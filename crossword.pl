@@ -1,7 +1,7 @@
 #!/usr/bin/swipl -q -g main -s
 
-%    crossword.pl - A crossword layout generator in Prolog
-%    Copyright (C) 2011  Ned Letcher - nedned.net
+% crossword.pl - A crossword layout generator in Prolog
+% Copyright (C) 2011  Ned Letcher - nedned.net
 %
 % Permission is hereby granted, free of charge, to any person obtaining a copy of
 % this software and associated documentation files (the "Software"), to deal in
