@@ -1,4 +1,7 @@
-#!/usr/bin/swipl -q -g main -s
+#!/usr/bin/swipl
+
+:- set_prolog_flag(verbose, silent). 
+:- initialization main. 
 
 % crossword.pl - A crossword layout generator in Prolog
 % Copyright (C) 2011  Ned Letcher - nedned.net
@@ -57,7 +60,8 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % The main predicate, called when run as a PrologScript.
-main(Argv) :-
+main :-
+    current_prolog_flag(argv, Argv), 
     Argv = [GLenAtom, StartLoc],
     atom_number(GLenAtom, GLen),
     ( 
