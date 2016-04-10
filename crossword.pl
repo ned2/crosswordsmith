@@ -62,93 +62,78 @@
 % The main predicate, called when run as a PrologScript.
 main :-
     current_prolog_flag(argv, Argv), 
-    Argv = [GLenAtom, StartLoc],
-    atom_number(GLenAtom, GLen),
-    ( 
-     StartLoc == 'rand_loc' ->
-     crossword(GLen)
-    ;    
-     crossword(GLen, StartLoc)
+    clues(ClueWords),
+    (
+     Argv = [GLenArg, '--shuffle', StartArg] ->
+     % shuffle the input words
+     shuffle(ClueWords, UseWords)
+     ;
+     Argv = [GLenArg, StartLoc],
+     UseWords = ClueWords
     ),
+    atom_number(GLenArg, GLen),
+    ( 
+      StartArg == 'rand_loc' ->
+      % choose a start location at random
+      start_locs(Locs),
+      shuffle(Locs, ShuffledLocs),
+      member(StartLoc, ShuffledLocs)
+    ;    
+      % just use supplied start location
+      StartLoc = StartArg
+    ),
+    crossword(GLen, UseWords, StartLoc),
     halt.
-
-
-% Top level predicate for solving the crossword.  Does not specify
-% starting position, instead one will be selected randomly.
-crossword(GLen) :- crossword(GLen, _StartLoc).
 
 
 % Top level predicate for solving the crossword with a specified
 % starting position.
-crossword(GLen, StartLoc) :-
-    find_crossword(GLen, StartLoc, _Grid, Words1),
-    assign_clue_numbers(Words1, Words2),
-    annotate_grid(Words2, GLen, Grid),
+crossword(GLen, Words, StartLoc) :-
+    find_crossword(GLen, Words, StartLoc, _Grid, PlacedWords),
+    assign_clue_numbers(PlacedWords, NumberedPlacedWords),
+    annotate_grid(NumberedPlacedWords, GLen, Grid),
     print_grid(Grid, GLen),
     write('\n@\n\n'),
-    print_clues(Words2).
-
-
-% Top level predicate for finding the number of solutions for the
-% crossword for all start positions.
-all_crossword(GLen, Num) :-
-    length(Sols, Num),
-    findall(Grid, find_crossword(GLen, _StartLoc, Grid, _), Sols).
+    print_clues(NumberedPlacedWords).
 
 
 % Top level predicate for finding the number of solutions for the
 % crossword for a specific starting position.
-all_crossword(GLen, StartLoc, Num) :-
+all_crossword(GLen, Words, StartLoc, Num) :-
     length(Sols, Num),
-    findall(Grid, find_crossword(GLen, StartLoc, Grid, _), Sols).
+    findall(Grid, find_crossword(GLen, Words, StartLoc, Grid, _), Sols).
 
 
 % The driver predicate used to solve the crossword.
-find_crossword(GLen, Loc, Grid, PlacedWords) :-
-    clues(Words),
-    start_locs(Locs),
-    init_grid(GLen, G1),  
-
-    % shuffle the start locations and list of words so that the first
-    % solution is different for each run
-    shuffle(Locs, SLocs),  
-    shuffle(Words, SWords),
-
-    % select a start location
-    member(Loc, SLocs),
+find_crossword(GLen, Words, Loc, Grid, PlacedWords) :-
+    init_grid(GLen, G1),     
+    % Get the cell number and direction for start loc
     start_loc(Loc, GLen, StartNum, StartDir),
-
-    % select the first word 
-    member([Word, Clue, Link], Words),
-    atom_chars(Word, Letters),
-    length(Letters, WLen),
-
-    % place the first word on the crossword
-    assign_word(Word, Letters, WLen, Clue, Link, StartNum, StartDir, GLen, G1, PlacedWord, G2),
- 
-    % remove the word so we don't try to place it again
-    remove_x([Word, Clue, Link], SWords, RemWords),
-
-    % place the rest
-    assign_words(RemWords, [PlacedWord], GLen, G2, Grid, PlacedWords).
+    assign_words(SWords, [], GLen, StartNum, StartDir, G1, Grid, PlacedWords).
 
 
 % Assign all words. The starting location is selected by locating an
 % intersecting word from the words already placed.
-assign_words([], P, _, G, G, P).
-assign_words(Words, PlacedWords, GLen, GIn, GOut, PlacedWordsOut) :-
+assign_words([], P, _, _, _, G, G, P).
+assign_words(Words, PlacedWords, GLen, Start, Dir, GIn, GOut, PlacedWordsOut) :-
     member([Word, Clue, Link], Words),
     atom_chars(Word, Letters),
     delete(Letters, ' ', Letters2),
-    length(Letters, WLen),
+    length(Letters2, WLen),
+    % on first pass, Start and Dir will be grounded with the start values
+    % then afterwards will be unground, with find_intersecting_word grounding them
     find_intersecting_word(Letters2, WLen, PlacedWords, GLen, Start, Dir),
     assign_word(Word, Letters2, WLen, Clue, Link, Start, Dir, GLen, GIn, Placed, G1),
     remove_x([Word, Clue, Link], Words, RemWords),
-    assign_words(RemWords, [Placed|PlacedWords], GLen, G1, GOut, PlacedWordsOut).
+    assign_words(RemWords, [Placed|PlacedWords], GLen, _Start, _Dir, G1, GOut, PlacedWordsOut).
 
 
 % Given a Word and a set of Placed words, locates a candidate 
 % start cell and direction that intersects with an existing word.
+
+% no placed words; just use grounded values
+find_intersecting_word(_Letters, _WLen, [], _GLen, _Start, _Dir).
+
 find_intersecting_word(Letters, WLen, PlacedWords, GLen, Start, Dir) :-
     member([_, _, _, PLetters, _, PDir, _, PStart, _], PlacedWords),
     intersection(Letters, PLetters, Vals),
@@ -532,18 +517,17 @@ remove_x(_,[],[]).
 
 %% shuffle(ListIn, ListOut) - randomly shuffles
 %% ListIn and unifies it with ListOut
-shuffle([], []).
+shuffle([], []) :- !.
 shuffle(List, [Element|Rest]) :-
-        choose(List, Element),
-        delete(List, Element, NewList),
-        shuffle(NewList, Rest).
+    choose(List, Element),
+    delete(List, Element, NewList),
+    shuffle(NewList, Rest).
 
 
 %% choose(List, Elt) - chooses a random element
 %% in List and unifies it with Elt.
-choose([], []).
 choose(List, Elt) :-
-        length(List, Length),
-        Index is random(Length),
-        nth0(Index, List, Elt).
+    length(List, Length),
+    Index is random(Length),
+    nth0(Index, List, Elt).
 
