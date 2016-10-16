@@ -29,15 +29,17 @@
 % This program can be run as an SWI PrologScript like this:
 %
 % $ ./crossword.pl <grid_length> <start_loc>
-% 
-% Where grid_length is integer specifying the dimensions of the
-% crossword and start_loc specifies where the first word of the
-% crossword is placed and can be one of {rand_loc, topleft_down,
-% topleft_across, topright, bottomleft}.
-
-
-% Data structures:
 %
+% Or you can find a vaguely random solution by shuffling the input words                                
+% and the order of the start locations:
+%
+% $ ./crossword.pl --shuffle <grid_length>
+%
+% Where grid_length is integer specifying the dimensions of the crossword and
+% start_loc specifies where the first word of the crossword is placed and can be
+% one of {topleft_down, topleft_across, topright, bottomleft}.
+
+
 % The program uses two simple data structures. The first is a list of
 % words that have been placed on the crossword grid with each element
 % being a list of attributes of the word. See the placed words utility
@@ -60,7 +62,28 @@
 % program predicates.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-% The main predicate, called when run as a PrologScript.
+
+main :-
+    current_prolog_flag(argv, Argv), 
+    clues(ClueWords),
+    start_locs(Locs),
+    (
+     % shuffle the input words and starting location
+     Argv = ['--shuffle', GridLenArg],
+     shuffle(ClueWords, UseWords),
+     shuffle(Locs, ShuffledLocs),
+     member(StartLoc, ShuffledLocs)
+    ;
+     % use provided starting location
+     Argv = [GridLenArg, StartLoc],
+     member(StartLoc, Locs),
+     UseWords = ClueWords
+    ),
+    atom_number(GridLenArg, GridLen),
+    crossword(GridLen, UseWords, StartLoc),
+    halt.
+
+
 main :-
     current_prolog_flag(argv, Argv),
     (
@@ -72,32 +95,6 @@ main :-
     clues(Words),
     all_crossword(GridLen, Words, StartLoc, Num),
     writeln(Num).
-
-
-main :-
-    current_prolog_flag(argv, Argv), 
-    clues(ClueWords),
-    (
-     Argv = ['--shuffle', GridLenArg, StartArg] ->
-     % shuffle the input words
-     shuffle(ClueWords, UseWords)
-     ;
-     Argv = [GridLenArg, StartLoc],
-     UseWords = ClueWords
-    ),
-    atom_number(GridLenArg, GridLen),
-    ( 
-      StartArg == 'rand_loc' ->
-      % choose a start location at random
-      start_locs(Locs),
-      shuffle(Locs, ShuffledLocs),
-      member(StartLoc, ShuffledLocs)
-    ;    
-      % just use supplied start location
-      StartLoc = StartArg
-    ),
-    crossword(GridLen, UseWords, StartLoc),
-    halt.
 
 
 % Top level predicate for solving the crossword with a specified
