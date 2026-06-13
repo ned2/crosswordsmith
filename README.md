@@ -25,9 +25,180 @@ this was originally intented for embedding in a web page, where the
 clues/solved words can be links.
 
 
-USAGE
-===============================================================================
+## Requirements
+
+[SWI-Prolog](https://www.swi-prolog.org/). The code is plain enough that
+it should port to most Prologs with little effort, but it is developed
+and tested against SWI. It has been confirmed to run on SWI-Prolog
+9.2.x (the version in the Ubuntu repositories) and 10.0.x (from the
+`ppa:swi-prolog/stable` PPA).
+
+On recent SWI versions the program prints a harmless deprecation
+warning to stderr (`Initialization goal called halt(0)` — the
+`:- initialization main.` idiom predates `initialization/2`). Standard
+output is unaffected.
 
 
-CLUES FILE
-===============================================================================
+## Usage
+
+`crossword.pl` is an executable SWI-Prolog script (note the `#!`
+shebang at the top). Run it directly:
+
+    # Place the words using a fixed starting position.
+    $ ./crossword.pl <grid_length> <start_loc>
+
+    # Find a vaguely random layout by shuffling the input words and the
+    # order in which start positions are tried.
+    $ ./crossword.pl --shuffle <grid_length>
+
+    # Count how many distinct solutions exist (see the note below).
+    $ ./crossword.pl --all <grid_length> [<start_loc>]
+
+Arguments:
+
+- `grid_length` — an integer giving the side length of the (square)
+  grid. The words in `clues.pl` are intended for a grid of length 17.
+- `start_loc` — where the *first* word is placed. One of:
+  `topleft_across`, `topleft_down`, `topright`, `bottomleft`.
+
+If you do not have execute permission set, you can equivalently run it
+as `swipl crossword.pl <args...>`.
+
+Examples:
+
+    $ ./crossword.pl 17 topleft_across
+    $ ./crossword.pl --shuffle 17
+
+> **Note on `--all`:** this enumerates *every* solution by
+> backtracking, and the search space is large — many solutions are
+> duplicates that differ only in the order words were laid down. With a
+> fixed `start_loc` it is bounded but can still be slow; with no
+> `start_loc` it additionally enumerates all four starting positions and
+> can take a very long time. Use it for small grids / small clue sets.
+
+
+## Clues file
+
+The words and clues live in `clues.pl`, which is pulled in via
+`:- include('clues.pl').` at the top of `crossword.pl`. It defines a
+single predicate, `clues/1`, whose argument is a list of `[word, clue,
+link]` triples:
+
+    clues([
+           ['OMEGA POINT',
+            'Transcending entropy',
+            'http://en.wikipedia.org/wiki/Omega_Point'],
+           ['FLOW',
+            'Autotelic activity',
+            'http://en.wikipedia.org/wiki/Flow_(psychology)'],
+           ...
+          ]).
+
+- **word** — the answer. Spaces are allowed for multi-word answers; they
+  are stripped before the letters are placed on the grid (so
+  `'OMEGA POINT'` occupies a single 10-cell run).
+- **clue** — the human-readable clue text.
+- **link** — an optional URL associated with the word. This is carried
+  through to the output so answers/clues can be rendered as links when
+  embedded in a web page; it is otherwise unused by the solver.
+
+To use your own words, replace the contents of `clues/1` and pick a
+`grid_length` large enough to lay them out.
+
+
+## How it works
+
+### Data structures
+
+The solver uses two structures (see the comments at the top of
+`crossword.pl`):
+
+1. **The grid** — an association list (`library(assoc)`) keyed by cell
+   number. Cells are numbered `1 .. grid_length²` in row-major order
+   (left to right, top to bottom). Moving **across** is `+1` (along a
+   row); moving **down** is `+grid_length` (down a column). Each value
+   is initially the atom `empty`.
+
+2. **Placed words** — a list, one entry per word already laid down. Each
+   entry is a list of attributes:
+
+       [Word, Clue, Link, Letters, Cells, Dir, WLen, Start, ClueNum]
+
+   where `Letters` is the space-stripped character list, `Cells` is the
+   list of grid-cell numbers it occupies, `Dir` is `across`/`down`,
+   `WLen` is the length, `Start` is the starting cell, and `ClueNum` is
+   filled in at the end.
+
+### The algorithm
+
+The driver is `assign_words/8`. It is a greedy, backtracking placement:
+
+1. Pick a not-yet-placed word (via `member/2`, so the choice is a
+   backtrack point).
+2. `find_intersecting_word/6` chooses where to put it. For the very
+   first word there is nothing to cross, so the grounded `start_loc` is
+   used. For every word after that, it finds an already-placed word that
+   shares a letter, computes the crossing cell, flips the direction
+   (`swap_dir/2`), derives the candidate start cell, and checks the word
+   fits on the grid (`fits_on_grid/4`).
+3. `assign_word/11` lays the letters down with `assign_letters/7`,
+   enforcing the two layout rules:
+   - each cell must either already hold the *same* letter (a legal
+     crossing) or be empty; and
+   - an empty cell's perpendicular neighbours must be free
+     (`adj_is_free/4`), plus the cells just before the start and just
+     after the end must be empty (`check_prev_cell/4`,
+     `check_next_cell/4`). Together these stop words being laid flush
+     alongside one another — only genuine crossings are allowed.
+4. Recurse with the word removed from the pool and added to the placed
+   list. When the pool is empty, every word has been placed and the
+   layout succeeds.
+
+Because the words are tried in order and the solver returns the first
+success, a `--shuffle` run randomises both the word order and the order
+the start positions are tried (`shuffle/2`, built on `choose/2`).
+
+### Finishing and output
+
+Once all words are placed:
+
+- `assign_clue_numbers/2` sorts the placed words by their start cell and
+  assigns clue numbers in that order (cells that start both an across
+  and a down word share a number).
+- `annotate_grid/3` builds a fresh grid holding, per filled cell, the
+  across/down clue numbers, the letter, a start marker, and the link.
+- `print_grid/2` and `print_clues/1` emit the result.
+
+The output is designed to be machine-parsed (it was built to feed a web
+page), in three parts:
+
+1. **The grid**, `grid_length` rows of `grid_length` cells separated by
+   spaces. An empty cell is `*`. A filled cell is five fields joined by
+   commas: `Across,Down,Letter,Marker,Link` where
+
+   - `Across` / `Down` are the clue numbers of the across/down words
+     passing through the cell, or `x` if no word of that direction does;
+   - `Letter` is the cell's letter;
+   - `Marker` is `a` if the cell is the start of an across clue, `d` if
+     the start of a down clue, or `n` otherwise (used to render the
+     little clue number in the corner);
+   - `Link` is the associated URL.
+
+2. A line containing a single `@`, separating the grid from the clues.
+
+3. **The clues**, under `Across Clues` and `Down Clues` headings, one
+   per line as `Word|ClueNum|Clue|Link`.
+
+
+## Implementation notes / limitations
+
+- **Grid size is not inferred.** You must pass a `grid_length` that is
+  large enough; too small and there is no solution, and the solver will
+  simply fail to find one.
+- **First-solution semantics.** The solver stops at the first valid
+  layout. `--all` exists to enumerate them but is expensive (see the
+  usage note).
+- **Duplicate solutions.** Many enumerated solutions are the same
+  physical layout reached by placing words in a different order.
+</content>
+</invoke>

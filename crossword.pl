@@ -1,7 +1,11 @@
 #!/usr/bin/swipl
 
-:- set_prolog_flag(verbose, silent). 
-:- initialization main. 
+:- set_prolog_flag(verbose, silent).
+% initialization(main, main) (vs plain `initialization main`) means main is
+% only run when this file is executed as a script. When the file is loaded
+% (consulted) by the test suite, main does not fire, so the predicates below
+% can be unit tested in isolation. It also gives a proper process exit code.
+:- initialization(main, main).
 
 % crossword.pl - A crossword layout generator in Prolog
 % Copyright (C) 2011  Ned Letcher - nedned.net
@@ -80,8 +84,7 @@ main :-
      UseWords = ClueWords
     ),
     atom_number(GridLenArg, GridLen),
-    crossword(GridLen, UseWords, StartLoc),
-    halt.
+    crossword(GridLen, UseWords, StartLoc).
 
 
 main :-
@@ -279,7 +282,7 @@ add_clue_nums([_-[W]|Rest], ClueNum, [WClue|RestClues]) :-
     add_clue_nums(Rest, ClueNum2, RestClues).    
     
 % a word whose start cell belongs to both a down and an across word
-add_clue_nums([_-[W1,W2]|Rest], [WClue1,WClue2|RestClues]) :-
+add_clue_nums([_-[W1,W2]|Rest], ClueNum, [WClue1,WClue2|RestClues]) :-
     add_clue_word(W1, ClueNum, WClue1),
     add_clue_word(W2, ClueNum, WClue2),
     ClueNum2 is ClueNum + 1,

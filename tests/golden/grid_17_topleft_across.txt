@@ -1,0 +1,30 @@
+1,x,O,a,http://en.wikipedia.org/wiki/Omega_Point 1,x,M,n,http://en.wikipedia.org/wiki/Omega_Point 1,x,E,n,http://en.wikipedia.org/wiki/Omega_Point 1,2,G,d,http://en.wikipedia.org/wiki/Gnostic_Gospels 1,x,A,n,http://en.wikipedia.org/wiki/Omega_Point 1,x,P,n,http://en.wikipedia.org/wiki/Omega_Point 1,x,O,n,http://en.wikipedia.org/wiki/Omega_Point 1,x,I,n,http://en.wikipedia.org/wiki/Omega_Point 1,x,N,n,http://en.wikipedia.org/wiki/Omega_Point 1,x,T,n,http://en.wikipedia.org/wiki/Omega_Point * * * * * * * 
+* * * x,2,N,n,http://en.wikipedia.org/wiki/Gnostic_Gospels * * * * * * * * * x,3,N,d,http://wiki.lesswrong.com/wiki/Narrative_fallacy * * * 
+* * * x,2,O,n,http://en.wikipedia.org/wiki/Gnostic_Gospels * * * * * * * * * x,3,A,n,http://wiki.lesswrong.com/wiki/Narrative_fallacy * * * 
+* * * x,2,S,n,http://en.wikipedia.org/wiki/Gnostic_Gospels * * * * * * * * * x,3,R,n,http://wiki.lesswrong.com/wiki/Narrative_fallacy * * * 
+* * 4,x,E,a,http://en.wikipedia.org/wiki/Eternal_return 4,2,T,n,http://en.wikipedia.org/wiki/Gnostic_Gospels 4,x,E,n,http://en.wikipedia.org/wiki/Eternal_return 4,x,R,n,http://en.wikipedia.org/wiki/Eternal_return 4,x,N,n,http://en.wikipedia.org/wiki/Eternal_return 4,x,A,n,http://en.wikipedia.org/wiki/Eternal_return 4,x,L,n,http://en.wikipedia.org/wiki/Eternal_return 4,x,R,n,http://en.wikipedia.org/wiki/Eternal_return 4,x,E,n,http://en.wikipedia.org/wiki/Eternal_return 4,x,T,n,http://en.wikipedia.org/wiki/Eternal_return 4,x,U,n,http://en.wikipedia.org/wiki/Eternal_return 4,3,R,n,http://wiki.lesswrong.com/wiki/Narrative_fallacy 4,x,N,n,http://en.wikipedia.org/wiki/Eternal_return * * 
+* * * x,2,I,n,http://en.wikipedia.org/wiki/Gnostic_Gospels * * * * * * * * * x,3,A,n,http://wiki.lesswrong.com/wiki/Narrative_fallacy * * * 
+* * * x,2,C,n,http://en.wikipedia.org/wiki/Gnostic_Gospels * * * * * * * * * x,3,T,n,http://wiki.lesswrong.com/wiki/Narrative_fallacy * * * 
+* * * x,2,G,n,http://en.wikipedia.org/wiki/Gnostic_Gospels * * * * * * * * * x,3,I,n,http://wiki.lesswrong.com/wiki/Narrative_fallacy * * * 
+* * * x,2,O,n,http://en.wikipedia.org/wiki/Gnostic_Gospels * * * * * * * * * x,3,V,n,http://wiki.lesswrong.com/wiki/Narrative_fallacy * * * 
+5,x,B,a,http://en.wikipedia.org/wiki/List_of_cognitive_biases 5,x,I,n,http://en.wikipedia.org/wiki/List_of_cognitive_biases 5,x,A,n,http://en.wikipedia.org/wiki/List_of_cognitive_biases 5,2,S,n,http://en.wikipedia.org/wiki/Gnostic_Gospels * * * * * * * * * x,3,E,n,http://wiki.lesswrong.com/wiki/Narrative_fallacy * * * 
+* * * x,2,P,n,http://en.wikipedia.org/wiki/Gnostic_Gospels * * * * * * * * * x,3,F,n,http://wiki.lesswrong.com/wiki/Narrative_fallacy * * * 
+* * * x,2,E,n,http://en.wikipedia.org/wiki/Gnostic_Gospels * * * * * * * * * x,3,A,n,http://wiki.lesswrong.com/wiki/Narrative_fallacy * * * 
+* * 6,x,F,a,http://en.wikipedia.org/wiki/Flow_(psychology) 6,2,L,n,http://en.wikipedia.org/wiki/Gnostic_Gospels 6,x,O,n,http://en.wikipedia.org/wiki/Flow_(psychology) 6,x,W,n,http://en.wikipedia.org/wiki/Flow_(psychology) * * * * * * * x,3,L,n,http://wiki.lesswrong.com/wiki/Narrative_fallacy * * * 
+* * * x,2,S,n,http://en.wikipedia.org/wiki/Gnostic_Gospels * * * * * * * * * x,3,L,n,http://wiki.lesswrong.com/wiki/Narrative_fallacy * * * 
+* * * * * * * * * * * * * x,3,A,n,http://wiki.lesswrong.com/wiki/Narrative_fallacy * * * 
+* * * * * * * * * * * * * x,3,C,n,http://wiki.lesswrong.com/wiki/Narrative_fallacy * * * 
+* * * * * * * * * * * * * x,3,Y,n,http://wiki.lesswrong.com/wiki/Narrative_fallacy * * * 
+
+@
+
+Across Clues
+OMEGA POINT|1|Transcending entropy|http://en.wikipedia.org/wiki/Omega_Point
+ETERNAL RETURN|4|Live|http://en.wikipedia.org/wiki/Eternal_return
+BIAS|5|Why your brain sucks|http://en.wikipedia.org/wiki/List_of_cognitive_biases
+FLOW|6|Autotelic activity|http://en.wikipedia.org/wiki/Flow_(psychology)
+
+Down Clues
+GNOSTIC GOSPELS|2|Some apocrypha|http://en.wikipedia.org/wiki/Gnostic_Gospels
+NARRATIVE FALLACY|3|Telos everywhere|http://wiki.lesswrong.com/wiki/Narrative_fallacy
+
