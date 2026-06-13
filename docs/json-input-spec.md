@@ -144,36 +144,34 @@ A new flag selects the source:
 
 `--clues File` is a flag-with-value that must compose with the existing
 `--shuffle` / `--all` flags and the positional `grid_length` / `start_loc`.
-Today `main/0` matches `Argv` positionally, so the flag is stripped first and
-the *remaining* args drive the existing patterns:
 
-1. **Strip the flag, then match the rest (minimal).** Remove `--clues File`
-   from `Argv` and run the existing `main/0` clauses on what's left.
-   **Caution:** the extraction must preserve flag→value adjacency. A
-   `select('--clues', Argv, R), select(File, R, _)` pair is *wrong* — the
-   second `select/3` binds `File` to the first remaining token, which is the
-   flag's value only when `--clues` happens to be first (it mis-binds
-   `--shuffle` for `[--shuffle, 17, --clues, p.json]`). Use an adjacency-
-   preserving extractor instead.
-2. **`library(optparse)`.** With `--shuffle`, `--all`, `--clues`, and
-   positionals, the flag set is at the point where a real parser pays its way;
-   prefer this if touching the parsing at all.
+**Implemented with `library(optparse)`.** The original `main/0` matched `Argv`
+positionally and would have needed each new flag stripped, adjacency-safe,
+from `Argv` before the positional clauses ran. With `--shuffle`, `--all`,
+`--clues`, and now `--out`, the flag set crossed the point where a real parser
+pays its way (this section's option 2), so `main/0` was migrated to
+`opt_parse/4`: it strips all flags and returns the leftover positionals
+(`grid_length` and an optional `start_loc`, as atoms), which a single `run/2`
+predicate dispatches on. Flags now compose in any order, accept `--flag=value`,
+get `--help`/`-h` for free, and an unknown flag is a clean
+`existence_error(commandline_option, _)` rather than a silent positional
+mismatch. Adding a further flag is one more `opts_spec/1` entry.
 
-The loader, sketched (extension sniffing dropped — JSON is the only external
-format, so just parse and let JSON errors speak):
+(The migration retired the adjacency-preserving `strip_clues_flag/3` that an
+earlier draft of this section sketched. The hazard it guarded against is real
+— a naive `select('--clues', Argv, R), select(File, R, _)` mis-binds a leading
+`--shuffle` as the value for `[--shuffle, 17, --clues, p.json]` — but
+`opt_parse/4` handles flag→value adjacency itself, so the hand-rolled
+extractor is no longer needed.)
+
+The clue loader proper is unchanged from the design (extension sniffing
+dropped — JSON is the only external format, so just parse and let JSON errors
+speak):
 
 ```prolog
-% Strip --clues from Argv; RestArgv feeds the existing positional matching.
-load_clues(Argv, RestArgv, Words) :-
-    ( strip_clues_flag(Argv, File, RestArgv)
-    -> read_clues_json(File, Words)
-    ;  RestArgv = Argv, clues(Words)        % bundled default
-    ).
-
-% Adjacency-preserving: only the token *after* --clues is the file.
-strip_clues_flag(['--clues', File | Rest], File, Rest) :- !.
-strip_clues_flag([A | T], File, [A | Rest]) :- strip_clues_flag(T, File, Rest).
-% (no clause for []: absence of --clues makes load_clues fall to the default)
+% '' (the --clues default) selects the bundled clues/1; a path reads JSON.
+load_clues('', Words)  :- !, clues(Words).
+load_clues(File, Words) :- read_clues_json(File, Words).
 
 read_clues_json(File, Words) :-
     setup_call_cleanup(open(File, read, S), json_read_dict(S, Doc), close(S)),
@@ -182,6 +180,13 @@ read_clues_json(File, Words) :-
 
 `doc_to_words/2` validates the document (§9) and maps each entry to
 `[AtomAnswer, MetaDict]`.
+
+**`--out File` (added alongside).** Writes the output to a file instead of
+stdout. Because `emit_json/3` already writes to `current_output`, this needed
+no change to the solver or emitter: `run/2` wraps the dispatched goal in
+`with_output/2`, which for a file captures the output to a string and writes
+it only on success — so an unsolvable run leaves no empty file — and for the
+default (`''`) calls the goal directly, keeping the stdout path byte-identical.
 
 ## 9. Validation
 

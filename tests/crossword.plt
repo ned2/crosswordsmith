@@ -293,3 +293,56 @@ test(json_output_reduces_to_valid_input) :-
     get_dict(link, RM, "http://en.wikipedia.org/wiki/Omega_Point").
 
 :- end_tests(json_input).
+
+
+% CLI option plumbing
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% main/0 parses argv with library(optparse) and dispatches via run/2; here we
+% test the supporting predicates directly (load_clues/2, with_output/2,
+% valid_loc/1). End-to-end argv handling is covered by the golden regression.
+
+:- begin_tests(cli).
+
+% load_clues/2: '' selects the bundled clues/1; a path reads the JSON file.
+test(load_clues_default_is_bundled) :-
+    load_clues('', W),
+    length(W, 6),
+    W = [[A|_]|_], A == 'OMEGA POINT'.
+
+test(load_clues_from_file) :-
+    load_clues('tests/clues.json', W),
+    length(W, 6),
+    once((member([Ans, _], W), Ans == 'BIAS')).
+
+% valid_loc/1 accepts the four named start locations and nothing else.
+test(valid_loc_accepts_known) :- valid_loc(topleft_across).
+test(valid_loc_rejects_unknown, [fail]) :- valid_loc(nowhere).
+
+% with_output('', Goal) writes straight to the current output (stdout path).
+test(with_output_stdout_passthrough) :-
+    with_output_to(string(S), with_output('', write(hello))),
+    S == "hello".
+
+% with_output(File, Goal) sends Goal's output to File, byte-for-byte the same
+% as the stdout path would produce.
+test(with_output_file_matches_stdout) :-
+    read_clues_json('tests/clues.json', Words),
+    with_output_to(string(StdoutText), crossword(17, Words, topleft_across)),
+    tmp_file_stream(text, Tmp, S0), close(S0),
+    with_output(Tmp, crossword(17, Words, topleft_across)),
+    setup_call_cleanup(open(Tmp, read, S), read_string(S, _, FileText), close(S)),
+    delete_file(Tmp),
+    FileText == StdoutText,
+    atom_json_dict(FileText, Dict, []),         % and it is valid JSON
+    get_dict(words, Dict, Ws), length(Ws, 6).
+
+% On a goal that fails (grid too small for a layout), no file is written, so a
+% failed run never leaves an empty output file behind.
+test(with_output_no_file_on_failure) :-
+    read_clues_json('tests/clues.json', Words),
+    tmp_file_stream(text, Tmp, S0), close(S0),
+    delete_file(Tmp),                           % ensure it is absent
+    \+ with_output(Tmp, crossword(3, Words, topleft_across)),
+    \+ exists_file(Tmp).
+
+:- end_tests(cli).

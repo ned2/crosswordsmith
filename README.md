@@ -57,10 +57,15 @@ shebang at the top). Run it directly:
     # Count how many distinct solutions exist (see the note below).
     $ ./crossword.pl --all <grid_length> [<start_loc>]
 
-    # Use an external JSON clue file instead of the bundled clues.pl.
-    # --clues composes with any of the forms above.
+    # Use an external JSON clue file instead of the bundled clues.pl, and/or
+    # write the output to a file. --clues and --out compose with any of the
+    # forms above and may appear in any order.
     $ ./crossword.pl --clues puzzle.json <grid_length> <start_loc>
     $ ./crossword.pl --clues puzzle.json --shuffle <grid_length>
+    $ ./crossword.pl --out solution.json <grid_length> <start_loc>
+
+    # Show all options.
+    $ ./crossword.pl --help
 
 Arguments:
 
@@ -77,6 +82,13 @@ Options:
   valid input. Without the flag, the bundled `clues.pl` is used (unchanged).
   See [Clues file](#clues-file) and
   [`docs/json-input-spec.md`](docs/json-input-spec.md).
+- `--out <file>` — write the output to `<file>` instead of stdout. The file
+  is written only once a solution is found, so an unsolvable run leaves no
+  empty file behind. Without the flag, output goes to stdout as before.
+- `--help` / `-h` — print the usage summary and exit.
+
+Flags are parsed with `library(optparse)`, so they compose in any order and
+also accept the `--flag=value` form (e.g. `--clues=puzzle.json`).
 
 If you do not have execute permission set, you can equivalently run it
 as `swipl crossword.pl <args...>`.

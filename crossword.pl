@@ -65,45 +65,113 @@
 % Used by the JSON output emitter (canonically library(json) on SWI 10+).
 :- use_module(library(http/json)).
 
+% Command-line option parsing (--shuffle/--all/--clues/--out + positionals).
+:- use_module(library(optparse)).
+
 
 
 % program predicates.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
+% Command-line entry point. Options are parsed with library(optparse), which
+% strips the flags from argv and returns the leftover positional arguments
+% (grid_length and an optional start_loc, as atoms). So the flags compose
+% freely and in any order, and adding another is a one-line spec entry rather
+% than another arg-matching clause. The dispatch lives in run/2.
 main :-
     current_prolog_flag(argv, Argv),
-    % --clues File (if present) is stripped here; RestArgv drives the
-    % existing positional matching below. See "Clue input loading".
-    load_clues(Argv, RestArgv, ClueWords),
+    opts_spec(Spec),
+    opt_parse(Spec, Argv, Opts, Positional),
+    run(Opts, Positional).
+
+% The option set. `clues`/`out` default to '' meaning "not given".
+opts_spec(
+    [ [opt(help),    type(boolean), default(false),
+       shortflags([h]), longflags([help]),
+       help('show this help and exit')],
+      [opt(shuffle), type(boolean), default(false),
+       longflags([shuffle]),
+       help('shuffle the words and start positions for a random layout')],
+      [opt(all),     type(boolean), default(false),
+       longflags([all]),
+       help('count every solution instead of emitting one (see README)')],
+      [opt(clues),   type(atom),    default(''), meta('FILE'),
+       longflags([clues]),
+       help('load clues from a JSON file instead of the bundled clues.pl')],
+      [opt(out),     type(atom),    default(''), meta('FILE'),
+       longflags([out]),
+       help('write output to FILE instead of stdout')]
+    ]).
+
+% Dispatch on the parsed options. The positional grammar is:
+%   <grid_length> <start_loc>   solve and emit one JSON solution
+%   --shuffle <grid_length>     ditto, words/start shuffled (start_loc implied)
+%   --all <grid_length> [loc]   count solutions (all start_locs if loc omitted)
+% --clues FILE and --out FILE are orthogonal and compose with any of these.
+run(Opts, _) :-
+    memberchk(help(true), Opts),
+    !,
+    print_usage.
+run(Opts, Positional) :-
+    memberchk(clues(CluesFile), Opts),
+    memberchk(out(OutFile), Opts),
+    load_clues(CluesFile, Words),
+    (   memberchk(all(true), Opts)
+    ->  positional(Positional, GridLen, StartLoc),   % StartLoc unbound if absent
+        with_output(OutFile, count_solutions(GridLen, Words, StartLoc))
+    ;   memberchk(shuffle(true), Opts)
+    ->  Positional = [GridLenArg],
+        atom_number(GridLenArg, GridLen),
+        solve_shuffled(GridLen, Words, OutFile)
+    ;   Positional = [GridLenArg, StartLocArg],
+        atom_number(GridLenArg, GridLen),
+        valid_loc(StartLocArg),
+        with_output(OutFile, crossword(GridLen, Words, StartLocArg))
+    ).
+
+print_usage :-
+    opts_spec(Spec),
+    opt_help(Spec, Help),
+    format("Usage: crossword.pl [options] <grid_length> [<start_loc>]~n~n~w", [Help]).
+
+% Positional args for the --all path: grid_length is required; start_loc is
+% optional and left unbound when absent, so all four start positions are
+% enumerated by the solver.
+positional([GridLenArg], GridLen, _StartLoc) :-
+    atom_number(GridLenArg, GridLen).
+positional([GridLenArg, StartLoc], GridLen, StartLoc) :-
+    atom_number(GridLenArg, GridLen),
+    valid_loc(StartLoc).
+
+% Solve with shuffled words and start order; member/2 is the backtrack point
+% that tries successive shuffled start positions until one yields a layout.
+solve_shuffled(GridLen, Words, OutFile) :-
     start_locs(Locs),
-    (
-     % shuffle the input words and starting location
-     RestArgv = ['--shuffle', GridLenArg],
-     shuffle(ClueWords, UseWords),
-     shuffle(Locs, ShuffledLocs),
-     member(StartLoc, ShuffledLocs)
-    ;
-     % use provided starting location
-     RestArgv = [GridLenArg, StartLoc],
-     member(StartLoc, Locs),
-     UseWords = ClueWords
-    ),
-    atom_number(GridLenArg, GridLen),
-    crossword(GridLen, UseWords, StartLoc).
+    shuffle(Words, UseWords),
+    shuffle(Locs, ShuffledLocs),
+    member(StartLoc, ShuffledLocs),
+    with_output(OutFile, crossword(GridLen, UseWords, StartLoc)).
 
-
-main :-
-    current_prolog_flag(argv, Argv),
-    load_clues(Argv, RestArgv, Words),
-    (
-     RestArgv = ['--all', GridLenArg, StartLoc]
-    ;
-     RestArgv = ['--all', GridLenArg]
-    ),
-    atom_number(GridLenArg, GridLen),
+% Count solutions for one start position (or all, with StartLoc unbound).
+count_solutions(GridLen, Words, StartLoc) :-
     all_crossword(GridLen, Words, StartLoc, Num),
     writeln(Num).
+
+valid_loc(Loc) :-
+    start_locs(Locs),
+    memberchk(Loc, Locs).
+
+% Run Goal with its output sent to a file, or straight to stdout when '' (no
+% --out). For a file the output is captured first and written only if Goal
+% succeeds, so a no-solution run leaves no empty file behind; the stdout path
+% is the unchanged direct write.
+with_output('', Goal) :-
+    !,
+    call(Goal).
+with_output(File, Goal) :-
+    with_output_to(string(Text), Goal),
+    setup_call_cleanup(open(File, write, S), write(S, Text), close(S)).
 
 
 % Clue input loading
@@ -115,21 +183,13 @@ main :-
 % an external JSON file is the interchange format, selected with `--clues
 % File`. Everything after this loader is unchanged.
 
-% Strip --clues File from Argv (if present) and read that file; otherwise
-% RestArgv = Argv and the bundled clues/1 supplies the words.
-load_clues(Argv, RestArgv, Words) :-
-    (   strip_clues_flag(Argv, File, RestArgv)
-    ->  read_clues_json(File, Words)
-    ;   RestArgv = Argv, clues(Words)        % no --clues: bundled default
-    ).
-
-% Adjacency-preserving extraction: only the token *directly after* --clues is
-% the file, so the flag composes with --shuffle/--all and the positionals
-% whatever the order (a naive double select/3 would mis-bind a leading
-% --shuffle as the value). No clause for []: when --clues is absent this
-% fails and load_clues falls through to the bundled default.
-strip_clues_flag(['--clues', File | Rest], File, Rest) :- !.
-strip_clues_flag([A | T], File, [A | Rest]) :- strip_clues_flag(T, File, Rest).
+% Load the clue set: from a JSON file when one was given (--clues FILE),
+% otherwise the bundled clues/1.
+load_clues('', Words) :-
+    !,
+    clues(Words).
+load_clues(File, Words) :-
+    read_clues_json(File, Words).
 
 % Read and validate a JSON clue file into the internal Words list. A missing
 % file or malformed JSON throws standard ISO errors (existence_error /
