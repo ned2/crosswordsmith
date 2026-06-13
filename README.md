@@ -36,11 +36,6 @@ against SWI and has been confirmed to run on SWI-Prolog 9.2.x (the version
 in the Ubuntu repositories) and 10.0.x (from the `ppa:swi-prolog/stable`
 PPA).
 
-On recent SWI versions the program prints a harmless deprecation
-warning to stderr (`Initialization goal called halt(0)` — the
-`:- initialization main.` idiom predates `initialization/2`). Standard
-output is unaffected.
-
 
 ## Usage
 
@@ -239,7 +234,8 @@ Once all words are placed:
   assigns clue numbers in that order (cells that start both an across
   and a down word share a number).
 - `emit_json/3` builds the grid and word list and writes the whole
-  solution as a single JSON object via `json_write_dict/2`.
+  solution as a single JSON object via `json_write_dict/2` — to standard
+  output, or to the named file when `--out <file>` is given.
 
 The output is one JSON object with three top-level keys (`json_write_dict`
 emits object keys in sorted order, so on the wire they appear as `grid`,
@@ -269,8 +265,8 @@ emits object keys in sorted order, so on the wire they appear as `grid`,
   from `clues.pl`, `{}` if none). To follow a link from a cell, match the
   cell's `across`/`down` number **and** direction against `words`.
 
-If no layout exists for the requested `grid_length`, the program prints
-nothing and exits non-zero.
+If no layout exists for the requested `grid_length`, the program produces
+no output and exits non-zero (and with `--out`, no file is written).
 
 The full schema and design rationale live in
 [`docs/json-output-spec.md`](docs/json-output-spec.md).
