@@ -1,30 +1,447 @@
-1,x,O,a,http://en.wikipedia.org/wiki/Omega_Point 1,x,M,n,http://en.wikipedia.org/wiki/Omega_Point 1,x,E,n,http://en.wikipedia.org/wiki/Omega_Point 1,2,G,d,http://en.wikipedia.org/wiki/Gnostic_Gospels 1,x,A,n,http://en.wikipedia.org/wiki/Omega_Point 1,x,P,n,http://en.wikipedia.org/wiki/Omega_Point 1,x,O,n,http://en.wikipedia.org/wiki/Omega_Point 1,x,I,n,http://en.wikipedia.org/wiki/Omega_Point 1,x,N,n,http://en.wikipedia.org/wiki/Omega_Point 1,x,T,n,http://en.wikipedia.org/wiki/Omega_Point * * * * * * * 
-* * * x,2,N,n,http://en.wikipedia.org/wiki/Gnostic_Gospels * * * * * * * * * x,3,N,d,http://wiki.lesswrong.com/wiki/Narrative_fallacy * * * 
-* * * x,2,O,n,http://en.wikipedia.org/wiki/Gnostic_Gospels * * * * * * * * * x,3,A,n,http://wiki.lesswrong.com/wiki/Narrative_fallacy * * * 
-* * * x,2,S,n,http://en.wikipedia.org/wiki/Gnostic_Gospels * * * * * * * * * x,3,R,n,http://wiki.lesswrong.com/wiki/Narrative_fallacy * * * 
-* * 4,x,E,a,http://en.wikipedia.org/wiki/Eternal_return 4,2,T,n,http://en.wikipedia.org/wiki/Gnostic_Gospels 4,x,E,n,http://en.wikipedia.org/wiki/Eternal_return 4,x,R,n,http://en.wikipedia.org/wiki/Eternal_return 4,x,N,n,http://en.wikipedia.org/wiki/Eternal_return 4,x,A,n,http://en.wikipedia.org/wiki/Eternal_return 4,x,L,n,http://en.wikipedia.org/wiki/Eternal_return 4,x,R,n,http://en.wikipedia.org/wiki/Eternal_return 4,x,E,n,http://en.wikipedia.org/wiki/Eternal_return 4,x,T,n,http://en.wikipedia.org/wiki/Eternal_return 4,x,U,n,http://en.wikipedia.org/wiki/Eternal_return 4,3,R,n,http://wiki.lesswrong.com/wiki/Narrative_fallacy 4,x,N,n,http://en.wikipedia.org/wiki/Eternal_return * * 
-* * * x,2,I,n,http://en.wikipedia.org/wiki/Gnostic_Gospels * * * * * * * * * x,3,A,n,http://wiki.lesswrong.com/wiki/Narrative_fallacy * * * 
-* * * x,2,C,n,http://en.wikipedia.org/wiki/Gnostic_Gospels * * * * * * * * * x,3,T,n,http://wiki.lesswrong.com/wiki/Narrative_fallacy * * * 
-* * * x,2,G,n,http://en.wikipedia.org/wiki/Gnostic_Gospels * * * * * * * * * x,3,I,n,http://wiki.lesswrong.com/wiki/Narrative_fallacy * * * 
-* * * x,2,O,n,http://en.wikipedia.org/wiki/Gnostic_Gospels * * * * * * * * * x,3,V,n,http://wiki.lesswrong.com/wiki/Narrative_fallacy * * * 
-5,x,B,a,http://en.wikipedia.org/wiki/List_of_cognitive_biases 5,x,I,n,http://en.wikipedia.org/wiki/List_of_cognitive_biases 5,x,A,n,http://en.wikipedia.org/wiki/List_of_cognitive_biases 5,2,S,n,http://en.wikipedia.org/wiki/Gnostic_Gospels * * * * * * * * * x,3,E,n,http://wiki.lesswrong.com/wiki/Narrative_fallacy * * * 
-* * * x,2,P,n,http://en.wikipedia.org/wiki/Gnostic_Gospels * * * * * * * * * x,3,F,n,http://wiki.lesswrong.com/wiki/Narrative_fallacy * * * 
-* * * x,2,E,n,http://en.wikipedia.org/wiki/Gnostic_Gospels * * * * * * * * * x,3,A,n,http://wiki.lesswrong.com/wiki/Narrative_fallacy * * * 
-* * 6,x,F,a,http://en.wikipedia.org/wiki/Flow_(psychology) 6,2,L,n,http://en.wikipedia.org/wiki/Gnostic_Gospels 6,x,O,n,http://en.wikipedia.org/wiki/Flow_(psychology) 6,x,W,n,http://en.wikipedia.org/wiki/Flow_(psychology) * * * * * * * x,3,L,n,http://wiki.lesswrong.com/wiki/Narrative_fallacy * * * 
-* * * x,2,S,n,http://en.wikipedia.org/wiki/Gnostic_Gospels * * * * * * * * * x,3,L,n,http://wiki.lesswrong.com/wiki/Narrative_fallacy * * * 
-* * * * * * * * * * * * * x,3,A,n,http://wiki.lesswrong.com/wiki/Narrative_fallacy * * * 
-* * * * * * * * * * * * * x,3,C,n,http://wiki.lesswrong.com/wiki/Narrative_fallacy * * * 
-* * * * * * * * * * * * * x,3,Y,n,http://wiki.lesswrong.com/wiki/Narrative_fallacy * * * 
-
-@
-
-Across Clues
-OMEGA POINT|1|Transcending entropy|http://en.wikipedia.org/wiki/Omega_Point
-ETERNAL RETURN|4|Live|http://en.wikipedia.org/wiki/Eternal_return
-BIAS|5|Why your brain sucks|http://en.wikipedia.org/wiki/List_of_cognitive_biases
-FLOW|6|Autotelic activity|http://en.wikipedia.org/wiki/Flow_(psychology)
-
-Down Clues
-GNOSTIC GOSPELS|2|Some apocrypha|http://en.wikipedia.org/wiki/Gnostic_Gospels
-NARRATIVE FALLACY|3|Telos everywhere|http://wiki.lesswrong.com/wiki/Narrative_fallacy
-
+{
+  "grid": [
+    [
+      {"across":1,"down":null,"letter":"O","number":1},
+      {"across":1,"down":null,"letter":"M","number":null},
+      {"across":1,"down":null,"letter":"E","number":null},
+      {"across":1,"down":2,"letter":"G","number":2},
+      {"across":1,"down":null,"letter":"A","number":null},
+      {"across":1,"down":null,"letter":"P","number":null},
+      {"across":1,"down":null,"letter":"O","number":null},
+      {"across":1,"down":null,"letter":"I","number":null},
+      {"across":1,"down":null,"letter":"N","number":null},
+      {"across":1,"down":null,"letter":"T","number":null},
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ],
+    [
+      null,
+      null,
+      null,
+      {"across":null,"down":2,"letter":"N","number":null},
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      {"across":null,"down":3,"letter":"N","number":3},
+      null,
+      null,
+      null
+    ],
+    [
+      null,
+      null,
+      null,
+      {"across":null,"down":2,"letter":"O","number":null},
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      {"across":null,"down":3,"letter":"A","number":null},
+      null,
+      null,
+      null
+    ],
+    [
+      null,
+      null,
+      null,
+      {"across":null,"down":2,"letter":"S","number":null},
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      {"across":null,"down":3,"letter":"R","number":null},
+      null,
+      null,
+      null
+    ],
+    [
+      null,
+      null,
+      {"across":4,"down":null,"letter":"E","number":4},
+      {"across":4,"down":2,"letter":"T","number":null},
+      {"across":4,"down":null,"letter":"E","number":null},
+      {"across":4,"down":null,"letter":"R","number":null},
+      {"across":4,"down":null,"letter":"N","number":null},
+      {"across":4,"down":null,"letter":"A","number":null},
+      {"across":4,"down":null,"letter":"L","number":null},
+      {"across":4,"down":null,"letter":"R","number":null},
+      {"across":4,"down":null,"letter":"E","number":null},
+      {"across":4,"down":null,"letter":"T","number":null},
+      {"across":4,"down":null,"letter":"U","number":null},
+      {"across":4,"down":3,"letter":"R","number":null},
+      {"across":4,"down":null,"letter":"N","number":null},
+      null,
+      null
+    ],
+    [
+      null,
+      null,
+      null,
+      {"across":null,"down":2,"letter":"I","number":null},
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      {"across":null,"down":3,"letter":"A","number":null},
+      null,
+      null,
+      null
+    ],
+    [
+      null,
+      null,
+      null,
+      {"across":null,"down":2,"letter":"C","number":null},
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      {"across":null,"down":3,"letter":"T","number":null},
+      null,
+      null,
+      null
+    ],
+    [
+      null,
+      null,
+      null,
+      {"across":null,"down":2,"letter":"G","number":null},
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      {"across":null,"down":3,"letter":"I","number":null},
+      null,
+      null,
+      null
+    ],
+    [
+      null,
+      null,
+      null,
+      {"across":null,"down":2,"letter":"O","number":null},
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      {"across":null,"down":3,"letter":"V","number":null},
+      null,
+      null,
+      null
+    ],
+    [
+      {"across":5,"down":null,"letter":"B","number":5},
+      {"across":5,"down":null,"letter":"I","number":null},
+      {"across":5,"down":null,"letter":"A","number":null},
+      {"across":5,"down":2,"letter":"S","number":null},
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      {"across":null,"down":3,"letter":"E","number":null},
+      null,
+      null,
+      null
+    ],
+    [
+      null,
+      null,
+      null,
+      {"across":null,"down":2,"letter":"P","number":null},
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      {"across":null,"down":3,"letter":"F","number":null},
+      null,
+      null,
+      null
+    ],
+    [
+      null,
+      null,
+      null,
+      {"across":null,"down":2,"letter":"E","number":null},
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      {"across":null,"down":3,"letter":"A","number":null},
+      null,
+      null,
+      null
+    ],
+    [
+      null,
+      null,
+      {"across":6,"down":null,"letter":"F","number":6},
+      {"across":6,"down":2,"letter":"L","number":null},
+      {"across":6,"down":null,"letter":"O","number":null},
+      {"across":6,"down":null,"letter":"W","number":null},
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      {"across":null,"down":3,"letter":"L","number":null},
+      null,
+      null,
+      null
+    ],
+    [
+      null,
+      null,
+      null,
+      {"across":null,"down":2,"letter":"S","number":null},
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      {"across":null,"down":3,"letter":"L","number":null},
+      null,
+      null,
+      null
+    ],
+    [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      {"across":null,"down":3,"letter":"A","number":null},
+      null,
+      null,
+      null
+    ],
+    [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      {"across":null,"down":3,"letter":"C","number":null},
+      null,
+      null,
+      null
+    ],
+    [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      {"across":null,"down":3,"letter":"Y","number":null},
+      null,
+      null,
+      null
+    ]
+  ],
+  "gridLength":17,
+  "words": [
+    {
+      "answer":"OMEGA POINT",
+      "cells": [
+	[0, 0 ],
+	[0, 1 ],
+	[0, 2 ],
+	[0, 3 ],
+	[0, 4 ],
+	[0, 5 ],
+	[0, 6 ],
+	[0, 7 ],
+	[0, 8 ],
+	[0, 9 ]
+      ],
+      "direction":"across",
+      "meta": {
+	"clue":"Transcending entropy",
+	"link":"http://en.wikipedia.org/wiki/Omega_Point"
+      },
+      "number":1
+    },
+    {
+      "answer":"GNOSTIC GOSPELS",
+      "cells": [
+	[0, 3 ],
+	[1, 3 ],
+	[2, 3 ],
+	[3, 3 ],
+	[4, 3 ],
+	[5, 3 ],
+	[6, 3 ],
+	[7, 3 ],
+	[8, 3 ],
+	[9, 3 ],
+	[10, 3 ],
+	[11, 3 ],
+	[12, 3 ],
+	[13, 3 ]
+      ],
+      "direction":"down",
+      "meta": {
+	"clue":"Some apocrypha",
+	"link":"http://en.wikipedia.org/wiki/Gnostic_Gospels"
+      },
+      "number":2
+    },
+    {
+      "answer":"NARRATIVE FALLACY",
+      "cells": [
+	[1, 13 ],
+	[2, 13 ],
+	[3, 13 ],
+	[4, 13 ],
+	[5, 13 ],
+	[6, 13 ],
+	[7, 13 ],
+	[8, 13 ],
+	[9, 13 ],
+	[10, 13 ],
+	[11, 13 ],
+	[12, 13 ],
+	[13, 13 ],
+	[14, 13 ],
+	[15, 13 ],
+	[16, 13 ]
+      ],
+      "direction":"down",
+      "meta": {
+	"clue":"Telos everywhere",
+	"link":"http://wiki.lesswrong.com/wiki/Narrative_fallacy"
+      },
+      "number":3
+    },
+    {
+      "answer":"ETERNAL RETURN",
+      "cells": [
+	[4, 2 ],
+	[4, 3 ],
+	[4, 4 ],
+	[4, 5 ],
+	[4, 6 ],
+	[4, 7 ],
+	[4, 8 ],
+	[4, 9 ],
+	[4, 10 ],
+	[4, 11 ],
+	[4, 12 ],
+	[4, 13 ],
+	[4, 14 ]
+      ],
+      "direction":"across",
+      "meta": {
+	"clue":"Live",
+	"link":"http://en.wikipedia.org/wiki/Eternal_return"
+      },
+      "number":4
+    },
+    {
+      "answer":"BIAS",
+      "cells": [ [9, 0 ],  [9, 1 ],  [9, 2 ],  [9, 3 ] ],
+      "direction":"across",
+      "meta": {
+	"clue":"Why your brain sucks",
+	"link":"http://en.wikipedia.org/wiki/List_of_cognitive_biases"
+      },
+      "number":5
+    },
+    {
+      "answer":"FLOW",
+      "cells": [ [12, 2 ],  [12, 3 ],  [12, 4 ],  [12, 5 ] ],
+      "direction":"across",
+      "meta": {
+	"clue":"Autotelic activity",
+	"link":"http://en.wikipedia.org/wiki/Flow_(psychology)"
+      },
+      "number":6
+    }
+  ]
+}

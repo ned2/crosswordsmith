@@ -10,6 +10,7 @@
 % utilities, the solver, and clue numbering.
 
 :- use_module(library(plunit)).
+:- use_module(library(http/json)).
 
 
 % Grid geometry
@@ -107,11 +108,11 @@ test(init_grid_no_extra, [fail]) :-
 % (across, starting cell 1) and GNOSTIC GOSPELS (down) cross on G.
 % (nondet: find_crossword backtracks over many solutions; we assert one exists.)
 test(places_two_crossing_words, [nondet]) :-
-    Words = [['OMEGA POINT', 'c1', ''], ['GNOSTIC GOSPELS', 'c2', '']],
+    Words = [['OMEGA POINT', _{}], ['GNOSTIC GOSPELS', _{}]],
     find_crossword(17, Words, topleft_across, _Grid, Placed),
     length(Placed, 2),
     % the first word is laid across starting at cell 1
-    memberchk([_,_,_,_,_,across,_,1,_], Placed).
+    member(PW, Placed), get_dict(dir, PW, across), get_dict(start, PW, 1).
 
 % The full bundled clue set has a solution on a 17x17 grid.
 test(bundled_clues_solve_at_17, [nondet]) :-
@@ -124,31 +125,63 @@ test(too_small_grid_fails, [fail]) :-
     clues(Words),
     find_crossword(3, Words, topleft_across, _Grid, _Placed).
 
-% End-to-end: the top-level crossword/3 (which also numbers clues and
-% prints) succeeds on the bundled clues. Output is captured to keep test
-% logs clean.
-test(full_pipeline_bundled) :-
+% End-to-end: the top-level crossword/3 emits one JSON object describing the
+% solution. Parse it and assert the expected shape. Output is captured both to
+% keep logs clean and to inspect it.
+test(full_pipeline_emits_json) :-
     clues(Words),
-    with_output_to(string(_), crossword(17, Words, topleft_across)).
+    with_output_to(string(S), crossword(17, Words, topleft_across)),
+    atom_json_dict(S, Dict, []),
+    get_dict(gridLength, Dict, 17),
+    get_dict(grid, Dict, Grid), length(Grid, 17),
+    forall(member(Row, Grid), length(Row, 17)),
+    get_dict(words, Dict, WordObjs), length(WordObjs, 6).
+
+% A crossing cell carries BOTH directions, so both links remain reachable (G2).
+% Row 0, col 3 is where OMEGA POINT (across 1) and GNOSTIC GOSPELS (down 2) cross.
+test(crossing_cell_has_both_directions) :-
+    clues(Words),
+    with_output_to(string(S), crossword(17, Words, topleft_across)),
+    atom_json_dict(S, Dict, []),
+    get_dict(grid, Dict, Grid),
+    nth0(0, Grid, Row0),
+    nth0(3, Row0, Cell),
+    get_dict(across, Cell, 1),
+    get_dict(down, Cell, 2).
+
+% Per-word metadata is rejoined verbatim under `meta`.
+test(word_metadata_under_meta) :-
+    clues(Words),
+    with_output_to(string(S), crossword(17, Words, topleft_across)),
+    atom_json_dict(S, Dict, []),
+    get_dict(words, Dict, WordObjs),
+    once(( member(W, WordObjs), get_dict(answer, W, "OMEGA POINT") )),
+    get_dict(meta, W, Meta),
+    get_dict(clue, Meta, "Transcending entropy"),
+    get_dict(link, Meta, "http://en.wikipedia.org/wiki/Omega_Point").
+
+% The emit-time join requires unique answers; a duplicate is rejected up front.
+test(duplicate_answer_rejected, [throws(duplicate_answer('CAT'))]) :-
+    crossword(5, [['CAT', _{}], ['CAT', _{}]], topleft_across).
 
 :- end_tests(solver).
 
 
 % Clue numbering
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% A placed word is [Word, Clue, Link, Letters, Cells, Dir, WLen, Start, ClueNum].
-% assign_clue_numbers/2 sorts by Start and fills in ClueNum.
+% A placed word is word{answer,letters,cells,dir,len,start,num}.
+% assign_clue_numbers/2 sorts by start and fills in num.
 
 :- begin_tests(clue_numbering).
 
 % Helper: clue number assigned to the word with the given text.
 clue_num_of(Word, Placed, Num) :-
-    member([Word,_,_,_,_,_,_,_,Num], Placed).
+    member(PW, Placed), get_dict(answer, PW, Word), get_dict(num, PW, Num).
 
 % Two words with distinct start cells get sequential numbers, in start order.
 test(distinct_starts_numbered_in_order, [nondet]) :-
-    W1 = ['CAT', 'c', '', [c,a,t], [1,2,3],   across, 3, 1, _],
-    W2 = ['DOG', 'c', '', [d,o,g], [5,12,19], down,   3, 5, _],
+    W1 = word{answer:'CAT', letters:[c,a,t], cells:[1,2,3],   dir:across, len:3, start:1},
+    W2 = word{answer:'DOG', letters:[d,o,g], cells:[5,12,19], dir:down,   len:3, start:5},
     assign_clue_numbers([W2,W1], Placed),   % deliberately unsorted input
     clue_num_of('CAT', Placed, 1),
     clue_num_of('DOG', Placed, 2).
@@ -158,8 +191,8 @@ test(distinct_starts_numbered_in_order, [nondet]) :-
 % share a clue number. Before the fix the buggy clause had the wrong arity
 % and this scenario failed clue numbering entirely.
 test(shared_start_cell_shares_number, [nondet]) :-
-    Wa = ['CAT', 'c', '', [c,a,t], [1,2,3],   across, 3, 1, _],
-    Wd = ['COW', 'c', '', [c,o,w], [1,18,35], down,   3, 1, _],
+    Wa = word{answer:'CAT', letters:[c,a,t], cells:[1,2,3],   dir:across, len:3, start:1},
+    Wd = word{answer:'COW', letters:[c,o,w], cells:[1,18,35], dir:down,   len:3, start:1},
     assign_clue_numbers([Wa,Wd], Placed),
     clue_num_of('CAT', Placed, N),
     clue_num_of('COW', Placed, N),

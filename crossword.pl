@@ -46,8 +46,8 @@
 
 % The program uses two simple data structures. The first is a list of
 % words that have been placed on the crossword grid with each element
-% being a list of attributes of the word. See the placed words utility
-% predicate section below for the structure of this list.
+% being a dict of attributes of the word. See the placed words utility
+% predicate section below for the structure of this dict.
 %
 % The second data structure is as association list used to to store
 % the contents of each cell in the grid. The keys are the numbers of
@@ -56,10 +56,14 @@
 
 % Load a file that contains a predicate 'clues' which has a single
 % parameter which is a list of clues to be used in the crossword, with
-% each clue being a list of the following form [word, clue, link].  It
-% is ok to include spaces in the word slot for multi-word answers.
-% Link is in case you want to spcify an accompanying URL for the word.
+% each clue being a list of the form [Answer, Metadata]. Answer is the
+% word (spaces are allowed for multi-word answers and are stripped before
+% placement). Metadata is an optional dict of passthrough data, by
+% convention a clue and a link; the solver never inspects it.
 :- include('clues.pl').
+
+% Used by the JSON output emitter (canonically library(json) on SWI 10+).
+:- use_module(library(http/json)).
 
 
 
@@ -101,14 +105,12 @@ main :-
 
 
 % Top level predicate for solving the crossword with a specified
-% starting position.
+% starting position. Emits the solution as a single JSON object.
 crossword(GridLen, Words, StartLoc) :-
+    check_unique_answers(Words),
     find_crossword(GridLen, Words, StartLoc, _Grid, PlacedWords),
     assign_clue_numbers(PlacedWords, NumberedPlacedWords),
-    annotate_grid(NumberedPlacedWords, GridLen, Grid),
-    print_grid(Grid, GridLen),
-    write('\n@\n\n'),
-    print_clues(NumberedPlacedWords).
+    emit_json(NumberedPlacedWords, Words, GridLen).
 
 
 % Top level predicate for finding the number of solutions for the
@@ -130,15 +132,16 @@ find_crossword(GridLen, Words, Loc, Grid, PlacedWords) :-
 % intersecting word from the words already placed.
 assign_words([], P, _, _, _, G, G, P).
 assign_words(Words, PlacedWords, GridLen, Start, Dir, GIn, GOut, PlacedWordsOut) :-
-    member([Word, Clue, Link], Words),
+    member(Entry, Words),
+    Entry = [Word|_],   % the solver uses only the answer; metadata is ignored
     atom_chars(Word, Letters),
     delete(Letters, ' ', Letters2),
     length(Letters2, WLen),
     % on first pass, Start and Dir will be grounded with the start values
     % then afterwards will be unground, with find_intersecting_word grounding them
     find_intersecting_word(Letters2, WLen, PlacedWords, GridLen, Start, Dir),
-    assign_word(Word, Letters2, WLen, Clue, Link, Start, Dir, GridLen, GIn, Placed, G1),
-    remove_x([Word, Clue, Link], Words, RemWords),
+    assign_word(Word, Letters2, WLen, Start, Dir, GridLen, GIn, Placed, G1),
+    remove_x(Entry, Words, RemWords),
     assign_words(RemWords, [Placed|PlacedWords], GridLen, _Start, _Dir, G1, GOut, PlacedWordsOut).
 
 
@@ -149,7 +152,10 @@ assign_words(Words, PlacedWords, GridLen, Start, Dir, GIn, GOut, PlacedWordsOut)
 find_intersecting_word(_Letters, _WLen, [], _GridLen, _Start, _Dir).
 
 find_intersecting_word(Letters, WLen, PlacedWords, GridLen, Start, Dir) :-
-    member([_, _, _, PLetters, _, PDir, _, PStart, _], PlacedWords),
+    member(PW, PlacedWords),
+    get_dict(letters, PW, PLetters),
+    get_dict(dir, PW, PDir),
+    get_dict(start, PW, PStart),
     intersection(Letters, PLetters, Vals),
     list_to_set(Vals, Vals2),
     member(Val, Vals2),
@@ -161,11 +167,13 @@ find_intersecting_word(Letters, WLen, PlacedWords, GridLen, Start, Dir) :-
     fits_on_grid(Dir, Start, WLen, GridLen).
 
 
-assign_word(Word, Letters, WLen, Clue, Link, Start, Dir, GridLen, GIn, Placed, GOut) :-
+assign_word(Word, Letters, WLen, Start, Dir, GridLen, GIn, Placed, GOut) :-
     % make sure previous cell does not have a letter
     check_prev_cell(Dir, Start, GridLen, GIn),
     assign_letters(Letters, Start, Dir, GridLen, Cells, GIn, GOut),
-    Placed = [Word, Clue, Link, Letters, Cells, Dir, WLen, Start, _ClueNum].
+    % `num` is added later by assign_clue_numbers/2
+    Placed = word{answer:Word, letters:Letters, cells:Cells,
+                  dir:Dir, len:WLen, start:Start}.
 
 
 % Previous cell before start of word. Make sure it doesn't contain
@@ -289,74 +297,135 @@ add_clue_nums([_-[W1,W2]|Rest], ClueNum, [WClue1,WClue2|RestClues]) :-
     add_clue_nums(Rest, ClueNum2, RestClues).    
 
 
-% Create a new grid containing the final values for each cell
-annotate_grid(PlacedWords, GridLen, G) :-
-    init_grid(GridLen, NewG),
-    words_to_grid(PlacedWords, NewG, G).
-
-
-words_to_grid([], G, G).
-words_to_grid([W|Ws], GIn, GOut) :-
-    W = [_, _, Link, Letters, Cells, Dir, _, Start, ClueNum],
-    letters_to_grid(Letters, Cells, Dir, Start, ClueNum, Link, GIn, G1),
-    words_to_grid(Ws, G1, GOut).
-
-
-% this code could be cleaned up a bit
-letters_to_grid([], [], _, _, _, _, Grid, Grid).
-letters_to_grid([L|Ls], [C|Cs], Dir, Start, ClueNum, Link, GIn, GOut) :-
-    get_assoc(C, GIn, X),
-    (
-     Start == C ->
-     (
-      Dir == across,
-      Print = 'a'
-     ;
-      Dir == down,
-      Print = 'd'
-     ), !
-    ;
-     Print = 'n'
-    ),
-    (
-     X == empty ->
-     (
-      Dir == across,
-      Val = [ClueNum-x, L, Print, Link]
-     ;
-      Dir == down,
-      Val = [x-ClueNum, L, Print, Link]
-     ), !     
-    ;
-     X = [A-D,L,_P,CurrLink],
-     (
-      Dir == across,
-      Val = [ClueNum-D, L, Print, CurrLink]
-     ;
-      Dir == down,
-      Val = [A-ClueNum, L, Print, Link]
-     ), !
-    ),
-    put_assoc(C, GIn, Val, G1),
-    letters_to_grid(Ls, Cs, Dir, Start, ClueNum, Link, G1, GOut).
-
-
-
-% Placed Word list utility predicates:
+% JSON output
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-% A placed word looks like this: 
-% [Word, Clue, Link, Letters, Cells, Dir, Len, Start, ClueNum]
+% The emit-time metadata join is keyed on the answer string, so fail loudly if
+% two input entries share an answer (crosswords do not repeat answers).
+check_unique_answers(Words) :-
+    findall(A, member([A|_], Words), Answers),
+    msort(Answers, Sorted),
+    (
+     append(_, [Dup, Dup|_], Sorted)
+    ->
+     throw(duplicate_answer(Dup))
+    ;
+     true
+    ).
 
 
-dir_is_across([_,_,_,_,_,across,_,_,_]).
+% Emit the solved crossword as a single JSON object on the current output.
+% Words is the original input list, used to rejoin per-word metadata.
+emit_json(NumberedPlacedWords, Words, GridLen) :-
+    build_grid_rows(NumberedPlacedWords, GridLen, GridRows),
+    build_words(NumberedPlacedWords, Words, GridLen, WordObjs),
+    Payload = _{gridLength: GridLen, grid: GridRows, words: WordObjs},
+    current_output(Out),
+    json_write_dict(Out, Payload),
+    nl(Out).
 
-start_is([_,_,_,_,_,_,_,Start,_], Start).
 
-% Assign clue number to it's location in the placed word list  
-add_clue_word(Word, ClueNum, WordClue) :-
-    Word = [W, C, Lnk, Ls, Cs, D, WLen, S, _],
-    WordClue = [W, C, Lnk, Ls, Cs, D, WLen, S, ClueNum].
+% Build the dense GridLen x GridLen array, row-major. Empty cells are the atom
+% `null` (written as JSON null); filled cells are dicts.
+build_grid_rows(PlacedWords, GridLen, Rows) :-
+    empty_assoc(A0),
+    foldl(add_word_cells, PlacedWords, A0, CellMap),
+    NumCells is GridLen * GridLen,
+    numlist(1, NumCells, AllCells),
+    maplist(cell_to_json(CellMap), AllCells, FlatCells),
+    rows_of(FlatCells, GridLen, Rows).
+
+
+% Fold one placed word's cells into the cell map.
+add_word_cells(PW, AIn, AOut) :-
+    get_dict(cells, PW, Cells),
+    get_dict(letters, PW, Letters),
+    get_dict(dir, PW, Dir),
+    get_dict(num, PW, Num),
+    get_dict(start, PW, Start),
+    foldl(add_cell(Dir, Num, Start), Cells, Letters, AIn, AOut).
+
+
+% Record one cell's letter, its across/down clue numbers, and (if it is the
+% start cell of a word) its corner-label number.
+add_cell(Dir, Num, Start, Cell, Letter, AIn, AOut) :-
+    (
+     get_assoc(Cell, AIn, cell(_, Ac0, Dn0, N0))
+    ->
+     true
+    ;
+     Ac0 = null, Dn0 = null, N0 = null
+    ),
+    ( Dir == across -> Ac = Num, Dn = Dn0 ; Ac = Ac0, Dn = Num ),
+    ( Cell =:= Start -> N = Num ; N = N0 ),
+    put_assoc(Cell, AIn, cell(Letter, Ac, Dn, N), AOut).
+
+
+cell_to_json(CellMap, Cell, Json) :-
+    (
+     get_assoc(Cell, CellMap, cell(Letter, Ac, Dn, N))
+    ->
+     Json = _{letter: Letter, number: N, across: Ac, down: Dn}
+    ;
+     Json = null
+    ).
+
+
+% Group a flat list of cells into rows of length GridLen.
+rows_of([], _, []) :- !.
+rows_of(Flat, GridLen, [Row|Rows]) :-
+    length(Row, GridLen),
+    append(Row, Rest, Flat),
+    rows_of(Rest, GridLen, Rows).
+
+
+% Build the `words` array. Metadata is rejoined from the input list by answer.
+build_words(PlacedWords, Words, GridLen, WordObjs) :-
+    maplist(placed_to_word(Words, GridLen), PlacedWords, WordObjs).
+
+
+placed_to_word(Words, GridLen, PW, WordObj) :-
+    get_dict(answer, PW, Answer),
+    get_dict(dir, PW, Dir),
+    get_dict(num, PW, Num),
+    get_dict(cells, PW, Cells),
+    maplist(cell_coord(GridLen), Cells, Coords),
+    answer_meta(Answer, Words, Meta),
+    WordObj = _{number: Num, direction: Dir, answer: Answer,
+                cells: Coords, meta: Meta}.
+
+
+% Look up the (opaque) metadata for an answer in the input list. An entry may
+% omit metadata ([Answer]); answers are unique (check_unique_answers/1).
+answer_meta(Answer, Words, Meta) :-
+    member(Entry, Words),
+    Entry = [A|_],
+    A == Answer,
+    !,
+    ( Entry = [_, M] -> Meta = M ; Meta = _{} ).
+
+
+% Cell number (1-based, row-major) to 0-based [Row, Col].
+cell_coord(GridLen, Cell, [Row, Col]) :-
+    Row is (Cell - 1) // GridLen,
+    Col is (Cell - 1) mod GridLen.
+
+
+
+% Placed word utility predicates:
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% A placed word is a dict:
+%   word{answer:Answer, letters:Letters, cells:Cells, dir:Dir,
+%        len:Len, start:Start, num:ClueNum}
+% `num` is absent until assign_clue_numbers/2 fills it in.
+
+
+start_is(PW, Start) :- get_dict(start, PW, Start).
+
+% Add the assigned clue number to a placed word.
+add_clue_word(PW, ClueNum, NumberedPW) :-
+    put_dict(num, PW, ClueNum, NumberedPW).
 
 
 
@@ -437,53 +506,8 @@ init_grid(GridLen, Grid) :-
 
 
 
-% printing predicates
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-
-print_grid(Grid, Length) :-
-    assoc_to_list(Grid, List),
-    print_list(List, Length).
-
-
-print_list([], _).
-print_list([K-V|Xs], Length) :-
-    (
-     V == empty ->
-     write('*')
-    ;
-     V = [A-D,L,P,LK],
-     % join the contents of the cell with ',' as a seperator
-     atomic_list_concat([A,D,L,P,LK], ',', Str),
-     write(Str)
-    ),
-    write(' '),
-    M is K mod Length,
-    ( M == 0 -> nl ; true),
-    print_list(Xs, Length).
-
-
-% Partition into down and across lists and then 
-% print each separately.
-print_clues(Words) :-
-    partition(dir_is_across, Words, AcrossWords, DownWords),
-    write('Across Clues\n'),
-    x_print_clues(AcrossWords),
-    nl,
-    write('Down Clues\n'),
-    x_print_clues(DownWords),
-    nl.
-
-
-% todo: map could definintely be used here, except that
-% map needs to return a list, we don't want to.
-x_print_clues([]).
-x_print_clues([W|Ws]) :-
-    W = [Word, Clue, Link, _, _, _, _, _, ClueNum],
-    atomic_list_concat([Word, ClueNum, Clue, Link], '|', Str),
-    write(Str),
-    nl,
-    x_print_clues(Ws).
+% (the solved crossword is emitted as JSON by emit_json/3; see the
+% "JSON output" section above)
 
 
 

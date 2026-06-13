@@ -3,8 +3,9 @@ crosswordsmith
 
 A crossword layout generator in Prolog. 
 
-This is a crossword grid generator implemented in SWI Prolog, however
-it should work in most Prologs with minimal porting. The solver works
+This is a crossword grid generator implemented in SWI Prolog. The solver
+core is portable Prolog, though the clue-input and JSON-output paths use
+SWI-specific features (see Requirements). The solver works
 deterministically, laying down one word at a time by placing it such
 that it intersects with an existing word, and also such that it
 doesn't sit hard up against any letters from another word.
@@ -27,11 +28,13 @@ clues/solved words can be links.
 
 ## Requirements
 
-[SWI-Prolog](https://www.swi-prolog.org/). The code is plain enough that
-it should port to most Prologs with little effort, but it is developed
-and tested against SWI. It has been confirmed to run on SWI-Prolog
-9.2.x (the version in the Ubuntu repositories) and 10.0.x (from the
-`ppa:swi-prolog/stable` PPA).
+[SWI-Prolog](https://www.swi-prolog.org/). The solver core is plain
+Prolog, but the input and output paths are SWI-specific: clue metadata and
+the JSON output both use SWI dicts and `library(http/json)`, so porting to
+another Prolog would mean replacing those. It is developed and tested
+against SWI and has been confirmed to run on SWI-Prolog 9.2.x (the version
+in the Ubuntu repositories) and 10.0.x (from the `ppa:swi-prolog/stable`
+PPA).
 
 On recent SWI versions the program prints a harmless deprecation
 warning to stderr (`Initialization goal called halt(0)` — the
@@ -81,26 +84,31 @@ Examples:
 
 The words and clues live in `clues.pl`, which is pulled in via
 `:- include('clues.pl').` at the top of `crossword.pl`. It defines a
-single predicate, `clues/1`, whose argument is a list of `[word, clue,
-link]` triples:
+single predicate, `clues/1`, whose argument is a list of `[Answer,
+Metadata]` pairs:
 
     clues([
            ['OMEGA POINT',
-            'Transcending entropy',
-            'http://en.wikipedia.org/wiki/Omega_Point'],
+            _{clue: 'Transcending entropy',
+              link: 'http://en.wikipedia.org/wiki/Omega_Point'}],
            ['FLOW',
-            'Autotelic activity',
-            'http://en.wikipedia.org/wiki/Flow_(psychology)'],
+            _{clue: 'Autotelic activity',
+              link: 'http://en.wikipedia.org/wiki/Flow_(psychology)'}],
            ...
           ]).
 
-- **word** — the answer. Spaces are allowed for multi-word answers; they
+- **Answer** — the word. Spaces are allowed for multi-word answers; they
   are stripped before the letters are placed on the grid (so
-  `'OMEGA POINT'` occupies a single 10-cell run).
-- **clue** — the human-readable clue text.
-- **link** — an optional URL associated with the word. This is carried
-  through to the output so answers/clues can be rendered as links when
-  embedded in a web page; it is otherwise unused by the solver.
+  `'OMEGA POINT'` occupies a single 10-cell run). The answer keeps its
+  spaces as a display label in the output.
+- **Metadata** — an optional dict of arbitrary data carried through to the
+  output verbatim. By convention it holds a `clue` and a `link`, but the
+  solver never inspects it, so any keys are fine. The metadata element may
+  be omitted entirely (just `['BIAS']`) or given as an empty dict
+  (`['FLOW', _{}]`); either yields an empty `meta` object in the output.
+
+Answers must be unique: the output associates metadata with each placed
+word by its answer string, so a repeated answer is rejected up front.
 
 To use your own words, replace the contents of `clues/1` and pick a
 `grid_length` large enough to lay them out.
@@ -120,14 +128,17 @@ The solver uses two structures (see the comments at the top of
    is initially the atom `empty`.
 
 2. **Placed words** — a list, one entry per word already laid down. Each
-   entry is a list of attributes:
+   entry is a dict:
 
-       [Word, Clue, Link, Letters, Cells, Dir, WLen, Start, ClueNum]
+       word{answer:Answer, letters:Letters, cells:Cells, dir:Dir,
+            len:Len, start:Start, num:ClueNum}
 
-   where `Letters` is the space-stripped character list, `Cells` is the
-   list of grid-cell numbers it occupies, `Dir` is `across`/`down`,
-   `WLen` is the length, `Start` is the starting cell, and `ClueNum` is
-   filled in at the end.
+   where `letters` is the space-stripped character list, `cells` is the
+   list of grid-cell numbers it occupies, `dir` is `across`/`down`,
+   `len` is the length, `start` is the starting cell, and `num` (the clue
+   number) is added at the end by `assign_clue_numbers/2`. The solver
+   carries no clue text or link here — metadata is rejoined to each word by
+   its answer string only at output time.
 
 ### The algorithm
 
@@ -141,7 +152,7 @@ The driver is `assign_words/8`. It is a greedy, backtracking placement:
    shares a letter, computes the crossing cell, flips the direction
    (`swap_dir/2`), derives the candidate start cell, and checks the word
    fits on the grid (`fits_on_grid/4`).
-3. `assign_word/11` lays the letters down with `assign_letters/7`,
+3. `assign_word/9` lays the letters down with `assign_letters/7`,
    enforcing the two layout rules:
    - each cell must either already hold the *same* letter (a legal
      crossing) or be empty; and
@@ -165,29 +176,42 @@ Once all words are placed:
 - `assign_clue_numbers/2` sorts the placed words by their start cell and
   assigns clue numbers in that order (cells that start both an across
   and a down word share a number).
-- `annotate_grid/3` builds a fresh grid holding, per filled cell, the
-  across/down clue numbers, the letter, a start marker, and the link.
-- `print_grid/2` and `print_clues/1` emit the result.
+- `emit_json/3` builds the grid and word list and writes the whole
+  solution as a single JSON object via `json_write_dict/2`.
 
-The output is designed to be machine-parsed (it was built to feed a web
-page), in three parts:
+The output is one JSON object with three top-level keys (`json_write_dict`
+emits object keys in sorted order, so on the wire they appear as `grid`,
+`gridLength`, `words`):
 
-1. **The grid**, `grid_length` rows of `grid_length` cells separated by
-   spaces. An empty cell is `*`. A filled cell is five fields joined by
-   commas: `Across,Down,Letter,Marker,Link` where
+    {
+      "gridLength": 17,
+      "grid":  [ ...gridLength rows... ],
+      "words": [ ...one entry per placed word... ]
+    }
 
-   - `Across` / `Down` are the clue numbers of the across/down words
-     passing through the cell, or `x` if no word of that direction does;
-   - `Letter` is the cell's letter;
-   - `Marker` is `a` if the cell is the start of an across clue, `d` if
-     the start of a down clue, or `n` otherwise (used to render the
-     little clue number in the corner);
-   - `Link` is the associated URL.
+- **`grid`** — a dense `grid_length` × `grid_length` array, row-major and
+  0-indexed `[row, col]`. Each entry is either `null` (an empty cell) or a
+  cell object `{"letter", "number", "across", "down"}`:
 
-2. A line containing a single `@`, separating the grid from the clues.
+  - `letter` — the cell's letter;
+  - `number` — the corner-label clue number, or `null` unless a word
+    starts in this cell (across and down words starting together share it);
+  - `across` / `down` — the clue numbers of the across/down words passing
+    through the cell, or `null` for none. A crossing cell carries both, so
+    both words (and both links) stay reachable; the consumer decides which
+    to follow.
 
-3. **The clues**, under `Across Clues` and `Down Clues` headings, one
-   per line as `Word|ClueNum|Clue|Link`.
+- **`words`** — one object per placed word: `number`, `direction`
+  (`"across"`/`"down"`), `answer` (spaces preserved), `cells` (the ordered
+  `[row, col]` pairs it occupies), and `meta` (the verbatim metadata dict
+  from `clues.pl`, `{}` if none). To follow a link from a cell, match the
+  cell's `across`/`down` number **and** direction against `words`.
+
+If no layout exists for the requested `grid_length`, the program prints
+nothing and exits non-zero.
+
+The full schema and design rationale live in
+[`docs/json-output-spec.md`](docs/json-output-spec.md).
 
 
 ## Implementation notes / limitations
