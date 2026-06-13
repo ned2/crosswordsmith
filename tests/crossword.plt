@@ -199,3 +199,97 @@ test(shared_start_cell_shares_number, [nondet]) :-
     integer(N).
 
 :- end_tests(clue_numbering).
+
+
+% JSON clue input
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% The --clues path reads a JSON file into the same internal Words list the
+% bundled clues/1 produces, so the whole pipeline downstream is unchanged.
+% Paths are relative to the repo root (the runner consults from there).
+
+:- begin_tests(json_input).
+
+% Reduce one emitted words[] entry back to an input clue {answer, meta}.
+reduce_word(W, _{answer:A, meta:M}) :-
+    get_dict(answer, W, A),
+    get_dict(meta, W, M).
+
+% The fixture loads to the internal Words form: atom answers, dict metadata.
+test(json_loads_to_words) :-
+    read_clues_json('tests/clues.json', Words),
+    length(Words, 6),
+    once((member([Answer, Meta], Words), Answer == 'OMEGA POINT')),
+    atom(Answer),
+    % json_read_dict yields string meta *values* (vs the Prolog path's atoms);
+    % json_write_dict renders both to the same JSON token (input spec D3).
+    get_dict(clue, Meta, "Transcending entropy"),
+    get_dict(link, Meta, "http://en.wikipedia.org/wiki/Omega_Point").
+
+% An omitted `meta` key and an explicit empty `{}` both yield an empty dict.
+test(json_absent_meta_is_empty_dict) :-
+    read_clues_json('tests/clues.json', Words),
+    once((member([A1, M1], Words), A1 == 'GNOSTIC GOSPELS')),  % no meta key
+    once((member([A2, M2], Words), A2 == 'BIAS')),             % meta: {}
+    dict_pairs(M1, _, []),
+    dict_pairs(M2, _, []).
+
+% The JSON-loaded words drive the existing pipeline to a valid JSON solution.
+test(json_pipeline_emits_json) :-
+    read_clues_json('tests/clues.json', Words),
+    with_output_to(string(S), crossword(17, Words, topleft_across)),
+    atom_json_dict(S, Dict, []),
+    get_dict(gridLength, Dict, 17),
+    get_dict(grid, Dict, Grid), length(Grid, 17),
+    forall(member(Row, Grid), length(Row, 17)),
+    get_dict(words, Dict, WordObjs), length(WordObjs, 6).
+
+% Schema violations throw error/2 terms (rendered by error_message//1).
+test(json_no_clues_array_throws, [throws(error(json_no_clues_array, _))]) :-
+    doc_to_words(_{version: 1}, _).            % no `clues` key
+
+test(json_clues_not_list_throws, [throws(error(json_no_clues_array, _))]) :-
+    doc_to_words(_{clues: "nope"}, _).         % `clues` not an array
+
+test(json_missing_answer_throws, [throws(error(json_invalid_answer(_), _))]) :-
+    doc_to_words(_{clues: [_{meta: _{}}]}, _). % entry with no `answer`
+
+test(json_non_string_answer_throws, [throws(error(json_invalid_answer(_), _))]) :-
+    doc_to_words(_{clues: [_{answer: 42}]}, _).% numeric answer (would coerce)
+
+test(json_non_object_meta_throws, [throws(error(json_invalid_meta('FLOW'), _))]) :-
+    doc_to_words(_{clues: [_{answer: "FLOW", meta: "no"}]}, _).
+
+% Malformed JSON and a missing file surface as standard ISO errors.
+test(json_malformed_throws, [throws(_)]) :-
+    setup_call_cleanup(open_string("{ not json", S),
+                       json_read_dict(S, _),
+                       close(S)).
+
+test(json_missing_file_throws, [throws(error(existence_error(source_sink, _), _))]) :-
+    read_clues_json('tests/no_such_file.json', _).
+
+% Symmetry (G5): reduce the emitted output to {answer, meta} entries and
+% confirm they round-trip as valid input — they load and re-solve, the answer
+% set is preserved, and metadata survives. (Asserted as validity, not a byte
+% diff: solver layout depends on input order, which the reduction reshuffles.)
+test(json_output_reduces_to_valid_input) :-
+    read_clues_json('tests/clues.json', Words),
+    with_output_to(string(S1), crossword(17, Words, topleft_across)),
+    atom_json_dict(S1, Dict, []),
+    get_dict(words, Dict, WordObjs),
+    maplist(reduce_word, WordObjs, ReducedClues),
+    doc_to_words(_{clues: ReducedClues}, Words2),
+    % the reduced output is itself valid input: it re-solves and re-emits JSON
+    with_output_to(string(S2), crossword(17, Words2, topleft_across)),
+    atom_json_dict(S2, Dict2, []),
+    get_dict(words, Dict2, WordObjs2), length(WordObjs2, 6),
+    % the answer set survives the round trip (atoms on both sides)
+    findall(A, member([A, _], Words),  AsOrig0),  msort(AsOrig0,  AsOrig),
+    findall(A, member([A, _], Words2), AsRound0), msort(AsRound0, AsRound),
+    AsOrig == AsRound,
+    % and metadata survives for a representative entry
+    once((member([RA, RM], Words2), RA == 'OMEGA POINT')),
+    get_dict(clue, RM, "Transcending entropy"),
+    get_dict(link, RM, "http://en.wikipedia.org/wiki/Omega_Point").
+
+:- end_tests(json_input).

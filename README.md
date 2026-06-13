@@ -57,12 +57,26 @@ shebang at the top). Run it directly:
     # Count how many distinct solutions exist (see the note below).
     $ ./crossword.pl --all <grid_length> [<start_loc>]
 
+    # Use an external JSON clue file instead of the bundled clues.pl.
+    # --clues composes with any of the forms above.
+    $ ./crossword.pl --clues puzzle.json <grid_length> <start_loc>
+    $ ./crossword.pl --clues puzzle.json --shuffle <grid_length>
+
 Arguments:
 
 - `grid_length` — an integer giving the side length of the (square)
   grid. The words in `clues.pl` are intended for a grid of length 17.
 - `start_loc` — where the *first* word is placed. One of:
   `topleft_across`, `topleft_down`, `topright`, `bottomleft`.
+
+Options:
+
+- `--clues <file>` — load the word/clue set from an external **JSON file**
+  instead of the bundled `clues.pl`. This is the interchange format: it
+  mirrors the JSON *output*, so a solution payload can be reduced back to a
+  valid input. Without the flag, the bundled `clues.pl` is used (unchanged).
+  See [Clues file](#clues-file) and
+  [`docs/json-input-spec.md`](docs/json-input-spec.md).
 
 If you do not have execute permission set, you can equivalently run it
 as `swipl crossword.pl <args...>`.
@@ -112,6 +126,42 @@ word by its answer string, so a repeated answer is rejected up front.
 
 To use your own words, replace the contents of `clues/1` and pick a
 `grid_length` large enough to lay them out.
+
+### JSON clue file (`--clues`)
+
+For programmatic use you can supply the clue set as a JSON file instead,
+without editing any Prolog:
+
+    $ ./crossword.pl --clues puzzle.json 17 topleft_across
+
+The file is a JSON object with a `clues` array; each entry mirrors an
+output `words[]` object minus the solver-computed fields:
+
+    {
+      "clues": [
+        { "answer": "OMEGA POINT",
+          "meta": { "clue": "Transcending entropy",
+                    "link": "http://en.wikipedia.org/wiki/Omega_Point" } },
+        { "answer": "FLOW" },
+        { "answer": "BIAS", "meta": {} }
+      ]
+    }
+
+- **`answer`** — required string. Spaces are allowed and stripped before
+  placement, exactly as in `clues.pl`.
+- **`meta`** — optional object (default `{}`), copied verbatim to the
+  output entry's `meta`. By convention `clue` and `link`, but any keys are
+  fine; the solver never inspects it. Omitting `meta` and giving `{}` are
+  equivalent.
+
+The two sources are otherwise identical: the JSON path produces the same
+internal word list as `clues/1`, so uniqueness checking, solving, and output
+are unchanged (the bundled `clues.pl` remains the default when `--clues` is
+absent). A missing file, malformed JSON, or a schema violation (no `clues`
+array, a non-string `answer`, a non-object `meta`) is reported and the
+program exits non-zero. See
+[`docs/json-input-spec.md`](docs/json-input-spec.md) for the full schema and
+rationale; `tests/clues.json` is a worked example.
 
 
 ## How it works
@@ -224,5 +274,3 @@ The full schema and design rationale live in
   usage note).
 - **Duplicate solutions.** Many enumerated solutions are the same
   physical layout reached by placing words in a different order.
-</content>
-</invoke>

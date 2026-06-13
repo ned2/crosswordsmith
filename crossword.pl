@@ -72,18 +72,20 @@
 
 
 main :-
-    current_prolog_flag(argv, Argv), 
-    clues(ClueWords),
+    current_prolog_flag(argv, Argv),
+    % --clues File (if present) is stripped here; RestArgv drives the
+    % existing positional matching below. See "Clue input loading".
+    load_clues(Argv, RestArgv, ClueWords),
     start_locs(Locs),
     (
      % shuffle the input words and starting location
-     Argv = ['--shuffle', GridLenArg],
+     RestArgv = ['--shuffle', GridLenArg],
      shuffle(ClueWords, UseWords),
      shuffle(Locs, ShuffledLocs),
      member(StartLoc, ShuffledLocs)
     ;
      % use provided starting location
-     Argv = [GridLenArg, StartLoc],
+     RestArgv = [GridLenArg, StartLoc],
      member(StartLoc, Locs),
      UseWords = ClueWords
     ),
@@ -93,15 +95,86 @@ main :-
 
 main :-
     current_prolog_flag(argv, Argv),
+    load_clues(Argv, RestArgv, Words),
     (
-     Argv = ['--all', GridLenArg, StartLoc]
+     RestArgv = ['--all', GridLenArg, StartLoc]
     ;
-     Argv = ['--all', GridLenArg]
+     RestArgv = ['--all', GridLenArg]
     ),
     atom_number(GridLenArg, GridLen),
-    clues(Words),
     all_crossword(GridLen, Words, StartLoc, Num),
     writeln(Num).
+
+
+% Clue input loading
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Two clue sources converge on the same internal Words list
+% ([[Answer, MetaDict], ...]) before the pipeline runs; see
+% docs/json-input-spec.md. The bundled Prolog clues/1 (pulled in via the
+% include/1 above) is the zero-argument default and native authoring format;
+% an external JSON file is the interchange format, selected with `--clues
+% File`. Everything after this loader is unchanged.
+
+% Strip --clues File from Argv (if present) and read that file; otherwise
+% RestArgv = Argv and the bundled clues/1 supplies the words.
+load_clues(Argv, RestArgv, Words) :-
+    (   strip_clues_flag(Argv, File, RestArgv)
+    ->  read_clues_json(File, Words)
+    ;   RestArgv = Argv, clues(Words)        % no --clues: bundled default
+    ).
+
+% Adjacency-preserving extraction: only the token *directly after* --clues is
+% the file, so the flag composes with --shuffle/--all and the positionals
+% whatever the order (a naive double select/3 would mis-bind a leading
+% --shuffle as the value). No clause for []: when --clues is absent this
+% fails and load_clues falls through to the bundled default.
+strip_clues_flag(['--clues', File | Rest], File, Rest) :- !.
+strip_clues_flag([A | T], File, [A | Rest]) :- strip_clues_flag(T, File, Rest).
+
+% Read and validate a JSON clue file into the internal Words list. A missing
+% file or malformed JSON throws standard ISO errors (existence_error /
+% syntax_error) that SWI's default handler renders clearly, so they need no
+% handling here; schema violations are caught by doc_to_words/2.
+read_clues_json(File, Words) :-
+    setup_call_cleanup(open(File, read, S), json_read_dict(S, Doc), close(S)),
+    doc_to_words(Doc, Words).
+
+% Map the parsed document to [[AtomAnswer, MetaDict], ...], the form clues/1
+% already returns. json_read_dict does not check shape and atom_string/2
+% silently coerces (a number or JSON null would become a bogus atom), so each
+% type is guarded *before* conversion. Schema violations throw error/2 terms
+% rendered by the prolog:error_message//1 clauses below. Answers are
+% normalised to atoms so the emit-time answer_meta/3 join and
+% check_unique_answers/1 (both ==-based) behave identically across sources.
+doc_to_words(Doc, Words) :-
+    (   is_dict(Doc), get_dict(clues, Doc, Clues), is_list(Clues)
+    ->  true
+    ;   throw(error(json_no_clues_array, _))
+    ),
+    maplist(entry_to_word, Clues, Words).
+
+% One JSON clue entry -> [AtomAnswer, MetaDict]. `answer` is required and must
+% be a string; `meta` is an optional object (default _{}), copied verbatim.
+entry_to_word(Entry, [Answer, Meta]) :-
+    (   is_dict(Entry), get_dict(answer, Entry, RawAnswer), string(RawAnswer)
+    ->  atom_string(Answer, RawAnswer)
+    ;   throw(error(json_invalid_answer(Entry), _))
+    ),
+    (   get_dict(meta, Entry, RawMeta)
+    ->  (   is_dict(RawMeta)
+        ->  Meta = RawMeta
+        ;   throw(error(json_invalid_meta(Answer), _))
+        )
+    ;   Meta = _{}
+    ).
+
+:- multifile prolog:error_message//1.
+prolog:error_message(json_no_clues_array) -->
+    [ 'clues file: expected a JSON object with a "clues" array' ].
+prolog:error_message(json_invalid_answer(Entry)) -->
+    [ 'clues file: every entry needs a string "answer" (offending entry: ~q)'-[Entry] ].
+prolog:error_message(json_invalid_meta(Answer)) -->
+    [ 'clues file: "meta" for answer ~q must be a JSON object'-[Answer] ].
 
 
 % Top level predicate for solving the crossword with a specified

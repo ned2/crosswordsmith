@@ -3,6 +3,10 @@
 Status: **implemented** — `crossword.pl`, `clues.pl`, the tests, and the
 README now reflect this design.
 
+Companion: [`json-input-spec.md`](json-input-spec.md) defines the JSON
+*input* format (`--clues File`), designed as the natural mirror of this
+output so a solution payload reduces back to a valid input.
+
 ## 1. Problem statement
 
 `crossword.pl` emits a solved crossword as an ad-hoc, delimiter-based text

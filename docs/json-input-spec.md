@@ -1,6 +1,8 @@
 # Spec: JSON clue-input file
 
-Status: **proposed** — not yet implemented; audited and revised.
+Status: **implemented** — `crossword.pl` (the `--clues` loader), the
+`tests/clues.json` fixture, the `json_input` plunit suite, and the README now
+reflect this design.
 
 Companion to [`json-output-spec.md`](json-output-spec.md), which is implemented.
 

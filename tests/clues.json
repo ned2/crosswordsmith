@@ -1,0 +1,18 @@
+{
+  "clues": [
+    { "answer": "OMEGA POINT",
+      "meta": { "clue": "Transcending entropy",
+                "link": "http://en.wikipedia.org/wiki/Omega_Point" } },
+    { "answer": "FLOW",
+      "meta": { "clue": "Autotelic activity",
+                "link": "http://en.wikipedia.org/wiki/Flow_(psychology)" } },
+    { "answer": "GNOSTIC GOSPELS" },
+    { "answer": "BIAS", "meta": {} },
+    { "answer": "ETERNAL RETURN",
+      "meta": { "clue": "Live",
+                "link": "http://en.wikipedia.org/wiki/Eternal_return" } },
+    { "answer": "NARRATIVE FALLACY",
+      "meta": { "clue": "Telos everywhere",
+                "link": "http://wiki.lesswrong.com/wiki/Narrative_fallacy" } }
+  ]
+}
