@@ -301,17 +301,23 @@ add_clue_nums([_-[W1,W2]|Rest], ClueNum, [WClue1,WClue2|RestClues]) :-
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % The emit-time metadata join is keyed on the answer string, so fail loudly if
-% two input entries share an answer (crosswords do not repeat answers).
+% two input entries share an answer (crosswords do not repeat answers). A
+% standard error/2 term plus the error_message//1 hook below renders cleanly;
+% a bare custom throw would print as "Unknown message".
 check_unique_answers(Words) :-
     findall(A, member([A|_], Words), Answers),
     msort(Answers, Sorted),
     (
      append(_, [Dup, Dup|_], Sorted)
     ->
-     throw(duplicate_answer(Dup))
+     throw(error(duplicate_answer(Dup), _))
     ;
      true
     ).
+
+:- multifile prolog:error_message//1.
+prolog:error_message(duplicate_answer(Answer)) -->
+    [ 'duplicate answer ~q in clues; answers must be unique'-[Answer] ].
 
 
 % Emit the solved crossword as a single JSON object on the current output.

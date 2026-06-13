@@ -161,7 +161,7 @@ test(word_metadata_under_meta) :-
     get_dict(link, Meta, "http://en.wikipedia.org/wiki/Omega_Point").
 
 % The emit-time join requires unique answers; a duplicate is rejected up front.
-test(duplicate_answer_rejected, [throws(duplicate_answer('CAT'))]) :-
+test(duplicate_answer_rejected, [throws(error(duplicate_answer('CAT'), _))]) :-
     crossword(5, [['CAT', _{}], ['CAT', _{}]], topleft_across).
 
 :- end_tests(solver).
