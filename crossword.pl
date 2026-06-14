@@ -32,12 +32,12 @@
 % 
 % This program can be run as an SWI PrologScript like this:
 %
-% $ ./crossword.pl <grid_length> <start_loc>
+% $ ./crossword.pl --input <input_file> <grid_length> <start_loc>
 %
 % Or you can find a vaguely random solution by shuffling the input words                                
 % and the order of the start locations:
 %
-% $ ./crossword.pl --shuffle <grid_length>
+% $ ./crossword.pl --input <input_file> --shuffle <grid_length>
 %
 % Where grid_length is integer specifying the dimensions of the crossword and
 % start_loc specifies where the first word of the crossword is placed and can be
@@ -54,18 +54,10 @@
 % the cells (1 through to GridLen*GridLen) and the values are the
 % contents of the cell.
 
-% Load a file that contains a predicate 'clues' which has a single
-% parameter which is a list of clues to be used in the crossword, with
-% each clue being a list of the form [Answer, Metadata]. Answer is the
-% word (spaces are allowed for multi-word answers and are stripped before
-% placement). Metadata is an optional dict of passthrough data, by
-% convention a clue and a link; the solver never inspects it.
-:- include('clues.pl').
-
 % Used by the JSON output emitter (canonically library(json) on SWI 10+).
 :- use_module(library(http/json)).
 
-% Command-line option parsing (--shuffle/--all/--clues/--out + positionals).
+% Command-line option parsing (--input/--shuffle/--all/--out + positionals).
 :- use_module(library(optparse)).
 
 
@@ -85,40 +77,41 @@ main :-
     opt_parse(Spec, Argv, Opts, Positional),
     run(Opts, Positional).
 
-% The option set. `clues`/`out` default to '' meaning "not given".
+% The option set. `input`/`out` default to '' meaning "not given".
 opts_spec(
     [ [opt(help),    type(boolean), default(false),
        shortflags([h]), longflags([help]),
        help('show this help and exit')],
+      [opt(input),   type(atom),    default(''), meta('FILE'),
+       longflags([input]),
+       help('load clues from FILE (.json or .pl)')],
       [opt(shuffle), type(boolean), default(false),
        longflags([shuffle]),
        help('shuffle the words and start positions for a random layout')],
       [opt(all),     type(boolean), default(false),
        longflags([all]),
        help('count every solution instead of emitting one (see README)')],
-      [opt(clues),   type(atom),    default(''), meta('FILE'),
-       longflags([clues]),
-       help('load clues from a JSON file instead of the bundled clues.pl')],
       [opt(out),     type(atom),    default(''), meta('FILE'),
        longflags([out]),
        help('write output to FILE instead of stdout')]
     ]).
 
 % Dispatch on the parsed options. The positional grammar is:
-%   <grid_length> <start_loc>   solve and emit one JSON solution
-%   --shuffle <grid_length>     ditto, words/start shuffled (start_loc implied)
-%   --all <grid_length> [loc]   count solutions (all start_locs if loc omitted)
-% --clues FILE and --out FILE are orthogonal and compose with any of these.
+%   --input FILE <grid_length> <start_loc>   solve and emit one JSON solution
+%   --input FILE --shuffle <grid_length>     ditto, words/start shuffled
+%   --input FILE --all <grid_length> [loc]   count solutions (all start_locs if loc omitted)
+% --out FILE is orthogonal and composes with any of these.
 run(Opts, _) :-
     memberchk(help(true), Opts),
     !,
     print_usage.
 run(Opts, Positional) :-
-    memberchk(clues(CluesFile), Opts),
+    memberchk(input(InputFile), Opts),
+    require_input_file(InputFile),
     memberchk(out(OutFile), Opts),
-    load_clues(CluesFile, Words),
+    load_clues(InputFile, Words),
     (   memberchk(all(true), Opts)
-    ->  positional(Positional, GridLen, StartLoc),   % StartLoc unbound if absent
+    ->  positional_all(Positional, GridLen, StartLoc),   % StartLoc unbound if absent
         with_output(OutFile, count_solutions(GridLen, Words, StartLoc))
     ;   memberchk(shuffle(true), Opts)
     ->  Positional = [GridLenArg],
@@ -133,14 +126,19 @@ run(Opts, Positional) :-
 print_usage :-
     opts_spec(Spec),
     opt_help(Spec, Help),
-    format("Usage: crossword.pl [options] <grid_length> [<start_loc>]~n~n~w", [Help]).
+    format("Usage: crossword.pl --input <file> [options] <grid_length> [<start_loc>]~n~n~w", [Help]).
+
+require_input_file('') :-
+    !,
+    throw(error(missing_input_file, _)).
+require_input_file(_).
 
 % Positional args for the --all path: grid_length is required; start_loc is
 % optional and left unbound when absent, so all four start positions are
 % enumerated by the solver.
-positional([GridLenArg], GridLen, _StartLoc) :-
+positional_all([GridLenArg], GridLen, _StartLoc) :-
     atom_number(GridLenArg, GridLen).
-positional([GridLenArg, StartLoc], GridLen, StartLoc) :-
+positional_all([GridLenArg, StartLoc], GridLen, StartLoc) :-
     atom_number(GridLenArg, GridLen),
     valid_loc(StartLoc).
 
@@ -176,20 +174,41 @@ with_output(File, Goal) :-
 
 % Clue input loading
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% Two clue sources converge on the same internal Words list
-% ([[Answer, MetaDict], ...]) before the pipeline runs; see
-% docs/json-input-spec.md. The bundled Prolog clues/1 (pulled in via the
-% include/1 above) is the zero-argument default and native authoring format;
-% an external JSON file is the interchange format, selected with `--clues
-% File`. Everything after this loader is unchanged.
+% Input files converge on the same internal Words list
+% ([[Answer, MetaDict], ...]) before the pipeline runs. JSON is the
+% interchange format; Prolog fixture files define a clues/1 term in the same
+% shape. Everything after this loader is unchanged.
 
-% Load the clue set: from a JSON file when one was given (--clues FILE),
-% otherwise the bundled clues/1.
-load_clues('', Words) :-
-    !,
-    clues(Words).
 load_clues(File, Words) :-
+    file_name_extension(_, Ext0, File),
+    downcase_atom(Ext0, Ext),
+    load_clues_by_extension(Ext, File, Words).
+
+load_clues_by_extension(json, File, Words) :-
+    !,
     read_clues_json(File, Words).
+load_clues_by_extension(pl, File, Words) :-
+    !,
+    read_clues_prolog(File, Words).
+load_clues_by_extension(Ext, File, _Words) :-
+    throw(error(unsupported_clue_file(File, Ext), _)).
+
+% Read a Prolog fixture file containing a clues/1 term. This reads terms rather
+% than consulting the file, so benchmark/main input fixtures do not define or
+% redefine global predicates.
+read_clues_prolog(File, Words) :-
+    setup_call_cleanup(open(File, read, S),
+                       read_clues_prolog_term(S, File, Words),
+                       close(S)).
+
+read_clues_prolog_term(S, File, Words) :-
+    read_term(S, Term, []),
+    (   Term == end_of_file
+    ->  throw(error(prolog_no_clues_term(File), _))
+    ;   Term = clues(Words)
+    ->  true
+    ;   read_clues_prolog_term(S, File, Words)
+    ).
 
 % Read and validate a JSON clue file into the internal Words list. A missing
 % file or malformed JSON throws standard ISO errors (existence_error /
@@ -235,6 +254,13 @@ prolog:error_message(json_invalid_answer(Entry)) -->
     [ 'clues file: every entry needs a string "answer" (offending entry: ~q)'-[Entry] ].
 prolog:error_message(json_invalid_meta(Answer)) -->
     [ 'clues file: "meta" for answer ~q must be a JSON object'-[Answer] ].
+prolog:error_message(missing_input_file) -->
+    [ 'missing required --input FILE option' ].
+prolog:error_message(unsupported_clue_file(File, Ext)) -->
+    [ 'clues file ~q has unsupported extension ~q; expected .json or .pl'-
+      [File, Ext] ].
+prolog:error_message(prolog_no_clues_term(File)) -->
+    [ 'Prolog clues file ~q does not contain a clues/1 term'-[File] ].
 
 
 % Top level predicate for solving the crossword with a specified

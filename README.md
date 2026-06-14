@@ -20,10 +20,11 @@ possible to specify a length for which there are no solutions. Also
 note that duplicate solutions exist. These consist of the same layout
 of words, but found by laying out words in a different order.
 
-The words and their accompanying solutions are stored in a separate
-file, clues.pl, which also allow you to attach a URL to each word, as
-this was originally intented for embedding in a web page, where the
-clues/solved words can be links.
+The words and their accompanying solutions are supplied as an input file.
+The repository includes a Prolog fixture, `fixtures/bundled_17_clues.pl`,
+which also allows you to attach a URL to each word, as this was originally
+intented for embedding in a web page, where the clues/solved words can be
+links.
 
 
 ## Requirements
@@ -43,21 +44,21 @@ PPA).
 shebang at the top). Run it directly:
 
     # Place the words using a fixed starting position.
-    $ ./crossword.pl <grid_length> <start_loc>
+    $ ./crossword.pl --input <input_file> <grid_length> <start_loc>
 
     # Find a vaguely random layout by shuffling the input words and the
     # order in which start positions are tried.
-    $ ./crossword.pl --shuffle <grid_length>
+    $ ./crossword.pl --input <input_file> --shuffle <grid_length>
 
     # Count how many distinct solutions exist (see the note below).
-    $ ./crossword.pl --all <grid_length> [<start_loc>]
+    $ ./crossword.pl --input <input_file> --all <grid_length> [<start_loc>]
 
-    # Use an external JSON clue file instead of the bundled clues.pl, and/or
-    # write the output to a file. --clues and --out compose with any of the
-    # forms above and may appear in any order.
-    $ ./crossword.pl --clues puzzle.json <grid_length> <start_loc>
-    $ ./crossword.pl --clues puzzle.json --shuffle <grid_length>
-    $ ./crossword.pl --out solution.json <grid_length> <start_loc>
+    # JSON and Prolog clue inputs are both accepted.
+    $ ./crossword.pl --input puzzle.json <grid_length> <start_loc>
+    $ ./crossword.pl --input fixtures/bundled_17_clues.pl 17 topleft_across
+
+    # Write the output to a file. --out composes with any form above.
+    $ ./crossword.pl --input <input_file> --out solution.json <grid_length> <start_loc>
 
     # Show all options.
     $ ./crossword.pl --help
@@ -65,33 +66,31 @@ shebang at the top). Run it directly:
 Arguments:
 
 - `grid_length` — an integer giving the side length of the (square)
-  grid. The words in `clues.pl` are intended for a grid of length 17.
+  grid. The words in `fixtures/bundled_17_clues.pl` are intended for a grid
+  of length 17.
 - `start_loc` — where the *first* word is placed. One of:
   `topleft_across`, `topleft_down`, `topright`, `bottomleft`.
 
 Options:
 
-- `--clues <file>` — load the word/clue set from an external **JSON file**
-  instead of the bundled `clues.pl`. This is the interchange format: it
-  mirrors the JSON *output*, so a solution payload can be reduced back to a
-  valid input. Without the flag, the bundled `clues.pl` is used (unchanged).
-  See [Clues file](#clues-file) and
-  [`docs/json-input-spec.md`](docs/json-input-spec.md).
+- `--input <file>` — required. Load the word/clue set from a `.json` clue file
+  using the interchange schema, or from a `.pl` Prolog fixture containing a
+  `clues/1` term.
 - `--out <file>` — write the output to `<file>` instead of stdout. The file
   is written only once a solution is found, so an unsolvable run leaves no
   empty file behind. Without the flag, output goes to stdout as before.
 - `--help` / `-h` — print the usage summary and exit.
 
 Flags are parsed with `library(optparse)`, so they compose in any order and
-also accept the `--flag=value` form (e.g. `--clues=puzzle.json`).
+also accept the `--flag=value` form (e.g. `--out=solution.json`).
 
 If you do not have execute permission set, you can equivalently run it
 as `swipl crossword.pl <args...>`.
 
 Examples:
 
-    $ ./crossword.pl 17 topleft_across
-    $ ./crossword.pl --shuffle 17
+    $ ./crossword.pl --input fixtures/bundled_17_clues.pl 17 topleft_across
+    $ ./crossword.pl --input fixtures/bundled_17_clues.pl --shuffle 17
 
 > **Note on `--all`:** this enumerates *every* solution by
 > backtracking, and the search space is large — many solutions are
@@ -101,12 +100,11 @@ Examples:
 > can take a very long time. Use it for small grids / small clue sets.
 
 
-## Clues file
+## Clues Fixture
 
-The words and clues live in `clues.pl`, which is pulled in via
-`:- include('clues.pl').` at the top of `crossword.pl`. It defines a
-single predicate, `clues/1`, whose argument is a list of `[Answer,
-Metadata]` pairs:
+The bundled words and clues live in `fixtures/bundled_17_clues.pl`. Prolog
+fixture files define a single `clues/1` term whose argument is a list of
+`[Answer, Metadata]` pairs:
 
     clues([
            ['OMEGA POINT',
@@ -131,15 +129,15 @@ Metadata]` pairs:
 Answers must be unique: the output associates metadata with each placed
 word by its answer string, so a repeated answer is rejected up front.
 
-To use your own words, replace the contents of `clues/1` and pick a
-`grid_length` large enough to lay them out.
+To use your own words with the main CLI, pass either a JSON clue file or a
+Prolog fixture file with `--input`.
 
-### JSON clue file (`--clues`)
+### JSON clue file
 
 For programmatic use you can supply the clue set as a JSON file instead,
 without editing any Prolog:
 
-    $ ./crossword.pl --clues puzzle.json 17 topleft_across
+    $ ./crossword.pl --input puzzle.json 17 topleft_across
 
 The file is a JSON object with a `clues` array; each entry mirrors an
 output `words[]` object minus the solver-computed fields:
@@ -155,18 +153,18 @@ output `words[]` object minus the solver-computed fields:
     }
 
 - **`answer`** — required string. Spaces are allowed and stripped before
-  placement, exactly as in `clues.pl`.
+  placement, exactly as in the bundled Prolog fixture.
 - **`meta`** — optional object (default `{}`), copied verbatim to the
   output entry's `meta`. By convention `clue` and `link`, but any keys are
   fine; the solver never inspects it. Omitting `meta` and giving `{}` are
   equivalent.
 
-The two sources are otherwise identical: the JSON path produces the same
-internal word list as `clues/1`, so uniqueness checking, solving, and output
-are unchanged (the bundled `clues.pl` remains the default when `--clues` is
-absent). A missing file, malformed JSON, or a schema violation (no `clues`
-array, a non-string `answer`, a non-object `meta`) is reported and the
-program exits non-zero. See
+The two sources are otherwise identical: JSON files and Prolog fixtures
+produce the same internal word list as `clues/1`, so uniqueness checking,
+solving, and output are unchanged. A missing file, malformed JSON, Prolog
+fixture without `clues/1`, unsupported extension, or JSON schema violation
+(no `clues` array, a non-string `answer`, a non-object `meta`) is reported
+and the program exits non-zero. See
 [`docs/json-input-spec.md`](docs/json-input-spec.md) for the full schema and
 rationale; `tests/clues.json` is a worked example.
 
@@ -262,8 +260,8 @@ emits object keys in sorted order, so on the wire they appear as `grid`,
 - **`words`** — one object per placed word: `number`, `direction`
   (`"across"`/`"down"`), `answer` (spaces preserved), `cells` (the ordered
   `[row, col]` pairs it occupies), and `meta` (the verbatim metadata dict
-  from `clues.pl`, `{}` if none). To follow a link from a cell, match the
-  cell's `across`/`down` number **and** direction against `words`.
+  from the input clue set, `{}` if none). To follow a link from a cell, match
+  the cell's `across`/`down` number **and** direction against `words`.
 
 If no layout exists for the requested `grid_length`, the program produces
 no output and exits non-zero (and with `--out`, no file is written).
@@ -282,3 +280,27 @@ The full schema and design rationale live in
   usage note).
 - **Duplicate solutions.** Many enumerated solutions are the same
   physical layout reached by placing words in a different order.
+
+
+## Development
+
+Run the full regression suite with:
+
+    $ make test
+
+For local performance comparisons, run the benchmark harness:
+
+    $ make bench
+
+or directly:
+
+    $ swipl -q benchmarks/run_benchmarks.pl -- fixtures/bundled_17_clues.pl
+
+The harness reports min, median, and mean wall time, CPU time, and inference
+counts for a Prolog fixture file that defines `clues/1`. These numbers are
+machine-specific and are intended for comparing local branches, not as CI
+thresholds or authoritative baselines. The default fixture is
+`fixtures/bundled_17_clues.pl`; pass a different fixture path directly, or use
+`make bench BENCH_FIXTURE=fixtures/other.pl`. Use `--grid <n>`,
+`--start-loc <loc>`, `--iterations <n>`, `--warmup <n>`, and
+`--format table|json|both` to shape a run.

@@ -12,6 +12,9 @@
 :- use_module(library(plunit)).
 :- use_module(library(http/json)).
 
+bundled_words(Words) :-
+    load_clues('fixtures/bundled_17_clues.pl', Words).
+
 
 % Grid geometry
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -116,20 +119,20 @@ test(places_two_crossing_words, [nondet]) :-
 
 % The full bundled clue set has a solution on a 17x17 grid.
 test(bundled_clues_solve_at_17, [nondet]) :-
-    clues(Words),
+    bundled_words(Words),
     find_crossword(17, Words, topleft_across, _Grid, Placed),
     length(Placed, 6).
 
 % A grid that is too small for the words has no solution.
 test(too_small_grid_fails, [fail]) :-
-    clues(Words),
+    bundled_words(Words),
     find_crossword(3, Words, topleft_across, _Grid, _Placed).
 
 % End-to-end: the top-level crossword/3 emits one JSON object describing the
 % solution. Parse it and assert the expected shape. Output is captured both to
 % keep logs clean and to inspect it.
 test(full_pipeline_emits_json) :-
-    clues(Words),
+    bundled_words(Words),
     with_output_to(string(S), crossword(17, Words, topleft_across)),
     atom_json_dict(S, Dict, []),
     get_dict(gridLength, Dict, 17),
@@ -140,7 +143,7 @@ test(full_pipeline_emits_json) :-
 % A crossing cell carries BOTH directions, so both links remain reachable (G2).
 % Row 0, col 3 is where OMEGA POINT (across 1) and GNOSTIC GOSPELS (down 2) cross.
 test(crossing_cell_has_both_directions) :-
-    clues(Words),
+    bundled_words(Words),
     with_output_to(string(S), crossword(17, Words, topleft_across)),
     atom_json_dict(S, Dict, []),
     get_dict(grid, Dict, Grid),
@@ -151,7 +154,7 @@ test(crossing_cell_has_both_directions) :-
 
 % Per-word metadata is rejoined verbatim under `meta`.
 test(word_metadata_under_meta) :-
-    clues(Words),
+    bundled_words(Words),
     with_output_to(string(S), crossword(17, Words, topleft_across)),
     atom_json_dict(S, Dict, []),
     get_dict(words, Dict, WordObjs),
@@ -203,8 +206,8 @@ test(shared_start_cell_shares_number, [nondet]) :-
 
 % JSON clue input
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% The --clues path reads a JSON file into the same internal Words list the
-% bundled clues/1 produces, so the whole pipeline downstream is unchanged.
+% JSON input reads into the same internal Words list as Prolog fixtures, so
+% the whole pipeline downstream is unchanged.
 % Paths are relative to the repo root (the runner consults from there).
 
 :- begin_tests(json_input).
@@ -303,16 +306,20 @@ test(json_output_reduces_to_valid_input) :-
 
 :- begin_tests(cli).
 
-% load_clues/2: '' selects the bundled clues/1; a path reads the JSON file.
-test(load_clues_default_is_bundled) :-
-    load_clues('', W),
+% load_clues/2 reads either Prolog fixtures or JSON input files.
+test(load_clues_from_prolog_fixture) :-
+    load_clues('fixtures/bundled_17_clues.pl', W),
     length(W, 6),
     W = [[A|_]|_], A == 'OMEGA POINT'.
 
-test(load_clues_from_file) :-
+test(load_clues_from_json_file) :-
     load_clues('tests/clues.json', W),
     length(W, 6),
     once((member([Ans, _], W), Ans == 'BIAS')).
+
+test(load_clues_rejects_unsupported_extension,
+     [throws(error(unsupported_clue_file('tests/clues.txt', txt), _))]) :-
+    load_clues('tests/clues.txt', _).
 
 % valid_loc/1 accepts the four named start locations and nothing else.
 test(valid_loc_accepts_known) :- valid_loc(topleft_across).

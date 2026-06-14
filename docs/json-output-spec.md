@@ -1,11 +1,11 @@
 # Spec: JSON solution output with per-word link metadata
 
-Status: **implemented** — `crossword.pl`, `clues.pl`, the tests, and the
-README now reflect this design.
+Status: **implemented** — `crossword.pl`, `fixtures/bundled_17_clues.pl`, the
+tests, and the README now reflect this design.
 
 Companion: [`json-input-spec.md`](json-input-spec.md) defines the JSON
-*input* format (`--clues File`), designed as the natural mirror of this
-output so a solution payload reduces back to a valid input.
+*input* format, designed as the natural mirror of this output so a solution
+payload reduces back to a valid input.
 
 ## 1. Problem statement
 
@@ -82,10 +82,11 @@ These were settled during design discussion:
   receives a single document. This is the purest form of G4: the solver does
   not merely ignore metadata, it never sees it. The one assumption it buys is
   that answers are unique (see §8.1 and §9).
-- **Input format: answer + metadata dict.** `clues.pl` moves from positional
-  triples `[Word, Clue, Link]` to `[Answer, Metadata]`, where `Metadata` is a
-  dict of arbitrary passthrough keys (conventionally `clue` and `link`). The
-  solver consumes only `Answer`; it does not special-case any metadata key.
+- **Input format: answer + metadata dict.** The bundled Prolog fixture moves
+  from positional triples `[Word, Clue, Link]` to `[Answer, Metadata]`, where
+  `Metadata` is a dict of arbitrary passthrough keys (conventionally `clue`
+  and `link`). The solver consumes only `Answer`; it does not special-case any
+  metadata key.
 
 ## 5. Proposed input format
 
@@ -250,9 +251,9 @@ carries (the placed-word tuple loses its metadata slots) and the I/O edges
 (input format and output emitter). `find_crossword/5`'s logic is untouched;
 `assign_words/8` changes only in how it destructures each input entry.
 
-1. **Input normalisation.** Update `clues.pl` to the `[Answer, Metadata]`
-   form, and have `assign_words/8` take only the answer (`[Answer | _]`,
-   `crossword.pl:133`). Metadata is **not** carried by the solver, so the
+1. **Input normalisation.** Update the bundled Prolog fixture to the
+   `[Answer, Metadata]` form, and have `assign_words/8` take only the answer
+   (`[Answer | _]`, `crossword.pl:133`). Metadata is **not** carried by the solver, so the
    placed-word tuple drops its `Clue` and `Link` slots entirely (9 elements
    to 7). That arity change shifts every positional match on the tuple. Sites
    to update (or, for the old grid builder, remove):
@@ -308,7 +309,7 @@ carries (the placed-word tuple loses its metadata slots) and the I/O edges
 
 4. **Tests.** Both layers in `run_tests.sh` need updating:
    - The golden regression compares the raw CLI output of
-     `crossword.pl 17 topleft_across` against
+     `crossword.pl --input fixtures/bundled_17_clues.pl 17 topleft_across` against
      `tests/golden/grid_17_topleft_across.txt`. Regenerate the golden file in
      the new JSON format. Consider parsing the JSON and asserting on structure
      rather than byte-exact match, since key ordering in `json_write_dict` is
@@ -323,9 +324,9 @@ carries (the placed-word tuple loses its metadata slots) and the I/O edges
 
 ## 9. Risks and considerations
 
-- **Breaking change.** Both the input (`clues.pl`) and output formats change.
-  Any existing consumer of the text format must be updated. This is acceptable
-  given the redesign is the point; note it in the README / commit.
+- **Breaking change.** Both the Prolog clue fixture shape and output formats
+  change. Any existing consumer of the text format must be updated. This is
+  acceptable given the redesign is the point; note it in the README / commit.
 - **Emit-time join assumes unique answers.** Metadata is reattached by
   matching the answer string, so two `clues/1` entries with the same answer
   cannot be told apart. The uniqueness guard (§8.1) turns this into a clear

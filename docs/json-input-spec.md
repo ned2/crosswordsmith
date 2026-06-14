@@ -1,6 +1,6 @@
 # Spec: JSON clue-input file
 
-Status: **implemented** — `crossword.pl` (the `--clues` loader), the
+Status: **implemented** — `crossword.pl` (the input-file loader), the
 `tests/clues.json` fixture, the `json_input` plunit suite, and the README now
 reflect this design.
 
@@ -8,23 +8,23 @@ Companion to [`json-output-spec.md`](json-output-spec.md), which is implemented.
 
 ## 1. Problem statement
 
-The crossword's input lives in `clues.pl`, a Prolog source file pulled in at
-compile time via `:- include('clues.pl').`. It defines `clues/1` as a list of
-`[Answer, Metadata]` pairs (`Metadata` an SWI dict). `main/0` calls `clues/1`
-to obtain the word list.
+The repository's example input lives in `fixtures/bundled_17_clues.pl`, a
+Prolog fixture file defining `clues/1` as a list of `[Answer, Metadata]` pairs
+(`Metadata` an SWI dict). `main/0` now requires `--input File` and loads either
+a `.pl` fixture or a `.json` clue file at runtime.
 
-This means the *only* way to supply a puzzle is to author Prolog source and
-have it compiled into the script. The output is already JSON
-(`json-output-spec.md`), and the program was built to feed a web page, so an
-external consumer that can *read* the solution cannot *produce* a puzzle
-without writing Prolog. We want to accept clues from a JSON file so puzzles
-can be generated programmatically and the input/output loop is symmetric.
+Originally the only way to supply a puzzle was to author Prolog source
+compiled into the script. The output is already JSON (`json-output-spec.md`),
+and the program was built to feed a web page, so an external consumer that can
+*read* the solution should also be able to *produce* a puzzle without writing
+Prolog. We accept clues from JSON and from Prolog fixture files through the
+same mandatory CLI input-file option.
 
 ## 2. Goals
 
 - **G1.** Accept a clue set from an external **JSON file** at runtime.
-- **G2.** Keep the bundled Prolog `clues/1` working unchanged as the default,
-  so existing usage and the in-repo dataset need no migration.
+- **G2.** Accept Prolog fixture files at runtime, so the in-repo dataset does
+  not need to be compiled into `crossword.pl`.
 - **G3.** Add **no new dependency** — reuse `library(http/json)`, already
   loaded for output.
 - **G4.** Leave the solver and emitter untouched: both input sources converge
@@ -36,23 +36,16 @@ can be generated programmatically and the input/output loop is symmetric.
 
 - Moving `grid_length` / `start_loc` into the file (they stay CLI arguments;
   see §11).
-- Supporting arbitrary *external Prolog* clue files (see §4, decision D1).
 - Changing the solver, placement, clue-numbering, or output format.
 
 ## 4. Decisions taken
 
-- **D1. Two formats, distinct roles — not interchangeable peers.** The bundled
-  Prolog `clues/1` remains the **zero-argument default** and the native
-  authoring format for the in-repo dataset. JSON is the **external /
-  interchange** format, selected explicitly. We are *not* replacing `clues.pl`
-  with JSON (that forces a second input-format migration right after the
-  output redesign and loses the compile-time `include`), and we are *not*
-  supporting arbitrary external `.pl` clue files. The latter is a YAGNI call,
-  not a technical one: editing the bundled `clues.pl` already covers Prolog
-  authoring, so a second Prolog source path earns nothing. (It is also
-  slightly awkward — `clues/1` is already defined via `include`, so a naive
-  runtime `load_files/2` with a `module` option can clobber it; a `read_term/3`
-  scan would sidestep that, but it isn't worth building.)
+- **D1. Mandatory input file.** The main CLI has no compiled-in default clue
+  set. `--input File` is required; `.json` files use the interchange schema
+  and `.pl` files are Prolog fixtures containing a `clues/1` term. This is an
+  option rather than the first positional because direct SWI shebang execution
+  can treat a leading `.pl` argument as another Prolog source file before the
+  script receives argv.
 - **D2. Single internal representation.** Both sources produce the existing
   `Words = [[Answer, MetaDict], …]` list (atom `Answer`, dict `MetaDict`)
   before anything downstream runs. The change is a *loader* in `main/0`; the
@@ -78,14 +71,14 @@ can be generated programmatically and the input/output loop is symmetric.
 ## 5. Architecture
 
 ```
-   clues.pl  (include, default) ─┐
-                                 ├─► Words = [[Answer, MetaDict], …] ─► unchanged
-   --clues f.json (json_read) ───┘                                      pipeline
+   fixture.pl (read clues/1 term) ─┐
+                                   ├─► Words = [[Answer, MetaDict], …] ─► unchanged
+   puzzle.json (json_read) ────────┘                                      pipeline
 ```
 
-`main/0` decides the source from the CLI, calls a loader, and passes the
-resulting `Words` into the existing flow. Everything after the loader is the
-code that ships today.
+`main/0` decides the source from the input-file extension, calls a loader, and
+passes the resulting `Words` into the existing flow. Everything after the
+loader is the code that ships today.
 
 ## 6. Proposed JSON input schema
 
@@ -119,7 +112,8 @@ reuses the collision-safety rationale from the output spec (§6.2 there). As
 with the output, `meta` values are re-emitted via `json_write_dict`, so they
 inherit that spec's contract (§9 there) — values must be JSON-friendly. A flat
 alias is rejected: it would double the validation surface, and hand-authoring
-ergonomics are what the bundled `clues.pl` is for, not the interchange format.
+ergonomics are what the bundled Prolog fixture is for, not the interchange
+format.
 
 ## 7. Mapping to the internal form
 
@@ -134,52 +128,49 @@ The result is indistinguishable from what `clues/1` returns, so
 `check_unique_answers/1` (the existing answer-uniqueness guard) applies
 uniformly.
 
-## 8. CLI changes
+## 8. CLI
 
-A new flag selects the source:
+The input file is mandatory:
 
-    ./crossword.pl --clues puzzle.json 17 topleft_across
-    ./crossword.pl --clues puzzle.json --shuffle 17
-    ./crossword.pl 17 topleft_across          # unchanged: bundled clues
+    ./crossword.pl --input puzzle.json 17 topleft_across
+    ./crossword.pl --input fixtures/bundled_17_clues.pl 17 topleft_across
+    ./crossword.pl --input puzzle.json --shuffle 17
 
-`--clues File` is a flag-with-value that must compose with the existing
-`--shuffle` / `--all` flags and the positional `grid_length` / `start_loc`.
+The positional grammar is:
+
+- `--input FILE <grid_length> <start_loc>` for one JSON solution;
+- `--input FILE --shuffle <grid_length>` for a shuffled first solution;
+- `--input FILE --all <grid_length> [start_loc]` for solution counts.
 
 **Implemented with `library(optparse)`.** The original `main/0` matched `Argv`
-positionally and would have needed each new flag stripped, adjacency-safe,
-from `Argv` before the positional clauses ran. With `--shuffle`, `--all`,
-`--clues`, and now `--out`, the flag set crossed the point where a real parser
-pays its way (this section's option 2), so `main/0` was migrated to
-`opt_parse/4`: it strips all flags and returns the leftover positionals
-(`grid_length` and an optional `start_loc`, as atoms), which a single `run/2`
-predicate dispatches on. Flags now compose in any order, accept `--flag=value`,
-get `--help`/`-h` for free, and an unknown flag is a clean
-`existence_error(commandline_option, _)` rather than a silent positional
-mismatch. Adding a further flag is one more `opts_spec/1` entry.
+positionally and would have needed each flag stripped before the positional
+clauses ran. With `--shuffle`, `--all`, and `--out`, the flag set crossed the
+point where a real parser pays its way, so `main/0` uses `opt_parse/4`: it
+strips all flags and returns the leftover positionals as atoms, which a single
+`run/2` predicate dispatches on. Flags compose in any order, accept
+`--flag=value`, get `--help`/`-h` for free, and an unknown flag is a clean
+`existence_error(commandline_option, _)`.
 
-(The migration retired the adjacency-preserving `strip_clues_flag/3` that an
-earlier draft of this section sketched. The hazard it guarded against is real
-— a naive `select('--clues', Argv, R), select(File, R, _)` mis-binds a leading
-`--shuffle` as the value for `[--shuffle, 17, --clues, p.json]` — but
-`opt_parse/4` handles flag→value adjacency itself, so the hand-rolled
-extractor is no longer needed.)
-
-The clue loader proper is unchanged from the design (extension sniffing
-dropped — JSON is the only external format, so just parse and let JSON errors
-speak):
+The clue loader dispatches by extension:
 
 ```prolog
-% '' (the --clues default) selects the bundled clues/1; a path reads JSON.
-load_clues('', Words)  :- !, clues(Words).
-load_clues(File, Words) :- read_clues_json(File, Words).
+load_clues(File, Words) :-
+    file_name_extension(_, Ext0, File),
+    downcase_atom(Ext0, Ext),
+    load_clues_by_extension(Ext, File, Words).
+
+load_clues_by_extension(json, File, Words) :- read_clues_json(File, Words).
+load_clues_by_extension(pl, File, Words)   :- read_clues_prolog(File, Words).
 
 read_clues_json(File, Words) :-
     setup_call_cleanup(open(File, read, S), json_read_dict(S, Doc), close(S)),
     doc_to_words(Doc, Words).
 ```
 
-`doc_to_words/2` validates the document (§9) and maps each entry to
-`[AtomAnswer, MetaDict]`.
+`read_clues_prolog/2` reads terms until it finds `clues(Words)`, rather than
+consulting the file, so input fixtures do not define or redefine global
+predicates. `doc_to_words/2` validates JSON documents (§9) and maps each entry
+to `[AtomAnswer, MetaDict]`.
 
 **`--out File` (added alongside).** Writes the output to a file instead of
 stdout. Because `emit_json/3` already writes to `current_output`, this needed
@@ -229,8 +220,8 @@ Answer uniqueness is *not* re-checked in the loader — the existing
   entry to `{answer, meta}`, and confirms it round-trips as valid input.
   Compare at the **JSON-text** level (re-emit and diff) or normalise both
   sides first: emitted `answer`/`meta` values are JSON *strings* while authored
-  `clues.pl` uses *atoms*, so a direct term comparison against `clues/1` would
-  see a spurious `"FLOW" \== 'FLOW'` mismatch.
+  Prolog fixtures use *atoms*, so a direct term comparison against `clues/1`
+  would see a spurious `"FLOW" \== 'FLOW'` mismatch.
 - **Docs.** README usage section; this spec; cross-link from the output spec.
 
 ## 11. Resolved questions
@@ -238,9 +229,9 @@ Answer uniqueness is *not* re-checked in the loader — the existing
 - **Nested `meta`, not flat.** Resolved nested (see §6): it's the only shape
   under which output→input symmetry (G5) holds, and it inherits the output's
   collision-safety. No flat alias.
-- **Flag name `--clues <file>`.** Matches the predicate `clues/1`; `--input`
-  is too generic, `--clues-file` redundant. Extension sniffing is dropped
-  (§8) — JSON is the only external format.
+- **Required `--input File`.** There is no `--clues` flag and no compiled-in
+  default. The input file is part of every CLI form, and extension dispatch
+  selects JSON (`.json`) or Prolog fixture (`.pl`) loading.
 - **Config in the file: deferred, but coupled.** `gridLength` / `startLoc`
   stay CLI args for v1; the wrapper-object shape leaves room to add them later.
   When that happens, CLI overrides file and a `--shuffle` run ignores a file

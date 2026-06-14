@@ -5,7 +5,8 @@
 # Two layers:
 #   1. plunit unit/integration tests (tests/crossword.plt) via tests/run_tests.pl
 #   2. a golden-output regression test: the deterministic CLI run
-#      `crossword.pl 17 topleft_across` must match tests/golden/.
+#      `crossword.pl --input fixtures/bundled_17_clues.pl 17 topleft_across`
+#      must match tests/golden/.
 #
 # Exits non-zero if any layer fails. Run from anywhere.
 
@@ -28,7 +29,7 @@ golden="tests/golden/grid_17_topleft_across.txt"
 actual="$(mktemp)"
 trap 'rm -f "$actual"' EXIT
 # Compare files directly (not via $(...), which strips trailing newlines).
-./crossword.pl 17 topleft_across 2>/dev/null > "$actual"
+./crossword.pl --input fixtures/bundled_17_clues.pl 17 topleft_across 2>/dev/null > "$actual"
 if diff -u "$golden" "$actual" >/dev/null; then
     echo "golden: OK"
 else

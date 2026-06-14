@@ -19,10 +19,11 @@ the README.
 
 - The implementation is a SWI-Prolog crossword layout generator.
 - `crossword.pl` is the executable script and main implementation.
-- `clues.pl` is the bundled clue dataset used by default.
+- `fixtures/bundled_17_clues.pl` is the bundled clue dataset used by examples,
+  benchmarks, and the golden regression.
 - `tests/crossword.plt` contains the plunit coverage.
 - `tests/golden/grid_17_topleft_across.txt` is the deterministic CLI golden
-  output for `./crossword.pl 17 topleft_across`.
+  output for `./crossword.pl --input fixtures/bundled_17_clues.pl 17 topleft_across`.
 
 ## Working Instructions
 
