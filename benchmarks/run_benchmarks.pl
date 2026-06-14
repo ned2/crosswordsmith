@@ -50,9 +50,9 @@ benchmark_opts_spec(
       [opt(warmup),     type(integer), default(3), meta('N'),
        longflags([warmup]),
        help('unreported warmup repetitions')],
-      [opt(format),     type(atom),    default(both), meta('FORMAT'),
+      [opt(format),     type(atom),    default(text), meta('FORMAT'),
        longflags([format]),
-       help('output format: table, json, or both')]
+       help('output format: text, csv, or json')]
     ]).
 
 
@@ -155,7 +155,7 @@ validate_warmup(Warmup) :-
 
 
 validate_format(Format) :-
-    memberchk(Format, [table, json, both]),
+    memberchk(Format, [text, csv, json]),
     !.
 validate_format(Format) :-
     throw(error(invalid_format(Format), _)).
@@ -278,32 +278,73 @@ version_atom(VersionData, Version) :-
     term_to_atom(VersionData, Version).
 
 
-output_report(table, Report) :-
+output_report(text, Report) :-
     !,
-    emit_table(Report).
+    emit_text(Report).
+output_report(csv, Report) :-
+    !,
+    emit_csv(Report).
 output_report(json, Report) :-
     !,
     emit_json_report(Report).
-output_report(both, Report) :-
-    emit_table(Report),
-    nl,
-    emit_json_report(Report).
 
 
-emit_table(Report) :-
+emit_text(Report) :-
     get_dict(metadata, Report, Metadata),
-    format("crosswordsmith benchmarks~n", []),
-    format("fixture: ~w, grid: ~d, start: ~w, iterations: ~d, warmup: ~d, swipl: ~w~n~n",
-           [Metadata.fixture, Metadata.gridLength, Metadata.startLoc,
-            Metadata.iterations, Metadata.warmup, Metadata.swiProlog]),
-    format("fixture\tgrid\tstart\titerations\twall_min_s\twall_median_s\twall_mean_s\tcpu_min_s\tcpu_median_s\tcpu_mean_s\tinferences_min\tinferences_median\tinferences_mean~n",
-           []),
+    get_dict(results, Report, [Result]),
+    emit_text_atom(tool, Metadata.tool),
+    emit_text_atom(fixture, Result.fixture),
+    emit_text_atom(fixture_name, Result.fixtureName),
+    emit_text_integer(grid_length, Result.gridLength),
+    emit_text_atom(start_loc, Result.startLoc),
+    emit_text_integer(iterations, Result.iterations),
+    emit_text_integer(warmup, Metadata.warmup),
+    emit_text_atom(swi_prolog, Metadata.swiProlog),
+    emit_text_float(epoch_seconds, Metadata.epochSeconds),
+    emit_text_float(wall_min_s, Result.wall.min),
+    emit_text_float(wall_median_s, Result.wall.median),
+    emit_text_float(wall_mean_s, Result.wall.mean),
+    emit_text_float(cpu_min_s, Result.cpu.min),
+    emit_text_float(cpu_median_s, Result.cpu.median),
+    emit_text_float(cpu_mean_s, Result.cpu.mean),
+    emit_text_count(inferences_min, Result.inferences.min),
+    emit_text_count(inferences_median, Result.inferences.median),
+    emit_text_count(inferences_mean, Result.inferences.mean).
+
+
+emit_text_atom(Key, Value) :-
+    emit_text_key(Key),
+    format("~w~n", [Value]).
+
+
+emit_text_integer(Key, Value) :-
+    emit_text_key(Key),
+    format("~d~n", [Value]).
+
+
+emit_text_float(Key, Value) :-
+    emit_text_key(Key),
+    format("~6f~n", [Value]).
+
+
+emit_text_count(Key, Value) :-
+    emit_text_key(Key),
+    format("~0f~n", [Value]).
+
+
+emit_text_key(Key) :-
+    format("~w:~t~22|", [Key]).
+
+
+emit_csv(Report) :-
     get_dict(results, Report, Results),
-    forall(member(Result, Results), emit_table_row(Result)).
+    format("fixture,grid,start,iterations,wall_min_s,wall_median_s,wall_mean_s,cpu_min_s,cpu_median_s,cpu_mean_s,inferences_min,inferences_median,inferences_mean~n",
+           []),
+    forall(member(Result, Results), emit_csv_row(Result)).
 
 
-emit_table_row(Result) :-
-    format("~w\t~d\t~w\t~d\t~6f\t~6f\t~6f\t~6f\t~6f\t~6f\t~0f\t~0f\t~0f~n",
+emit_csv_row(Result) :-
+    format("~w,~d,~w,~d,~6f,~6f,~6f,~6f,~6f,~6f,~0f,~0f,~0f~n",
            [ Result.fixtureName,
              Result.gridLength,
              Result.startLoc,
@@ -345,7 +386,7 @@ prolog:error_message(invalid_iterations(Iterations)) -->
 prolog:error_message(invalid_warmup(Warmup)) -->
     [ 'benchmark warmup must be a non-negative integer, got ~q'-[Warmup] ].
 prolog:error_message(invalid_format(Format)) -->
-    [ 'benchmark format must be one of table, json, or both, got ~q'-[Format] ].
+    [ 'benchmark format must be text, csv, or json, got ~q'-[Format] ].
 prolog:error_message(fixture_unsolved(GridLen, StartLoc)) -->
     [ 'benchmark fixture did not solve for grid length ~d and start location ~q'-
       [GridLen, StartLoc] ].

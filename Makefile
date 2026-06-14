@@ -28,4 +28,4 @@ update-golden:
 
 # Local performance baselines. Results are machine-specific and reporting-only.
 bench:
-	swipl -q benchmarks/run_benchmarks.pl -- --format both $(BENCH_FIXTURE)
+	swipl -q benchmarks/run_benchmarks.pl -- $(BENCH_FIXTURE)

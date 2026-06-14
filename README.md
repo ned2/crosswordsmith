@@ -303,4 +303,4 @@ thresholds or authoritative baselines. The default fixture is
 `fixtures/bundled_17_clues.pl`; pass a different fixture path directly, or use
 `make bench BENCH_FIXTURE=fixtures/other.pl`. Use `--grid <n>`,
 `--start-loc <loc>`, `--iterations <n>`, `--warmup <n>`, and
-`--format table|json|both` to shape a run.
+`--format text|csv|json` to shape a run. The default format is `text`.
