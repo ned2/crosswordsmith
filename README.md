@@ -301,6 +301,27 @@ counts for a Prolog fixture file that defines `clues/1`. These numbers are
 machine-specific and are intended for comparing local branches, not as CI
 thresholds or authoritative baselines. The default fixture is
 `fixtures/bundled_17_clues.pl`; pass a different fixture path directly, or use
-`make bench BENCH_FIXTURE=fixtures/other.pl`. Use `--grid <n>`,
+`make bench BENCH_FIXTURE=fixtures/other.pl BENCH_GRID=<n>`. Use `--grid <n>`,
 `--start-loc <loc>`, `--iterations <n>`, `--warmup <n>`, and
-`--format text|csv|json` to shape a run. The default format is `text`.
+`--format text|csv|json` to shape a direct run. With `make bench`, the matching
+variables are `BENCH_GRID`, `BENCH_START_LOC`, `BENCH_ITERATIONS`,
+`BENCH_WARMUP`, and `BENCH_FORMAT`. The default format is `text`.
+
+Synthetic benchmark fixtures are included for deeper search workloads:
+
+| fixture | words | grid |
+| --- | ---: | ---: |
+| `fixtures/benchmark_08_words.pl` | 8 | 13 |
+| `fixtures/benchmark_14_words.pl` | 14 | 17 |
+| `fixtures/benchmark_16_dense_words.pl` | 16 | 17 |
+| `fixtures/benchmark_20_words.pl` | 20 | 37 |
+| `fixtures/benchmark_26_words.pl` | 26 | 49 |
+
+For example:
+
+    $ make bench BENCH_FIXTURE=fixtures/benchmark_20_words.pl BENCH_GRID=37
+
+The dense 16-word fixture is intentionally much slower than the others; start
+with one measured iteration:
+
+    $ make bench BENCH_FIXTURE=fixtures/benchmark_16_dense_words.pl BENCH_GRID=17 BENCH_ITERATIONS=1 BENCH_WARMUP=0

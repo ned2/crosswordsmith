@@ -5,6 +5,11 @@ SHELL := /bin/bash
 .PHONY: test unit golden update-golden bench
 
 BENCH_FIXTURE ?= fixtures/bundled_17_clues.pl
+BENCH_GRID ?= 17
+BENCH_START_LOC ?= topleft_across
+BENCH_ITERATIONS ?= 30
+BENCH_WARMUP ?= 3
+BENCH_FORMAT ?= text
 
 # Full suite: plunit tests + golden-output regression.
 test:
@@ -28,4 +33,10 @@ update-golden:
 
 # Local performance baselines. Results are machine-specific and reporting-only.
 bench:
-	swipl -q benchmarks/run_benchmarks.pl -- $(BENCH_FIXTURE)
+	swipl -q benchmarks/run_benchmarks.pl -- \
+		--grid $(BENCH_GRID) \
+		--start-loc $(BENCH_START_LOC) \
+		--iterations $(BENCH_ITERATIONS) \
+		--warmup $(BENCH_WARMUP) \
+		--format $(BENCH_FORMAT) \
+		$(BENCH_FIXTURE)
