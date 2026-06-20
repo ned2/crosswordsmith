@@ -212,15 +212,39 @@ comb tax motivated E5 (`mrv_inc`).
 
 ## Open ideas
 
-- **I2 — value ordering.** Among a chosen word's placements, prefer those that
-  create more crossings (denser, and likely fewer downstream dead ends).
-  `benchmark_16_dense` is the proving ground for a pruning win; the combs and
-  `benchmark_70_mesh` for whether it adds per-node cost.
+- All logged algorithm ideas (I1-I5) are closed. Possible future work: a
+  *cheaper* value heuristic that biases `find_intersecting_word/6`'s generation
+  order without the full enumerate-and-sort (I2 failed on that cost, not the
+  idea); and the infra items deferred by choice (auto-stamp git SHA + a
+  fixture-set hash in `run_matrix.pl`; a CI / inference-count regression gate).
 
 ## Done / closed ideas
 
 - **I1 — incremental counts.** DONE → E5 (`mrv_inc`). Shipped; 3.8-4.6x fewer
   inferences on the large combs, dense win preserved.
+- **I2 — value ordering.** TRIED, REJECTED (reverted from code, like E4). Idea:
+  among the chosen word's candidate placements, try them ordered by how many
+  crossings each makes with already-placed words, instead of
+  `find_intersecting_word/6`'s native order. Sketch: in the placement step,
+  `findall(Count-(S-D), distinct(S-D, (find_intersecting_word(...,S,D),`
+  `crossing_count(Letters,S,D,GridLen,GIn,Count))), Pairs)`, `sort/4` by Count,
+  then `member` best-first; `crossing_count/6` counts word cells already holding
+  the matching letter.
+  - **Result (post-I5 solver):** both directions are *worse* than `mrv_inc`.
+    Most-crossings-first: `benchmark_16_dense` 398 k -> 488 k inferences,
+    `benchmark_14` 289 k -> 358 k (~20-24% more); `benchmark_20` ~3% more.
+    Fewest-crossings-first (the least-constraining-value intuition): essentially
+    identical (dense 491 k, bench_14 360 k).
+  - **Why:** the ~20% penalty is the per-node cost of enumerating and sorting
+    *all* of a word's placements - inherent to value ordering. Both heuristic
+    directions lose by the same margin, so the loss is the overhead, not the
+    ranking. On top of `mrv_inc`'s strong variable ordering the search already
+    backtracks little, so there is not ~20% of pruning available to offset the
+    cost. (Value ordering reorders placements *within* a word; it cannot help
+    baseline's `dense_16` blow-up, which is a *variable*-ordering problem.)
+  - **Verdict:** not worth it for this suite. Revisit only with a value
+    heuristic that does not require full per-node placement enumeration, and/or
+    a fixture where `mrv_inc` itself backtracks heavily (none found).
 - **I5 — solver soundness: collinear "word inside a word".** DONE (fixed in
   `crossword.pl`). The solver could place a word and a collinear word whose span
   contains it (e.g. `DFEE` inside `DFEEE`, same start cell, same direction) -
