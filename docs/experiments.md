@@ -49,6 +49,60 @@ swipl -q benchmarks/run_matrix.pl -- baseline mrv_capped   # subset
 
 ---
 
+## Suite property: start-position bias
+
+Every benchmark pins one start position (`topleft_across` for all manifest
+fixtures). A sweep over all four named starts (`start_locs/1`), baseline and
+`mrv_inc`, each fixture on its manifest grid, exposes how much that pin matters.
+Data: `benchmarks/results/2026-06-20-start-sensitivity.csv` (reproduce with
+`swipl -q benchmarks/start_sensitivity.pl`). Inferences per start (TL-A =
+topleft_across, TL-D = topleft_down, TR = topright, BL = bottomleft):
+
+| fixture | strategy | TL-A | TL-D | TR | BL |
+| --- | --- | --- | --- | --- | --- |
+| bundled_17 | baseline | 25.6 k | 16.9 k | 9.3 k | 9.2 k |
+| bundled_17 | mrv_inc | 322 k | 305 k | **22 k** | **22 k** |
+| benchmark_08 | both | ~10 k / 53 k | ~10 k / 53 k | **unsat** | **unsat** |
+| benchmark_14 | both | solves | solves | **timeout** | **timeout** |
+| benchmark_16_dense | both | solves (slow) | solves (slow) | **timeout** | **timeout** |
+| benchmark_70_mesh | baseline | 293 k | 292 k | **timeout** | **timeout** |
+| benchmark_70_mesh | mrv_inc | 5.16 M | 5.14 M | 4.84 M | 4.77 M |
+| benchmark_20 | mrv_inc | 79 k | 81 k | 154 k | 158 k |
+| benchmark_26 | mrv_inc | 139 k | 143 k | 274 k | 280 k |
+
+Findings:
+
+- **The synthetic fixtures are start-locked by construction.** `benchmark_08`
+  (provably, small grid), `benchmark_14`, `benchmark_16_dense` and
+  `benchmark_70_mesh` only solve from the two **top-left** starts; from
+  top-right / bottom-left they are unsatisfiable or do not finish. They were
+  planted/generated with a top-left-anchored solution (the mesh generator seeds
+  the witness at cell (0,0)), so no layout exists from the far corners. Pinning
+  `topleft_across` is therefore not an arbitrary choice - it is the start most
+  of them work from at all. The start is **load-bearing** for the suite.
+- **Corner matters, not the first word's direction.** `topleft_across` ≈
+  `topleft_down` and `topright` ≈ `bottomleft` everywhere; there are two
+  regimes, top-left vs the far corners.
+- **On the one start-neutral fixture (`bundled_17`, real words), the start
+  matters a lot and the pin is the *worst* choice for the production solver:**
+  `mrv_inc` solves it in 22 k inferences from the far corners vs 322 k from
+  top-left - a ~15x swing. So "corner start gives nicer/less-cramped layouts"
+  is not supported here; the top-left choice is just *fixed*, not better.
+- **"Best start" is fixture-dependent:** top-left for the combs (`benchmark_20`/
+  `26` cost ~2.3-2.4x more from the far corners), far-corner for `bundled_17`,
+  top-left-only for the planted fixtures.
+
+Consequences: (1) benchmark results are all taken at the one start the synthetic
+fixtures were built for, which is fine for *comparing strategies* but is not a
+representative cross-section of "general crossword solving". (2) **The synthetic
+suite cannot evaluate a "let the start fall out of the algorithm" idea** (e.g. a
+principled deterministic seed choice) - it is rigged for top-left, so any seed
+heuristic that picks elsewhere would make those fixtures look unsolvable. A fair
+test needs start-neutral fixtures (real-word sets, or a generator that does not
+anchor a corner).
+
+---
+
 ## Result batch — 2026-06-20, post I5 fix (SWI 10.0.2) — current
 
 Source: `benchmarks/results/2026-06-20-postI5-strategy-matrix.csv`. After the I5
