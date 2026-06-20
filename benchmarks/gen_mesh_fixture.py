@@ -94,11 +94,12 @@ def build(G, N, K, lmin, lmax, seed):
         s, to_fill, crossings = res
         if crossings == 0 or s in seen:         # must actually cross; no dup answers
             continue
-        # Reject prefix pairs: if one word is a prefix of another, the solver can
-        # place them collinearly at the same start cell (a "word inside a word"),
-        # which assign_clue_numbers/3 cannot number. (This is a latent SOLVER
-        # bug the dense mesh surfaced; we sidestep it in the witness so the
-        # fixture emits cleanly through the full CLI.)
+        # Avoid prefix pairs in the word set. The solver now rejects collinear
+        # "word inside a word" placements itself (crossword.pl no_word_merge/3,
+        # idea I5), so this is no longer needed for correctness; it is kept as a
+        # cheap heuristic to keep the *witness* a clean, non-overlapping layout
+        # (so the instance stays comfortably satisfiable) and to keep the
+        # committed fixture reproducible from these exact arguments.
         if any(w.startswith(s) or s.startswith(w) for w in seen):
             continue
         commit(to_fill)

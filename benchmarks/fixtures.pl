@@ -18,7 +18,9 @@ bench_fixture('fixtures/benchmark_14_words.pl',      17, topleft_across, 30, 3).
 bench_fixture('fixtures/benchmark_16_dense_words.pl', 17, topleft_across,  1, 0).
 bench_fixture('fixtures/benchmark_20_words.pl',      37, topleft_across, 30, 3).
 bench_fixture('fixtures/benchmark_26_words.pl',      49, topleft_across, 30, 3).
-% Hard mesh (idea I4): hard for baseline (does not finish in the matrix's
-% per-cell limit), tractable for the MRV strategies. 1 iteration / 0 warmup
-% because the baseline cell is slow. See docs/experiments.md (I4).
+% Large dense mesh (idea I4). NOTE: this was baseline-hard only because of the
+% collinear-overlap bug (I5); once that was fixed, baseline solves it in ~14 ms
+% and the MRV strategies pay their per-node tax instead (baseline beats MRV
+% here). Kept as a large-grid mesh data point. 1 iteration / 0 warmup. See
+% docs/experiments.md (I4, I5).
 bench_fixture('fixtures/benchmark_70_mesh_words.pl', 21, topleft_across,  1, 0).

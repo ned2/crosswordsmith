@@ -17,7 +17,7 @@ comparisons rather than puzzle content.
 | `benchmark_16_dense_words.pl` | 16 | 17 | Dense mesh | Very high | 1 | Stress testing search changes and pruning behavior |
 | `benchmark_20_words.pl` | 20 | 37 | Comb | Low | 30+ | Larger word-count overhead without a branchy search tree |
 | `benchmark_26_words.pl` | 26 | 49 | Comb | Low to moderate | 30+ | Larger grid and word-count scaling checks |
-| `benchmark_70_mesh_words.pl` | 70 | 21 | Dense mesh | Baseline: timeout; MRV: low | 1 | Hard search where baseline times out but MRV solves (idea I4) |
+| `benchmark_70_mesh_words.pl` | 70 | 21 | Dense mesh | Baseline: low; MRV: moderate | 1 | Large dense mesh; baseline beats MRV here (idea I4; see I5 note) |
 
 The "expected cost" column and the dense fixture's reputation describe the
 **`baseline`** strategy (input-order search). Under baseline, the dense fixture
@@ -50,9 +50,11 @@ make bench-matrix
 examples, golden-output regression, and default benchmark runs. It solves
 almost instantly and is mainly useful as a compatibility check.
 
-`benchmark_70_mesh_words.pl` is a hard short-word mesh: `baseline` does not
-finish (the `bench-matrix` harness caps each cell at 60 s and records
-`timeout`), while `mrv_inc` solves it quickly — the suite's case for search
-pruning on a larger grid. It is reproducible via
+`benchmark_70_mesh_words.pl` is a large dense short-word mesh. It was added (I4)
+as a baseline-hard fixture, but the I5 fix (collinear-overlap maximality)
+revealed that its hardness was largely the bug: with the bug fixed, `baseline`
+solves it in ~14 ms while the MRV strategies pay their per-node tax (so baseline
+*beats* MRV here). It is kept as a large-grid mesh data point. Reproducible via
 `benchmarks/gen_mesh_fixture.py 21 70 8 3 5 1 <out>` (deterministic; see
-`docs/experiments.md`, idea I4).
+`docs/experiments.md`, ideas I4 and I5). `benchmark_16_dense_words.pl` remains
+the suite's genuine baseline-hard fixture.

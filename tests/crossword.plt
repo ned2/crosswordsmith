@@ -167,6 +167,21 @@ test(word_metadata_under_meta) :-
 test(duplicate_answer_rejected, [throws(error(duplicate_answer('CAT'), _))]) :-
     crossword(5, [['CAT', _{}], ['CAT', _{}]], topleft_across).
 
+% Regression for I5: a word must stay a MAXIMAL run. Placing DFEEE across over
+% an already-placed DFEE (same start cell) would make DFEE a "word inside a
+% word" - two same-direction answers at one start, which assign_clue_numbers/2
+% cannot number. assign_word/10 must reject it (no_word_merge/3).
+test(rejects_collinear_prefix_overlap, [fail]) :-
+    init_grid(10, G0),
+    assign_word('DFEE',  [d,f,e,e],   4, 1, across, 10, [],   G0, P1, G1),
+    assign_word('DFEEE', [d,f,e,e,e], 5, 1, across, 10, [P1], G1, _, _).
+
+% ...but a collinear word separated by the required empty boundary cell is fine.
+test(allows_separated_collinear_word, [nondet]) :-
+    init_grid(10, G0),
+    assign_word('DFEE', [d,f,e,e], 4, 1, across, 10, [],   G0, P1, G1),
+    assign_word('DOG',  [d,o,g],   3, 6, across, 10, [P1], G1, _, _).
+
 :- end_tests(solver).
 
 

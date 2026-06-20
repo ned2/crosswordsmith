@@ -1,0 +1,34 @@
+# git_commit: aaa37e0 + uncommitted I5 fix (no_word_merge maximality check)
+# tool: crosswordsmith-matrix
+# swi_prolog: 10.0.2
+# strategies: [baseline,mrv,mrv_capped,mrv_inc]
+# metric_note: wall time is machine-dependent; inferences are the portable metric
+strategy,fixture,grid,start,iterations,solved,wall_min_ms,wall_median_ms,inferences_min,inferences_median
+baseline,bundled_17_clues.pl,17,topleft_across,30,yes,0.759,0.802,16934,16934
+baseline,benchmark_08_words.pl,13,topleft_across,30,yes,0.428,0.443,9688,9688
+baseline,benchmark_14_words.pl,17,topleft_across,30,yes,1.649,1.704,35951,35951
+baseline,benchmark_16_dense_words.pl,17,topleft_across,1,yes,23758.765,23758.765,453086607,453086607
+baseline,benchmark_20_words.pl,37,topleft_across,30,yes,2.317,2.368,43206,43206
+baseline,benchmark_26_words.pl,49,topleft_across,30,yes,3.951,4.031,75978,75978
+baseline,benchmark_70_mesh_words.pl,21,topleft_across,1,yes,14.417,14.417,293351,293351
+mrv,bundled_17_clues.pl,17,topleft_across,30,yes,16.559,16.877,352600,352600
+mrv,benchmark_08_words.pl,13,topleft_across,30,yes,3.864,3.909,84427,84427
+mrv,benchmark_14_words.pl,17,topleft_across,30,yes,25.638,26.772,567142,567142
+mrv,benchmark_16_dense_words.pl,17,topleft_across,1,yes,37.979,37.979,830020,830020
+mrv,benchmark_20_words.pl,37,topleft_across,30,yes,16.567,16.968,320463,320463
+mrv,benchmark_26_words.pl,49,topleft_across,30,yes,38.796,40.642,697185,697185
+mrv,benchmark_70_mesh_words.pl,21,topleft_across,1,yes,576.851,576.851,12973635,12973635
+mrv_capped,bundled_17_clues.pl,17,topleft_across,30,yes,15.636,15.906,324473,324473
+mrv_capped,benchmark_08_words.pl,13,topleft_across,30,yes,2.484,2.498,51423,51423
+mrv_capped,benchmark_14_words.pl,17,topleft_across,30,yes,13.177,13.266,272584,272584
+mrv_capped,benchmark_16_dense_words.pl,17,topleft_across,1,yes,18.447,18.447,380061,380061
+mrv_capped,benchmark_20_words.pl,37,topleft_across,30,yes,17.031,17.564,320843,320843
+mrv_capped,benchmark_26_words.pl,49,topleft_across,30,yes,40.349,40.930,697835,697835
+mrv_capped,benchmark_70_mesh_words.pl,21,topleft_across,1,yes,536.876,536.876,11925210,11925210
+mrv_inc,bundled_17_clues.pl,17,topleft_across,30,yes,15.343,15.609,320968,320968
+mrv_inc,benchmark_08_words.pl,13,topleft_across,30,yes,2.513,2.564,52900,52900
+mrv_inc,benchmark_14_words.pl,17,topleft_across,30,yes,13.205,13.650,278441,278441
+mrv_inc,benchmark_16_dense_words.pl,17,topleft_across,1,yes,20.062,20.062,387985,387985
+mrv_inc,benchmark_20_words.pl,37,topleft_across,30,yes,4.230,4.308,78719,78719
+mrv_inc,benchmark_26_words.pl,49,topleft_across,30,yes,8.138,8.246,138683,138683
+mrv_inc,benchmark_70_mesh_words.pl,21,topleft_across,1,yes,238.255,238.255,5159417,5159417

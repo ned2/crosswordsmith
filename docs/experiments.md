@@ -49,30 +49,39 @@ swipl -q benchmarks/run_matrix.pl -- baseline mrv_capped   # subset
 
 ---
 
-## Result batch — 2026-06-20 (SWI 10.0.2) — current
+## Result batch — 2026-06-20, post I5 fix (SWI 10.0.2) — current
 
-Source: `benchmarks/results/2026-06-20-strategy-matrix.csv`. Median inferences
-(the portable metric); wall ms in parentheses where notable. Each fixture on
-its manifest grid. Adds the I4 fixture `benchmark_64_mesh` and a per-cell 60 s
-timeout in the matrix harness (cells over the limit show `timeout`).
+Source: `benchmarks/results/2026-06-20-postI5-strategy-matrix.csv`. After the I5
+fix (`no_word_merge/3` maximality check). Median inferences (portable metric);
+wall ms in parentheses where notable. Each fixture on its manifest grid.
 
 | fixture (grid) | baseline | mrv (full) | mrv_capped | **mrv_inc** |
 | --- | --- | --- | --- | --- |
-| benchmark_08 (13) | 9.0 k | 76 k | 47 k | 48 k |
-| benchmark_14 (17) | 33 k | 501 k | 247 k | 252 k |
-| **benchmark_16_dense (17)** | **450.9 M** (23 s) | 718 k | 340 k | **348 k (19 ms)** |
-| benchmark_20 (37) | 37 k | 272 k | 272 k (15.7 ms) | **72 k (4.1 ms)** |
-| benchmark_26 (49) | 65 k | 585 k | 586 k (36 ms) | **126 k (7.9 ms)** |
-| bundled_17 (17) | 16 k | 328 k | 308 k | 308 k |
-| **benchmark_70_mesh (21)** | **timeout** | 7.61 M (367 ms) | 10.13 M (479 ms) | **3.18 M (161 ms)** |
+| benchmark_08 (13) | 9.7 k | 84 k | 51 k | 53 k |
+| benchmark_14 (17) | 36 k | 567 k | 273 k | 278 k |
+| **benchmark_16_dense (17)** | **453.1 M** (24 s) | 830 k | 380 k | **388 k (20 ms)** |
+| benchmark_20 (37) | 43 k | 320 k | 321 k | **79 k (4.2 ms)** |
+| benchmark_26 (49) | 76 k | 697 k | 698 k | **139 k (8.2 ms)** |
+| bundled_17 (17) | 17 k | 353 k | 324 k | 321 k |
+| benchmark_70_mesh (21) | **293 k (14 ms)** | 12.97 M | 11.93 M | 5.16 M (238 ms) |
 
 Headlines:
-- `mrv_inc` keeps the dense pruning win (~1,300x vs baseline) and the large-comb
-  per-node savings over `mrv_capped` (bench_20/26 ~3.8-4.6x fewer inferences).
-- The new `benchmark_70_mesh` (I4) is a hard search where **baseline times out
-  (>120 s)** but all three MRV strategies solve, and `mrv_inc` is decisively
-  fastest (161 ms; ~3x fewer inferences than `mrv_capped`, ~2.4x than `mrv`).
-  First suite fixture where baseline is hard but MRV wins on a 21x21 grid.
+- Strategy story unchanged: `mrv_inc` keeps the `dense_16` pruning win (~1,150x
+  vs baseline) and the large-comb savings over `mrv_capped` (bench_20/26 ~4x
+  fewer inferences). Inference counts rose ~5% everywhere vs the pre-I5 batch -
+  the per-placement maximality check.
+- **`benchmark_70_mesh` flipped:** pre-I5 baseline timed out; post-I5 it solves
+  in 14 ms and now *beats* the MRV strategies. Its hardness was largely the
+  collinear-overlap bug (baseline thrashing through invalid overlap branches).
+  See I5 / I4 (Done). `benchmark_16_dense` remains the only genuine baseline-hard
+  fixture - its equal-length full-width words cannot trigger the overlap bug.
+
+## Result batch — 2026-06-20, pre I5 fix (SWI 10.0.2) — historical
+
+Source: `benchmarks/results/2026-06-20-strategy-matrix.csv`. Before the I5 fix;
+notable only because `benchmark_70_mesh` shows `baseline = timeout` here (the bug
+made it baseline-hard). mrv_inc 161 ms / 3.18 M, mrv 367 ms, mrv_capped 479 ms.
+Superseded by the post-I5 batch above.
 
 ## Result batch — 2026-06-19 (SWI 10.0.2) — historical (pre-I4 fixture)
 
@@ -204,23 +213,43 @@ comb tax motivated E5 (`mrv_inc`).
 ## Open ideas
 
 - **I2 — value ordering.** Among a chosen word's placements, prefer those that
-  create more crossings (denser, and likely fewer downstream dead ends). The
-  `benchmark_70_mesh` fixture (I4) is a good proving ground: it is a hard,
-  ordering-sensitive search, so a better value heuristic should show there.
-- **I5 — solver soundness: collinear prefix words.** The solver can place a word
-  and its prefix collinearly at one start cell (see I4), producing an invalid
-  layout that `assign_clue_numbers/2` cannot number. `check_next_cell/4` only
-  checks at placement time; a later longer word extends past a shorter one's
-  end. Fix candidates: when placing a word, reject it if its end cell's next
-  cell is filled *and the word's cells are a prefix of an existing word's*; or
-  forbid two same-direction words sharing a start cell. Note: this changes
-  layouts, so the golden file would need regenerating. Until fixed, dense
-  fixtures must avoid prefix-pair word sets (the I4 generator already does).
+  create more crossings (denser, and likely fewer downstream dead ends).
+  `benchmark_16_dense` is the proving ground for a pruning win; the combs and
+  `benchmark_70_mesh` for whether it adds per-node cost.
 
 ## Done / closed ideas
 
 - **I1 — incremental counts.** DONE → E5 (`mrv_inc`). Shipped; 3.8-4.6x fewer
   inferences on the large combs, dense win preserved.
+- **I5 — solver soundness: collinear "word inside a word".** DONE (fixed in
+  `crossword.pl`). The solver could place a word and a collinear word whose span
+  contains it (e.g. `DFEE` inside `DFEEE`, same start cell, same direction) -
+  `check_prev_cell`/`check_next_cell` validate a word's boundaries only at its
+  own placement time, and the `X==L` branch of `assign_letters/7` lets a later
+  longer word pass straight through and fill a shorter word's end boundary. The
+  result is two same-direction answers at one start cell, which
+  `assign_clue_numbers/2` cannot number, so the CLI backtracked into the search
+  and hung (the benchmark harness uses `find_crossword` with a cut, so it never
+  hit numbering - "solves" != "full pipeline succeeds").
+  - **Fix:** `no_word_merge/3` in `assign_word/10` - a newly placed word's cells
+    must not occupy the boundary cell (just before start / after end, in its
+    direction) of any already-placed word. With the existing checks (which guard
+    the new word's own boundaries) this maintains "every word is a maximal run"
+    inductively. Forbids the prefix, suffix and interior-containment cases.
+    Regression tests added (`rejects_collinear_prefix_overlap`,
+    `allows_separated_collinear_word`). Validated end-to-end: a prefix-laden mesh
+    that hung the old CLI now emits valid JSON. Golden unchanged (no existing
+    fixture's first solution contained an overlap).
+  - **Surprise / important:** the fix made `benchmark_70_mesh` (I4) **baseline-
+    easy** - baseline went from timeout (>120 s) to 14 ms. Its baseline-hardness
+    was largely the bug: baseline was thrashing through invalid overlap branches.
+    Probing under the corrected solver found **no robust baseline-hard /
+    MRV-tractable mesh window** (grid 21: N<=70 baseline-easy, N>=72 hard for
+    all). So `benchmark_16_dense` remains the suite's only genuine baseline-hard
+    fixture - and its hardness is real (equal-length full-width words cannot form
+    a collinear containment, so the bug never applied to it). The generator's
+    prefix-pair rejection is now redundant for correctness (solver enforces it);
+    kept only to keep witnesses tidy and the fixture reproducible.
 - **I4 — hard large-grid fixture.** DONE → shipped `fixtures/benchmark_70_mesh_words.pl`
   (`benchmarks/gen_mesh_fixture.py 21 70 8 3 5 1`, deterministic; grid 21, 70
   short words, alphabet 8, seed 1). Generator builds a witness layout by
@@ -228,11 +257,16 @@ comb tax motivated E5 (`mrv_inc`).
   crossing placed ones, seed at (0,0) across), so it is **satisfiable +
   reachable by construction**; output order is shuffled so baseline cannot
   replay the build.
-  - **Result:** baseline times out (>120 s), while `mrv` (367 ms), `mrv_capped`
-    (479 ms) and `mrv_inc` (161 ms) all solve — the first suite fixture where
-    baseline is hard but the MRV strategies win, on a 21x21 grid, and `mrv_inc`
-    is clearly fastest (~3x fewer inferences than `mrv_capped`). Added a 60 s
-    per-cell timeout to `run_matrix.pl` so such fixtures cannot hang the matrix.
+  - **Result (as shipped, PRE-I5):** baseline timed out (>120 s), while `mrv`
+    (367 ms), `mrv_capped` (479 ms) and `mrv_inc` (161 ms) all solved — looked
+    like the first suite fixture where baseline is hard but MRV wins on a 21x21
+    grid. Added a 60 s per-cell timeout to `run_matrix.pl` so such fixtures
+    cannot hang the matrix.
+  - **SUPERSEDED by I5:** that baseline-hardness was largely the collinear-overlap
+    bug. Once I5 fixed it, baseline solves this fixture in 14 ms and now beats
+    the MRV strategies; no robust baseline-hard mesh window survives (see I5).
+    The fixture is kept, relabelled as a large dense mesh; `benchmark_16_dense`
+    is the genuine baseline-hard fixture.
   - **Key finding (the bigger lesson):** MRV's advantage is **structure-specific,
     not generic.** On *sparse/flexible* random meshes baseline wins (its cheaper
     per-node cost beats MRV, which has nothing to prune); only *near saturation*

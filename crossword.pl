@@ -339,7 +339,7 @@ assign_words(Strategy, Words, PlacedWords, GridLen, Start, Dir, GIn, GOut, Place
     % on first pass, Start and Dir will be grounded with the start values
     % then afterwards will be unground, with find_intersecting_word grounding them
     find_intersecting_word(Letters2, WLen, PlacedWords, GridLen, Start, Dir),
-    assign_word(Word, Letters2, WLen, Start, Dir, GridLen, GIn, Placed, G1),
+    assign_word(Word, Letters2, WLen, Start, Dir, GridLen, PlacedWords, GIn, Placed, G1),
     assign_words(Strategy, RemWords, [Placed|PlacedWords], GridLen, _Start, _Dir, G1, GOut, PlacedWordsOut).
 
 
@@ -408,7 +408,7 @@ mrv_count(Cap, PlacedWords, GridLen, Start, Dir, GIn, Entry, Count) :-
                    ( find_intersecting_word(Letters2, WLen, PlacedWords, GridLen,
                                             Start, Dir),
                      assign_word(Word, Letters2, WLen, Start, Dir, GridLen,
-                                 GIn, _Placed, _G1) )),
+                                 PlacedWords, GIn, _Placed, _G1) )),
             Ts),
     length(Ts, Count).
 
@@ -446,7 +446,7 @@ assign_words_inc(Words, PlacedWords, StateIn, GridLen, Start, Dir, GIn, GOut, Ou
     delete(Letters, ' ', Letters2),
     length(Letters2, WLen),
     find_intersecting_word(Letters2, WLen, PlacedWords, GridLen, Start, Dir),
-    assign_word(Word, Letters2, WLen, Start, Dir, GridLen, GIn, Placed, G1),
+    assign_word(Word, Letters2, WLen, Start, Dir, GridLen, PlacedWords, GIn, Placed, G1),
     assign_words_inc(RemWords, [Placed|PlacedWords], StateOut, GridLen,
                      _Start, _Dir, G1, GOut, Out).
 
@@ -537,13 +537,49 @@ find_intersecting_word(Letters, WLen, PlacedWords, GridLen, Start, Dir) :-
     fits_on_grid(Dir, Start, WLen, GridLen).
 
 
-assign_word(Word, Letters, WLen, Start, Dir, GridLen, GIn, Placed, GOut) :-
+assign_word(Word, Letters, WLen, Start, Dir, GridLen, PlacedWords, GIn, Placed, GOut) :-
     % make sure previous cell does not have a letter
     check_prev_cell(Dir, Start, GridLen, GIn),
     assign_letters(Letters, Start, Dir, GridLen, Cells, GIn, GOut),
+    % keep every word a maximal run: this word must not fill the boundary cell
+    % of an already-placed word (see no_word_merge/3 and docs/experiments.md I5)
+    no_word_merge(Cells, GridLen, PlacedWords),
     % `num` is added later by assign_clue_numbers/2
     Placed = word{answer:Word, letters:Letters, cells:Cells,
                   dir:Dir, len:WLen, start:Start}.
+
+
+% A valid crossword needs every word to be a MAXIMAL run of cells - bounded on
+% both ends, in its own direction, by an empty cell or the grid edge.
+% check_prev_cell/4 and check_next_cell/4 enforce that only at the moment a word
+% is placed; a later, longer collinear word can pass straight through a shorter
+% word's cells (the X==L branch of assign_letters/7 skips adjacency checks) and
+% fill the cell just past its end, retroactively making the shorter word a
+% "word inside a word". That produces two same-direction answers sharing a start
+% cell, which assign_clue_numbers/2 cannot number. We forbid it here: the word
+% being placed (cells Cells) must not occupy the boundary cell of any
+% already-placed word. (The reverse - an existing word occupying THIS word's
+% boundary - is already caught by check_prev_cell/check_next_cell, so together
+% the invariant is maintained inductively.)
+no_word_merge(Cells, GridLen, PlacedWords) :-
+    \+ ( member(PW, PlacedWords),
+         placed_boundary_cell(PW, GridLen, Boundary),
+         memberchk(Boundary, Cells) ).
+
+% Each on-grid boundary cell of a placed word: the cell just before its start,
+% and the cell just after its end, in the word's own direction (omitting either
+% when the word abuts the grid edge there).
+placed_boundary_cell(PW, GridLen, Before) :-
+    get_dict(dir, PW, Dir),
+    get_dict(start, PW, Start),
+    \+ is_start_cell(Dir, Start, GridLen),
+    prev_cell(Dir, Start, GridLen, Before).
+placed_boundary_cell(PW, GridLen, After) :-
+    get_dict(dir, PW, Dir),
+    get_dict(cells, PW, Cells),
+    last(Cells, End),
+    \+ is_end_cell(Dir, End, GridLen),
+    next_cell(Dir, End, GridLen, After).
 
 
 % Previous cell before start of word. Make sure it doesn't contain
