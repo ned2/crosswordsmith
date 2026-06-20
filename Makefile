@@ -2,7 +2,7 @@
 
 SHELL := /bin/bash
 
-.PHONY: test unit golden update-golden bench
+.PHONY: test unit golden update-golden bench bench-matrix
 
 BENCH_FIXTURE ?= fixtures/bundled_17_clues.pl
 BENCH_GRID ?= 17
@@ -10,6 +10,7 @@ BENCH_START_LOC ?= topleft_across
 BENCH_ITERATIONS ?= 30
 BENCH_WARMUP ?= 3
 BENCH_FORMAT ?= text
+BENCH_STRATEGY ?=
 
 # Full suite: plunit tests + golden-output regression.
 test:
@@ -32,6 +33,8 @@ update-golden:
 	@echo "Regenerated tests/golden/grid_17_topleft_across.txt"
 
 # Local performance baselines. Results are machine-specific and reporting-only.
+# Benchmarks the production default strategy unless BENCH_STRATEGY is set, e.g.
+#   make bench BENCH_FIXTURE=fixtures/benchmark_16_dense_words.pl BENCH_ITERATIONS=1 BENCH_WARMUP=0 BENCH_STRATEGY=baseline
 bench:
 	swipl -q benchmarks/run_benchmarks.pl -- \
 		--grid $(BENCH_GRID) \
@@ -39,4 +42,13 @@ bench:
 		--iterations $(BENCH_ITERATIONS) \
 		--warmup $(BENCH_WARMUP) \
 		--format $(BENCH_FORMAT) \
+		$(if $(BENCH_STRATEGY),--strategy $(BENCH_STRATEGY),) \
 		$(BENCH_FIXTURE)
+
+# Strategy x fixture comparison matrix (CSV on stdout). Each fixture runs on
+# its manifest grid (benchmarks/fixtures.pl). Optionally restrict strategies:
+#   make bench-matrix BENCH_STRATEGIES="baseline mrv_capped"
+# Compare on inferences (machine-independent); wall time is reporting-only.
+BENCH_STRATEGIES ?=
+bench-matrix:
+	swipl -q benchmarks/run_matrix.pl -- $(BENCH_STRATEGIES)

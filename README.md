@@ -79,6 +79,12 @@ Options:
 - `--out <file>` — write the output to `<file>` instead of stdout. The file
   is written only once a solution is found, so an unsolvable run leaves no
   empty file behind. Without the flag, output goes to stdout as before.
+- `--strategy <name>` — the variable-ordering strategy used by the solver:
+  one of `baseline` (original input-order search), `mrv`, `mrv_capped`, or
+  `mrv_inc`. Defaults to `mrv_inc`, which solves pathological inputs orders of
+  magnitude faster than `baseline` while matching it elsewhere; see
+  `docs/experiments.md`. All strategies produce valid layouts (which one they
+  find can differ).
 - `--help` / `-h` — print the usage summary and exit.
 
 Flags are parsed with `library(optparse)`, so they compose in any order and

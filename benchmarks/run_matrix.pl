@@ -1,0 +1,101 @@
+#!/usr/bin/env swipl
+% benchmarks/run_matrix.pl - strategy x fixture benchmark matrix.
+%
+% Runs every solver strategy against every fixture in the manifest
+% (benchmarks/fixtures.pl), each on its OWN configured grid/start/iterations,
+% and emits one CSV row per (strategy, fixture) cell. This is the harness used
+% to produce comparable result batches for the experiment log
+% (docs/experiments.md): regenerate the whole matrix in one command whenever
+% the fixtures or an algorithm change.
+%
+% Usage:
+%   swipl -q benchmarks/run_matrix.pl                 % all strategies
+%   swipl -q benchmarks/run_matrix.pl -- baseline mrv_capped
+%
+% Wall time is machine-dependent; treat INFERENCES as the primary, portable
+% metric when comparing across runs or machines.
+
+:- set_prolog_flag(verbose, silent).
+:- use_module(library(lists)).
+:- use_module(library(apply)).
+:- use_module(library(statistics)).
+
+:- dynamic repo_root/1.
+
+:- prolog_load_context(directory, BenchDir),
+   absolute_file_name('..', RepoRoot,
+                      [ relative_to(BenchDir), file_type(directory), access(read) ]),
+   asserta(repo_root(RepoRoot)),
+   directory_file_path(RepoRoot, 'crossword.pl', Crossword),
+   consult(Crossword),
+   directory_file_path(RepoRoot, 'benchmarks/fixtures.pl', Manifest),
+   consult(Manifest).
+
+:- initialization(main, main).
+
+main :-
+    current_prolog_flag(argv, Argv),
+    chosen_strategies(Argv, Strategies),
+    emit_metadata(Strategies),
+    format("strategy,fixture,grid,start,iterations,solved,wall_min_ms,wall_median_ms,inferences_min,inferences_median~n", []),
+    forall(member(Strategy, Strategies),
+           forall(bench_fixture(Rel, Grid, Start, Iters, Warmup),
+                  run_cell(Strategy, Rel, Grid, Start, Iters, Warmup))).
+
+% Strategies from argv (already atoms), else every strategy crossword.pl
+% defines. Each named strategy is validated; an unknown one throws.
+chosen_strategies([], Strategies) :-
+    !,
+    strategies(Strategies).
+chosen_strategies(Argv, Argv) :-
+    forall(member(S, Argv), require_strategy(S)).
+
+emit_metadata(Strategies) :-
+    current_prolog_flag(version_data, V),
+    ( V = swi(Ma, Mi, Pa, _) -> format(atom(Ver), '~d.~d.~d', [Ma, Mi, Pa]) ; Ver = V ),
+    format("# tool: crosswordsmith-matrix~n", []),
+    format("# swi_prolog: ~w~n", [Ver]),
+    format("# strategies: ~w~n", [Strategies]),
+    format("# metric_note: wall time is machine-dependent; inferences are the portable metric~n", []).
+
+run_cell(Strategy, Rel, Grid, Start, Iters, Warmup) :-
+    repo_file(Rel, File),
+    read_clues(File, Words),
+    file_base_name(Rel, Name),
+    ( solve_once(Strategy, Words, Grid, Start)
+    ->  forall(between(1, Warmup, _), ignore(solve_once(Strategy, Words, Grid, Start))),
+        findall(W-I,
+                ( between(1, Iters, _),
+                  call_time(solve_once(Strategy, Words, Grid, Start), T),
+                  W is T.wall * 1000.0, I = T.inferences ),
+                Pairs),
+        pairs_keys_values(Pairs, Walls, Infs),
+        col(Walls, WMin, WMed),
+        col(Infs, IMin, IMed),
+        format("~w,~w,~d,~w,~d,yes,~3f,~3f,~0f,~0f~n",
+               [Strategy, Name, Grid, Start, Iters, WMin, WMed, IMin, IMed])
+    ;   format("~w,~w,~d,~w,~d,no,,,,~n", [Strategy, Name, Grid, Start, Iters])
+    ).
+
+solve_once(Strategy, Words, Grid, Start) :-
+    find_crossword(Strategy, Grid, Words, Start, _Grid, _Placed),
+    !.
+
+col(Values, Min, Median) :-
+    msort(Values, Sorted),
+    Sorted = [Min|_],
+    length(Sorted, Len),
+    Mid is Len // 2,
+    nth0(Mid, Sorted, Median).
+
+repo_file(Rel, File) :-
+    repo_root(Root),
+    directory_file_path(Root, Rel, File).
+
+read_clues(File, Words) :-
+    setup_call_cleanup(open(File, read, S), read_loop(S, Words), close(S)).
+read_loop(S, Words) :-
+    read_term(S, T, []),
+    ( T == end_of_file -> Words = []
+    ; T = clues(Words)  -> true
+    ; read_loop(S, Words) ).

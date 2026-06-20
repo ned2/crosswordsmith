@@ -1,0 +1,221 @@
+# Algorithm experiment log
+
+Append-only record of solver-algorithm experiments: what we tried, what we
+measured, and **why** we kept or rejected it. The goal is to never re-run a
+dead end and to be able to write up comparable findings over time.
+
+## How to use this log
+
+- **Code is the source of truth for reproduction, not this log.** Every *kept*
+  algorithm lives as a selectable strategy in `crossword.pl` (`--strategy`,
+  see `select_word/9` and `strategies/1`). To reproduce its numbers, run it;
+  do not reconstruct it from prose here.
+- **This log is the narrative + index.** Each entry records a hypothesis, the
+  change (by strategy id / commit), a results snapshot *with its conditions*,
+  and a verdict. Rejected ideas live here as prose (often with no surviving
+  code) — that is their whole point: don't try them again.
+- **Numbers here are historical snapshots.** Never compare numbers across
+  entries directly. For an authoritative comparison, regenerate the whole
+  matrix now (`make bench-matrix`) so every cell shares one machine + build.
+
+## Metrics
+
+- **Inferences are the primary metric.** They are deterministic and
+  machine-independent, so a logged inference count stays comparable across
+  machines as long as code + fixture + config are pinned.
+- **Wall time is secondary** ("is it fast enough in practice"). It is
+  machine- and load-dependent; do not compare wall time across runs/machines.
+
+## Reproducing a result batch
+
+```sh
+make bench-matrix                       # all strategies x all fixtures
+swipl -q benchmarks/run_matrix.pl -- baseline mrv_capped   # subset
+```
+
+- Per-fixture config (grid, start, iterations, warmup) is read from the
+  manifest `benchmarks/fixtures.pl` — the **single source of truth**, mirrored
+  for humans in `fixtures/README.md`.
+- Raw CSV batches are saved under `benchmarks/results/`, tagged with the SWI
+  version and git commit that produced them.
+
+> **Methodology lesson (2026-06-18).** The first benchmarking pass hardcoded a
+> 17x17 grid for every fixture and reported `benchmark_20`/`benchmark_26` as
+> *unsatisfiable*. They are not — they are designed for 37x37 and 49x49 grids
+> and solve fine there. The "unsat" was an artifact of the wrong grid. This is
+> exactly why per-fixture config must live in data (the manifest) that travels
+> with results, and why the harness reads only the manifest. Don't reintroduce
+> a hardcoded grid.
+
+---
+
+## Result batch — 2026-06-19 (SWI 10.0.2) — current
+
+Source: `benchmarks/results/2026-06-19-strategy-matrix.csv`. Median inferences
+(the portable metric); wall ms in parentheses where notable. Each fixture on
+its manifest grid. Adds `mrv_inc` (E5).
+
+| fixture (grid) | baseline | mrv_capped | **mrv_inc** |
+| --- | --- | --- | --- |
+| benchmark_08 (13) | 9.0 k | 47 k | 48 k |
+| benchmark_14 (17) | 33 k | 247 k | 252 k |
+| **benchmark_16_dense (17)** | **450.9 M** (24 s) | 340 k (17 ms) | **348 k (18 ms)** |
+| benchmark_20 (37) | 37 k | 272 k (15.7 ms) | **72 k (4.1 ms)** |
+| benchmark_26 (49) | 65 k | 586 k (36.7 ms) | **126 k (8.0 ms)** |
+| bundled_17 (17) | 16 k | 308 k | 308 k |
+
+Headline: `mrv_inc` keeps the dense pruning win (~1,300x vs baseline) AND cuts
+the large-comb per-node tax that `mrv_capped` paid — bench_20 3.8x fewer
+inferences, bench_26 4.6x fewer — bringing the comb tax over baseline down from
+~7-9x to ~1.9x. Small/mesh fixtures are unchanged (cache adds ~2-3%). `mrv`
+(full) is omitted here; the 2026-06-18 batch shows it is dominated by
+`mrv_capped`.
+
+## Result batch — 2026-06-18 (SWI 10.0.2) — historical (pre-mrv_inc)
+
+Source: `benchmarks/results/2026-06-18-strategy-matrix.csv`. Median wall (ms)
+and inferences, each fixture on its manifest grid.
+
+| fixture (grid) | baseline | mrv (full) | mrv_capped |
+| --- | --- | --- | --- |
+| benchmark_08 (13) | 0.5 ms / 9.0 k | 3.9 ms / 76 k | 2.5 ms / 47 k |
+| benchmark_14 (17) | 2.0 ms / 33 k | 25.5 ms / 501 k | 12.9 ms / 247 k |
+| **benchmark_16_dense (17)** | **26,256 ms / 450.9 M** | 36.8 ms / 718 k | **18.2 ms / 340 k** |
+| benchmark_20 (37) | 2.3 ms / 37 k | 15.6 ms / 272 k | 15.9 ms / 272 k |
+| benchmark_26 (49) | 3.8 ms / 65 k | 36.8 ms / 585 k | 37.2 ms / 586 k |
+| bundled_17 (17) | 1.0 ms / 16 k | 16.7 ms / 328 k | 15.9 ms / 308 k |
+
+Headline: on the one pathological (dense mesh) fixture, `mrv_capped` is a
+**~1,330x reduction in inferences** (~1,450x wall). On every other fixture
+(easy in input order) the MRV variants are a net tax — all still < 40 ms. The
+comb tax motivated E5 (`mrv_inc`).
+
+---
+
+## Entries
+
+### E1 — baseline (input-order search) — REFERENCE, kept
+
+- **Strategy id:** `baseline` (`crossword.pl`).
+- **What:** original algorithm. `assign_words` picks the next word with
+  `member/2` in input order; `find_intersecting_word` rejects words that can't
+  connect. No search guidance.
+- **Result:** fast on every fixture *except* the dense mesh, where it explodes
+  to ~26 s / 450 M inferences.
+- **Verdict:** keep permanently as the comparison reference. Not the algorithm
+  to ship — one pathological input is enough to motivate ordering.
+
+### E2 — MRV, full exact counts — superseded by E3
+
+- **Strategy id:** `mrv` (`crossword.pl`); `mrv_cap(mrv, unbounded)`.
+- **Hypothesis:** fail-first (minimum-remaining-values) ordering tames the
+  dense blow-up.
+- **What:** at each step, count *every* viable placement of each remaining
+  word, try words most-constrained-first, **backtrackably** (reorders the same
+  tree; completeness preserved).
+- **Correctness subtlety (important):** placements must cross an
+  already-placed word, so a word's option count *grows* as neighbours land — a
+  count of 0 means "not connectable yet", **not** "dead". An earlier prototype
+  treated 0 as a dead branch and as grounds to commit deterministically; that
+  was *incomplete* and failed fixtures the baseline solved. Fix: only rank
+  words with count > 0, keep selection backtrackable, and special-case the
+  first (seed) word as a free choice over all words.
+- **Result:** dense 450.9 M → 718 k inferences (huge win); but a per-node
+  recount tax makes easy fixtures 5–20x slower.
+- **Verdict:** proves the win exists, but **strictly dominated by E3** (capped
+  is ≤ in every cell). Kept as a documented comparison point only.
+
+### E3 — MRV, count capped at 2 — KEPT (recommended)
+
+- **Strategy id:** `mrv_capped` (`crossword.pl`); `mrv_cap(mrv_capped, 2)`.
+- **Hypothesis:** the ordering only needs the buckets 0 / 1 / ≥2, so capping
+  the count enumeration at 2 keeps the pruning while cutting the per-node cost.
+- **Result vs E2 (inferences):** mesh fixtures roughly halve (dense 718 k →
+  340 k; bench_14 501 k → 247 k; bench_08 76 k → 47 k). On the comb fixtures
+  (20, 26) the cap is **inert** (272 k/586 k, identical to full MRV) — comb
+  words have ≤ 2 placements each, so the cap never triggers.
+- **Result vs baseline:** dense ~1,330x fewer inferences; elsewhere a tax of
+  ~5–19x that is largest on the big comb grids (per-node recount over many
+  words on a large grid, unamortized) but always < 40 ms absolute.
+- **Verdict:** strong, but **superseded by E5** (`mrv_inc`), which keeps E3's
+  pruning and removes most of its large-grid per-node tax. Kept as a strategy
+  for comparison.
+- **Follow-up (resolved by E5):** the residual tax is fixed per-node *recompute*
+  cost (recounting every word every node), not enumeration depth.
+
+### E4 — static "longest word first" — REJECTED
+
+- **Idea (no surviving code):** approximate MRV for free by sorting words by
+  length descending once (longest words have fewer slots), then run the
+  baseline `member/2` search on the pre-sorted list. Sketch:
+  `order_by_length/2` via `map_list_to_pairs(atom_length, …)`, `keysort`,
+  `reverse`, used in `find_crossword` before `assign_words`.
+- **Result:** catastrophic. **Timed out (>120 s)** on `benchmark_14`, which
+  the baseline solves in ~2 ms, and on the dense fixture. Even `benchmark_08`
+  regressed ~7x.
+- **Why:** a static order is blind to grid state, which is the entire value of
+  MRV. Reordering globally can push the search into a far worse region; "fewer
+  slots in the abstract" ≠ "most constrained right now".
+- **Verdict:** rejected — do not revisit static/length-based ordering. If
+  ordering is wanted, it must be **dynamic and state-aware** (E3).
+
+### E5 — MRV capped + incremental count cache — KEPT (recommended) — was I1
+
+- **Strategy id:** `mrv_inc` (`crossword.pl`); own driver `assign_words_inc/9`.
+- **Hypothesis:** E3's residual tax is recomputing every remaining word's count
+  at every node; recompute only the counts that can have changed.
+- **What:** thread a count cache. After placing word W, only recount words that
+  **share a letter** with W; carry the rest forward. Counts capped at 2 (as E3).
+- **Correctness invariant:** a placement must cross an already-placed word, so
+  placing W can only ADD options to words sharing a letter with W, and only
+  REMOVE options from the rest. So a carried-forward count is always **>= the
+  true count** — never an under-count, which is what would be unsafe (it could
+  prune a placeable word and break completeness). Over-counts are harmless: the
+  word is tried, `find_intersecting_word` fails it, search moves on.
+- **Bug found & fixed during impl:** first cut built the candidate list with
+  `findall(Count-W, …)`, which **copies** terms; the copied `Entry` no longer
+  matched the original word in `Words`, so the `==`-based `remove_x` never
+  removed it and the search looped forever (even on 2 words). Fix: use
+  `map_list_to_pairs`, which keeps the original terms.
+- **Result (2026-06-19 batch):** large combs improve sharply — bench_20 272 k →
+  72 k inferences (3.8x; 15.7 → 4.1 ms), bench_26 586 k → 126 k (4.6x; 36.7 →
+  8.0 ms); comb tax over baseline drops from ~7-9x to ~1.9x. Dense win
+  preserved (348 k vs 451 M ≈ 1,300x). Small/mesh fixtures within ~2-3% of E3
+  (cache bookkeeping overhead, immaterial).
+- **Verdict:** **SHIPPED as the production default** (`default_strategy(mrv_inc)`
+  in `crossword.pl`; CLI `--strategy` default and the `crossword/3` +
+  `find_crossword/5` wrappers all resolve to it; golden regenerated). Best
+  general strategy: E3's pruning with the large-grid tax mostly removed, no
+  regressions, valid output, same solvability verdicts as baseline. Residual
+  small-fixture tax over baseline (few nodes, so the cache can't help) is
+  unchanged but < 16 ms absolute.
+
+---
+
+## Open ideas
+
+- **I2 — value ordering.** Among a chosen word's placements, prefer those that
+  create more crossings (denser, and likely fewer downstream dead ends).
+- **I4 — short-word hard fixture (revisits I3).** I3's lattice approach failed
+  (see done-items). A controllable hard-but-satisfiable large-grid fixture
+  likely needs SHORT interlocking words read off a witness layout, not
+  full-width rows/cols. Build a small layout generator and read words from it.
+
+## Done / closed ideas
+
+- **I1 — incremental counts.** DONE → E5 (`mrv_inc`). Shipped; 3.8-4.6x fewer
+  inferences on the large combs, dense win preserved.
+- **I3 — hard large-grid fixture.** ATTEMPTED, no fixture shipped. A lattice
+  generator (full-width words on even rows/cols of a deterministic letter grid;
+  satisfiable + adjacency-valid by construction, alphabet/stride as difficulty
+  knobs) was built and swept. **Finding:** full-width lattice words are
+  *pathologically* hard regardless of parameters — even grid 17 with a near-
+  unique alphabet times out under `mrv_capped` (>30 s), because a full-width
+  word can spuriously "cross" a perpendicular word at any matching letter and
+  only fail deep. Difficulty is not tunable this way; the generator was removed.
+  The pruning-vs-overhead discrimination I3 wanted is instead obtained **across
+  the existing suite**: combs (large grid, easy search) isolate per-node
+  overhead, `dense_16` (small grid, hard search) isolates pruning — which is
+  what let E5 be evaluated. A better fixture is tracked as I4.
+  *(Op note: those sweeps balloon Prolog stacks into the GBs before any timeout
+  fires — run heavy solves under `ulimit -v` to avoid an OOM kill.)*

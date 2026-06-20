@@ -18,18 +18,29 @@ comparisons rather than puzzle content.
 | `benchmark_20_words.pl` | 20 | 37 | Comb | Low | 30+ | Larger word-count overhead without a branchy search tree |
 | `benchmark_26_words.pl` | 26 | 49 | Comb | Low to moderate | 30+ | Larger grid and word-count scaling checks |
 
-The dense fixture is intentionally much slower than the others. On one
-development machine it took about 23 seconds and 450 million inferences for a
-single measured iteration; treat that as an order-of-magnitude guide rather
-than a portable baseline.
+The "expected cost" column and the dense fixture's reputation describe the
+**`baseline`** strategy (input-order search). Under baseline, the dense fixture
+is intentionally much slower than the others: on one development machine it took
+about 23 seconds and 450 million inferences for a single iteration — an
+order-of-magnitude guide, not a portable baseline.
+
+`make bench` now benchmarks the **production default strategy** (`mrv_inc`; see
+`docs/experiments.md`), which solves every fixture here in well under 40 ms,
+including the dense one. To reproduce the heavy baseline search, pass
+`BENCH_STRATEGY=baseline`. The `recommended iterations` column likewise assumes
+baseline (use 1 iteration for the dense fixture only under baseline).
 
 Example runs:
 
 ```sh
 make bench BENCH_FIXTURE=fixtures/benchmark_14_words.pl BENCH_GRID=17
-make bench BENCH_FIXTURE=fixtures/benchmark_16_dense_words.pl BENCH_GRID=17 BENCH_ITERATIONS=1 BENCH_WARMUP=0
+# dense under the fast default strategy (mrv_inc):
+make bench BENCH_FIXTURE=fixtures/benchmark_16_dense_words.pl BENCH_GRID=17
+# dense under baseline (slow; one iteration, no warmup):
+make bench BENCH_FIXTURE=fixtures/benchmark_16_dense_words.pl BENCH_GRID=17 BENCH_ITERATIONS=1 BENCH_WARMUP=0 BENCH_STRATEGY=baseline
 make bench BENCH_FIXTURE=fixtures/benchmark_26_words.pl BENCH_GRID=49
-swipl -q benchmarks/run_benchmarks.pl -- --grid 49 fixtures/benchmark_26_words.pl
+# whole strategy x fixture matrix:
+make bench-matrix
 ```
 
 ## Other Fixtures

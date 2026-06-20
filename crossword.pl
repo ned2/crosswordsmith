@@ -43,6 +43,9 @@
 % Command-line option parsing (--input/--shuffle/--all/--out + positionals).
 :- use_module(library(optparse)).
 
+% limit/2, used by the capped placement count in the mrv_capped strategy.
+:- use_module(library(solution_sequences)).
+
 
 
 % program predicates.
@@ -60,8 +63,12 @@ main :-
     opt_parse(Spec, Argv, Opts, Positional),
     run(Opts, Positional).
 
-% The option set. `input`/`out` default to '' meaning "not given".
-opts_spec(
+% The option set. `input`/`out` default to '' meaning "not given". The
+% `strategy` default is the production default (default_strategy/1), so the
+% CLI and the find_crossword/5 + crossword/3 convenience wrappers all agree.
+opts_spec(Spec) :-
+    default_strategy(DefStrategy),
+    Spec =
     [ [opt(help),    type(boolean), default(false),
        shortflags([h]), longflags([help]),
        help('show this help and exit')],
@@ -76,8 +83,11 @@ opts_spec(
        help('count every solution instead of emitting one (see README)')],
       [opt(out),     type(atom),    default(''), meta('FILE'),
        longflags([out]),
-       help('write output to FILE instead of stdout')]
-    ]).
+       help('write output to FILE instead of stdout')],
+      [opt(strategy), type(atom),   default(DefStrategy), meta('STRAT'),
+       longflags([strategy]),
+       help('variable-ordering strategy: baseline, mrv, mrv_capped, or mrv_inc')]
+    ].
 
 % Dispatch on the parsed options. The positional grammar is:
 %   --input FILE <grid_length> <start_loc>   solve and emit one JSON solution
@@ -92,18 +102,20 @@ run(Opts, Positional) :-
     memberchk(input(InputFile), Opts),
     require_input_file(InputFile),
     memberchk(out(OutFile), Opts),
+    memberchk(strategy(Strategy), Opts),
+    require_strategy(Strategy),
     load_clues(InputFile, Words),
     (   memberchk(all(true), Opts)
     ->  positional_all(Positional, GridLen, StartLoc),   % StartLoc unbound if absent
-        with_output(OutFile, count_solutions(GridLen, Words, StartLoc))
+        with_output(OutFile, count_solutions(Strategy, GridLen, Words, StartLoc))
     ;   memberchk(shuffle(true), Opts)
     ->  Positional = [GridLenArg],
         atom_number(GridLenArg, GridLen),
-        solve_shuffled(GridLen, Words, OutFile)
+        solve_shuffled(Strategy, GridLen, Words, OutFile)
     ;   Positional = [GridLenArg, StartLocArg],
         atom_number(GridLenArg, GridLen),
         valid_loc(StartLocArg),
-        with_output(OutFile, crossword(GridLen, Words, StartLocArg))
+        with_output(OutFile, crossword(Strategy, GridLen, Words, StartLocArg))
     ).
 
 print_usage :-
@@ -116,6 +128,28 @@ require_input_file('') :-
     throw(error(missing_input_file, _)).
 require_input_file(_).
 
+% The variable-ordering strategies the solver can run. `baseline` is the
+% original input-order search; `mrv`, `mrv_capped` and `mrv_inc` are the
+% fail-first variants (see select_word/9 and assign_words_inc/9). Adding a
+% strategy is a one-line entry here plus a select_word/9 clause.
+strategies([baseline, mrv, mrv_capped, mrv_inc]).
+
+% The production default when no --strategy is given. mrv_inc (incremental
+% capped MRV) is the best general strategy: it tames the pathological dense
+% search (~1300x fewer inferences than baseline) while keeping the large-grid
+% per-node cost low. See docs/experiments.md (entry E5) for the evidence.
+default_strategy(mrv_inc).
+
+valid_strategy(S) :-
+    strategies(Ss),
+    memberchk(S, Ss).
+
+require_strategy(S) :-
+    valid_strategy(S),
+    !.
+require_strategy(S) :-
+    throw(error(unknown_strategy(S), _)).
+
 % Positional args for the --all path: grid_length is required; start_loc is
 % optional and left unbound when absent, so all four start positions are
 % enumerated by the solver.
@@ -127,16 +161,16 @@ positional_all([GridLenArg, StartLoc], GridLen, StartLoc) :-
 
 % Solve with shuffled words and start order; member/2 is the backtrack point
 % that tries successive shuffled start positions until one yields a layout.
-solve_shuffled(GridLen, Words, OutFile) :-
+solve_shuffled(Strategy, GridLen, Words, OutFile) :-
     start_locs(Locs),
     shuffle(Words, UseWords),
     shuffle(Locs, ShuffledLocs),
     member(StartLoc, ShuffledLocs),
-    with_output(OutFile, crossword(GridLen, UseWords, StartLoc)).
+    with_output(OutFile, crossword(Strategy, GridLen, UseWords, StartLoc)).
 
 % Count solutions for one start position (or all, with StartLoc unbound).
-count_solutions(GridLen, Words, StartLoc) :-
-    all_crossword(GridLen, Words, StartLoc, Num),
+count_solutions(Strategy, GridLen, Words, StartLoc) :-
+    all_crossword(Strategy, GridLen, Words, StartLoc, Num),
     writeln(Num).
 
 valid_loc(Loc) :-
@@ -239,6 +273,8 @@ prolog:error_message(json_invalid_meta(Answer)) -->
     [ 'clues file: "meta" for answer ~q must be a JSON object'-[Answer] ].
 prolog:error_message(missing_input_file) -->
     [ 'missing required --input FILE option' ].
+prolog:error_message(unknown_strategy(S)) -->
+    [ 'unknown --strategy ~q; expected one of baseline, mrv, mrv_capped, mrv_inc'-[S] ].
 prolog:error_message(unsupported_clue_file(File, Ext)) -->
     [ 'clues file ~q has unsupported extension ~q; expected .json or .pl'-
       [File, Ext] ].
@@ -248,33 +284,54 @@ prolog:error_message(prolog_no_clues_term(File)) -->
 
 % Top level predicate for solving the crossword with a specified
 % starting position. Emits the solution as a single JSON object.
+% crossword/3 uses the production default strategy (default_strategy/1);
+% crossword/4 takes an explicit strategy.
 crossword(GridLen, Words, StartLoc) :-
+    default_strategy(Strategy),
+    crossword(Strategy, GridLen, Words, StartLoc).
+
+crossword(Strategy, GridLen, Words, StartLoc) :-
     check_unique_answers(Words),
-    find_crossword(GridLen, Words, StartLoc, _Grid, PlacedWords),
+    find_crossword(Strategy, GridLen, Words, StartLoc, _Grid, PlacedWords),
     assign_clue_numbers(PlacedWords, NumberedPlacedWords),
     emit_json(NumberedPlacedWords, Words, GridLen).
 
 
 % Top level predicate for finding the number of solutions for the
 % crossword for a specific starting position.
-all_crossword(GridLen, Words, StartLoc, Num) :-
+all_crossword(Strategy, GridLen, Words, StartLoc, Num) :-
     length(Sols, Num),
-    findall(Grid, find_crossword(GridLen, Words, StartLoc, Grid, _), Sols).
+    findall(Grid, find_crossword(Strategy, GridLen, Words, StartLoc, Grid, _), Sols).
 
 
-% The driver predicate used to solve the crossword.
+% The driver predicate used to solve the crossword. find_crossword/5 uses the
+% production default strategy (default_strategy/1); find_crossword/6 takes an
+% explicit strategy. The benchmark harness calls /6 directly per strategy.
 find_crossword(GridLen, Words, Loc, Grid, PlacedWords) :-
-    init_grid(GridLen, G1),     
+    default_strategy(Strategy),
+    find_crossword(Strategy, GridLen, Words, Loc, Grid, PlacedWords).
+
+% mrv_inc threads an incremental count cache, so it has its own driver
+% (assign_words_inc/9) rather than sharing the stateless assign_words/9 path.
+find_crossword(mrv_inc, GridLen, Words, Loc, Grid, PlacedWords) :-
+    !,
+    init_grid(GridLen, G1),
+    start_loc(Loc, GridLen, StartNum, StartDir),
+    assign_words_inc(Words, [], none, GridLen, StartNum, StartDir, G1, Grid, PlacedWords).
+find_crossword(Strategy, GridLen, Words, Loc, Grid, PlacedWords) :-
+    init_grid(GridLen, G1),
     % Get the cell number and direction for start loc
     start_loc(Loc, GridLen, StartNum, StartDir),
-    assign_words(Words, [], GridLen, StartNum, StartDir, G1, Grid, PlacedWords).
+    assign_words(Strategy, Words, [], GridLen, StartNum, StartDir, G1, Grid, PlacedWords).
 
 
 % Assign all words. The starting location is selected by locating an
 % intersecting word from the words already placed.
-assign_words([], P, _, _, _, G, G, P).
-assign_words(Words, PlacedWords, GridLen, Start, Dir, GIn, GOut, PlacedWordsOut) :-
-    member(Entry, Words),
+assign_words(_Strategy, [], P, _, _, _, G, G, P).
+assign_words(Strategy, Words, PlacedWords, GridLen, Start, Dir, GIn, GOut, PlacedWordsOut) :-
+    % select_word/9 chooses the next word to place (and the rest, RemWords)
+    % according to the strategy; it is the only thing the strategies vary.
+    select_word(Strategy, Words, PlacedWords, GridLen, Start, Dir, GIn, Entry, RemWords),
     Entry = [Word|_],   % the solver uses only the answer; metadata is ignored
     atom_chars(Word, Letters),
     delete(Letters, ' ', Letters2),
@@ -283,8 +340,179 @@ assign_words(Words, PlacedWords, GridLen, Start, Dir, GIn, GOut, PlacedWordsOut)
     % then afterwards will be unground, with find_intersecting_word grounding them
     find_intersecting_word(Letters2, WLen, PlacedWords, GridLen, Start, Dir),
     assign_word(Word, Letters2, WLen, Start, Dir, GridLen, GIn, Placed, G1),
+    assign_words(Strategy, RemWords, [Placed|PlacedWords], GridLen, _Start, _Dir, G1, GOut, PlacedWordsOut).
+
+
+% Variable ordering, pluggable per strategy. Each clause picks the next Entry
+% to place and returns the remaining words; selection stays backtrackable, so
+% strategies only REORDER the same search tree (completeness is unchanged).
+%
+% baseline: take words in input order. member/2 is the backtrack point and
+% find_intersecting_word/6 (in assign_words) rejects words that cannot connect
+% to the current grid - exactly the original behaviour.
+select_word(baseline, Words, _Placed, _GridLen, _Start, _Dir, _GIn, Entry, RemWords) :-
+    member(Entry, Words),
+    remove_x(Entry, Words, RemWords).
+
+% mrv / mrv_capped, first word (grid empty): Start/Dir are the ground seed and
+% every word has the same single placement there, so ranking is moot - branch
+% over all words, keeping the seed-word choice a backtrack point.
+select_word(Strategy, Words, [], _GridLen, _Start, _Dir, _GIn, Entry, RemWords) :-
+    mrv_strategy(Strategy),
+    !,
+    member(Entry, Words),
+    remove_x(Entry, Words, RemWords).
+
+% mrv / mrv_capped, otherwise: fail-first ordering. Count each word's viable
+% placements on the current grid, keep only those that can connect now
+% (count > 0), and offer them MOST-CONSTRAINED FIRST via member/2 (still
+% backtrackable). A word's placements must cross an already-placed word, so a
+% count of 0 means "not connectable yet", NOT "dead" - hence we filter rather
+% than fail. The branch is dead only when NOTHING is placeable, which leaves
+% Ordered empty and fails here (a sound forward check).
+select_word(Strategy, Words, PlacedWords, GridLen, Start, Dir, GIn, Entry, RemWords) :-
+    mrv_strategy(Strategy),
+    mrv_cap(Strategy, Cap),
+    map_list_to_pairs(mrv_count(Cap, PlacedWords, GridLen, Start, Dir, GIn),
+                      Words, Pairs),
+    include(positive_key, Pairs, Placeable),
+    keysort(Placeable, Sorted),
+    pairs_values(Sorted, Ordered),
+    member(Entry, Ordered),
+    remove_x(Entry, Words, RemWords).
+
+mrv_strategy(mrv).
+mrv_strategy(mrv_capped).
+
+% Placement-count cap. `mrv` counts every viable placement (exact MRV);
+% `mrv_capped` saturates at 2 - the ordering/forward-check only needs the
+% buckets 0 / 1 / >=2, so it stops enumerating after the 2nd hit and avoids
+% full MRV's per-node enumeration cost on grids where words have many slots.
+mrv_cap(mrv, unbounded).
+mrv_cap(mrv_capped, 2).
+
+positive_key(Count-_) :- Count > 0.
+
+% Count Entry's viable placements right now, bounded by Cap. findall enumerates
+% each candidate (Start,Dir) from find_intersecting_word that also survives the
+% assign_word adjacency/bounds checks; findall undoes the goal's bindings, so
+% the caller's Start/Dir (ground on the first word, unbound after) are left
+% untouched.
+mrv_count(Cap, PlacedWords, GridLen, Start, Dir, GIn, Entry, Count) :-
+    Entry = [Word|_],
+    atom_chars(Word, Letters),
+    delete(Letters, ' ', Letters2),
+    length(Letters2, WLen),
+    findall(t,
+            capped(Cap,
+                   ( find_intersecting_word(Letters2, WLen, PlacedWords, GridLen,
+                                            Start, Dir),
+                     assign_word(Word, Letters2, WLen, Start, Dir, GridLen,
+                                 GIn, _Placed, _G1) )),
+            Ts),
+    length(Ts, Count).
+
+capped(unbounded, Goal) :- call(Goal).
+capped(N, Goal) :- integer(N), limit(N, Goal).
+
+
+% mrv_inc: capped MRV with an INCREMENTAL count cache (idea I1 in
+% docs/experiments.md). mrv_capped recomputes every remaining word's placement
+% count at every node; that per-node recount is its residual cost, which grows
+% with word count and grid size. mrv_inc instead recomputes a count only for
+% words that can have CHANGED since the last placement, and carries the rest
+% forward.
+%
+% Correctness rests on this invariant: a placement must cross an already-placed
+% word, so placing word W can only ADD options to words that SHARE A LETTER
+% with W (a new crossing target); for every other word, placing W can only
+% remove options (blocking), never add. Hence a carried-forward (not recounted)
+% count is always >= the true current count - never an under-count. An
+% over-count is safe: such a word is merely tried when it has no real
+% placement, and find_intersecting_word/6 then fails it, so member/2 moves on.
+% An under-count to 0 would be unsafe (it could wrongly prune a placeable word
+% and break completeness) - and the invariant guarantees that never happens.
+%
+% The cache is threaded as a plain argument, so backtracking restores prior
+% caches automatically. Counts are capped at 2 (as in mrv_capped).
+
+% State is `none` (no cache yet) or state(CountAssoc, LastPlacedLetters).
+assign_words_inc([], P, _State, _, _, _, G, G, P).
+assign_words_inc(Words, PlacedWords, StateIn, GridLen, Start, Dir, GIn, GOut, Out) :-
+    select_inc(Words, PlacedWords, StateIn, GridLen, Start, Dir, GIn,
+               Entry, RemWords, StateOut),
+    Entry = [Word|_],
+    atom_chars(Word, Letters),
+    delete(Letters, ' ', Letters2),
+    length(Letters2, WLen),
+    find_intersecting_word(Letters2, WLen, PlacedWords, GridLen, Start, Dir),
+    assign_word(Word, Letters2, WLen, Start, Dir, GridLen, GIn, Placed, G1),
+    assign_words_inc(RemWords, [Placed|PlacedWords], StateOut, GridLen,
+                     _Start, _Dir, G1, GOut, Out).
+
+% Seed word (grid empty): branch over all words, as the other MRV strategies
+% do; the next node builds the full cache (StateOut = none).
+select_inc(Words, [], _StateIn, _GridLen, _Start, _Dir, _GIn, Entry, RemWords, none) :-
+    !,
+    member(Entry, Words),
+    remove_x(Entry, Words, RemWords).
+% Otherwise: get current counts (full or incremental), order most-constrained
+% first over the connectable words, pick backtrackably. The cache passed
+% forward is this node's count map tagged with the chosen word's letters, so
+% the next node only recounts words sharing a letter with it.
+select_inc(Words, PlacedWords, StateIn, GridLen, Start, Dir, GIn, Entry, RemWords, StateOut) :-
+    inc_counts(StateIn, Words, PlacedWords, GridLen, Start, Dir, GIn, CountMap),
+    % map_list_to_pairs keeps the ORIGINAL word terms (findall would copy them,
+    % breaking the ==-based remove_x below and looping forever).
+    map_list_to_pairs(count_of(CountMap), Words, Pairs),
+    include(positive_key, Pairs, Placeable),
+    keysort(Placeable, Sorted),
+    pairs_values(Sorted, Ordered),
+    member(Entry, Ordered),
     remove_x(Entry, Words, RemWords),
-    assign_words(RemWords, [Placed|PlacedWords], GridLen, _Start, _Dir, G1, GOut, PlacedWordsOut).
+    entry_letters(Entry, EntryLetters),
+    StateOut = state(CountMap, EntryLetters).
+
+count_of(CountMap, Word, Count) :-
+    Word = [A|_],
+    get_assoc(A, CountMap, Count).
+
+% Build the count map for the current words. With no cache yet, count them all;
+% otherwise recount only words sharing a letter with the last-placed word and
+% carry the rest forward from the previous map.
+inc_counts(none, Words, PlacedWords, GridLen, Start, Dir, GIn, CountMap) :-
+    !,
+    empty_assoc(A0),
+    foldl(full_count(PlacedWords, GridLen, Start, Dir, GIn), Words, A0, CountMap).
+inc_counts(state(PrevMap, LastLetters), Words, PlacedWords, GridLen, Start, Dir, GIn, CountMap) :-
+    empty_assoc(A0),
+    foldl(inc_count(PrevMap, LastLetters, PlacedWords, GridLen, Start, Dir, GIn),
+          Words, A0, CountMap).
+
+full_count(PlacedWords, GridLen, Start, Dir, GIn, Entry, AIn, AOut) :-
+    Entry = [A|_],
+    mrv_count(2, PlacedWords, GridLen, Start, Dir, GIn, Entry, Count),
+    put_assoc(A, AIn, Count, AOut).
+
+inc_count(PrevMap, LastLetters, PlacedWords, GridLen, Start, Dir, GIn, Entry, AIn, AOut) :-
+    Entry = [A|_],
+    entry_letters(Entry, ELetters),
+    (   shares_letter(ELetters, LastLetters)
+    ->  mrv_count(2, PlacedWords, GridLen, Start, Dir, GIn, Entry, Count)
+    ;   get_assoc(A, PrevMap, Count)            % carry forward (>= true count)
+    ->  true
+    ;   mrv_count(2, PlacedWords, GridLen, Start, Dir, GIn, Entry, Count)
+    ),
+    put_assoc(A, AIn, Count, AOut).
+
+entry_letters([Word|_], Letters) :-
+    atom_chars(Word, L0),
+    delete(L0, ' ', Letters).
+
+shares_letter(Letters, OtherLetters) :-
+    member(L, Letters),
+    memberchk(L, OtherLetters),
+    !.
 
 
 % Given a Word and a set of Placed words, locates a candidate 

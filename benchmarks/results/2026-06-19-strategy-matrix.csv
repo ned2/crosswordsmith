@@ -1,0 +1,30 @@
+# git_commit: f4f590b (working tree dirty: strategy refactor + mrv_inc not yet committed)
+# tool: crosswordsmith-matrix
+# swi_prolog: 10.0.2
+# strategies: [baseline,mrv,mrv_capped,mrv_inc]
+# metric_note: wall time is machine-dependent; inferences are the portable metric
+strategy,fixture,grid,start,iterations,solved,wall_min_ms,wall_median_ms,inferences_min,inferences_median
+baseline,bundled_17_clues.pl,17,topleft_across,30,yes,0.743,0.754,16136,16136
+baseline,benchmark_08_words.pl,13,topleft_across,30,yes,0.424,0.428,8992,8992
+baseline,benchmark_14_words.pl,17,topleft_across,30,yes,1.636,1.663,33361,33361
+baseline,benchmark_16_dense_words.pl,17,topleft_across,1,yes,24056.300,24056.300,450893706,450893706
+baseline,benchmark_20_words.pl,37,topleft_across,30,yes,2.203,2.250,37275,37275
+baseline,benchmark_26_words.pl,49,topleft_across,30,yes,3.727,3.784,65100,65100
+mrv,bundled_17_clues.pl,17,topleft_across,30,yes,16.136,16.477,327802,327802
+mrv,benchmark_08_words.pl,13,topleft_across,30,yes,3.758,3.838,76357,76357
+mrv,benchmark_14_words.pl,17,topleft_across,30,yes,24.853,25.544,500618,500618
+mrv,benchmark_16_dense_words.pl,17,topleft_across,1,yes,36.446,36.446,717603,717603
+mrv,benchmark_20_words.pl,37,topleft_across,30,yes,15.440,15.607,271782,271782
+mrv,benchmark_26_words.pl,49,topleft_across,30,yes,36.331,36.489,585232,585232
+mrv_capped,bundled_17_clues.pl,17,topleft_across,30,yes,15.192,15.362,307956,307956
+mrv_capped,benchmark_08_words.pl,13,topleft_across,30,yes,2.337,2.367,46989,46989
+mrv_capped,benchmark_14_words.pl,17,topleft_across,30,yes,12.356,12.473,246621,246621
+mrv_capped,benchmark_16_dense_words.pl,17,topleft_across,1,yes,17.221,17.221,340217,340217
+mrv_capped,benchmark_20_words.pl,37,topleft_across,30,yes,15.606,15.727,272162,272162
+mrv_capped,benchmark_26_words.pl,49,topleft_across,30,yes,36.506,36.699,585882,585882
+mrv_inc,bundled_17_clues.pl,17,topleft_across,30,yes,15.123,15.240,307837,307837
+mrv_inc,benchmark_08_words.pl,13,topleft_across,30,yes,2.405,2.453,48466,48466
+mrv_inc,benchmark_14_words.pl,17,topleft_across,30,yes,12.656,12.733,252478,252478
+mrv_inc,benchmark_16_dense_words.pl,17,topleft_across,1,yes,17.846,17.846,348141,348141
+mrv_inc,benchmark_20_words.pl,37,topleft_across,30,yes,4.049,4.134,71819,71819
+mrv_inc,benchmark_26_words.pl,49,topleft_across,30,yes,7.972,8.009,126230,126230

@@ -146,10 +146,10 @@
       null,
       null,
       null,
-      null,
-      {"across":null,"down":3,"letter":"I","number":null},
-      null,
-      null,
+      {"across":5,"down":null,"letter":"B","number":5},
+      {"across":5,"down":3,"letter":"I","number":null},
+      {"across":5,"down":null,"letter":"A","number":null},
+      {"across":5,"down":null,"letter":"S","number":null},
       null
     ],
     [
@@ -172,10 +172,10 @@
       null
     ],
     [
-      {"across":5,"down":null,"letter":"B","number":5},
-      {"across":5,"down":null,"letter":"I","number":null},
-      {"across":5,"down":null,"letter":"A","number":null},
-      {"across":5,"down":2,"letter":"S","number":null},
+      null,
+      null,
+      null,
+      {"across":null,"down":2,"letter":"S","number":null},
       null,
       null,
       null,
@@ -425,7 +425,7 @@
     },
     {
       "answer":"BIAS",
-      "cells": [ [9, 0 ],  [9, 1 ],  [9, 2 ],  [9, 3 ] ],
+      "cells": [ [7, 12 ],  [7, 13 ],  [7, 14 ],  [7, 15 ] ],
       "direction":"across",
       "meta": {
 	"clue":"Why your brain sucks",

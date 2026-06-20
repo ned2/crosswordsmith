@@ -52,7 +52,10 @@ benchmark_opts_spec(
        help('unreported warmup repetitions')],
       [opt(format),     type(atom),    default(text), meta('FORMAT'),
        longflags([format]),
-       help('output format: text, csv, or json')]
+       help('output format: text, csv, or json')],
+      [opt(strategy),   type(atom),    default(''), meta('STRAT'),
+       longflags([strategy]),
+       help('solver strategy (default: the production default_strategy/1)')]
     ]).
 
 
@@ -70,6 +73,8 @@ validate_options(Opts, Positional, Config) :-
     memberchk(iterations(Iterations), Opts),
     memberchk(warmup(Warmup), Opts),
     memberchk(format(Format), Opts),
+    memberchk(strategy(StrategyOpt), Opts),
+    resolve_strategy(StrategyOpt, Strategy),
     validate_grid(GridLen),
     validate_start_loc(StartLoc),
     validate_iterations(Iterations),
@@ -80,7 +85,19 @@ validate_options(Opts, Positional, Config) :-
                startLoc: StartLoc,
                iterations: Iterations,
                warmup: Warmup,
-               format: Format}.
+               format: Format,
+               strategy: Strategy}.
+
+% '' means "use the production default"; otherwise validate against the
+% strategies crossword.pl defines.
+resolve_strategy('', Strategy) :-
+    !,
+    default_strategy(Strategy).
+resolve_strategy(Strategy, Strategy) :-
+    (   valid_strategy(Strategy)
+    ->  true
+    ;   throw(error(invalid_strategy(Strategy), _))
+    ).
 
 
 print_benchmark_usage :-
@@ -163,7 +180,7 @@ validate_format(Format) :-
 
 run_benchmark(Config, Report) :-
     load_fixture(Config.fixture, Words),
-    warmup(Words, Config.grid, Config.startLoc, Config.warmup),
+    warmup(Config.strategy, Words, Config.grid, Config.startLoc, Config.warmup),
     measure(Words, Config, Result),
     report(Config, Result, Report).
 
@@ -184,16 +201,16 @@ read_fixture_clues(Stream, FixtureFile, Words) :-
     ).
 
 
-warmup(_Words, _GridLen, _StartLoc, 0) :-
+warmup(_Strategy, _Words, _GridLen, _StartLoc, 0) :-
     !.
-warmup(Words, GridLen, StartLoc, Warmup) :-
-    forall(between(1, Warmup, _), must_solve(Words, GridLen, StartLoc)).
+warmup(Strategy, Words, GridLen, StartLoc, Warmup) :-
+    forall(between(1, Warmup, _), must_solve(Strategy, Words, GridLen, StartLoc)).
 
 
 measure(Words, Config, Result) :-
     findall(Time,
             ( between(1, Config.iterations, _),
-              timed_solve(Words, Config.grid, Config.startLoc, Time)
+              timed_solve(Config.strategy, Words, Config.grid, Config.startLoc, Time)
             ),
             Times),
     summarize_times(Times, Summary),
@@ -202,20 +219,21 @@ measure(Words, Config, Result) :-
                fixtureName: FixtureName,
                gridLength: Config.grid,
                startLoc: Config.startLoc,
+               strategy: Config.strategy,
                iterations: Config.iterations,
                wall: Summary.wall,
                cpu: Summary.cpu,
                inferences: Summary.inferences}.
 
 
-timed_solve(Words, GridLen, StartLoc, Time) :-
-    call_time(must_solve(Words, GridLen, StartLoc), Time).
+timed_solve(Strategy, Words, GridLen, StartLoc, Time) :-
+    call_time(must_solve(Strategy, Words, GridLen, StartLoc), Time).
 
 
-must_solve(Words, GridLen, StartLoc) :-
-    find_crossword(GridLen, Words, StartLoc, _Grid, _PlacedWords),
+must_solve(Strategy, Words, GridLen, StartLoc) :-
+    find_crossword(Strategy, GridLen, Words, StartLoc, _Grid, _PlacedWords),
     !.
-must_solve(_Words, GridLen, StartLoc) :-
+must_solve(_Strategy, _Words, GridLen, StartLoc) :-
     throw(error(fixture_unsolved(GridLen, StartLoc), _)).
 
 
@@ -297,6 +315,7 @@ emit_text(Report) :-
     emit_text_atom(fixture_name, Result.fixtureName),
     emit_text_integer(grid_length, Result.gridLength),
     emit_text_atom(start_loc, Result.startLoc),
+    emit_text_atom(strategy, Result.strategy),
     emit_text_integer(iterations, Result.iterations),
     emit_text_integer(warmup, Metadata.warmup),
     emit_text_atom(swi_prolog, Metadata.swiProlog),
@@ -338,16 +357,17 @@ emit_text_key(Key) :-
 
 emit_csv(Report) :-
     get_dict(results, Report, Results),
-    format("fixture,grid,start,iterations,wall_min_s,wall_median_s,wall_mean_s,cpu_min_s,cpu_median_s,cpu_mean_s,inferences_min,inferences_median,inferences_mean~n",
+    format("fixture,grid,start,strategy,iterations,wall_min_s,wall_median_s,wall_mean_s,cpu_min_s,cpu_median_s,cpu_mean_s,inferences_min,inferences_median,inferences_mean~n",
            []),
     forall(member(Result, Results), emit_csv_row(Result)).
 
 
 emit_csv_row(Result) :-
-    format("~w,~d,~w,~d,~6f,~6f,~6f,~6f,~6f,~6f,~0f,~0f,~0f~n",
+    format("~w,~d,~w,~w,~d,~6f,~6f,~6f,~6f,~6f,~6f,~0f,~0f,~0f~n",
            [ Result.fixtureName,
              Result.gridLength,
              Result.startLoc,
+             Result.strategy,
              Result.iterations,
              Result.wall.min,
              Result.wall.median,
@@ -387,6 +407,8 @@ prolog:error_message(invalid_warmup(Warmup)) -->
     [ 'benchmark warmup must be a non-negative integer, got ~q'-[Warmup] ].
 prolog:error_message(invalid_format(Format)) -->
     [ 'benchmark format must be text, csv, or json, got ~q'-[Format] ].
+prolog:error_message(invalid_strategy(Strategy)) -->
+    [ 'benchmark strategy is not a known solver strategy: ~q'-[Strategy] ].
 prolog:error_message(fixture_unsolved(GridLen, StartLoc)) -->
     [ 'benchmark fixture did not solve for grid length ~d and start location ~q'-
       [GridLen, StartLoc] ].
