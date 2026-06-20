@@ -19,6 +19,7 @@
 :- use_module(library(lists)).
 :- use_module(library(apply)).
 :- use_module(library(statistics)).
+:- use_module(library(time)).        % call_with_time_limit/2 (per-cell guard)
 
 :- dynamic repo_root/1.
 
@@ -58,11 +59,19 @@ emit_metadata(Strategies) :-
     format("# strategies: ~w~n", [Strategies]),
     format("# metric_note: wall time is machine-dependent; inferences are the portable metric~n", []).
 
+% Per-cell wall-clock guard. A strategy that cannot solve a fixture within this
+% many seconds is recorded as `timeout` rather than hanging the whole matrix
+% (e.g. baseline on a hard mesh). Keep fixtures' manifest iterations at 1 for
+% such fixtures so a slow-but-solved cell is not multiplied.
+cell_limit_seconds(60).
+
 run_cell(Strategy, Rel, Grid, Start, Iters, Warmup) :-
     repo_file(Rel, File),
     read_clues(File, Words),
     file_base_name(Rel, Name),
-    ( solve_once(Strategy, Words, Grid, Start)
+    cell_limit_seconds(Limit),
+    solve_status(Strategy, Words, Grid, Start, Limit, Status),
+    ( Status == solved
     ->  forall(between(1, Warmup, _), ignore(solve_once(Strategy, Words, Grid, Start))),
         findall(W-I,
                 ( between(1, Iters, _),
@@ -74,8 +83,18 @@ run_cell(Strategy, Rel, Grid, Start, Iters, Warmup) :-
         col(Infs, IMin, IMed),
         format("~w,~w,~d,~w,~d,yes,~3f,~3f,~0f,~0f~n",
                [Strategy, Name, Grid, Start, Iters, WMin, WMed, IMin, IMed])
-    ;   format("~w,~w,~d,~w,~d,no,,,,~n", [Strategy, Name, Grid, Start, Iters])
+    ;   % Status is `no` (search exhausted) or `timeout` (exceeded the limit);
+        % distinguished so a slow cell is never mistaken for unsatisfiable.
+        format("~w,~w,~d,~w,~d,~w,,,,~n", [Strategy, Name, Grid, Start, Iters, Status])
     ).
+
+% solved | no | timeout, never throwing the time-limit error to the caller.
+solve_status(Strategy, Words, Grid, Start, Limit, Status) :-
+    catch( ( call_with_time_limit(Limit, solve_once(Strategy, Words, Grid, Start))
+           ->  Status = solved
+           ;   Status = no ),
+           time_limit_exceeded,
+           Status = timeout ).
 
 solve_once(Strategy, Words, Grid, Start) :-
     find_crossword(Strategy, Grid, Words, Start, _Grid, _Placed),

@@ -17,6 +17,7 @@ comparisons rather than puzzle content.
 | `benchmark_16_dense_words.pl` | 16 | 17 | Dense mesh | Very high | 1 | Stress testing search changes and pruning behavior |
 | `benchmark_20_words.pl` | 20 | 37 | Comb | Low | 30+ | Larger word-count overhead without a branchy search tree |
 | `benchmark_26_words.pl` | 26 | 49 | Comb | Low to moderate | 30+ | Larger grid and word-count scaling checks |
+| `benchmark_70_mesh_words.pl` | 70 | 21 | Dense mesh | Baseline: timeout; MRV: low | 1 | Hard search where baseline times out but MRV solves (idea I4) |
 
 The "expected cost" column and the dense fixture's reputation describe the
 **`baseline`** strategy (input-order search). Under baseline, the dense fixture
@@ -48,3 +49,10 @@ make bench-matrix
 `bundled_17_clues.pl` is the small human-readable clue set used by README
 examples, golden-output regression, and default benchmark runs. It solves
 almost instantly and is mainly useful as a compatibility check.
+
+`benchmark_70_mesh_words.pl` is a hard short-word mesh: `baseline` does not
+finish (the `bench-matrix` harness caps each cell at 60 s and records
+`timeout`), while `mrv_inc` solves it quickly — the suite's case for search
+pruning on a larger grid. It is reproducible via
+`benchmarks/gen_mesh_fixture.py 21 70 8 3 5 1 <out>` (deterministic; see
+`docs/experiments.md`, idea I4).

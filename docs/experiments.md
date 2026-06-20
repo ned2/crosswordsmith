@@ -49,27 +49,36 @@ swipl -q benchmarks/run_matrix.pl -- baseline mrv_capped   # subset
 
 ---
 
-## Result batch — 2026-06-19 (SWI 10.0.2) — current
+## Result batch — 2026-06-20 (SWI 10.0.2) — current
 
-Source: `benchmarks/results/2026-06-19-strategy-matrix.csv`. Median inferences
+Source: `benchmarks/results/2026-06-20-strategy-matrix.csv`. Median inferences
 (the portable metric); wall ms in parentheses where notable. Each fixture on
-its manifest grid. Adds `mrv_inc` (E5).
+its manifest grid. Adds the I4 fixture `benchmark_64_mesh` and a per-cell 60 s
+timeout in the matrix harness (cells over the limit show `timeout`).
 
-| fixture (grid) | baseline | mrv_capped | **mrv_inc** |
-| --- | --- | --- | --- |
-| benchmark_08 (13) | 9.0 k | 47 k | 48 k |
-| benchmark_14 (17) | 33 k | 247 k | 252 k |
-| **benchmark_16_dense (17)** | **450.9 M** (24 s) | 340 k (17 ms) | **348 k (18 ms)** |
-| benchmark_20 (37) | 37 k | 272 k (15.7 ms) | **72 k (4.1 ms)** |
-| benchmark_26 (49) | 65 k | 586 k (36.7 ms) | **126 k (8.0 ms)** |
-| bundled_17 (17) | 16 k | 308 k | 308 k |
+| fixture (grid) | baseline | mrv (full) | mrv_capped | **mrv_inc** |
+| --- | --- | --- | --- | --- |
+| benchmark_08 (13) | 9.0 k | 76 k | 47 k | 48 k |
+| benchmark_14 (17) | 33 k | 501 k | 247 k | 252 k |
+| **benchmark_16_dense (17)** | **450.9 M** (23 s) | 718 k | 340 k | **348 k (19 ms)** |
+| benchmark_20 (37) | 37 k | 272 k | 272 k (15.7 ms) | **72 k (4.1 ms)** |
+| benchmark_26 (49) | 65 k | 585 k | 586 k (36 ms) | **126 k (7.9 ms)** |
+| bundled_17 (17) | 16 k | 328 k | 308 k | 308 k |
+| **benchmark_70_mesh (21)** | **timeout** | 7.61 M (367 ms) | 10.13 M (479 ms) | **3.18 M (161 ms)** |
 
-Headline: `mrv_inc` keeps the dense pruning win (~1,300x vs baseline) AND cuts
-the large-comb per-node tax that `mrv_capped` paid — bench_20 3.8x fewer
-inferences, bench_26 4.6x fewer — bringing the comb tax over baseline down from
-~7-9x to ~1.9x. Small/mesh fixtures are unchanged (cache adds ~2-3%). `mrv`
-(full) is omitted here; the 2026-06-18 batch shows it is dominated by
-`mrv_capped`.
+Headlines:
+- `mrv_inc` keeps the dense pruning win (~1,300x vs baseline) and the large-comb
+  per-node savings over `mrv_capped` (bench_20/26 ~3.8-4.6x fewer inferences).
+- The new `benchmark_70_mesh` (I4) is a hard search where **baseline times out
+  (>120 s)** but all three MRV strategies solve, and `mrv_inc` is decisively
+  fastest (161 ms; ~3x fewer inferences than `mrv_capped`, ~2.4x than `mrv`).
+  First suite fixture where baseline is hard but MRV wins on a 21x21 grid.
+
+## Result batch — 2026-06-19 (SWI 10.0.2) — historical (pre-I4 fixture)
+
+Source: `benchmarks/results/2026-06-19-strategy-matrix.csv`. Same six fixtures
+as 2026-06-20 minus `benchmark_64_mesh`; numbers match. Superseded by the
+2026-06-20 batch.
 
 ## Result batch — 2026-06-18 (SWI 10.0.2) — historical (pre-mrv_inc)
 
@@ -195,16 +204,54 @@ comb tax motivated E5 (`mrv_inc`).
 ## Open ideas
 
 - **I2 — value ordering.** Among a chosen word's placements, prefer those that
-  create more crossings (denser, and likely fewer downstream dead ends).
-- **I4 — short-word hard fixture (revisits I3).** I3's lattice approach failed
-  (see done-items). A controllable hard-but-satisfiable large-grid fixture
-  likely needs SHORT interlocking words read off a witness layout, not
-  full-width rows/cols. Build a small layout generator and read words from it.
+  create more crossings (denser, and likely fewer downstream dead ends). The
+  `benchmark_70_mesh` fixture (I4) is a good proving ground: it is a hard,
+  ordering-sensitive search, so a better value heuristic should show there.
+- **I5 — solver soundness: collinear prefix words.** The solver can place a word
+  and its prefix collinearly at one start cell (see I4), producing an invalid
+  layout that `assign_clue_numbers/2` cannot number. `check_next_cell/4` only
+  checks at placement time; a later longer word extends past a shorter one's
+  end. Fix candidates: when placing a word, reject it if its end cell's next
+  cell is filled *and the word's cells are a prefix of an existing word's*; or
+  forbid two same-direction words sharing a start cell. Note: this changes
+  layouts, so the golden file would need regenerating. Until fixed, dense
+  fixtures must avoid prefix-pair word sets (the I4 generator already does).
 
 ## Done / closed ideas
 
 - **I1 — incremental counts.** DONE → E5 (`mrv_inc`). Shipped; 3.8-4.6x fewer
   inferences on the large combs, dense win preserved.
+- **I4 — hard large-grid fixture.** DONE → shipped `fixtures/benchmark_70_mesh_words.pl`
+  (`benchmarks/gen_mesh_fixture.py 21 70 8 3 5 1`, deterministic; grid 21, 70
+  short words, alphabet 8, seed 1). Generator builds a witness layout by
+  simulating the solver's own placement rules (short perpendicular words
+  crossing placed ones, seed at (0,0) across), so it is **satisfiable +
+  reachable by construction**; output order is shuffled so baseline cannot
+  replay the build.
+  - **Result:** baseline times out (>120 s), while `mrv` (367 ms), `mrv_capped`
+    (479 ms) and `mrv_inc` (161 ms) all solve — the first suite fixture where
+    baseline is hard but the MRV strategies win, on a 21x21 grid, and `mrv_inc`
+    is clearly fastest (~3x fewer inferences than `mrv_capped`). Added a 60 s
+    per-cell timeout to `run_matrix.pl` so such fixtures cannot hang the matrix.
+  - **Key finding (the bigger lesson):** MRV's advantage is **structure-specific,
+    not generic.** On *sparse/flexible* random meshes baseline wins (its cheaper
+    per-node cost beats MRV, which has nothing to prune); only *near saturation*
+    does a search hard enough to favour pruning appear, and there the cliff is
+    **instance-dependent** — density sweeps at grid 21 found neighbouring
+    instances favouring opposite strategies (e.g. ~62 words baseline-easy/
+    mrv_inc-timeout; ~70 words baseline-timeout/mrv_inc-fast; >=72 both timeout).
+    `benchmark_70_mesh` is the chosen baseline-hard instance.
+  - **Honest caveat:** the fixture sits near that cliff, so it is a point-in-the-
+    design-space discriminator, not a smooth "MRV wins by Nx"; the committed file
+    is deterministic so the *numbers* are reproducible.
+  - **Latent solver bug surfaced (→ I5):** an earlier candidate exposed that the
+    solver can place a word and its **prefix** collinearly at the same start cell
+    (e.g. `DFEE` and `DFEEE` both across from one cell) — `check_next_cell/4`
+    validates at placement time but a later, longer word retroactively fills a
+    shorter word's "next" cell. `assign_clue_numbers/2` then fails (a start cell
+    with two same-direction words), so the CLI backtracks into the hard search
+    and hangs. Worked around in the generator (reject prefix pairs); the real fix
+    belongs in the solver — see I5.
 - **I3 — hard large-grid fixture.** ATTEMPTED, no fixture shipped. A lattice
   generator (full-width words on even rows/cols of a deterministic letter grid;
   satisfiable + adjacency-valid by construction, alphabet/stride as difficulty
