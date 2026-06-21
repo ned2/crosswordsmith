@@ -397,3 +397,42 @@ Findings:
   inputs/starts), confirming Q's `boundingBoxCost` term is doing real work.
 - Start position barely moves `checked_fraction` but can swing aspect (1.05 →
   1.92 on `toc_demo`) — another reason §8 ranges over starts and keeps best Q.
+
+## 16. Engine cost vs the solver (apples-to-apples)
+
+The quality engine and the solver (best variant `mrv_inc`) do **different jobs**,
+so there is no single "Nx slower" number: the solver finds *one* valid layout on
+a *given* grid (first-solution search, can backtrack); the quality engine
+*constructs* the best dense layout across a *multi-restart sweep* and *picks its
+own grid*. Measured on the same word sets — the solver fed the grid the quality
+engine chose, the quality cost split into a single greedy construction vs the
+full sweep (SWI 10.0.2; inferences are the portable metric; every row placed all
+words with no drops):
+
+| fixture (words) | solver `mrv_inc`, 1 search | quality, 1 construction | quality, full sweep (the deliverable) |
+| --- | --- | --- | --- |
+| toc_demo (16) | 690k inf / 38 ms | 183k inf / 32 ms | 15.0M inf / 1734 ms — 60 builds |
+| quality_22 (22) | 227k inf / 13 ms | 280k inf / 19 ms | 10.1M inf / 814 ms — 36 builds |
+| quality_61 (61) | **45.9M inf / 2462 ms** | **405k inf / 42 ms** | 37.1M inf / 3693 ms — 12 builds |
+
+Findings:
+- **Like-for-like (one construction vs one search), the quality core is
+  competitive-to-better and far more robust.** A single construction is the same
+  order as a single solver search on the small fixtures, and ~**110x cheaper** on
+  the dense one (quality_61: 405k vs 45.9M inf). Greedy construction never
+  backtracks, so it scales gracefully exactly where the solver's first-solution
+  search explodes (the same blow-up as `dense_16`, here on a tight 61-word grid).
+- **The quality engine's real cost is the sweep, and the multiplier is the build
+  count** (`grids × 4 starts × seeds` = 12–60 here). That spend is not waste — it
+  buys what the solver does not: density/checking (~0.45 vs the solver's ~0.1, §15),
+  automatic grid selection, and drop tolerance.
+- **No single ratio — it inverts with input hardness.** On solver-*easy* inputs
+  (quality_22, a trivial 227k-inf search) the full sweep is ~45x more expensive;
+  on solver-*hard* inputs (quality_61) the full sweep (37.1M) is actually
+  *cheaper* than one solver search, and a single construction is ~110x cheaper.
+- **Takeaway:** for "a valid layout on a grid I pick", one search ≈ one
+  construction and the construction will not blow up; for "the best dense
+  closed-set layout, engine picks the grid", the sweep is the price of quality —
+  ~1–45x a single solver search depending on whether the input is solver-easy or
+  solver-hard, and the *cheaper* option precisely on the dense inputs where the
+  solver struggles.
