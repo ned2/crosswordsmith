@@ -58,3 +58,25 @@ solves it in ~14 ms while the MRV strategies pay their per-node tax (so baseline
 `benchmarks/gen_mesh_fixture.py 21 70 8 3 5 1 <out>` (deterministic; see
 `docs/experiments.md`, ideas I4 and I5). `benchmark_16_dense_words.pl` remains
 the suite's genuine baseline-hard fixture.
+
+## Quality Fixtures
+
+For *layout-quality* work (`docs/cryptic-layout-spec.md`) rather than
+search-speed. The existing benchmark fixtures were built for search difficulty;
+their interlock ceilings are incidental (combs are structurally low-ceiling).
+These come with a **known-achievable checking ceiling** — the planted witness's
+own quality, reported by `gen_mesh_fixture.py` — so a quality engine can be
+measured against a real target, not just an unknown set. Analyze any layout with
+`benchmarks/analyze_layout.py` (reads emitted JSON).
+
+| fixture | words | grid | witness ceiling (checked / ≥half) | use |
+| --- | ---: | ---: | --- | --- |
+| `quality_22_mesh.pl` | 22 | 11 | 0.435 / 0.955 | small, solvable, high ceiling — fast iteration & baseline gap (current solver: 0.389 / 0.636) |
+| `quality_61_mesh.pl` | 61 | 17 | 0.470 / 0.967 | dense; the backtracking solver can't pack it at all — a pure greedy-engine target |
+| `toc_demo.pl` | 16 | 25 | low (real words; current ≈0.135) | realistic web-TOC input — graceful-degradation / honest-report end |
+
+Reproducible: `gen_mesh_fixture.py 11 22 5 3 4 7 quality_22_mesh.pl` and
+`... 17 70 6 3 4 3 quality_61_mesh.pl`. The cryptic ideal is ~0.5 checked with
+~all words ≥half-checked; even maximally-dense witnesses top out ~0.47, so for an
+arbitrary closed set the realistic target is "approach the witness ceiling",
+not 0.5 (see the spec, §15).

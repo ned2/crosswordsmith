@@ -108,14 +108,41 @@ def build(G, N, K, lmin, lmax, seed):
 
     strings = [w[2] for w in words]
     rng.shuffle(strings)                        # break the witness order for baseline
-    return strings, len(grid)
+    return strings, len(grid), words, grid
+
+
+def witness_metrics(placements, grid):
+    """Layout quality of the PLANTED witness (a known-achievable ceiling for a
+    quality engine fed this word set): checked fraction, fraction of words >=half
+    checked, fill density, aspect."""
+    cover = {}
+    for (cells, direction, _s) in placements:
+        for (r, c) in cells:
+            cover.setdefault((r, c), set()).add(direction)
+    filled = len(grid)
+    checked = sum(1 for dirs in cover.values() if len(dirs) >= 2)
+    meet = 0
+    for (cells, _d, _s) in placements:
+        cc = sum(1 for rc in cells if len(cover.get(rc, ())) >= 2)
+        if cc >= -(-len(cells) // 2):           # ceil(L/2)
+            meet += 1
+    rows = [r for (r, _c) in grid]
+    cols = [c for (_r, c) in grid]
+    h = max(rows) - min(rows) + 1
+    w = max(cols) - min(cols) + 1
+    return {
+        "checked_fraction": round(checked / filled, 3) if filled else 0.0,
+        "frac_words_meeting_min_half": round(meet / len(placements), 3) if placements else 0.0,
+        "fill_density": round(filled / (h * w), 3) if h and w else 0.0,
+        "aspect": round(max(h, w) / min(h, w), 2) if h and w else 0.0,
+    }
 
 
 def main():
     G, N, K, lmin, lmax, seed, outfile = (
         int(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3]),
         int(sys.argv[4]), int(sys.argv[5]), int(sys.argv[6]), sys.argv[7])
-    words, filled = build(G, N, K, lmin, lmax, seed)
+    words, filled, placements, grid = build(G, N, K, lmin, lmax, seed)
     with open(outfile, 'w') as f:
         f.write("%% Synthetic mesh fixture: %d words, grid %dx%d, alphabet %d, "
                 "lengths %d-%d, seed %d.\n" % (len(words), G, G, K, lmin, lmax, seed))
@@ -128,8 +155,13 @@ def main():
         f.write("clues([\n")
         f.write(",\n".join("       ['%s']" % w for w in words))  # no trailing comma
         f.write("\n      ]).\n")
+    wm = witness_metrics(placements, grid)
     print("wrote %s: %d words, grid %d, %d cells filled, alphabet %d"
           % (outfile, len(words), G, filled, K))
+    print("  witness ceiling: checked_fraction=%s frac_words>=half=%s "
+          "fill_density=%s aspect=%s"
+          % (wm["checked_fraction"], wm["frac_words_meeting_min_half"],
+             wm["fill_density"], wm["aspect"]))
 
 
 if __name__ == '__main__':
