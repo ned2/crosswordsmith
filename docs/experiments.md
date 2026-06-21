@@ -266,7 +266,7 @@ comb tax motivated E5 (`mrv_inc`).
 
 ## Open ideas
 
-- All logged algorithm ideas (I1-I5) are closed. Possible future work: a
+- All logged algorithm ideas (I1-I6) are closed. Possible future work: a
   *cheaper* value heuristic that biases `find_intersecting_word/6`'s generation
   order without the full enumerate-and-sort (I2 failed on that cost, not the
   idea); and the infra items deferred by choice (auto-stamp git SHA + a
@@ -299,6 +299,35 @@ comb tax motivated E5 (`mrv_inc`).
   - **Verdict:** not worth it for this suite. Revisit only with a value
     heuristic that does not require full per-node placement enumeration, and/or
     a fixture where `mrv_inc` itself backtracks heavily (none found).
+- **I6 — `mrv_inc_deg` (MRV + degree tie-break).** TRIED, REJECTED (reverted
+  from code, like E4/I2). Idea: among the words tied at the same capped placement
+  count, place the highest-DEGREE one first - degree = the number of other
+  remaining words sharing a letter (the count of future crossing constraints) -
+  the classic MRV + degree fail-first pairing. Implemented as a `mrv_inc` variant
+  reusing the incremental count cache, ordering by key `Count - (-Degree)` so
+  `keysort` gives count ascending then degree descending; `mrv_inc` itself left
+  byte-identical (golden + 66 tests unchanged).
+  - **Result:** worse than `mrv_inc` on EVERY fixture (median inferences):
+    bundled_17 321k->511k, bench_08 53k->58k, bench_14 278k->317k,
+    `benchmark_16_dense` 388k->447k (+15%), bench_20 79k->252k (+220%),
+    bench_26 139k->583k (+320%), `benchmark_70_mesh` 5.16M->14.57M (+182%).
+    Full batch: `benchmarks/results/2026-06-21-mrv_inc_deg.csv`.
+  - **Why (node counts settle it):** the degree ordering gives NO search benefit.
+    Instrumented node counts are IDENTICAL where it matters - `dense_16` 16 = 16,
+    bench_26 26 = 26 - so the entire inference increase there is pure per-node
+    cost: an O(n^2) degree scan (each ranked word vs every remaining word) at
+    every node, which balloons with the word-set size (hence +220-320% on the
+    larger sets, whose search is near-linear with no pruning to gain). Worse, on
+    `benchmark_70_mesh` the degree ordering actively STEERED INTO A WORSE TREE:
+    `mrv_inc` solves in a clean 70-node forward pass; `mrv_inc_deg` blows up to
+    775 nodes (11x). So degree loses three ways: no node reduction anywhere (a
+    tie at best), an 11x tree blow-up on one fixture, plus O(n^2) per-node cost.
+  - **Verdict:** not worth it, and - unlike I2 - NOT worth revisiting with a
+    cheaper degree computation: the ordering produced zero tree reduction even
+    when notionally free, so cost is not the only problem. The capped-count
+    buckets (0 / 1 / >=2) already place forced words first; among the large `>=2`
+    bucket, "most-connected first" is not a useful discriminator for this suite
+    (and on one fixture actively misleads). `mrv_inc` stays the default.
 - **I5 — solver soundness: collinear "word inside a word".** DONE (fixed in
   `crossword.pl`). The solver could place a word and a collinear word whose span
   contains it (e.g. `DFEE` inside `DFEEE`, same start cell, same direction) -

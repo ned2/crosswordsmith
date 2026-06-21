@@ -1,0 +1,40 @@
+# tool: crosswordsmith-matrix
+# swi_prolog: 10.0.2
+# strategies: [baseline,mrv,mrv_capped,mrv_inc,mrv_inc_deg]
+# metric_note: wall time is machine-dependent; inferences are the portable metric
+strategy,fixture,grid,start,iterations,solved,wall_min_ms,wall_median_ms,inferences_min,inferences_median
+baseline,bundled_17_clues.pl,17,topleft_across,30,yes,1.578,1.601,16935,16935
+baseline,benchmark_08_words.pl,13,topleft_across,30,yes,0.888,0.903,9689,9689
+baseline,benchmark_14_words.pl,17,topleft_across,30,yes,3.430,3.454,35952,35952
+baseline,benchmark_16_dense_words.pl,17,topleft_across,1,yes,24265.803,24265.803,453086608,453086608
+baseline,benchmark_20_words.pl,37,topleft_across,30,yes,2.354,2.409,43207,43207
+baseline,benchmark_26_words.pl,49,topleft_across,30,yes,4.043,4.106,75979,75979
+baseline,benchmark_70_mesh_words.pl,21,topleft_across,1,yes,13.962,13.962,293352,293352
+mrv,bundled_17_clues.pl,17,topleft_across,30,yes,17.197,17.312,352601,352601
+mrv,benchmark_08_words.pl,13,topleft_across,30,yes,4.076,4.192,84428,84428
+mrv,benchmark_14_words.pl,17,topleft_across,30,yes,27.054,27.297,567143,567143
+mrv,benchmark_16_dense_words.pl,17,topleft_across,1,yes,39.492,39.492,830021,830021
+mrv,benchmark_20_words.pl,37,topleft_across,30,yes,17.081,17.227,320464,320464
+mrv,benchmark_26_words.pl,49,topleft_across,30,yes,40.030,40.492,697186,697186
+mrv,benchmark_70_mesh_words.pl,21,topleft_across,1,yes,580.258,580.258,12973636,12973636
+mrv_capped,bundled_17_clues.pl,17,topleft_across,30,yes,16.021,16.178,324474,324474
+mrv_capped,benchmark_08_words.pl,13,topleft_across,30,yes,2.476,2.495,51424,51424
+mrv_capped,benchmark_14_words.pl,17,topleft_across,30,yes,13.253,13.380,272585,272585
+mrv_capped,benchmark_16_dense_words.pl,17,topleft_across,1,yes,18.532,18.532,380062,380062
+mrv_capped,benchmark_20_words.pl,37,topleft_across,30,yes,17.081,17.237,320844,320844
+mrv_capped,benchmark_26_words.pl,49,topleft_across,30,yes,39.933,40.286,697836,697836
+mrv_capped,benchmark_70_mesh_words.pl,21,topleft_across,1,yes,533.983,533.983,11925211,11925211
+mrv_inc,bundled_17_clues.pl,17,topleft_across,30,yes,15.804,15.909,321073,321073
+mrv_inc,benchmark_08_words.pl,13,topleft_across,30,yes,2.542,2.559,52908,52908
+mrv_inc,benchmark_14_words.pl,17,topleft_across,30,yes,13.554,13.838,278455,278455
+mrv_inc,benchmark_16_dense_words.pl,17,topleft_across,1,yes,19.464,19.464,388001,388001
+mrv_inc,benchmark_20_words.pl,37,topleft_across,30,yes,4.269,4.331,78739,78739
+mrv_inc,benchmark_26_words.pl,49,topleft_across,30,yes,8.318,8.391,138709,138709
+mrv_inc,benchmark_70_mesh_words.pl,21,topleft_across,1,yes,244.575,244.575,5159487,5159487
+mrv_inc_deg,bundled_17_clues.pl,17,topleft_across,30,yes,25.454,25.752,511009,511009
+mrv_inc_deg,benchmark_08_words.pl,13,topleft_across,30,yes,2.771,2.828,58457,58457
+mrv_inc_deg,benchmark_14_words.pl,17,topleft_across,30,yes,15.213,15.389,316822,316822
+mrv_inc_deg,benchmark_16_dense_words.pl,17,topleft_across,1,yes,21.636,21.636,446894,446894
+mrv_inc_deg,benchmark_20_words.pl,37,topleft_across,30,yes,16.223,16.539,251639,251639
+mrv_inc_deg,benchmark_26_words.pl,49,topleft_across,30,yes,41.242,41.591,582659,582659
+mrv_inc_deg,benchmark_70_mesh_words.pl,21,topleft_across,1,yes,665.310,665.310,14569120,14569120
