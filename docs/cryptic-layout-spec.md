@@ -237,9 +237,10 @@ off the chosen layout (an output, not an input).
 - **How close does one-pass greedy get to the cryptic ideal?** The core
   empirical question — answered by v1a measuring greedy-construction Q vs the
   current tree-like first solutions vs the ~0.5 checked target.
-- **Greedy local optima / painting-into-a-corner:** a dense early core can block
-  later words (raising drops). Mitigated by hill-climb + start/tie-break
-  restarts; v1a should measure how often this bites.
+- **Greedy local optima / painting-into-a-corner:** ANSWERED. Multi-restart
+  (grid x start x seed) suffices: the result is robustly 1- and 2-move locally
+  optimal (§14 v1b), so a dense early core is not a practical problem and deeper
+  search does not help.
 - **Greedy-key weighting** (crossings vs bbox-growth) is a taste call; needs v1a
   data.
 - **Very sparse sets** may force many drops; the research doc ranks "allow
@@ -299,18 +300,28 @@ bbox-area vs elongation) renders a near-square TOC (aspect 2.12->1.09 on
 quality_22 for ~0.02 less checked); a **bounded grid sweep** (three candidate
 sizes + the per-set seed cap) keeps it fast (quality_61 ~21 s -> ~5.6 s).
 
-Polish NOT adopted: **true local-move hill-climb** (reseat a word to a higher-Q
-crossing) was implemented and measured a **no-op** on every quality fixture -
-the multi-restart search (grid x start x seed) already reaches layouts that are
-*single-reseat-optimal* (each word is already at its best spot given the
-others), so single-word moves can't escape. Reverted (cf. I2). Improving further
-would need *multi-word* moves (eject + re-insert); deferred to v2 as uncertain
-payoff.
+Polish NOT adopted: **local-move search** was tested and is a **no-op**. First a
+single-word reseat (re-place a word at its now-best crossing): the multi-restart
+search (grid x start x seed) already reaches *single-reseat-optimal* layouts.
+Then a **2-word eject-and-reinsert** (the natural escalation): on quality_22, 448
+candidate two-word moves were generated and the **best one ties the current Q**
+(no improvement); identical on toc_demo. So the greedy+restart layout is robustly
+**1- and 2-move locally optimal**, and under the compactness-weighted Q it is at
+or above the witness ceilings. Both reverted (cf. I2).
+
+**Conclusion on quality-guided *search*:** it is **not worth building**. The
+greedy construction + multi-restart already reaches the local optimum, and 1-/2-
+move search can't improve it, so a heavier optimiser (B&B; spec v2 below) has no
+measured headroom on the quality fixtures. (The witness ceilings are pure-density
+and ignore compactness; greedy's slightly-lower checked fraction comes *with*
+better compactness, which our Q rewards - so greedy is at our Q-optimum, not
+short of it.)
 
 ### v2 — Refinements
-Optional admissible-bounded B&B on top of greedy (if v1a shows headroom); richer
-Q (length variety, themed/priority positioning); exposed Q-weights; possibly
-optional non-link connectors for pathologically sparse sets (§12).
+The **quality-guided B&B search** is **closed** (the local-move experiment above
+shows no headroom over greedy+restart). Remaining optional refinements: richer Q
+(length variety, themed/priority positioning); exposed Q-weights; optional
+non-link connectors for pathologically sparse sets (§12).
 
 ## 15. v1a results (done)
 
