@@ -317,6 +317,43 @@ and ignore compactness; greedy's slightly-lower checked fraction comes *with*
 better compactness, which our Q rewards - so greedy is at our Q-optimum, not
 short of it.)
 
+### v1b.1 — The construction is cut-free (the cut-based version was removed)
+The greedy construction is implemented **cut-free** ("Path A" — a declarative
+rewrite, *not* CLP(FD)). The original had two control constructs; both are gone:
+the first-solution `!` in `word_best_placement` is replaced by "fold `assign_word`
+legality INTO the `findall` generator, then take the head of the `@>=`-sorted
+list"; the greedy `( Best -> place ; stop )` if-then-else is replaced by "reify
+the best move (or `none`) as a term and dispatch on mutually exclusive clause
+heads (`[]` vs `[_|_]`)". No `!`, `->` or `\+` remain in the construction;
+`findall`/`sort`/`is` stay. `quality.pl`: `greedy_loop`, `next_move`/`best_move`/
+`apply_move`, `word_best_placement`.
+
+This was first landed as an opt-in `--quality-engine pure` variant and A-B'd
+against the cut-based original. It produced **byte-identical** output on every
+quality fixture (JSON + stderr report, floored and unfloored; verified by diff)
+**and** ran faster:
+
+| fixture          | cut-based            | cut-free             |
+|------------------|----------------------|----------------------|
+| toc_demo (16w)   | 2014 ms / 26.7M inf  | 1484 ms / 15.1M inf  |
+| quality_22 (22w) | 1335 ms / 18.5M inf  |  859 ms / 10.1M inf  |
+| quality_61 (61w) | 5504 ms / 69.8M inf  | 3924 ms / 37.1M inf  |
+
+(SWI 10.0.2; CPU + inferences per `quality_layout` call, N=30/30/10.) ~26–36 %
+less CPU, ~43–47 % fewer inferences.
+
+**Why faster (the prediction was wrong):** removing the green cut was expected to
+cost *more* — run `assign_word` for every candidate, not just up to the first
+legal one. It costs *less* because folding `assign_word` into the generator moves
+the legality filter **before** scoring: the cut-based version computed the
+(heavier) `placement_key` density score for *every* `find_intersecting_word`
+candidate, including the many illegal ones, then assigned only the first legal;
+the cut-free version runs a cheap early-failing `assign_word` on each and scores
+only the survivors. On dense meshes most crossing candidates are illegal, so
+pruning scoring early wins. Since it is identical-output, faster **and** more
+declarative, the cut-based construction and the `--quality-engine` flag were
+**removed** — the cut-free engine is now the only one.
+
 ### v2 — Refinements
 The **quality-guided B&B search** is **closed** (the local-move experiment above
 shows no headroom over greedy+restart). Remaining optional refinements: richer Q

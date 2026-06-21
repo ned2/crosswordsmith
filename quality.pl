@@ -24,6 +24,8 @@
 % Floor groundedness gives the modes: all off = auto; some on = manual/partial;
 % all on = strict. A bound per-word floor (min_half / max_unch_run) DROPS words
 % that violate it (drop-to-satisfy); `all_words` rejects any layout with drops.
+% The per-construction step (greedy_construct -> greedy_loop) is cut-free; the
+% sweep, scoring and floors wrap it.
 quality_layout(Words, Floors, BestPlaced, BestDropped, BestGrid) :-
     grid_candidates(Words, Grids),
     seed_candidates(Words, Seeds),
@@ -118,37 +120,54 @@ seed_word(Entry, Start, Dir, GridLen, GIn, PW, GOut) :-
 word_letters([Word|_], Letters, WLen) :-
     atom_chars(Word, L0), delete(L0, ' ', Letters), length(Letters, WLen).
 
-% Place the globally best-scoring placeable word, repeat; drop the rest.
+% Place the globally best-scoring placeable word, repeat; drop the rest. The
+% construction is cut-free: instead of an `( Best -> place ; stop )` if-then-else,
+% the next move (or `none`) is reified as a term and dispatched on the mutually
+% exclusive clause heads of best_move/2 ([] vs [_|_]). No !, ->, or \+ here or in
+% word_best_placement below; only findall/sort/arithmetic remain. (This replaced
+% an equivalent cut-based version; it is identical-output and faster - see
+% docs/cryptic-layout-spec.md v1b.1.)
 greedy_loop(Remaining, Placed, GridLen, Grid, FinalPlaced, Dropped) :-
-    ( best_global_placement(Remaining, Placed, GridLen, Grid, Entry, NewPW, NewGrid)
-    ->  remove_x(Entry, Remaining, Remaining1),
-        greedy_loop(Remaining1, [NewPW|Placed], GridLen, NewGrid, FinalPlaced, Dropped)
-    ;   FinalPlaced = Placed, Dropped = Remaining ).
+    next_move(Remaining, Placed, GridLen, Grid, Move),
+    apply_move(Move, Remaining, Placed, GridLen, FinalPlaced, Dropped).
 
+apply_move(none, Remaining, Placed, _GridLen, Placed, Remaining).
+apply_move(move(Entry, NewPW, NewGrid), Remaining, Placed, GridLen, FinalPlaced, Dropped) :-
+    remove_x(Entry, Remaining, Remaining1),
+    greedy_loop(Remaining1, [NewPW|Placed], GridLen, NewGrid, FinalPlaced, Dropped).
+
+% The best placeable word as move(Entry,PW,Grid), or `none` when nothing fits.
 % Among remaining words with a legal placement, the one whose best placement
-% scores highest (most new crossings, then least bbox growth).
-best_global_placement(Remaining, Placed, GridLen, Grid, BestEntry, BestPW, BestGrid) :-
+% scores highest (most new crossings, then least bbox growth). The [] vs [_|_]
+% dispatch in best_move/2 is what lets greedy_loop avoid an if-then-else.
+next_move(Remaining, Placed, GridLen, Grid, Move) :-
     placed_bbox(Placed, GridLen, BBox, _),
     findall(Score-cand(Entry, PW, G1),
             ( member(Entry, Remaining),
               word_best_placement(Entry, Placed, GridLen, Grid, BBox, Score, PW, G1) ),
             Cands),
-    Cands = [_|_],
-    sort(1, @>=, Cands, [_-cand(BestEntry, BestPW, BestGrid)|_]).
+    best_move(Cands, Move).
 
-% Best legal placement of one word on the current grid.
+best_move([], none).
+best_move([C|Cs], move(Entry, PW, G1)) :-
+    sort(1, @>=, [C|Cs], [_-cand(Entry, PW, G1)|_]).
+
+% Best legal placement of one word on the current grid, cut-free: assign_word
+% legality is folded INTO the findall generator so only legal placements are
+% collected (keyed by the density score), and the head of the @>=-sorted list is
+% the best - no first-solution `!`. Folding the legality filter ahead of scoring
+% means placement_key runs only for legal candidates (not every crossing
+% candidate), which is why this is faster than the cut version (see spec v1b.1).
 word_best_placement(Entry, Placed, GridLen, Grid, BBox, Score, PW, GOut) :-
     word_letters(Entry, Letters, WLen),
     Entry = [Word|_],
-    findall(Key-(Start-Dir),
+    findall(Key-place(PW1, G1),
             ( find_intersecting_word(Letters, WLen, Placed, GridLen, Start, Dir),
+              assign_word(Word, Letters, WLen, Start, Dir, GridLen, Placed, Grid, PW1, G1),
               placement_key(Letters, Start, Dir, WLen, GridLen, Grid, BBox, Key) ),
             Keyed),
     Keyed = [_|_],
-    sort(1, @>=, Keyed, Sorted),
-    member(Score-(Start-Dir), Sorted),
-    assign_word(Word, Letters, WLen, Start, Dir, GridLen, Placed, Grid, PW, GOut),
-    !.
+    sort(1, @>=, Keyed, [Score-place(PW, GOut)|_]).
 
 % Density score for a candidate placement: crossings dominate, bbox-growth
 % breaks ties (smaller is better). 10000 > any plausible bbox area.
