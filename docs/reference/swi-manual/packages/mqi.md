@@ -1,0 +1,530 @@
+mqi -- Python and Other Programming Languge Integration for SWI Prolog
+
+Eric Zinda  
+E-mail: [ericz@inductorsoftware.com](mailto:ericz@inductorsoftware.com)
+
+Abstract
+
+This package provides the library `mqi.pl` that enables embedding SWI Prolog into just about any programming language (Python, Go, C#, etc) in a straightforward way. It is designed for scenarios that need to use SWI Prolog as a local implementation detail of another language. Think of it as running SWI Prolog “like a library” . It can support any programming language that can launch processes, read their STDOUT pipe, and send and receive JSON over TCP/IP.
+
+A Python 3.x library is provided.
+
+# Table of Contents
+
+[1 Machine Query Interface Overview](#sec:1)
+
+[1.1 Installation Steps for Python](#sec:1.1)
+
+[1.2 Installation Steps for Other Languages](#sec:1.2)
+
+[1.3 Prolog Language Differences from the Top Level](#sec:1.3)
+
+[1.4 Embedded Mode: Integrating the Machine Query Interface Into a New Programming Language](#sec:1.4)
+
+[1.5 Standalone Mode: Debugging Prolog Code Used in an Application](#sec:1.5)
+
+[1.6 Machine Query Interface Messages](#sec:1.6)
+
+[1.6.1 Machine Query Interface Message Format](#sec:1.6.1)
+
+[1.6.2 Machine Query Interface Messages Reference](#sec:1.6.2)
+
+[2 library(mqi)](#sec:2)
+
+## 1 Machine Query Interface Overview
+
+The SWI Prolog Machine Query Interface ('MQI’) is designed to enable embedding SWI Prolog into just about any programming language (Python, Go, C#, etc) in a straightforward way. It is designed for scenarios that need to use SWI Prolog as a local implementation detail of another language. Think of it as running SWI Prolog "like a library". It can support any programming language that can launch processes, read their STDOUT pipe, and send and receive JSON over TCP/IP. A Python 3 library is included as a part of SWI Prolog, see Installation Steps for Python ([section 1.1](#sec:1.1)).
+
+Key features of the MQI:
+
+- Simulates the familiar Prolog "top level" (i.e. the interactive prompt you get when running Prolog: "`?-`").
+- Always runs queries from a connection on a consistent, single thread for that connection. The application itself can still be multi-threaded by running queries that use the multi-threading Prolog predicates or by opening more than one connection.
+- Runs as a separate dedicated **local** Prolog process to simplify integration (vs. using the C-level SWI Prolog interface). The process is launched and managed by a specific running client (e.g. Python or other language) program.
+- Communicates using sockets and [JSON](https://www.json.org/) encoded as UTF-8 to allow it to work on any platform supported by SWI Prolog. For security reasons, only listens on TCP/IP localhost or Unix Domain Sockets and requires (or generates depending on the options) a password to open a connection.
+- Has a lightweight text-based message format with only 6 commands: run synchronous query, run asynchronous query, retrieve asynchronous results, cancel asynchronous query, close connection and terminate the session.
+- Communicates answers using [JSON](https://www.json.org/), a well-known data format supported by most languages natively or with generally available libraries.
+
+The server can be used in two different modes:
+
+- **Embedded mode**: This is the main use case for the MQI. The user uses a library (just like any other library in their language of choice). That library integrates the MQI by launching the SWI Prolog process, connecting to it, and wrapping the MQI protocol with a language specific interface.
+- **Standalone mode**: The user still uses a library as above, but launches SWI Prolog independently of the language. The client language library connects to that process. This allows the user to see, interact with, and debug the Prolog process while the library interacts with it.
+
+Note that the MQI is related to the [Pengines library](https://www.swi-prolog.org/pldoc/man?section=pengine-references), but where the Pengines library is focused on a client/server, multi-tenet, sandboxed environment, the MQI is local, single tenet and unconstrained. Thus, when the requirement is to embed Prolog within another programming language "like a library", it can be a good solution for exposing the full power of Prolog with low integration overhead.
+
+### 1.1 Installation Steps for Python
+
+A Python 3.x library that integrates Python with SWI Prolog using the Machine Query Interface is included within the `libs` directory of the SWI Prolog installation. It is also available using `pip install swiplserver`. See the [Python swiplserver library documentation](https://www.swi-prolog.org/packages/mqi/prologmqi.html) for more information on how to use and install it from either location.
+
+### 1.2 Installation Steps for Other Languages
+
+In general, to use the Machine Query Interface with any programming language:
+
+1.  Install SWI Prolog itself on the machine the application will run on.
+2.  Ensure that the system path includes a path to the `swipl` executable from that installation.
+3.  Check if your SWI Prolog version includes the MQI by running‘swipl mqi --help\`
+4.  Make sure the application (really the user that launches the application) has permission to launch the SWI Prolog process. Unless your system is unusually locked down, this should be allowed by default. If not, you'll need to set the appropriate permissions to allow this.
+5.  Install (or write!) the library you'll be using to access the MQI in your language of choice.
+
+### 1.3 Prolog Language Differences from the Top Level
+
+The Machine Query Interface is designed to act like using the ["top level"](https://www.swi-prolog.org/pldoc/man?section=quickstart) prompt of SWI Prolog itself (i.e. the "`?-`" prompt). If you've built the Prolog part of your application by loading code, running it and debugging it using the normal SWI Prolog top level, integrating it with your native language should be straightforward: simply run the commands you'd normally run on the top level, but now run them using the query APIs provided by the library built for your target language. Those APIs will allow you to send the exact same text to Prolog and they should execute the same way. Here's an example using the Python `swiplserver` library:
+
+``` code
+% Prolog Top Level
+?- member(X, [first, second, third]).
+X = first ;
+X = second ;
+X = third.
+```
+
+``` code
+# Python using the swiplserver library
+from swiplserver import PrologMQI, PrologThread
+
+with PrologMQI() as mqi:
+    with mqi.create_thread() as prolog_thread:
+        result = prolog_thread.query("member(X, [first, second, third]).")
+        print(result)
+
+first
+second
+third
+```
+
+While the query functionality of the MQI does run on a thread, it will always be the **same** thread, and, if you use a single connection, it will only allow queries to be run one at a time, just like the top level. Of course, the queries you send can launch threads, just like the top level, so you are not limited to a single threaded application. There are a few differences from the top level, however:
+
+- Normally, the SWI Prolog top level runs all user code in the context of a built-in module called "user", as does the MQI. However, the top level allows this to be changed using the module/1 predicate. This predicate has no effect when sent to the MQI.
+- Predefined streams like `user_input` are initially bound to the standard operating system I/O streams (like STDIN) and, since the Prolog process is running invisibly, will obviously not work as expected. Those streams can be changed, however, by issuing commands using system predicates as defined in the SWI Prolog documentation.
+- Every connection to the MQI runs in its own thread, so opening two connections from an application means you are running multithreaded code.
+- The SWI Prolog top level does special handling to make residual [attributes on variables](https://www.swi-prolog.org/pldoc/man?section=attvar) print out in a human-friendly way. MQI instead returns any residuals in a special variable called `$residuals` that is added to the results.
+- Some Prolog extensions do not provide the full answer to a query by means of the variable bindings. The top level does extra work to find where the answers are stored and print them out. All of these extensions have an interface to get to this data as a Prolog term and users of MQI need to do this work themselves. Examples include: [Constraint Handling Rules (CHR)](https://www.swi-prolog.org/pldoc/man?section=chr) stores constraints in global variables, [Well Founded Semantics](https://www.swi-prolog.org/pldoc/man?section=wfs-toplevel) has the notion of delayed, which is translated into a program that carries the inconsistency if there are conflicting negations, [`s(CASP)`](https://www.swi-prolog.org/pack/list?p=scasp) has a model and justification.
+
+A basic rule to remember is: any predicates designed to interact with or change the default behavior of the top level itself probably won't have any effect.
+
+### 1.4 Embedded Mode: Integrating the Machine Query Interface Into a New Programming Language
+
+The most common way to use the Machine Query Interface is to find a library that wraps and exposes it as a native part of another programming language such as the Python `swiplserver` library ([section 1.1](#sec:1.1)). This section describes how to build one if there isn't yet a library for your language. To do this, you'll need to familiarize yourself with the MQI protocol as described in the [mqi_start/1](#mqi_start/1) documentation. However, to give an idea of the scope of work required, below is a typical interaction done (invisibly to the user) in the implementation of any programming language library:
+
+1.  Launch the SWI Prolog process using (along with any other options the user requests): `swipl mqi --write_connection_values=true`. To work, the `swipl` Prolog executable will need to be on the path or the path needs to be specified in the command. This launches SWI Prolog, starts the MQI, and writes the chosen port and password to STDOUT. This way of launching invokes the [mqi_start/0](#mqi_start/0) predicate that turns off the `int` (i.e. Interrupt/SIGINT) signal to Prolog. This is because some languages (such as Python) use that signal during debugging and it would be otherwise passed to the client Prolog process and switch it into the debugger. See the [mqi_start/0](#mqi_start/0) predicate for more information on other command line options.
+2.  Read the SWI Prolog STDOUT to retrieve the TCP/IP port and password. They are sent in that order, delimited by’`\n`’.
+
+``` code
+$ swipl mqi --write_connection_values=true
+54501
+185786669688147744015809740744888120144
+```
+
+Now the server is started. To create a connection:
+
+1.  Use the language's TCP/IP sockets library to open a socket on the specified port of localhost and send the password as a message. Messages to and from the MQI are in the form `<stringByteLength>.\n<stringBytes>.\n ` where `stringByteLength` includes the `.\n` from the string. For example: `7.\nhello.\n` More information on the message format ([section 1.6.1](#sec:1.6.1)) is below.
+2.  Listen on the socket for a response message of `true([[threads(Comm_Thread_ID, Goal_Thread_ID), version(Major, Minor)]])` (which will be in JSON form) indicating successful creation of the connection. `Comm_Thread_ID` and `Goal_Thread_ID` are the internal Prolog IDs of the two threads that are used for the connection. They are sent solely for monitoring and debugging purposes. `version` was introduced in version 1.0 of the protocol to allow for detecting the protocol version and should be checked to ensure the protocol version is supported by your library. See [mqi_version/2](#mqi_version/2) for more information and a version history.
+
+We can try all of this using the Unix tool `nc` (netcat) (also available for Windows) to interactively connect to the MQI. In `nc` hitting `enter` sends `\n` which is what the message format requires. The server responses are show indented inline.
+
+We'll use the port and password that were sent to STDOUT above:
+
+``` code
+$ nc 127.0.0.1 54501
+41.
+185786669688147744015809740744888120144.
+    173.
+    {
+      "args": [
+        [
+          [
+        {
+          "args": ["mqi1_conn2_comm", "mqi1_conn2_goal" ],
+          "functor":"threads"
+        },
+        {
+          "args": ["1", "0" ],
+          "functor":"version"
+        }
+          ]
+        ]
+      ],
+      "functor":"true"
+    }
+```
+
+Now the connection is established. To run queries and shutdown:
+
+1.  Any of the messages described in the Machine Query Interface messages documentation ([section 1.6](#sec:1.6)) can now be sent to run queries and retrieve their answers. For example, send the message `run(atom(a), -1)` to run the synchronous query `atom(a)` with no timeout and wait for the response message. It will be `true([[]])` (in JSON form).
+2.  Shutting down the connection is accomplished by sending the message `close`, waiting for the response message of `true([[]])` (in JSON form), and then closing the socket using the socket API of the language. If the socket is closed (or fails) before the `close` message is sent, the default behavior of the MQI is to exit the SWI Prolog process to avoid leaving the process around. This is to support scenarios where the user is running and halting their language debugger without cleanly exiting.
+3.  Shutting down the launched SWI Prolog process is accomplished by sending the `quit` message and waiting for the response message of `true([[]])` (in JSON form). This will cause an orderly shutdown and exit of the process.
+
+Continuing with the `nc` session (the `quit` message isn't shown since the `close` message closes the connection):
+
+``` code
+18.
+run(atom(a), -1).
+    39.
+    {"args": [ [ [] ] ], "functor":"true"}
+7.
+close.
+    39.
+    {"args": [ [ [] ] ], "functor":"true"}
+```
+
+Note that Unix Domain Sockets can be used instead of a TCP/IP port. How to do this is described with [mqi_start/1](#mqi_start/1).
+
+Here's the same example running in the R language. Note that this is **not** an example of how to use the MQI from R, it just shows the first code a developer would write as they begin to build a nice library to connect R to Prolog using the MQI:
+
+``` code
+# Server run with: swipl mqi.pl --port=40001 --password=123
+# R Source
+print("# Establish connection")
+
+sck = make.socket('localhost', 40001)
+
+print("# Send password")
+
+write.socket(sck, '5.\n') # message length
+
+write.socket(sck, '123.\n') # password
+
+print(read.socket(sck))
+
+print("# Run query")
+
+query = 'run(member(X, [1, 2, 3]), -1).\n'
+
+write.socket(sck, paste(nchar(query), '.\n', sep='')) # message length
+
+write.socket(sck, query) # query
+
+print(read.socket(sck))
+
+print("# Close session")
+
+close.socket(sck)
+```
+
+And here's the output:
+
+``` code
+[1] "# Establish connection"
+
+[1] "# Send password"
+
+[1] "172.\n{\n "args": [\n [\n [\n\t{\n\t "args": ["mqi1_conn1_comm", "mqi1_conn1_goal" ],\n\t "functor":"threads"\n\t}\n ]\n ]\n ],\n "functor":"true"\n}"
+
+[1] "# Run query"
+
+[1] "188.\n{\n "args": [\n [\n [ {"args": ["X", 1 ], "functor":"="} ],\n [ {"args": ["X", 2 ], "functor":"="} ],\n [ {"args": ["X", 3 ], "functor":"="} ]\n ]\n ],\n "functor":"true"\n}"
+
+[1] "# Close session"
+```
+
+Other notes about creating a new library to communicate with the MQI:
+
+- Where appropriate, use similar names and approaches to the [Python library](https://github.com/SWI-Prolog/packages-mqi/tree/master/python) when designing your language library. This will give familiarity and faster learning for users that use more than one language.
+- Use the debug/1 predicate described in the [mqi_start/1](#mqi_start/1) documentation to turn on debug tracing. It can really speed up debugging.
+- Read the STDOUT and STDERR output of the SWI Prolog process and output them to the debugging console of the native language to help users debug their Prolog application.
+
+### 1.5 Standalone Mode: Debugging Prolog Code Used in an Application
+
+When using the Machine Query Interface from another language, debugging the Prolog code itself can often be done by viewing traces from the Prolog native writeln/1 or debug/3 predicates. Their output will be shown in the debugger of the native language used. Sometimes an issue surfaces deep in an application. When this happens, running the application in the native language while setting breakpoints and viewing traces in Prolog itself is often the best debugging approach. Standalone mode is designed for this scenario.
+
+As the MQI is a multithreaded application, debugging the running code requires using the multithreaded debugging features of SWI Prolog as described in the section on ["Debugging Threads"](https://www.swi-prolog.org/pldoc/man?section=threaddebug) in the SWI Prolog documentation. A typical flow for Standalone Mode is:
+
+1.  Launch SWI Prolog and call the [mqi_start/1](#mqi_start/1) predicate specifying a port and password. Use the tdebug/0 predicate to set all threads to debugging mode like this: `tdebug, mqi_start([port(4242), password(debugnow)])`.
+2.  Set the port and password in the initialization API in the native language being used.
+3.  Launch the application and go through the steps to reproduce the issue.
+
+In Python this would look like:
+
+``` code
+% From the SWI Prolog top level
+?- tdebug, mqi_start([port(4242), password(debugnow)]).
+% The graphical front-end will be used for subsequent tracing
+true.
+```
+
+``` code
+# Python using the swiplserver library {#mqi-library}
+from swiplserver import PrologMQI, PrologThread
+
+with PrologMQI(launch_mqi=False, port=4242, password="debugnow") as mqi:
+    with mqi.create_thread() as prolog_thread:
+        # Your code to be debugged here
+```
+
+At this point, all of the multi-threaded debugging tools in SWI Prolog are available for debugging the problem. If the issue is an unexpected exception, the exception debugging features of SWI Prolog can be used to break on the exception and examine the state of the application. If it is a logic error, breakpoints can be set to halt at the point where the problem appears, etc.
+
+Note that, while using an MQI library to access Prolog will normally end and restart the process between runs of the code, running the server in standalone mode doesn't clear state between launches of the application. You'll either need to relaunch between runs or build your application so that it does the initialization at startup.
+
+### 1.6 Machine Query Interface Messages
+
+The messages the Machine Query Interface responds to are described below. A few things are true for all of them:
+
+- Every connection is in its own separate thread. Opening more than one connection means the code is running concurrently.
+- Closing the socket without sending `close` and waiting for a response will halt the process if running in "Embedded Mode" ([section 1.4](#sec:1.4)). This is so that stopping a debugger doesn't leave the process orphaned.
+- All messages are request/response messages. After sending, there will be exactly one response from the MQI.
+- Timeout in all of the commands is in seconds. Sending a variable (e.g. `_`) will use the default timeout passed to the initial [mqi_start/1](#mqi_start/1) predicate and `-1` means no timeout.
+- All queries are run in the default module context of `user`. module/1 has no effect.
+
+#### 1.6.1 Machine Query Interface Message Format
+
+Every Machine Query Interface message is a single valid Prolog term. Those that run queries have an argument which represents the query as a single term. To run several goals at once use `(goal1, goal2, ...)` as the goal term.
+
+The format of sent and received messages is identical (`\n` stands for the ASCII newline character which is a single byte):
+
+``` code
+<stringByteLength>.\n<stringBytes>.\n.
+```
+
+For example, to send `hello` as a message you would send this:
+
+``` code
+7.\nhello.\n
+```
+
+- `<stringByteLength>` is the number of bytes of the string to follow (including the `.\n`), in human readable numbers, such as `15` for a 15 byte string. It must be followed by `.\n`.
+- `<stringBytes>` is the actual message string being sent, such as `run(atom(a), -1).\n`. It must always end with `.\n`. The character encoding used to decode and encode the string is UTF-8.
+
+> Important: The very first version of MQI (version 0.0) had a bug that required messages sent to (but not received from) MQI to use the count of Unicode code points (**not** bytes). This was fixed to properly require byte count in the next version, version 1.0.
+
+To send a message to the MQI, send a message using the message format above to the localhost port or Unix Domain Socket that the MQI is listening on. For example, to run the synchronous goal `atom(a)`, send the following message:
+
+``` code
+18.\nrun(atom(a), -1).\n<end of stream>
+```
+
+You will receive the response below on the receive stream of the same connection you sent on. Note that the answer is in JSON format. If a message takes longer than 2 seconds, there will be "heartbeat" characters (".") at the beginning of the response message, approximately 1 every 2 seconds. So, if the query takes 6 seconds for some reason, there will be three "." characters first:
+
+``` code
+...12\ntrue([[]]).\n
+```
+
+#### 1.6.2 Machine Query Interface Messages Reference
+
+The full list of Machine Query Interface messages is described below:
+
+**run**(`Goal, Timeout`)  
+Runs `Goal` on the connection's designated query thread. Stops accepting new commands until the query is finished and it has responded with the results. If a previous query is still in progress, waits until the previous query finishes (discarding that query's results) before beginning the new query.
+
+`Timeout` is in seconds and indicates a timeout for generating all results for the query. Sending a variable (e.g. `_`) will use the default timeout passed to the initial [mqi_start/1](#mqi_start/1) predicate and `-1` means no timeout.
+
+While it is waiting for the query to complete, sends a "." character **not** in message format, just as a single character, once every two seconds to proactively ensure that the client is alive. Those should be read and discarded by the client.
+
+If a communication failure happens (during a heartbeat or otherwise), the connection is terminated, the query is aborted and (if running in "Embedded Mode" ([section 1.4](#sec:1.4))) the SWI Prolog process shuts down.
+
+When completed, sends a response message using the normal message format indicating the result.
+
+Response:
+
+> |  |  |
+> |----|----|
+> | `true([Answer1, Answer2, ... ])` | The goal succeeded at least once. The response always includes all answers as if run with `findall()` (see run_async/3 below to get individual results back iteratively). Each `Answer` is a list of the assignments of free variables in the answer. A special variable called `$residuals` will be added to each answer that has residual [variable constraints on it](https://www.swi-prolog.org/pldoc/man?section=attvar). This will contain a list of all the constraints on all the variables for that answer. If there are no free variables, `Answer` is an empty list. |
+> | `false` | The goal failed. |
+> | `exception(time_limit_exceeded)` | The query timed out. |
+> | `exception(Exception)` | An arbitrary exception was not caught while running the goal. |
+> | `exception(connection_failed)` | The query thread unexpectedly exited. The MQI will no longer be listening after this exception. |
+
+**run_async**(`Goal, Timeout, Find_All`)  
+Starts a Prolog query specified by `Goal` on the connection's designated query thread. Answers to the query, including exceptions, are retrieved afterwards by sending the `async_result` message (described below). The query can be cancelled by sending the `cancel_async` message. If a previous query is still in progress, waits until that query finishes (discarding that query's results) before responding.
+
+`Timeout` is in seconds and indicates a timeout for generating all results for the query. Sending a variable (e.g. `_`) will use the default timeout passed to the initial [mqi_start/1](#mqi_start/1) predicate and `-1` means no timeout.
+
+If the socket closes before a response is sent, the connection is terminated, the query is aborted and (if running in "Embedded Mode" ([section 1.4](#sec:1.4))) the SWI Prolog process shuts down.
+
+If it needs to wait for the previous query to complete, it will send heartbeat messages (see "Machine Query Interface Message Format" ([section 1.6.1](#sec:1.6.1))) while it waits. After it responds, however, it does not send more heartbeats. This is so that it can begin accepting new commands immediately after responding so the client.
+
+`Find_All == true` means generate one response to an `async_result` message with all of the answers to the query (as in the `run` message above). `Find_All == false` generates a single response to an `async_result` message per answer.
+
+Response:
+
+> |  |  |
+> |----|----|
+> | `true([[]])` | The goal was successfully parsed. |
+> | `exception(Exception)` | An error occurred parsing the goal. |
+> | `exception(connection_failed)` | The goal thread unexpectedly shut down. The MQI will no longer be listening after this exception. |
+
+**cancel_async**  
+Attempt to cancel a query started by the `run_async` message in a way that allows further queries to be run on this Prolog thread afterwards.
+
+If there is a goal running, injects a `throw(cancel_goal)` into the executing goal to attempt to stop the goal's execution. Begins accepting new commands immediately after responding. Does not inject abort/0 because this would kill the connection's designated thread and the system is designed to maintain thread local data for the client. This does mean it is a "best effort" cancel since the exception can be caught.
+
+`cancel_async` is guaranteed to either respond with an exception (if there is no query or pending results from the last query), or safely attempt to stop the last executed query even if it has already finished.
+
+To guarantee that a query is cancelled, send `close` and close the socket.
+
+It is not necessary to determine the outcome of `cancel_async` after sending it and receiving a response. Further queries can be immediately run. They will start after the current query stops.
+
+However, if you do need to determine the outcome or determine when the query stops, send `async_result`. Using `Timeout = 0` is recommended since the query might have caught the exception or still be running. Sending `async_result` will find out the "natural" result of the goal's execution. The "natural" result depends on the particulars of what the code actually did. The response could be:
+
+> |  |  |
+> |----|----|
+> | `exception(cancel_goal)` | The query was running and did not catch the exception. I.e. the goal was successfully cancelled. |
+> | `exception(time_limit_exceeded)` | The query timed out before getting cancelled. |
+> | `exception(Exception)` | They query hits another exception before it has a chance to be cancelled. |
+> | A valid answer | The query finished before being cancelled. |
+
+Note that you will need to continue sending `async_result` until you receive an `exception(Exception)` message if you want to be sure the query is finished (see documentation for `async_result`).
+
+Response:
+
+> |  |  |
+> |----|----|
+> | `true([[]])` | There is a query running or there are pending results for the last query. |
+> | `exception(no_query)` | There is no query or pending results from a query to cancel. |
+> | `exception(connection_failed)` | The connection has been unexpectedly shut down. The MQI will no longer be listening after this exception. |
+
+**async_result**(`Timeout`)  
+Get results from a query that was started via a `run_async` message. Used to get results for all cases: if the query terminates normally, is cancelled by sending a `cancel_async` message, or times out.
+
+Each response to an `async_result` message responds with one result and, when there are no more results, responds with `exception(no_more_results)` or whatever exception stopped the query. Receiving any `exception` response except `exception(result_not_available)` means there are no more results. If `run_async` was run with `Find_All == false`, multiple `async_result` messages may be required before receiving the final exception.
+
+Waits `Timeout` seconds for a result. `Timeout == -1` or sending a variable for `Timeout` indicates no timeout. If the timeout is exceeded and no results are ready, sends `exception(result_not_available)`.
+
+Some examples:
+
+> |  |  |
+> |----|----|
+> | If the query succeeds with N answers... | `async_result` messages 1 to N will receive each answer, in order, and `async_result` message N+1 will receive `exception(no_more_results)` |
+> | If the query fails (i.e. has no answers)... | `async_result` message 1 will receive `false` and `async_result` message 2 will receive `exception(no_more_results)` |
+> | If the query times out after one answer... | `async_result` message 1 will receive the first answer and `async_result` message 2 will receive `exception(time_limit_exceeded)` |
+> | If the query is cancelled after it had a chance to get 3 answers... | `async_result` messages 1 to 3 will receive each answer, in order, and `async_result` message 4 will receive `exception(cancel_goal)` |
+> | If the query throws an exception before returning any results... | `async_result` message 1 will receive `exception(Exception)` |
+
+Note that, after sending `cancel_async`, calling `async_result` will return the "natural" result of the goal's execution. The "natural" result depends on the particulars of what the code actually did since this is multi-threaded and there are race conditions. This is described more below in the response section and above in `cancel_async`.
+
+Response:
+
+> |  |  |
+> |----|----|
+> | `true([Answer1, Answer2, ... ])` | The next answer from the query is a successful answer. Whether there are more than one `Answer` in the response depends on the `findall` setting. Each `Answer` is a list of the assignments of free variables in the answer. A special variable called `$residuals` will be added to each answer that has residual [variable constraints on it](https://www.swi-prolog.org/pldoc/man?section=attvar). This will contain a list of all the constraints on all the variables for that answer. If there are no free variables, `Answer` is an empty list. |
+> | `false` | The query failed with no answers. |
+> | `exception(no_query)` | There is no query in progress. |
+> | `exception(result_not_available)` | There is a running query and no results were available in `Timeout` seconds. |
+> | `exception(no_more_results)` | There are no more answers and no other exception occurred. |
+> | `exception(cancel_goal)` | The next answer is an exception caused by `cancel_async`. Indicates no more answers. |
+> | `exception(time_limit_exceeded)` | The query timed out generating the next answer (possibly in a race condition before getting cancelled). Indicates no more answers. |
+> | `exception(Exception)` | The next answer is an arbitrary exception. This can happen after `cancel_async` if the `cancel_async` exception is caught or the code hits another exception first. Indicates no more answers. |
+> | `exception(connection_failed)` | The goal thread unexpectedly exited. The MQI will no longer be listening after this exception. |
+
+**close**  
+Closes a connection cleanly, indicating that the subsequent socket close is not a connection failure. Thus it doesn't shutdown the MQI in "Embedded Mode" ([section 1.4](#sec:1.4)). The response must be processed by the client before closing the socket or it will be interpreted as a connection failure.
+
+Any asynchronous query that is still running will be halted by using abort/0 in the connection's query thread.
+
+Response: `true([[]])`
+
+**quit**  
+Stops the MQI and ends the SWI Prolog process. This allows client language libraries to ask for an orderly shutdown of the Prolog process.
+
+Response: `true([[]])`
+
+## 2 library(mqi)
+
+\[semidet\]**mqi_start**(`+Options:list`)  
+Starts a Prolog Machine Query Interface ('MQI’) using `Options`. The MQI is normally started automatically by a library built for a particular programming language such as the `swiplserver` Python library ([section 1.1](#sec:1.1)), but starting manually can be useful when debugging Prolog code in some scenarios. See the documentation on "Standalone Mode" ([section 1.5](#sec:1.5)) for more information.
+
+Once started, the MQI listens for TCP/IP or Unix Domain Socket connections and authenticates them using the password provided (or created depending on options) before processing any messages. The messages processed by the MQI are described below ([section 1.6](#sec:1.6)).
+
+For debugging, the server outputs traces using the debug/3 predicate so that the server operation can be observed by using the debug/1 predicate. Run the following commands to see them:
+
+- `debug(mqi(protocol))`: Traces protocol messages to show the flow of commands and connections. It is designed to avoid filling the screen with large queries and results to make it easier to read.
+
+- `debug(mqi(query))`: Traces messages that involve each query and its results. Therefore it can be quite verbose depending on the query. **`Options`**
+
+  `Options` is a list containing any combination of the following options. When used in the Prolog top level (i.e. in Standalone Mode ([section 1.5](#sec:1.5))), these are specified as normal Prolog options like this:
+
+  ``` code
+  mqi_start([unix_domain_socket(Socket), password('a password')])
+  ```
+
+  When using "Embedded Mode" ([section 1.4](#sec:1.4)) they are passed using the same name but as normal command line arguments like this:
+
+  ``` code
+  swipl mqi --write_connection_values=true
+            --password="a password" --create_unix_domain_socket=true
+  ```
+
+  Note the use of quotes around values that could confuse command line processing like spaces (e.g. "a password") and that `unix_domain_socket(Variable)` is written as `--create_unix_domain_socket=true` on the command line. See below for more information.
+
+- port(?Port) The TCP/IP port to bind to on localhost. This option is ignored if the unix_domain_socket/1 option is set. Port is either a legal TCP/IP port number (integer) or a variable term like `Port`. If it is a variable, it causes the system to select a free port and unify the variable with the selected port as in tcp_bind/2. If the option `write_connection_values(true)` is set, the selected port is output to STDOUT followed by `\n` on startup to allow the client language library to retrieve it in "Embedded Mode" ([section 1.4](#sec:1.4)).
+
+- unix_domain_socket(?Unix_Domain_Socket_Path_And_File) If set, Unix Domain Sockets will be used as the way to communicate with the server. `Unix_Domain_Socket_Path_And_File` specifies the fully qualified path and filename to use for the socket.
+
+  To have one generated instead (recommended), pass `Unix_Domain_Socket_Path_And_File` as a variable when calling from the Prolog top level and the variable will be unified with a created filename. If launching in "Embedded Mode" ([section 1.4](#sec:1.4)), instead pass `--create_unix_domain_socket=true` since there isn't a way to specify variables from the command line. When generating the file, a temporary directory will be created using tmp_file/2 and a socket file will be created within that directory following the below requirements. If the directory and file are unable to be created for some reason, [mqi_start/1](#mqi_start/1) fails.
+
+  Regardless of whether the file is specified or generated, if the option `write_connection_values(true)` is set, the fully qualified path to the generated file is output to STDOUT followed by `\n` on startup to allow the client language library to retrieve it.
+
+  Specifying a file to use should follow the same guidelines as the generated file:
+
+  - If the file exists when the MQI is launched, it will be deleted.
+  - The Prolog process will attempt to create and, if Prolog exits cleanly, delete this file (and directory if it was created) when the MQI closes. This means the directory from a specified file must have the appropriate permissions to allow the Prolog process to do so.
+  - For security reasons, the filename should not be predictable and the directory it is contained in should have permissions set so that files created are only accessible to the current user.
+  - The path must be below 92 **bytes** long (including null terminator) to be portable according to the Linux documentation.
+
+- password(?Password) The password required for a connection. If not specified (recommended), the MQI will generate one as a Prolog string type since Prolog atoms are globally visible (be sure not to convert to an atom for this reason). If `Password` is a variable it will be unified with the created password. Regardless of whether the password is specified or generated, if the option `write_connection_values(true)` is set, the password is output to STDOUT followed by `\n` on startup to allow the client language library to retrieve it. This is the recommended way to integrate the MQI with a language as it avoids including the password as source code. This option is only included so that a known password can be supplied for when the MQI is running in Standalone Mode.
+
+- `query_timeout(+Seconds)` Sets the default time in seconds that a query is allowed to run before it is cancelled. This can be overridden on a query by query basis. If not set, the default is no timeout (`-1`).
+
+- `pending_connections(+Count)` Sets the number of pending connections allowed for the MQI as in tcp_listen/2. If not provided, the default is `5`.
+
+- `run_server_on_thread(+Run_Server_On_Thread)` Determines whether [mqi_start/1](#mqi_start/1) runs in the background on its own thread or blocks until the MQI shuts down. Must be missing or set to `true` when running in "Embedded Mode" ([section 1.4](#sec:1.4)) so that the SWI Prolog process can exit properly. If not set, the default is `true`.
+
+- server_thread(?Server_Thread) Specifies or retrieves the name of the thread the MQI will run on if `run_server_on_thread(true)`. Passing in an atom for Server_Thread will only set the server thread name if `run_server_on_thread(true)`. If `Server_Thread` is a variable, it is unified with a generated name.
+
+- `write_connection_values(+Write_Connection_Values)` Determines whether the server writes the port (or generated Unix Domain Socket) and password to STDOUT as it initializes. Used by language libraries to retrieve this information for connecting. If not set, the default is `false`.
+
+- `write_output_to_file(+File)` Redirects STDOUT and STDERR to the file path specified. Useful for debugging the MQI when it is being used in "Embedded Mode" ([section 1.4](#sec:1.4)). If using multiple MQI instances in one SWI Prolog instance, only set this on the first one. Each time it is set the output will be redirected.
+
+\[det\]**mqi_version**(`?Major_Version, ?Minor_Version`)  
+Provides the major and minor version number of the protocol used by the MQI. The protocol includes the message format and the messages that can be sent and received from the MQI.
+
+Note that the initial version of the MQI did not have a version predicate so The proper way for callers to check the version is:
+
+`use_module(library(mqi))`, ( `current_predicate(mqi_version/2)` `->` `mqi_version(Major_Version, Minor_Version)` ; `Major_Version` = 0, `Minor_Version` = 0 )
+
+Major versions are increased when there is a change to the protocol that will likely break clients written to the previous version. Minor versions are increased when there is new functionality that will **not** break clients written to the old version
+
+This allows a client written to MQI version’Client_Major_Version.Client_Minor_Version’to check for non-breaking compatibility like this:
+
+Client_Major_Version = MQI_Major_Version and Client_Minor_Version `<=` MQI_Minor_Version
+
+Breaking changes (i.e. Major version increments) should be very rare as the goal is to have the broadest adoption possible.
+
+Protocol Version History:
+
+- 0.0 First published version. Had a protocol bug that required messages sent to MQI to count Unicode code points instead of bytes for the message header.
+- 1.0 Breaking change: Fixed protocol bug so that it properly accepted byte count instead of Unicode code point count in the message header for messages sent to MQI.
+
+\[semidet\]**mqi_start**  
+Main entry point for running the Machine Query Interface in "Embedded Mode" ([section 1.4](#sec:1.4)) and designed to be called from the command line. Embedded Mode is used when launching the Machine Query Interface as an embedded part of another language (e.g. Python). Calling [mqi_start/0](#mqi_start/0) from Prolog interactively is not recommended as it depends on Prolog exiting to stop the MQI, instead use [mqi_start/1](#mqi_start/1) for interactive use.
+
+To launch embedded mode:
+
+``` code
+swipl mqi --write_connection_values=true
+```
+
+This will start SWI Prolog and invoke the [mqi_start/0](#mqi_start/0) predicate and exit the process when that predicate stops. Any command line arguments after the standalone `--` will be passed as Options. These are the same Options that [mqi_start/1](#mqi_start/1) accepts and are passed to it directly. Some options are expressed differently due to command line limitations, see [mqi_start/1](#mqi_start/1) Options for more information.
+
+Any Option values that cause issues during command line parsing (such as spaces) should be passed with `""` like this:
+
+``` code
+swipl mqi --write_connection_values=true --password="HGJ SOWLWW"
+```
+
+For help on commandline options run
+
+``` code
+swipl mqi --help
+```
+
+\[det\]**mqi_stop**(`?Server_Thread_ID:atom`)  
+If `Server_Thread_ID` is a variable, stops all Machine Query Interfaces and associated threads. If `Server_Thread_ID` is an atom, then only the MQI with that `Server_Thread_ID` is stopped. `Server_Thread_ID` can be provided or retrieved using `Options` in [mqi_start/1](#mqi_start/1).
+
+Always succeeds.
+
+# Index
+
+?  
+[mqi_start/0](#mqi_start/0)  
+[mqi_start/1](#mqi_start/1)  
+[mqi_stop/1](#mqi_stop/1)  
+[mqi_version/2](#mqi_version/2)  

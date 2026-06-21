@@ -14,6 +14,11 @@ the README.
   output behavior:
   - [docs/json-input-spec.md](docs/json-input-spec.md)
   - [docs/json-output-spec.md](docs/json-output-spec.md)
+- Need an SWI-Prolog predicate's signature, mode, or semantics? Look it up in the
+  local, version-matched manual under
+  [docs/reference/swi-manual/](docs/reference/swi-manual/) (grep it, or see its
+  `INDEX.md`) instead of guessing or going online — see
+  [docs/reference/README.md](docs/reference/README.md).
 
 ## Project Shape
 

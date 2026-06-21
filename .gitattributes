@@ -1,0 +1,4 @@
+# Generated SWI-Prolog manual copy (docs/reference/build-swi-manual.sh): large
+# and machine-generated. Mark it generated so GitHub keeps it out of language
+# stats and collapses it in diffs/reviews. Edit the build script, not the files.
+docs/reference/swi-manual/** linguist-generated=true

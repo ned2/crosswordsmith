@@ -1,0 +1,6 @@
+
+## 11.2 Engine resource usage
+
+A Prolog engine consists of a virtual machine state that includes the Prolog stacks. An‘empty’engine requires about 20 KBytes of memory. This grows when the engine requires additional stack space. Anonymous engines are subject to atom garbage collection (see [garbage_collect_atoms/0](memory.html#garbage_collect_atoms/0)). Engines may be reclaimed immediately using [engine_destroy/1](engine-predicates.html#engine_destroy/1). Calling [engine_destroy/1](engine-predicates.html#engine_destroy/1) destroys the virtual machine state, while the handle itself is left to atom garbage collection. The virtual machine is reclaimed as soon as an engine produced its last result, failed or raised an exception. This implies that it is only advantageous to call [engine_destroy/1](engine-predicates.html#engine_destroy/1) explicitly if you are not interested in further answers.
+
+Engines that are expected to be left in inactive state for a prolonged time can be minimized by calling [garbage_collect/0](memory.html#garbage_collect/0) and [trim_stacks/0](memory.html#trim_stacks/0) (in that order) before calling [engine_yield/1](engine-predicates.html#engine_yield/1) or succeeding.

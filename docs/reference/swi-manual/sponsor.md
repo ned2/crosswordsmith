@@ -1,0 +1,4 @@
+
+## 1.4 Support the SWI-Prolog project
+
+You can support the SWI-Prolog project in several ways. Academics are invited to cite one of the publications^(3[https://www.swi-prolog.org/Publications.html](https://www.swi-prolog.org/Publications.html)) on SWI-Prolog. Users can help by identifying and/or fixing problems with the code or its documentation^(4[https://www.swi-prolog.org/howto/SubmitPatch.html](https://www.swi-prolog.org/howto/SubmitPatch.html)). Users can contribute new features or, more lightweight, contribute packs^(5[https://www.swi-prolog.org/pack/list](https://www.swi-prolog.org/pack/list)). Commercial users may consider contacting the developers^(6[mailto:info@swi-prolog.org](mailto:info@swi-prolog.org)) to sponsor the development of new features or seek for opportunities to cooperate with the developers or other commercial users.

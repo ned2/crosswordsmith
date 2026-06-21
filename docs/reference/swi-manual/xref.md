@@ -1,0 +1,37 @@
+
+## 3.7 Cross-referencer
+
+A cross-referencer is a tool that examines the caller-callee relation between predicates, and, using this information to explicate dependency relations between source files, finds calls to non-existing predicates and predicates for which no callers can be found. Cross-referencing is useful during program development, reorganisation, clean-up, porting and other program maintenance tasks. The dynamic nature of Prolog makes the task non-trivial. Goals can be created dynamically using [call/1](metacall.html#call/1) after construction of a goal term. Abstract interpretation can find some of these calls, but they can also come from external communication, making it impossible to predict the callee. In other words, the cross-referencer has only partial understanding of the program, and its results are necessarily incomplete. Still, it provides valuable information to the developer.
+
+SWI-Prolog's cross-referencer is split into two parts. The standard Prolog library `library(prolog_xref)` is an extensible library for information gathering described in [section A.45](prologxref.html#sec:A.45), and the XPCE library `library(pce_xref)` provides a graphical front-end for the cross-referencer described here. We demonstrate the tool on CHAT80, a natural language question and answer system by Fernando C.N. Pereira and David H.D. Warren.
+
+**gxref**  
+Run cross-referencer on all currently loaded files and present a graphical overview of the result. As the predicate operates on the currently loaded application it must be run after loading the application.
+
+![](xrefchatfile.png)
+
+**Figure 2 :** File info for `chattop.pl`, part of CHAT80
+
+The **left window** (see [figure 2](xref.html#fig:xrefchatfile)) provides browsers for loaded files and predicates. To avoid long file paths, the file hierarchy has three main branches. The first is the current directory holding the sources. The second is marked `alias`, and below it are the file-search-path aliases (see [file_search_path/2](consulting.html#file_search_path/2) and [absolute_file_name/3](files.html#absolute_file_name/3)). Here you find files loaded from the system as well as modules of the program loaded from other locations using the file search path. All loaded files that fall outside these categories are below the last branch called `/`. Files where the system found suspicious dependencies are marked with an exclamation mark. This also holds for directories holding such files. Clicking on a file opens a *File info* window in the right pane.
+
+The **File info** window shows a file, its main properties, its undefined and not-called predicates and its import and export relations to other files in the project. Both predicates and files can be opened by clicking on them. The number of callers in a file for a certain predicate is indicated with a blue underlined number. A left-click will open a list and allow editing the calling predicate.
+
+The **Dependencies** (see [figure 3](xref.html#fig:xrefchatdep)) window displays a graphical overview of dependencies between files. Using the background menu a complete graph of the project can be created. It is also possible to drag files onto the graph window and use the menu on the nodes to incrementally expand the graph. The underlined blue text indicates the number of predicates used in the destination file. Left-clicking opens a menu to open the definition or select one of the callers.
+
+![](xrefchatdep.png)
+
+**Figure 3 :** Dependencies between source files of CHAT80
+
+**Module and non-module files**
+
+The cross-referencer threads module and non-module project files differently. Module files have explicit import and export relations and the tool shows the usage and consistency of the relations. Using the **Header** menu command, the tool creates a consistent import list for the module that can be included in the file. The tool computes the dependency relations between the non-module files. If the user wishes to convert the project into a module-based one, the **Header** command generates an appropriate module header and import list. Note that the cross-referencer may have missed dependencies and does not deal with meta-predicates defined in one module and called in another. Such problems must be resolved manually.
+
+**Settings**
+
+The following settings can be controlled from the **settings** menu:
+
+**Warn autoload**  
+By default disabled. If enabled, modules that require predicates to be autoloaded are flagged with a warning and the file info window of a module shows the required autoload predicates.
+
+**Warn not called**  
+If enabled (default), the file overview shows an alert icon for files that have predicates that are not called.
