@@ -85,6 +85,20 @@ Options:
   magnitude faster than `baseline` while matching it elsewhere; see
   `docs/experiments.md`. All strategies produce valid layouts (which one they
   find can differ).
+- `--quality` — produce a **cryptic-style quality layout** instead of solving a
+  fixed grid: a greedy density-construction engine that picks the grid size
+  itself, interlocks the words as densely as it can, and **drops words that
+  cannot be placed** (reported on stderr). No `<grid_length>`/`<start_loc>` args
+  are needed. Intended for arranging a closed set of links (a "table of
+  contents"). See `docs/cryptic-layout-spec.md`. Optional **floors** (hard
+  constraints; omit for best-effort, combine for stricter):
+  - `--min-half` — every word at least half its cells checked (drops words that
+    can't be).
+  - `--max-unch <K>` — no word has more than `K` unchecked cells in a row.
+  - `--all-words` — every input word must be placed (fail rather than drop).
+
+  When the requested floors can't be met the run exits non-zero with no output
+  and a `no layout satisfies floors …` message — relax a floor and retry.
 - `--help` / `-h` — print the usage summary and exit.
 
 Flags are parsed with `library(optparse)`, so they compose in any order and

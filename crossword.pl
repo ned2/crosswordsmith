@@ -46,6 +46,14 @@
 % limit/2, used by the capped placement count in the mrv_capped strategy.
 :- use_module(library(solution_sequences)).
 
+% The greedy quality layout engine (docs/cryptic-layout-spec.md), reached via
+% --quality. Loaded from the same directory as this script so it resolves
+% regardless of the working directory. ensure_loaded avoids a double-load when
+% a harness consults both files.
+:- prolog_load_context(directory, Dir),
+   directory_file_path(Dir, 'quality.pl', QualityFile),
+   ensure_loaded(QualityFile).
+
 
 
 % program predicates.
@@ -86,7 +94,19 @@ opts_spec(Spec) :-
        help('write output to FILE instead of stdout')],
       [opt(strategy), type(atom),   default(DefStrategy), meta('STRAT'),
        longflags([strategy]),
-       help('variable-ordering strategy: baseline, mrv, mrv_capped, or mrv_inc')]
+       help('variable-ordering strategy: baseline, mrv, mrv_capped, or mrv_inc')],
+      [opt(quality), type(boolean), default(false),
+       longflags([quality]),
+       help('cryptic-style quality layout: greedy density construction, the engine picks the grid, words may be dropped (no grid/start args needed)')],
+      [opt(min_half), type(boolean), default(false),
+       longflags(['min-half']),
+       help('quality floor: every word at least half-checked (drops words that cannot be)')],
+      [opt(max_unch), type(integer), default(-1), meta('K'),
+       longflags(['max-unch']),
+       help('quality floor: no word has more than K unchecked cells in a row')],
+      [opt(all_words), type(boolean), default(false),
+       longflags(['all-words']),
+       help('quality floor: every input word must be placed (fail rather than drop)')]
     ].
 
 % Dispatch on the parsed options. The positional grammar is:
@@ -105,7 +125,10 @@ run(Opts, Positional) :-
     memberchk(strategy(Strategy), Opts),
     require_strategy(Strategy),
     load_clues(InputFile, Words),
-    (   memberchk(all(true), Opts)
+    (   memberchk(quality(true), Opts)
+    ->  build_floors(Opts, Floors),                       % no grid/start needed
+        with_output(OutFile, quality_solve(Words, Floors))
+    ;   memberchk(all(true), Opts)
     ->  positional_all(Positional, GridLen, StartLoc),   % StartLoc unbound if absent
         with_output(OutFile, count_solutions(Strategy, GridLen, Words, StartLoc))
     ;   memberchk(shuffle(true), Opts)
@@ -149,6 +172,13 @@ require_strategy(S) :-
     !.
 require_strategy(S) :-
     throw(error(unknown_strategy(S), _)).
+
+% Build the quality-engine Floors dict from the CLI flags (groundedness ->
+% mode: no floors = auto, some = manual/partial, all = strict). See quality.pl.
+build_floors(Opts, floors{min_half:MH, max_unch_run:MU, all_words:AW}) :-
+    ( memberchk(min_half(true), Opts)              -> MH = on ; MH = off ),
+    ( memberchk(max_unch(K), Opts), integer(K), K >= 0 -> MU = K ; MU = off ),
+    ( memberchk(all_words(true), Opts)             -> AW = on ; AW = off ).
 
 % Positional args for the --all path: grid_length is required; start_loc is
 % optional and left unbound when absent, so all four start positions are

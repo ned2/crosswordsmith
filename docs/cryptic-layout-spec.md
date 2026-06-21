@@ -283,13 +283,19 @@ feasibility reconnaissance that sets Q's default weights and decides whether the
 heavier engine is worth it; (2) the metric code v1b's Q reuses. *Why first:*
 needed regardless, commits to nothing.
 
-### v1b — Greedy quality engine (the real work)
-A new `quality` driver: greedy density-construction (§6.1) with best-so-far
-(§6.2) and hill-climb (§6.3), optional hard floors via groundedness (§5b),
-static + constructive drop (§7), ranging over starts (§8), a node/inference
-budget, and the compromise report (§9). Reuses existing legality (§10); existing
-strategies and golden untouched. *Gate:* proceed only if v1a shows greedy Q
-materially beats the current tree-like layouts.
+### v1b — Greedy quality engine (IMPLEMENTED — `quality.pl`, CLI `--quality`)
+A `quality` engine: greedy density-construction (§6.1) with best-Q selection
+(§6.2) across candidate **grid sizes** and starts and **multi-seed restarts**
+(§6.3 hill-climb form), optional hard **floors** via groundedness (§5b:
+`--min-half`, `--max-unch K`, `--all-words`; drop-to-satisfy + all-words reject),
+**constructive drop** (§7), and the compromise report (§9, stderr). Reuses
+crossword.pl legality/emit; existing strategies and golden untouched (66 tests
+pass). Measured: reaches/beats the witness ceilings on the dense quality
+fixtures and places all of `toc_demo`'s real words; floors give a cryptic-valid
+core or honest infeasibility. *Not yet:* a node budget for very large sets
+(~21 s at 61 words), Q-weight tuning for the checking-vs-compactness balance
+(density-first can elongate), and true local-move hill-climb (only restarts so
+far).
 
 ### v2 — Refinements
 Optional admissible-bounded B&B on top of greedy (if v1a shows headroom); richer

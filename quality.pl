@@ -18,21 +18,35 @@
 % The engine picks the canvas (a tighter grid forces density; a looser one
 % avoids drops), so the caller does not supply GridLen. Q is lexicographic:
 % most words placed, then most checked cells, then smallest bounding box.
-quality_layout(Words, BestPlaced, BestDropped, BestGrid) :-
+% quality_layout(+Words, +Floors, -BestPlaced, -BestDroppedAnswers, -BestGrid)
+% Floors is a dict floors{min_half:M, max_unch_run:U, all_words:A} where each
+% value is `off` (not imposed; Q handles it softly) or active (on / an integer).
+% Floor groundedness gives the modes: all off = auto; some on = manual/partial;
+% all on = strict. A bound per-word floor (min_half / max_unch_run) DROPS words
+% that violate it (drop-to-satisfy); `all_words` rejects any layout with drops.
+quality_layout(Words, Floors, BestPlaced, BestDropped, BestGrid) :-
     grid_candidates(Words, Grids),
     seed_candidates(Words, Seeds),
-    findall(q(NP, Checked, NegArea)-pdg(Placed, Dropped, GridLen),
+    findall(q(NP, Checked, NegArea)-pdg(FPlaced, AllDropped, GridLen),
             ( member(GridLen, Grids),
               start_locs(Locs), member(Loc, Locs),
               member(Seed, Seeds),
-              greedy_construct(Words, GridLen, Loc, Seed, Placed, Dropped),
-              length(Placed, NP),
-              checked_cells(Placed, Checked),
-              placed_bbox(Placed, GridLen, _, Area),
+              greedy_construct(Words, GridLen, Loc, Seed, Placed0, Dropped0),
+              floor_drop(Floors, Placed0, FPlaced, FloorDropped),
+              findall(A, member([A|_], Dropped0), CantPlace),
+              append(CantPlace, FloorDropped, AllDropped),
+              floors_ok(Floors, AllDropped),
+              length(FPlaced, NP),
+              checked_cells(FPlaced, Checked),
+              placed_bbox(FPlaced, GridLen, _, Area),
               NegArea is -Area ),
             Results),
     Results = [_|_],
     sort(1, @>=, Results, [_-pdg(BestPlaced, BestDropped, BestGrid)|_]).
+
+% all_words floor: reject any candidate that dropped a word.
+floors_ok(Floors, AllDropped) :-
+    ( get_dict(all_words, Floors, on) -> AllDropped == [] ; true ).
 
 % Seed candidates: the K longest words (restart diversity to escape greedy
 % local optima). K shrinks as the set grows, so the total grid x start x seed
@@ -189,13 +203,73 @@ dir_cells(Placed, Dir, Set) :-
 
 % --- emit (reuse crossword.pl) + report -----------------------------------
 
-% quality_solve(+Words): construct the best layout (engine picks the grid),
-% emit it as JSON on stdout (placed subset) and a one-line report on stderr.
-quality_solve(Words) :-
-    quality_layout(Words, Placed, Dropped, GridLen),
-    assign_clue_numbers(Placed, Numbered),
-    emit_json(Numbered, Words, GridLen),
-    length(Placed, NP), length(Dropped, ND),
-    findall(A, member([A|_], Dropped), DroppedAnswers),
-    format(user_error, "quality: grid ~w, placed ~w, dropped ~w ~w~n",
-           [GridLen, NP, ND, DroppedAnswers]).
+% --- floors: drop-to-satisfy per-word floors ------------------------------
+
+other_dir(across, down).
+other_dir(down, across).
+
+% Iteratively drop placed words that violate an active per-word floor (their
+% removal can un-check a crosser, so re-evaluate after each drop). Returns the
+% surviving placed words and the answers dropped to satisfy the floors.
+floor_drop(Floors, Placed, FinalPlaced, FloorDropped) :-
+    floor_drop_(Floors, Placed, [], FinalPlaced, FloorDropped).
+floor_drop_(Floors, Placed, Acc, FinalPlaced, FloorDropped) :-
+    ( select(W, Placed, Rest), violates_floor(W, Placed, Floors)
+    ->  get_dict(answer, W, A),
+        floor_drop_(Floors, Rest, [A|Acc], FinalPlaced, FloorDropped)
+    ;   FinalPlaced = Placed, FloorDropped = Acc ).
+
+violates_floor(W, Placed, Floors) :-
+    get_dict(min_half, Floors, on),
+    \+ word_meets_half(W, Placed).
+violates_floor(W, Placed, Floors) :-
+    get_dict(max_unch_run, Floors, K), integer(K),
+    word_max_unch_run(W, Placed, R), R > K.
+
+word_meets_half(W, Placed) :-
+    get_dict(cells, W, Cells), length(Cells, L),
+    word_checked_count(W, Placed, CC),
+    CC >= (L + 1) // 2.
+
+% W's cells that are crossings = also covered by a perpendicular word.
+word_checked_count(W, Placed, Count) :-
+    get_dict(cells, W, Cells), get_dict(dir, W, Dir),
+    other_dir(Dir, OD), dir_cells(Placed, OD, ODCells),
+    findall(x, ( member(C, Cells), ord_memberchk(C, ODCells) ), Xs),
+    length(Xs, Count).
+
+word_max_unch_run(W, Placed, MaxRun) :-
+    get_dict(cells, W, Cells), get_dict(dir, W, Dir),
+    other_dir(Dir, OD), dir_cells(Placed, OD, ODCells),
+    maxrun(Cells, ODCells, 0, 0, MaxRun).
+maxrun([], _, _, M, M).
+maxrun([C|Cs], ODCells, Cur, M0, MaxRun) :-
+    ( ord_memberchk(C, ODCells) -> Cur1 = 0 ; Cur1 is Cur + 1 ),
+    M1 is max(M0, Cur1),
+    maxrun(Cs, ODCells, Cur1, M1, MaxRun).
+
+active_floors(Floors, Active) :-
+    findall(K=V, ( member(K, [min_half, max_unch_run, all_words]),
+                   get_dict(K, Floors, V), V \== off ),
+            Active).
+
+% --- entry point ----------------------------------------------------------
+
+% quality_solve(+Words, +Floors): construct the best layout (engine picks the
+% grid), emit it as JSON on stdout and a one-line report on stderr. Fails (no
+% output) when active floors cannot be satisfied.
+quality_solve(Words, Floors) :-
+    ( quality_layout(Words, Floors, Placed, Dropped, GridLen)
+    ->  assign_clue_numbers(Placed, Numbered),
+        emit_json(Numbered, Words, GridLen),
+        length(Placed, NP), length(Dropped, ND),
+        format(user_error, "quality: grid ~w, placed ~w, dropped ~w ~w~n",
+               [GridLen, NP, ND, Dropped])
+    ;   active_floors(Floors, Active),
+        format(user_error,
+               "quality: no layout satisfies floors ~w (try relaxing)~n",
+               [Active]),
+        fail ).
+
+% Auto mode: no floors imposed.
+no_floors(floors{min_half:off, max_unch_run:off, all_words:off}).
