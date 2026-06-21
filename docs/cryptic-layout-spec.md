@@ -292,10 +292,20 @@ A `quality` engine: greedy density-construction (§6.1) with best-Q selection
 crossword.pl legality/emit; existing strategies and golden untouched (66 tests
 pass). Measured: reaches/beats the witness ceilings on the dense quality
 fixtures and places all of `toc_demo`'s real words; floors give a cryptic-valid
-core or honest infeasibility. *Not yet:* a node budget for very large sets
-(~21 s at 61 words), Q-weight tuning for the checking-vs-compactness balance
-(density-first can elongate), and true local-move hill-climb (only restarts so
-far).
+core or honest infeasibility.
+
+Polish done: a **compactness-weighted Q** (`quality_weights/2`: checked vs
+bbox-area vs elongation) renders a near-square TOC (aspect 2.12->1.09 on
+quality_22 for ~0.02 less checked); a **bounded grid sweep** (three candidate
+sizes + the per-set seed cap) keeps it fast (quality_61 ~21 s -> ~5.6 s).
+
+Polish NOT adopted: **true local-move hill-climb** (reseat a word to a higher-Q
+crossing) was implemented and measured a **no-op** on every quality fixture -
+the multi-restart search (grid x start x seed) already reaches layouts that are
+*single-reseat-optimal* (each word is already at its best spot given the
+others), so single-word moves can't escape. Reverted (cf. I2). Improving further
+would need *multi-word* moves (eject + re-insert); deferred to v2 as uncertain
+payoff.
 
 ### v2 — Refinements
 Optional admissible-bounded B&B on top of greedy (if v1a shows headroom); richer
