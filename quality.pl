@@ -27,7 +27,7 @@
 quality_layout(Words, Floors, BestPlaced, BestDropped, BestGrid) :-
     grid_candidates(Words, Grids),
     seed_candidates(Words, Seeds),
-    findall(q(NP, Checked, NegArea)-pdg(FPlaced, AllDropped, GridLen),
+    findall(q(NP, Score)-pdg(FPlaced, AllDropped, GridLen),
             ( member(GridLen, Grids),
               start_locs(Locs), member(Loc, Locs),
               member(Seed, Seeds),
@@ -37,12 +37,26 @@ quality_layout(Words, Floors, BestPlaced, BestDropped, BestGrid) :-
               append(CantPlace, FloorDropped, AllDropped),
               floors_ok(Floors, AllDropped),
               length(FPlaced, NP),
-              checked_cells(FPlaced, Checked),
-              placed_bbox(FPlaced, GridLen, _, Area),
-              NegArea is -Area ),
+              layout_score(FPlaced, GridLen, Score) ),
             Results),
     Results = [_|_],
     sort(1, @>=, Results, [_-pdg(BestPlaced, BestDropped, BestGrid)|_]).
+
+% Q (secondary to words-placed): reward checked cells, penalise a large/elongated
+% bounding box (a web table-of-contents must render compactly, so checking and
+% compactness compete rather than checking strictly dominating). Weights are the
+% editorial knob (quality_weights/2).
+layout_score(Placed, GridLen, Score) :-
+    checked_cells(Placed, Checked),
+    placed_bbox(Placed, GridLen, bbox(MinR, MaxR, MinC, MaxC), Area),
+    H is MaxR - MinR + 1, W is MaxC - MinC + 1,
+    Elong is abs(H - W),
+    quality_weights(WCheck, WArea, WElong),
+    Score is WCheck * Checked - WArea * Area - WElong * Elong.
+
+% w_check : w_area : w_elong. Checking leads, but bbox area and elongation pull
+% layouts toward a compact square.
+quality_weights(6, 1, 2).
 
 % all_words floor: reject any candidate that dropped a word.
 floors_ok(Floors, AllDropped) :-
@@ -70,10 +84,11 @@ grid_candidates(Words, Sizes) :-
     max_list(Lens, MaxL),
     % target densities from dense-interlock down to sparse: a dense word set
     % wins on a tight grid (smaller bbox), a sparse one needs the looser grids
-    % to place all its words (Q prefers most-placed). Spanning both avoids
-    % under-sizing sparse sets.
+    % to place all its words (Q prefers most-placed). Three candidates bound the
+    % work (with the per-set seed cap) - the compactness-aware Q would not pick a
+    % much larger canvas anyway, so we do not generate slow oversized grids.
     findall(S,
-            ( member(D, [0.55, 0.40, 0.28, 0.18]),
+            ( member(D, [0.55, 0.38, 0.26]),
               S0 is ceiling(sqrt(Total / D)),
               S is max(S0, MaxL + 1) ),
             Raw),
