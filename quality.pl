@@ -13,34 +13,70 @@
 :- use_module(library(ordsets)).
 :- use_module(library(apply)).
 
-% quality_layout(+Words, +GridLen, -BestPlaced, -BestDropped)
-% Best greedy layout across the four start locations. Q is lexicographic:
+% quality_layout(+Words, -BestPlaced, -BestDropped, -BestGrid)
+% Best greedy layout across candidate grid sizes x the four start locations.
+% The engine picks the canvas (a tighter grid forces density; a looser one
+% avoids drops), so the caller does not supply GridLen. Q is lexicographic:
 % most words placed, then most checked cells, then smallest bounding box.
-quality_layout(Words, GridLen, BestPlaced, BestDropped) :-
-    findall(q(NP, Checked, NegArea)-pd(Placed, Dropped),
-            ( start_locs(Locs), member(Loc, Locs),
-              greedy_construct(Words, GridLen, Loc, Placed, Dropped),
+quality_layout(Words, BestPlaced, BestDropped, BestGrid) :-
+    grid_candidates(Words, Grids),
+    seed_candidates(Words, Seeds),
+    findall(q(NP, Checked, NegArea)-pdg(Placed, Dropped, GridLen),
+            ( member(GridLen, Grids),
+              start_locs(Locs), member(Loc, Locs),
+              member(Seed, Seeds),
+              greedy_construct(Words, GridLen, Loc, Seed, Placed, Dropped),
               length(Placed, NP),
               checked_cells(Placed, Checked),
               placed_bbox(Placed, GridLen, _, Area),
               NegArea is -Area ),
             Results),
     Results = [_|_],
-    sort(1, @>=, Results, [_-pd(BestPlaced, BestDropped)|_]).
+    sort(1, @>=, Results, [_-pdg(BestPlaced, BestDropped, BestGrid)|_]).
+
+% Seed candidates: the K longest words (restart diversity to escape greedy
+% local optima). K shrinks as the set grows, so the total grid x start x seed
+% sweep stays bounded (and deterministic).
+seed_candidates(Words, Seeds) :-
+    length(Words, N),
+    K is max(1, min(5, 80 // N)),
+    map_list_to_pairs(neg_answer_len, Words, Pairs),
+    keysort(Pairs, Sorted),
+    pairs_values(Sorted, ByLenDesc),
+    ( length(Prefix, K), append(Prefix, _, ByLenDesc)
+    ->  Seeds = Prefix
+    ;   Seeds = ByLenDesc ).
+
+% Candidate square sizes from the word set: hold the total letters at a few
+% target densities, but never smaller than the longest word. A small, fixed,
+% deterministic set (no wall-clock budget needed).
+grid_candidates(Words, Sizes) :-
+    maplist(word_letter_count, Words, Lens),
+    sum_list(Lens, Total),
+    max_list(Lens, MaxL),
+    % target densities from dense-interlock down to sparse: a dense word set
+    % wins on a tight grid (smaller bbox), a sparse one needs the looser grids
+    % to place all its words (Q prefers most-placed). Spanning both avoids
+    % under-sizing sparse sets.
+    findall(S,
+            ( member(D, [0.55, 0.40, 0.28, 0.18]),
+              S0 is ceiling(sqrt(Total / D)),
+              S is max(S0, MaxL + 1) ),
+            Raw),
+    sort(Raw, Sizes).
+
+word_letter_count([A|_], N) :-
+    atom_chars(A, Cs), delete(Cs, ' ', Ls), length(Ls, N).
 
 % --- greedy construction from one start location --------------------------
 
-greedy_construct(Words, GridLen, Loc, Placed, Dropped) :-
+greedy_construct(Words, GridLen, Loc, Seed, Placed, Dropped) :-
     init_grid(GridLen, G0),
     start_loc(Loc, GridLen, StartNum, StartDir),
-    longest_word(Words, Seed, Rest),
+    remove_x(Seed, Words, Rest),
     seed_word(Seed, StartNum, StartDir, GridLen, G0, SeedPW, G1),
     greedy_loop(Rest, [SeedPW], GridLen, G1, Placed, Dropped).
 
-longest_word(Words, Longest, Rest) :-
-    map_list_to_pairs(neg_answer_len, Words, Pairs),
-    keysort(Pairs, [_-Longest|_]),
-    remove_x(Longest, Words, Rest).
 neg_answer_len([A|_], NL) :- atom_length(A, L), NL is -L.
 
 % Seed: place the chosen word at the fixed start cell/direction (no crossings).
@@ -153,13 +189,13 @@ dir_cells(Placed, Dir, Set) :-
 
 % --- emit (reuse crossword.pl) + report -----------------------------------
 
-% quality_solve(+Words, +GridLen): emit the best layout as JSON on stdout
-% (placed subset) and a one-line report on stderr.
-quality_solve(Words, GridLen) :-
-    quality_layout(Words, GridLen, Placed, Dropped),
+% quality_solve(+Words): construct the best layout (engine picks the grid),
+% emit it as JSON on stdout (placed subset) and a one-line report on stderr.
+quality_solve(Words) :-
+    quality_layout(Words, Placed, Dropped, GridLen),
     assign_clue_numbers(Placed, Numbered),
     emit_json(Numbered, Words, GridLen),
     length(Placed, NP), length(Dropped, ND),
     findall(A, member([A|_], Dropped), DroppedAnswers),
-    format(user_error, "quality: placed ~w, dropped ~w ~w~n",
-           [NP, ND, DroppedAnswers]).
+    format(user_error, "quality: grid ~w, placed ~w, dropped ~w ~w~n",
+           [GridLen, NP, ND, DroppedAnswers]).
