@@ -183,6 +183,22 @@ test(allows_separated_collinear_word, [nondet]) :-
     assign_word('DFEE', [d,f,e,e], 4, 1, across, 10, [],   G0, P1, G1),
     assign_word('DOG',  [d,o,g],   3, 6, across, 10, [P1], G1, _, _).
 
+% all_crossword/5 (the --all/count path) totals every solution for a start
+% position. It must agree with independently enumerating find_crossword's
+% solutions, and do so deterministically (aggregate_all runs the search once).
+test(all_crossword_counts_all_solutions, [true(Num =:= Expected)]) :-
+    Words = [['OMEGA POINT', _{}], ['GNOSTIC GOSPELS', _{}]],
+    findall(G, find_crossword(baseline, 17, Words, topleft_across, G, _), Sols),
+    length(Sols, Expected),
+    all_crossword(baseline, 17, Words, topleft_across, Num).
+
+% Exactly one answer, no leftover choicepoint (guards against a relapse to the
+% length/findall idiom, which re-ran the search per candidate length).
+test(all_crossword_is_deterministic) :-
+    Words = [['OMEGA POINT', _{}], ['GNOSTIC GOSPELS', _{}]],
+    findall(N, all_crossword(baseline, 17, Words, topleft_across, N), Counts),
+    Counts = [_].
+
 :- end_tests(solver).
 
 

@@ -46,6 +46,9 @@
 % limit/2, used by the capped placement count in the mrv_capped strategy.
 :- use_module(library(solution_sequences)).
 
+% aggregate_all/3, used to count solutions in all_crossword/5.
+:- use_module(library(aggregate)).
+
 % The greedy quality layout engine (docs/cryptic-layout-spec.md), reached via
 % --quality. Loaded from the same directory as this script so it resolves
 % regardless of the working directory. ensure_loaded avoids a double-load when
@@ -327,11 +330,15 @@ crossword(Strategy, GridLen, Words, StartLoc) :-
     emit_json(NumberedPlacedWords, Words, GridLen).
 
 
-% Top level predicate for finding the number of solutions for the
-% crossword for a specific starting position.
+% Top level predicate for finding the number of solutions for the crossword
+% for a specific starting position (or all start positions when StartLoc is
+% unbound). aggregate_all/3 runs the search once and counts deterministically;
+% the previous length(Sols,Num)/findall idiom re-ran the entire search once per
+% candidate length and left a (failing) choicepoint behind.
 all_crossword(Strategy, GridLen, Words, StartLoc, Num) :-
-    length(Sols, Num),
-    findall(Grid, find_crossword(Strategy, GridLen, Words, StartLoc, Grid, _), Sols).
+    aggregate_all(count,
+                  find_crossword(Strategy, GridLen, Words, StartLoc, _Grid, _Placed),
+                  Num).
 
 
 % The driver predicate used to solve the crossword. find_crossword/5 uses the
