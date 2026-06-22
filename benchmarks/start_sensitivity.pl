@@ -64,9 +64,17 @@ repo_file(Rel, File) :-
     directory_file_path(Root, Rel, File).
 
 read_clues(File, Words) :-
-    setup_call_cleanup(open(File, read, S), read_loop(S, Words), close(S)).
-read_loop(S, Words) :-
+    setup_call_cleanup(open(File, read, S), read_loop(S, File, Words), close(S)).
+% A fixture with no clues/1 term (typo, truncation, wrong path) must be a hard
+% error: silently unifying Words=[] makes an empty puzzle "solve" trivially and
+% records a bogus measured cell, corrupting the batch docs/experiments.md reads.
+% Mirror run_benchmarks.pl's read_fixture_clues/3 (throw fixture_missing_clues/1).
+read_loop(S, File, Words) :-
     read_term(S, T, []),
-    ( T == end_of_file -> Words = []
+    ( T == end_of_file -> throw(error(fixture_missing_clues(File), _))
     ; T = clues(Words)  -> true
-    ; read_loop(S, Words) ).
+    ; read_loop(S, File, Words) ).
+
+:- multifile prolog:error_message//1.
+prolog:error_message(fixture_missing_clues(Fixture)) -->
+    [ 'benchmark fixture ~q does not define clues/1'-[Fixture] ].
