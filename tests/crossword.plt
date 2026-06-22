@@ -11,6 +11,7 @@
 
 :- use_module(library(plunit)).
 :- use_module(library(http/json)).
+:- use_module(library(time)).      % call_with_time_limit/2 for the quality smoke test
 
 bundled_words(Words) :-
     load_clues('fixtures/bundled_17_clues.pl', Words).
@@ -368,3 +369,34 @@ test(with_output_no_file_on_failure) :-
     \+ exists_file(Tmp).
 
 :- end_tests(cli).
+
+
+% The quality engine
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% quality.pl's greedy density engine is loaded alongside crossword.pl (via its
+% ensure_loaded). This smoke test guards that the engine TERMINATES and produces
+% a complete layout on real, metadata-carrying input.
+%
+% Regression for F016: next_move/5 gathers candidates with findall, which COPIES
+% each entry; a .pl fixture entry [Answer, _{...}] has an unbound dict tag, so
+% the copy is \== the original. apply_move/6 must therefore remove the placed
+% word by its ground answer atom, not via ==-based remove_x, or the just-placed
+% word is re-offered forever (an infinite loop). The bundled fixture carries
+% exactly such dicts, so before the fix this hung. The goal is time-bounded, so
+% a regression FAILS the suite instead of hanging it.
+
+:- begin_tests(quality).
+
+% The engine terminates and places every word of the bundled metadata-carrying
+% fixture with no drops, choosing its own (square) grid.
+test(quality_terminates_and_places_all_bundled, [nondet]) :-
+    bundled_words(Words),
+    no_floors(Floors),
+    call_with_time_limit(10,
+        quality_layout(Words, Floors, Placed, Dropped, GridLen)),
+    integer(GridLen),
+    Dropped == [],
+    length(Words, NWords),
+    length(Placed, NWords).
+
+:- end_tests(quality).

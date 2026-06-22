@@ -133,7 +133,16 @@ greedy_loop(Remaining, Placed, GridLen, Grid, FinalPlaced, Dropped) :-
 
 apply_move(none, Remaining, Placed, _GridLen, Placed, Remaining).
 apply_move(move(Entry, NewPW, NewGrid), Remaining, Placed, GridLen, FinalPlaced, Dropped) :-
-    remove_x(Entry, Remaining, Remaining1),
+    % next_move/5 collects candidates with findall, which COPIES each Entry, so
+    % the move's Entry is NOT ==-identical to its term in Remaining when the
+    % entry is non-ground (a .pl fixture's [Answer, _{...}] has an unbound dict
+    % tag). remove_x (==-based) would then drop nothing and greedy_loop would
+    % re-offer the just-placed word forever. Key the removal on the ground
+    % answer atom instead (answers are unique, check_unique_answers/1); selectchk
+    % keeps the original, uncopied tail. (Same term-copy footgun the MRV path
+    % avoids via map_list_to_pairs - see crossword.pl select_inc.)
+    Entry = [Answer|_],
+    selectchk([Answer|_], Remaining, Remaining1),
     greedy_loop(Remaining1, [NewPW|Placed], GridLen, NewGrid, FinalPlaced, Dropped).
 
 % The best placeable word as move(Entry,PW,Grid), or `none` when nothing fits.
