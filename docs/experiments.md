@@ -126,6 +126,49 @@ perf-neutral on the solver. (F005's own large speedup is on the `--all` count
 path, which the strategy matrix does not exercise — measured separately at
 old/new = N+1 inferences, e.g. 9× at N=8.)
 
+## Audit micro-optimization benchmarks — 2026-06-23 (SWI 10.0.2)
+
+The three "NEEDS-BENCHMARK" items from the SWI audit
+(`docs/prolog-audit-findings.md`): F006, F007, F010. Each was a clarity-vs-cost
+trade the audit deliberately did **not** auto-recommend, leaving the call to
+measurement. Measured here on the real suite and **recorded only — no solver
+change was made** (by choice; the wins below are available to revisit).
+
+Method: `benchmarks/run_matrix.pl`, all 4 strategies × 7 fixtures. Baseline =
+the committed `2026-06-22-post-audit-strategy-matrix.csv`; re-run reproduced it
+**byte-identical across all 28 cells** (determinism check on this machine).
+Each variant was applied to a fresh `git checkout` of `crossword.pl` in an
+isolated worktree and measured via a 1-iteration manifest (inferences are
+iteration-independent, so the counts match the 30-iter manifest). Inferences are
+the metric, as always.
+
+- **F010 — `position/3`/`x_position/4` → `nth1/3` (+ delete the dead `:- false`
+  clause).** Hits `find_intersecting_word/6`, used by *every* strategy. **WIN,
+  larger than the audit guessed ("marginal").** 26/28 cells fewer inferences, 0
+  worse, 2 unchanged (baseline `benchmark_20`/`26`). Typical −2% to −3%; headline
+  is the one genuinely hard cell, baseline `benchmark_16_dense` **453.09 M →
+  431.37 M (−4.79%, ~21.7 M fewer)**. Behaviour-preserving: with F010+F007
+  applied, all 84 plunit tests pass and the golden output is byte-identical.
+- **F007 — `mrv_count/8` `findall(t,…)+length` → `aggregate_all(count,…)`.**
+  **The audit's prior ("likely-worse, ~+60% on the mrv/unbounded path") is
+  refuted.** On the real suite it is marginally *faster*: all 21 mrv/mrv_capped/
+  mrv_inc cells −0.07% to −0.36%, 0 worse; the 7 baseline cells are unchanged
+  (baseline never calls `mrv_count`), confirming the change is correctly
+  localized. A readability win at worst perf-neutral. (Whatever produced the
+  +60% microbench figure did not reflect the predicate in situ — exactly why the
+  audit punted to measurement.)
+- **F006 — strip-spaces idiom (`delete(Cs, ' ', …)` at 4 sites).** Two rewrites
+  measured; **both lose, audit confirmed — keep the four inline `delete/3`s.**
+  (a) `exclude(==(' '), …)` (meta-call): **all 28 cells worse**, +0.09% to
+  **+4.36%**, total +0.35%; worst on `mrv_inc`, which hits the most strip sites.
+  (b) A delete-based DRY helper (`strip_letters/3`): all 28 cells worse but
+  tiny, +0.02% to +0.77%, total +0.02% — the per-call overhead buys only
+  marginal de-duplication on a hot path. The perf fence holds.
+
+Net: F010 and F007 are real, behaviour-preserving improvements (F010 the
+material one); F006 stays as-is. Not adopted in code — recorded for a future
+optimization pass.
+
 ## Result batch — 2026-06-20, post I5 fix (SWI 10.0.2) — current numbers (re-verified 2026-06-22)
 
 Source: `benchmarks/results/2026-06-20-postI5-strategy-matrix.csv`. After the I5

@@ -78,16 +78,29 @@ none rises to a "win" worth its own change.)
 
 These trade clarity for inference cost and are explicitly excluded from the recommend list:
 
+> **Benchmarked 2026-06-23** (real suite, SWI 10.0.2) — see
+> `docs/experiments.md` § "Audit micro-optimization benchmarks". Outcomes recorded
+> inline below; **no solver change was made** (by choice). The benchmark overturned
+> the priors on F007 and F010.
+
 - **F006** (low) — factoring the 4× strip-spaces idiom into an `exclude(==(' '), ...)` helper. Verifiers
   measured `exclude/3` (meta-call) at ~1.4× more inferences than the C-builtin `delete/3` on the MRV
   hot path → **perf=likely-worse**. Also note the proposed helper would *diverge* from `quality.pl`'s
   existing `delete/3`-based `word_letters/3`, not mirror it.
+  **MEASURED → REJECTED:** `exclude/3` is worse on all 28 cells (+0.09% to +4.36%, worst on `mrv_inc`);
+  a delete-based DRY helper is also worse on all 28 (+0.02% to +0.77%, per-call overhead). Keep the
+  inline `delete/3`s. (Audit confirmed.)
 - **F007** (nit) — `mrv_count/8` `findall(t,...)+length` → `aggregate_all(count,...)`. Warm cost is
   noise at cap 2, but on the unbounded `mrv` strategy verifiers measured ~60% more inferences →
   **perf=likely-worse on the mrv/unbounded path**.
+  **MEASURED → prior REFUTED:** marginally *faster* (mrv/mrv_capped/mrv_inc cells −0.07% to −0.36%,
+  0 worse; baseline cells unchanged). A readability win at worst perf-neutral, not a +60% regression.
 - **F010** (low) — replacing the hand-rolled `position/3`/`x_position/4` with `nth1/3` (plus deleting
   a dead `:- false` clause). On the `find_intersecting_word/6` hot path → **perf=needs-benchmark**
   (microbench showed `nth1` marginally cheaper, but measure on the real suite before adopting).
+  **MEASURED → WIN (bigger than guessed):** 26/28 cells fewer inferences, 0 worse; typical −2% to −3%,
+  −4.79% (~21.7 M) on the hard baseline `benchmark_16_dense` cell. Behaviour-preserving (84 tests +
+  golden byte-identical). Available to adopt in a future optimization pass.
 - **F016** (high) — the fix's `perf=needs-benchmark` (no baseline; the engine currently never
   completes on affected inputs). Listed here for completeness, but it is a *correctness* fix and the
   current behaviour is non-terminating, so any termination is strictly an improvement.
