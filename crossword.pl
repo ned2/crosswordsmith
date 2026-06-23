@@ -881,10 +881,6 @@ add_clue_word(PW, ClueNum, NumberedPW) :-
 % grid utility predicates
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-direction(down).
-direction(across).
-
-
 swap_dir(down, across).
 swap_dir(across, down).
 
@@ -962,15 +958,6 @@ init_grid(GridLen, Grid) :-
 
 % generic utility predicates
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-head([X|_], X).
-
-length_sort(Words, OrderedWords) :-
-    map_list_to_pairs(atom_length, Words, Pairs),
-    keysort(Pairs, SortedPairs),
-    pairs_values(SortedPairs, SortedWords),
-    reverse(SortedWords, OrderedWords).
-
 
 % finds all positions X occurs in List (over backtracking)
 position(X, List, Pos) :- x_position(List, X, 1, Pos).

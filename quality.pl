@@ -47,7 +47,7 @@ quality_layout(Words, Floors, BestPlaced, BestDropped, BestGrid) :-
 % Q (secondary to words-placed): reward checked cells, penalise a large/elongated
 % bounding box (a web table-of-contents must render compactly, so checking and
 % compactness compete rather than checking strictly dominating). Weights are the
-% editorial knob (quality_weights/2).
+% editorial knob (quality_weights/3).
 layout_score(Placed, GridLen, Score) :-
     checked_cells(Placed, Checked),
     placed_bbox(Placed, GridLen, bbox(MinR, MaxR, MinC, MaxC), Area),
