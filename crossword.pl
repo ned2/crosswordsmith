@@ -433,24 +433,23 @@ mrv_cap(mrv_capped, 2).
 
 positive_key(Count-_) :- Count > 0.
 
-% Count Entry's viable placements right now, bounded by Cap. findall enumerates
-% each candidate (Start,Dir) from find_intersecting_word that also survives the
-% assign_word adjacency/bounds checks; findall undoes the goal's bindings, so
-% the caller's Start/Dir (ground on the first word, unbound after) are left
-% untouched.
+% Count Entry's viable placements right now, bounded by Cap. aggregate_all/3
+% counts each candidate (Start,Dir) from find_intersecting_word that also
+% survives the assign_word adjacency/bounds checks; like findall it undoes the
+% goal's bindings, so the caller's Start/Dir (ground on the first word, unbound
+% after) are left untouched.
 mrv_count(Cap, PlacedWords, GridLen, Start, Dir, GIn, Entry, Count) :-
     Entry = [Word|_],
     atom_chars(Word, Letters),
     delete(Letters, ' ', Letters2),
     length(Letters2, WLen),
-    findall(t,
+    aggregate_all(count,
             capped(Cap,
                    ( find_intersecting_word(Letters2, WLen, PlacedWords, GridLen,
                                             Start, Dir),
                      assign_word(Word, Letters2, WLen, Start, Dir, GridLen,
                                  PlacedWords, GIn, _Placed, _G1) )),
-            Ts),
-    length(Ts, Count).
+            Count).
 
 capped(unbounded, Goal) :- call(Goal).
 capped(N, Goal) :- integer(N), limit(N, Goal).

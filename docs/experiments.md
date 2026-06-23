@@ -103,7 +103,34 @@ anchor a corner).
 
 ---
 
-## Result batch — 2026-06-23, F010 adopted (position/3 → nth1/3) — current
+## Result batch — 2026-06-23, F007 adopted (mrv_count aggregate_all, on top of F010) — current
+
+Source: `benchmarks/results/2026-06-23-f007-strategy-matrix.csv`. After adopting
+F007: `mrv_count/8` counts viable placements with `aggregate_all(count, ...)`
+instead of `findall(t, ...)+length`. Stacks on the F010 batch below; same
+30-iter / Warmup=3 methodology, so directly comparable. Median inferences.
+
+| fixture (grid) | baseline | mrv (full) | mrv_capped | **mrv_inc** |
+| --- | --- | --- | --- | --- |
+| benchmark_08 (13) | 9.5 k | 83 k | 50 k | 52 k |
+| benchmark_14 (17) | 35 k | 551 k | 265 k | 271 k |
+| **benchmark_16_dense (17)** | **431.4 M** | 807 k | 370 k | **378 k** |
+| benchmark_20 (37) | 43 k | 319 k | 319 k | **79 k** |
+| benchmark_26 (49) | 76 k | 694 k | 695 k | **138 k** |
+| bundled_17 (17) | 17 k | 343 k | 315 k | 312 k |
+| benchmark_70_mesh (21) | 283 k | 12.62 M | 11.51 M | 5.02 M |
+
+Headlines:
+- Marginal and exactly as scoped: vs the F010 batch, the **21 mrv/mrv_capped/
+  mrv_inc cells fall −0.09% to −0.37%, 0 worse**; the **7 baseline cells are
+  byte-identical** (baseline never calls `mrv_count`), confirming the change is
+  perfectly localized.
+- The value is readability (`aggregate_all(count)` over `findall(t)+length`) at a
+  small inference win — and it **refutes the audit's "~+60% worse on the mrv path"
+  prior** (see the audit micro-opt section below).
+- Behaviour-preserving: golden byte-identical; 81 plunit tests green.
+
+## Result batch — 2026-06-23, F010 adopted (position/3 → nth1/3) — historical (superseded by the F007 batch above)
 
 Source: `benchmarks/results/2026-06-23-f010-strategy-matrix.csv`. After adopting
 F010: `find_intersecting_word/6` now uses the C-builtin `nth1/3` instead of the
@@ -160,8 +187,8 @@ old/new = N+1 inferences, e.g. 9× at N=8.)
 The three "NEEDS-BENCHMARK" items from the SWI audit
 (`docs/prolog-audit-findings.md`): F006, F007, F010. Each was a clarity-vs-cost
 trade the audit deliberately did **not** auto-recommend, leaving the call to
-measurement. Measured here on the real suite; **F010 was subsequently adopted**
-(see the 2026-06-23 result batch above), while F007 and F006 were left as-is.
+measurement. Measured here on the real suite; **F010 and F007 were subsequently
+adopted** (see the 2026-06-23 result batches above), while F006 was left as-is.
 
 Method: `benchmarks/run_matrix.pl`, all 4 strategies × 7 fixtures. Baseline =
 the committed `2026-06-22-post-audit-strategy-matrix.csv`; re-run reproduced it
@@ -188,7 +215,9 @@ the metric, as always.
   (baseline never calls `mrv_count`), confirming the change is correctly
   localized. A readability win at worst perf-neutral. (Whatever produced the
   +60% microbench figure did not reflect the predicate in situ — exactly why the
-  audit punted to measurement.)
+  audit punted to measurement.) **Adopted** — see the 2026-06-23 F007 result batch
+  above (mrv cells −0.09% to −0.37% on adoption, baseline byte-identical, 81 tests
+  + golden green).
 - **F006 — strip-spaces idiom (`delete(Cs, ' ', …)` at 4 sites).** Two rewrites
   measured; **both lose, audit confirmed — keep the four inline `delete/3`s.**
   (a) `exclude(==(' '), …)` (meta-call): **all 28 cells worse**, +0.09% to
@@ -197,9 +226,8 @@ the metric, as always.
   tiny, +0.02% to +0.77%, total +0.02% — the per-call overhead buys only
   marginal de-duplication on a hot path. The perf fence holds.
 
-Net: F010 (the material win) is now adopted in code (2026-06-23 batch above).
-F007 is a real but marginal improvement, measured and left unadopted; F006 stays
-as-is (both rewrites lose).
+Net: F010 (the material win) and F007 (marginal, mrv-only) are both adopted in
+code (2026-06-23 batches above); F006 stays as-is (both rewrites lose).
 
 ## Result batch — 2026-06-20, post I5 fix (SWI 10.0.2) — current numbers (re-verified 2026-06-22)
 

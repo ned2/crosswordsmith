@@ -80,8 +80,8 @@ These trade clarity for inference cost and are explicitly excluded from the reco
 
 > **Benchmarked 2026-06-23** (real suite, SWI 10.0.2) — see
 > `docs/experiments.md` § "Audit micro-optimization benchmarks". Outcomes recorded
-> inline below. The benchmark overturned the priors on F007 and F010; **F010 was
-> then adopted** (2026-06-23 result batch), with F007 and F006 left as-is.
+> inline below. The benchmark overturned the priors on F007 and F010; **F010 and
+> F007 were then adopted** (2026-06-23 result batches), with F006 left as-is.
 
 - **F006** (low) — factoring the 4× strip-spaces idiom into an `exclude(==(' '), ...)` helper. Verifiers
   measured `exclude/3` (meta-call) at ~1.4× more inferences than the C-builtin `delete/3` on the MRV
@@ -93,8 +93,9 @@ These trade clarity for inference cost and are explicitly excluded from the reco
 - **F007** (nit) — `mrv_count/8` `findall(t,...)+length` → `aggregate_all(count,...)`. Warm cost is
   noise at cap 2, but on the unbounded `mrv` strategy verifiers measured ~60% more inferences →
   **perf=likely-worse on the mrv/unbounded path**.
-  **MEASURED → prior REFUTED:** marginally *faster* (mrv/mrv_capped/mrv_inc cells −0.07% to −0.36%,
-  0 worse; baseline cells unchanged). A readability win at worst perf-neutral, not a +60% regression.
+  **MEASURED → prior REFUTED; ADOPTED 2026-06-23:** marginally *faster* (mrv/mrv_capped/mrv_inc cells
+  −0.09% to −0.37%, 0 worse; baseline cells byte-identical). A readability win at worst perf-neutral,
+  not a +60% regression. See `docs/experiments.md` 2026-06-23 F007 result batch.
 - **F010** (low) — replacing the hand-rolled `position/3`/`x_position/4` with `nth1/3` (plus deleting
   a dead `:- false` clause). On the `find_intersecting_word/6` hot path → **perf=needs-benchmark**
   (microbench showed `nth1` marginally cheaper, but measure on the real suite before adopting).
