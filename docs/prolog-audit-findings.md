@@ -73,6 +73,8 @@ none rises to a "win" worth its own change.)
 - **F002b / F015 (low/nit) — behaviour=risk-HIGH** without being severity-high: both can perturb a
   random/heuristic ordering (the `--shuffle` permutation stream; the quality seed-selection
   ordering on multi-word answers) and so must be golden/diff-checked rather than assumed safe.
+  **Both ADOPTED 2026-06-23** after exactly that before/after diff: F015 is byte-identical on the whole
+  corpus (latent-only risk); F002b changes only the contract-free random `--shuffle` layout. See entries.
 
 ### NEEDS-BENCHMARK (elegance-for-speed trades — NOT recommended without measurement)
 
@@ -177,6 +179,11 @@ These trade clarity for inference cost and are explicitly excluded from the reco
   **needs-measurement** | **confidence:** high.
 - **Disposition:** REAL, low. Manual-backed; behaviour-preserving for the protected surface (the one
   shuffle test checks multiset, golden is the deterministic top-left path, JSON is RNG-independent).
+  **ADOPTED 2026-06-23** after verifying the protected surface is byte-identical (golden unchanged, all
+  81 tests pass) and that `--shuffle` still yields valid, complete, reproducible crosswords under fixed
+  seeds — the per-seed layout differs, by design, the only observable change and on a path with no
+  contract. Removes the deprecated `delete/3` and the latent duplicate-drop hazard; `choose/2` deleted,
+  `:- use_module(library(random))` added.
 - **Steelman:** `shuffle/2` is self-contained and already random; swapping changes the specific
   per-seed layout, an observable change in the random stream.
 

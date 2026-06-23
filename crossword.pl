@@ -49,6 +49,9 @@
 % aggregate_all/3, used to count solutions in all_crossword/5.
 :- use_module(library(aggregate)).
 
+% random_permutation/2, used by shuffle/2 for the --shuffle random layout.
+:- use_module(library(random)).
+
 % The greedy quality layout engine (docs/cryptic-layout-spec.md), reached via
 % --quality. Loaded from the same directory as this script so it resolves
 % regardless of the working directory. ensure_loaded avoids a double-load when
@@ -970,16 +973,5 @@ remove_x(_,[],[]).
 
 %% shuffle(ListIn, ListOut) - randomly shuffles
 %% ListIn and unifies it with ListOut
-shuffle([], []) :- !.
-shuffle(List, [Element|Rest]) :-
-    choose(List, Element),
-    delete(List, Element, NewList),
-    shuffle(NewList, Rest).
-
-
-%% choose(List, Elt) - chooses a random element
-%% in List and unifies it with Elt.
-choose(List, Elt) :-
-    length(List, Length),
-    Index is random(Length),
-    nth0(Index, List, Elt).
+shuffle(List, Shuffled) :-
+    random_permutation(List, Shuffled).

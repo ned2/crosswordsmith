@@ -242,7 +242,7 @@ The driver is `assign_words/8`. It is a greedy, backtracking placement:
 
 Because the words are tried in order and the solver returns the first
 success, a `--shuffle` run randomises both the word order and the order
-the start positions are tried (`shuffle/2`, built on `choose/2`).
+the start positions are tried (`shuffle/2`, a thin wrapper over `random_permutation/2`).
 
 ### Finishing and output
 
