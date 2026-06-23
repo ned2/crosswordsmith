@@ -77,11 +77,6 @@ test(start_bottomleft,     [true(N-D == 273-across)]):- start_loc(bottomleft, 17
 
 :- begin_tests(utilities).
 
-% position/3 yields every 1-based index of X, on backtracking.
-test(position_first, [true(P == 1)])  :- once(position(a, [a,b,c], P)).
-test(position_all,   [all(P == [1,3])]) :- position(a, [a,b,a], P).
-test(position_none,  [fail])          :- position(z, [a,b,c], _).
-
 % remove_x removes only the first occurrence. (nondet: it leaves a harmless
 % choicepoint; we only care about the first answer.)
 test(remove_x_first, [true(R == [a,c,b]), nondet]) :- remove_x(b, [a,b,c,b], R).

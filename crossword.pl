@@ -569,8 +569,8 @@ find_intersecting_word(Letters, WLen, PlacedWords, GridLen, Start, Dir) :-
     intersection(Letters, PLetters, Vals),
     list_to_set(Vals, Vals2),
     member(Val, Vals2),
-    position(Val, PLetters, PPos),
-    position(Val, Letters, Pos),
+    nth1(PPos, PLetters, Val),
+    nth1(Pos, Letters, Val),
     calc_num(PDir, GridLen, PPos, PStart, PNum),
     swap_dir(PDir, Dir),
     calc_start(Dir, GridLen, Pos, PNum, Start),
@@ -960,16 +960,6 @@ init_grid(GridLen, Grid) :-
 
 % generic utility predicates
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-% finds all positions X occurs in List (over backtracking)
-position(X, List, Pos) :- x_position(List, X, 1, Pos).
-
-x_position([], _, _, _) :- false.
-x_position([X|_], X, Pos, Pos).
-x_position([_|Ys], X, N, Pos) :-
-    N2 is N + 1,
-    x_position(Ys, X, N2, Pos).
-
 
 % remove_x(X,L,R) :- R is L with first occurrence of X removed from it.
 remove_x(Y,[X|Xs],[X|Tail]) :-

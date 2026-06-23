@@ -1,0 +1,39 @@
+# change: F010 adopted - find_intersecting_word/6 uses nth1/3 instead of the
+#   hand-rolled position/3 + x_position/4 (both removed, incl. the dead `:- false` clause).
+# baseline: 2026-06-22-post-audit-strategy-matrix.csv (same 30-iter/Warmup=3 methodology).
+# result: inferences fall on 26/28 cells, 0 worse, 2 unchanged; all cells still solved.
+#   Headline: baseline benchmark_16_dense 453.09M -> 431.37M (-4.79%, ~21.7M fewer).
+#   Behaviour-preserving: 81 plunit tests + golden byte-identical (3 position/3 unit tests removed with the predicate).
+# tool: crosswordsmith-matrix
+# swi_prolog: 10.0.2
+# strategies: [baseline,mrv,mrv_capped,mrv_inc]
+# metric_note: wall time is machine-dependent; inferences are the portable metric
+strategy,fixture,grid,start,iterations,solved,wall_min_ms,wall_median_ms,inferences_min,inferences_median
+baseline,bundled_17_clues.pl,17,topleft_across,30,yes,1.544,1.558,16548,16548
+baseline,benchmark_08_words.pl,13,topleft_across,30,yes,0.879,0.889,9512,9512
+baseline,benchmark_14_words.pl,17,topleft_across,30,yes,3.235,3.247,34811,34811
+baseline,benchmark_16_dense_words.pl,17,topleft_across,1,yes,21192.406,21192.406,431370723,431370723
+baseline,benchmark_20_words.pl,37,topleft_across,30,yes,2.303,2.382,43206,43206
+baseline,benchmark_26_words.pl,49,topleft_across,30,yes,3.922,3.957,75978,75978
+baseline,benchmark_70_mesh_words.pl,21,topleft_across,1,yes,13.315,13.315,283081,283081
+mrv,bundled_17_clues.pl,17,topleft_across,30,yes,15.966,16.263,343878,343878
+mrv,benchmark_08_words.pl,13,topleft_across,30,yes,3.711,3.793,82711,82711
+mrv,benchmark_14_words.pl,17,topleft_across,30,yes,24.184,24.547,551650,551650
+mrv,benchmark_16_dense_words.pl,17,topleft_across,1,yes,36.020,36.020,807302,807302
+mrv,benchmark_20_words.pl,37,topleft_across,30,yes,16.250,16.480,319703,319703
+mrv,benchmark_26_words.pl,49,topleft_across,30,yes,37.938,38.748,695885,695885
+mrv,benchmark_70_mesh_words.pl,21,topleft_across,1,yes,562.179,562.179,12636421,12636421
+mrv_capped,bundled_17_clues.pl,17,topleft_across,30,yes,14.785,14.982,316263,316263
+mrv_capped,benchmark_08_words.pl,13,topleft_across,30,yes,2.294,2.324,50517,50517
+mrv_capped,benchmark_14_words.pl,17,topleft_across,30,yes,11.994,12.205,265574,265574
+mrv_capped,benchmark_16_dense_words.pl,17,topleft_across,1,yes,16.714,16.714,370567,370567
+mrv_capped,benchmark_20_words.pl,37,topleft_across,30,yes,16.441,16.739,320083,320083
+mrv_capped,benchmark_26_words.pl,49,topleft_across,30,yes,38.537,40.121,696535,696535
+mrv_capped,benchmark_70_mesh_words.pl,21,topleft_across,1,yes,590.814,590.814,11533850,11533850
+mrv_inc,bundled_17_clues.pl,17,topleft_across,30,yes,15.665,16.106,312836,312836
+mrv_inc,benchmark_08_words.pl,13,topleft_across,30,yes,2.603,2.694,51994,51994
+mrv_inc,benchmark_14_words.pl,17,topleft_across,30,yes,13.477,16.077,271431,271431
+mrv_inc,benchmark_16_dense_words.pl,17,topleft_across,1,yes,23.165,23.165,378491,378491
+mrv_inc,benchmark_20_words.pl,37,topleft_across,30,yes,5.191,5.410,78643,78643
+mrv_inc,benchmark_26_words.pl,49,topleft_across,30,yes,9.586,10.772,138583,138583
+mrv_inc,benchmark_70_mesh_words.pl,21,topleft_across,1,yes,276.044,276.044,5034539,5034539

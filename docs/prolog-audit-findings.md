@@ -80,8 +80,8 @@ These trade clarity for inference cost and are explicitly excluded from the reco
 
 > **Benchmarked 2026-06-23** (real suite, SWI 10.0.2) — see
 > `docs/experiments.md` § "Audit micro-optimization benchmarks". Outcomes recorded
-> inline below; **no solver change was made** (by choice). The benchmark overturned
-> the priors on F007 and F010.
+> inline below. The benchmark overturned the priors on F007 and F010; **F010 was
+> then adopted** (2026-06-23 result batch), with F007 and F006 left as-is.
 
 - **F006** (low) — factoring the 4× strip-spaces idiom into an `exclude(==(' '), ...)` helper. Verifiers
   measured `exclude/3` (meta-call) at ~1.4× more inferences than the C-builtin `delete/3` on the MRV
@@ -98,9 +98,10 @@ These trade clarity for inference cost and are explicitly excluded from the reco
 - **F010** (low) — replacing the hand-rolled `position/3`/`x_position/4` with `nth1/3` (plus deleting
   a dead `:- false` clause). On the `find_intersecting_word/6` hot path → **perf=needs-benchmark**
   (microbench showed `nth1` marginally cheaper, but measure on the real suite before adopting).
-  **MEASURED → WIN (bigger than guessed):** 26/28 cells fewer inferences, 0 worse; typical −2% to −3%,
-  −4.79% (~21.7 M) on the hard baseline `benchmark_16_dense` cell. Behaviour-preserving (84 tests +
-  golden byte-identical). Available to adopt in a future optimization pass.
+  **MEASURED → WIN (bigger than guessed); ADOPTED 2026-06-23:** 26/28 cells fewer inferences, 0 worse;
+  typical −2% to −3%, −4.79% (~21.7 M) on the hard baseline `benchmark_16_dense` cell.
+  `position/3`/`x_position/4` removed (with their 3 unit tests; suite now 81 plunit + golden, all green).
+  See `docs/experiments.md` 2026-06-23 result batch.
 - **F016** (high) — the fix's `perf=needs-benchmark` (no baseline; the engine currently never
   completes on affected inputs). Listed here for completeness, but it is a *correctness* fix and the
   current behaviour is non-terminating, so any termination is strictly an improvement.

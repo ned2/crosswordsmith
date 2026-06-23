@@ -103,7 +103,36 @@ anchor a corner).
 
 ---
 
-## Result batch — 2026-06-22, post-audit re-verification (SWI 10.0.2) — current
+## Result batch — 2026-06-23, F010 adopted (position/3 → nth1/3) — current
+
+Source: `benchmarks/results/2026-06-23-f010-strategy-matrix.csv`. After adopting
+F010: `find_intersecting_word/6` now uses the C-builtin `nth1/3` instead of the
+hand-rolled `position/3` + `x_position/4` (both removed, including the dead
+`:- false` clause). Same 30-iter / Warmup=3 methodology as the post-audit
+baseline, so directly comparable. Median inferences (portable metric).
+
+| fixture (grid) | baseline | mrv (full) | mrv_capped | **mrv_inc** |
+| --- | --- | --- | --- | --- |
+| benchmark_08 (13) | 9.5 k | 83 k | 51 k | 52 k |
+| benchmark_14 (17) | 35 k | 552 k | 266 k | 271 k |
+| **benchmark_16_dense (17)** | **431.4 M** | 807 k | 371 k | **378 k** |
+| benchmark_20 (37) | 43 k | 320 k | 320 k | **79 k** |
+| benchmark_26 (49) | 76 k | 696 k | 697 k | **139 k** |
+| bundled_17 (17) | 17 k | 344 k | 316 k | 313 k |
+| benchmark_70_mesh (21) | 283 k | 12.64 M | 11.53 M | 5.03 M |
+
+Headlines:
+- vs the 2026-06-22 post-audit baseline: **26/28 cells fewer inferences, 0 worse**,
+  2 unchanged (baseline `benchmark_20`/`26`). Typical −2% to −3%; the headline is
+  the one genuinely hard cell, baseline `benchmark_16_dense` **453.09 M → 431.37 M
+  (−4.79%, ~21.7 M fewer)**. Strategy story otherwise unchanged.
+- `nth1/3` is the C-builtin that the hand-rolled `position/3` reinvented; the win
+  is per-lookup cost on `find_intersecting_word/6`, used by every strategy.
+- Behaviour-preserving: golden output byte-identical; suite green at **81 plunit
+  tests** — the 3 `position/3` unit tests were removed with the predicate. The full
+  F006/F007/F010 measurement that led here is in the audit micro-opt section below.
+
+## Result batch — 2026-06-22, post-audit re-verification (SWI 10.0.2) — historical (superseded by the 2026-06-23 F010 batch)
 
 Source: `benchmarks/results/2026-06-22-post-audit-strategy-matrix.csv` (HEAD
 `aaf01f4`). Full matrix re-run after the SWI-Prolog code audit
@@ -131,8 +160,8 @@ old/new = N+1 inferences, e.g. 9× at N=8.)
 The three "NEEDS-BENCHMARK" items from the SWI audit
 (`docs/prolog-audit-findings.md`): F006, F007, F010. Each was a clarity-vs-cost
 trade the audit deliberately did **not** auto-recommend, leaving the call to
-measurement. Measured here on the real suite and **recorded only — no solver
-change was made** (by choice; the wins below are available to revisit).
+measurement. Measured here on the real suite; **F010 was subsequently adopted**
+(see the 2026-06-23 result batch above), while F007 and F006 were left as-is.
 
 Method: `benchmarks/run_matrix.pl`, all 4 strategies × 7 fixtures. Baseline =
 the committed `2026-06-22-post-audit-strategy-matrix.csv`; re-run reproduced it
@@ -147,8 +176,11 @@ the metric, as always.
   larger than the audit guessed ("marginal").** 26/28 cells fewer inferences, 0
   worse, 2 unchanged (baseline `benchmark_20`/`26`). Typical −2% to −3%; headline
   is the one genuinely hard cell, baseline `benchmark_16_dense` **453.09 M →
-  431.37 M (−4.79%, ~21.7 M fewer)**. Behaviour-preserving: with F010+F007
-  applied, all 84 plunit tests pass and the golden output is byte-identical.
+  431.37 M (−4.79%, ~21.7 M fewer)**. Behaviour-preserving (golden byte-identical).
+  **Adopted** — see the 2026-06-23 result batch above; on adoption `position/3`/
+  `x_position/4` and their 3 unit tests are removed, leaving the suite at 81 tests,
+  green. (The pre-adoption measurement was run with F010+F007 applied together —
+  84 tests then, since `position/3` still existed.)
 - **F007 — `mrv_count/8` `findall(t,…)+length` → `aggregate_all(count,…)`.**
   **The audit's prior ("likely-worse, ~+60% on the mrv/unbounded path") is
   refuted.** On the real suite it is marginally *faster*: all 21 mrv/mrv_capped/
@@ -165,9 +197,9 @@ the metric, as always.
   tiny, +0.02% to +0.77%, total +0.02% — the per-call overhead buys only
   marginal de-duplication on a hot path. The perf fence holds.
 
-Net: F010 and F007 are real, behaviour-preserving improvements (F010 the
-material one); F006 stays as-is. Not adopted in code — recorded for a future
-optimization pass.
+Net: F010 (the material win) is now adopted in code (2026-06-23 batch above).
+F007 is a real but marginal improvement, measured and left unadopted; F006 stays
+as-is (both rewrites lose).
 
 ## Result batch — 2026-06-20, post I5 fix (SWI 10.0.2) — current numbers (re-verified 2026-06-22)
 
