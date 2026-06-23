@@ -454,8 +454,11 @@ mrv_count(Cap, PlacedWords, GridLen, Start, Dir, GIn, Entry, Count) :-
                                  PlacedWords, GIn, _Placed, _G1) )),
             Count).
 
-capped(unbounded, Goal) :- call(Goal).
-capped(N, Goal) :- integer(N), limit(N, Goal).
+% Cap is `unbounded` (no cap, for mrv) or an integer (mrv_capped). The cut keeps
+% the unbounded case deterministic - without it, clause 2's variable head leaves a
+% spurious choicepoint on every call. The integer cap goes through limit/2.
+capped(unbounded, Goal) :- !, call(Goal).
+capped(N, Goal) :- limit(N, Goal).
 
 
 % mrv_inc: capped MRV with an INCREMENTAL count cache (idea I1 in

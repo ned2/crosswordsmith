@@ -279,8 +279,7 @@ word_meets_half(W, Placed) :-
 word_checked_count(W, Placed, Count) :-
     get_dict(cells, W, Cells), get_dict(dir, W, Dir),
     other_dir(Dir, OD), dir_cells(Placed, OD, ODCells),
-    findall(x, ( member(C, Cells), ord_memberchk(C, ODCells) ), Xs),
-    length(Xs, Count).
+    aggregate_all(count, ( member(C, Cells), ord_memberchk(C, ODCells) ), Count).
 
 word_max_unch_run(W, Placed, MaxRun) :-
     get_dict(cells, W, Cells), get_dict(dir, W, Dir),

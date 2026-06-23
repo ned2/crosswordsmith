@@ -21,6 +21,22 @@ How to read each finding:
 
 ## Executive summary
 
+### Status — CLOSED 2026-06-24
+
+All actionable findings are resolved. Final disposition of the 26 findings (+ the F002b sub-finding):
+
+- **Implemented (17):** F002b, F003, F004, F005, F007, F009, F010, F012, F013, F014, F015, F016, F019,
+  F020, F023, F024, F025, F026, F008. (F010 + F007 are measured solver-perf wins; F008/F019 verified
+  inference-neutral; the rest behaviour-preserving — see each entry's `ADOPTED` note.)
+- **Measured → rejected (1):** F006 (both `exclude/3` and a delete-based helper are slower; keep the
+  inline `delete/3`s).
+- **Obsolete (1):** F011 — subsumed by F002b (the `delete/3`/`choose/2` it targeted no longer exist).
+- **Drop-level, no action (6):** F001, F002, F017, F018, F021, F022.
+
+Benchmark evidence for the perf-relevant items is in `docs/experiments.md` (2026-06-23 F010 and F007
+result batches; the audit micro-optimization section). The counts table below is the original
+consensus snapshot, retained for provenance.
+
 ### Counts (final surviving findings, by consensus severity)
 
 The audit produced 26 candidate findings. After verifier consensus, several collapsed to
@@ -306,6 +322,12 @@ These trade clarity for inference cost and are explicitly excluded from the reco
   `findall/3`, which enumerates the choicepoint away) | **confidence:** high.
 - **Disposition:** Downgrade to nit (3/3). Both claims reproduced, but zero observable effect; affects
   only the non-default `mrv`/`mrv_capped` strategies.
+  **ADOPTED 2026-06-24:** kept `call/1` for the unbounded case but added a green cut to remove the
+  spurious choicepoint, and dropped the now-redundant `integer/1` guard from the integer clause. NOT
+  the audit's literal "collapse to `limit(Cap,Goal)`" — that was measured first and cost +0.0007% on
+  the mrv (unbounded) cells (routing the no-cap path through `limit(infinite,…)` instead of `call/1`),
+  so the cut form was chosen instead: full strategy matrix byte-identical to the F007 baseline (28/28
+  cells unchanged), 81 tests + golden green.
 - **Steelman:** The two-clause form is self-documenting, cut-free, with an `integer/1` guard, and the
   `unbounded` atom matches the `mrv_cap` vocabulary.
 
@@ -367,6 +389,9 @@ These trade clarity for inference cost and are explicitly excluded from the reco
   none (both single O(n) passes; finder's `likely-better` corrected) | **confidence:** med.
 - **Disposition:** Downgrade to nit (2/3). Real-but-latent idiom cleanup; swap `delete/3`→`selectchk/3`,
   drop the risk-HIGH/perf framing.
+  **OBSOLETE 2026-06-24 — subsumed by F002b:** `shuffle/2` was rewritten as a thin wrapper over
+  `random_permutation/2`, so `choose/2` and the `delete/3` element-removal this finding targets no
+  longer exist. Nothing to fix.
 - **Steelman:** Feeds only the "vaguely random" `--shuffle` path; uniqueness makes the two
   observationally identical today.
 
@@ -552,6 +577,9 @@ These trade clarity for inference cost and are explicitly excluded from the reco
 - **Disposition:** Downgrade to nit (2/3). NOT a re-litigation of the E5 `map_list_to_pairs` ruling
   (that is about findall *copying* terms breaking `==`; here the template is the bare atom `x`, no
   variables, no `==` dependency). Cosmetic alignment off the hot path.
+  **ADOPTED 2026-06-24:** swapped to `aggregate_all(count, …)`. The "needs-benchmark" caveat is moot —
+  this runs only inside `floor_drop` (off in auto mode), so the strategy matrix does not exercise it;
+  81 tests + golden green. F007 already showed the same transform is perf-neutral-to-better anyway.
 - **Steelman:** `findall+length` is universally understood and needs no import to read.
 
 ---
