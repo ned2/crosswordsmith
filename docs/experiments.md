@@ -103,7 +103,30 @@ anchor a corner).
 
 ---
 
-## Result batch — 2026-06-20, post I5 fix (SWI 10.0.2) — current
+## Result batch — 2026-06-22, post-audit re-verification (SWI 10.0.2) — current
+
+Source: `benchmarks/results/2026-06-22-post-audit-strategy-matrix.csv` (HEAD
+`aaf01f4`). Full matrix re-run after the SWI-Prolog code audit
+(`docs/prolog-audit-findings.md`) fixes landed: F016 (quality-engine
+infinite-loop fix), F026 (benchmark harness throws on a fixture missing
+`clues/1`), and F005 (`all_crossword/5` counts via `aggregate_all/3`).
+
+**Result: inferences are byte-identical to the post-I5 batch below across all 28
+cells (4 strategies × 7 fixtures), all solved.** No new table — the numbers in
+the post-I5 batch carry forward unchanged. Wall ms differs (machine-dependent,
+reporting-only, as always).
+
+This is the expected outcome: none of the three fixes touch the `find_crossword`
+search the matrix measures. F016 is in the greedy quality engine (`quality.pl`,
+reached only via `--quality`); F026 changes the harness's fixture read only on
+the *malformed* path (every committed fixture defines `clues/1`, so the measured
+path is unchanged); F005 changes the `--all` solution-count path, not the solve.
+Recorded as a dated regression checkpoint confirming the audit work is
+perf-neutral on the solver. (F005's own large speedup is on the `--all` count
+path, which the strategy matrix does not exercise — measured separately at
+old/new = N+1 inferences, e.g. 9× at N=8.)
+
+## Result batch — 2026-06-20, post I5 fix (SWI 10.0.2) — current numbers (re-verified 2026-06-22)
 
 Source: `benchmarks/results/2026-06-20-postI5-strategy-matrix.csv`. After the I5
 fix (`no_word_merge/3` maximality check). Median inferences (portable metric);
