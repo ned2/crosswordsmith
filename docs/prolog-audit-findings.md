@@ -446,8 +446,13 @@ These trade clarity for inference cost and are explicitly excluded from the reco
   correctness gain) | **perf:** none | **confidence:** high.
 - **Disposition:** Downgrade to nit (3/3). Real inconsistency, manual-confirmed, but NOT a correctness
   bug (placement always re-strips, so layouts stay legal) and the "uniform strip idiom" is an internal
-  convention, not a manual-mandated idiom. The code change is **not** auto-recommendable; only the
-  fallback comment is safe.
+  convention, not a manual-mandated idiom.
+  **ADOPTED 2026-06-23** after a before/after `--quality` diff on every multi-word fixture: output is
+  byte-identical across the whole corpus today (bundled_17's multi-word answers are all single-space,
+  so the seed ranking and K-prefix are preserved), 81 tests stay green, and the fix is strictly more
+  correct — it ranks by the placed-letter footprint that `seed_word`/`word_best_placement` already use.
+  The behaviour-risk is latent: a future multi-space answer could change a chosen layout (desirably), so
+  snapshot-review such fixtures.
 - **Steelman:** Seed selection is a heuristic; display length is a defensible "long words" proxy and
   never produces an illegal layout.
 

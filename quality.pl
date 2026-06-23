@@ -109,7 +109,7 @@ greedy_construct(Words, GridLen, Loc, Seed, Placed, Dropped) :-
     seed_word(Seed, StartNum, StartDir, GridLen, G0, SeedPW, G1),
     greedy_loop(Rest, [SeedPW], GridLen, G1, Placed, Dropped).
 
-neg_answer_len([A|_], NL) :- atom_length(A, L), NL is -L.
+neg_answer_len(Entry, NL) :- word_letters(Entry, _, WLen), NL is -WLen.
 
 % Seed: place the chosen word at the fixed start cell/direction (no crossings).
 seed_word(Entry, Start, Dir, GridLen, GIn, PW, GOut) :-
