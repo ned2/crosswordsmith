@@ -297,6 +297,9 @@ entry_to_word(Entry, [Answer, Meta]) :-
     ;   Meta = _{}
     ).
 
+% prolog:error_message//1 renders the formal term of an error(Formal, _). It is
+% verified working on the pinned SWI 10.0.2 but is undocumented in the manual
+% (which documents prolog:message//1); do not migrate without re-checking.
 :- multifile prolog:error_message//1.
 prolog:error_message(json_no_clues_array) -->
     [ 'clues file: expected a JSON object with a "clues" array' ].
@@ -758,7 +761,6 @@ check_unique_answers(Words) :-
      true
     ).
 
-:- multifile prolog:error_message//1.
 prolog:error_message(duplicate_answer(Answer)) -->
     [ 'duplicate answer ~q in clues; answers must be unique'-[Answer] ].
 

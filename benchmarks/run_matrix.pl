@@ -72,7 +72,11 @@ run_cell(Strategy, Rel, Grid, Start, Iters, Warmup) :-
     cell_limit_seconds(Limit),
     solve_status(Strategy, Words, Grid, Start, Limit, Status),
     ( Status == solved
-    ->  forall(between(1, Warmup, _), ignore(solve_once(Strategy, Words, Grid, Start))),
+    ->  % Only solve_status (below) runs under call_with_time_limit; the warmup
+        % and measured solves here are unguarded. Safe because the search is
+        % deterministic - inference counts are identical across iterations, so a
+        % cell that solved within the probe's limit cannot newly hang here.
+        forall(between(1, Warmup, _), ignore(solve_once(Strategy, Words, Grid, Start))),
         findall(W-I,
                 ( between(1, Iters, _),
                   call_time(solve_once(Strategy, Words, Grid, Start), T),
@@ -100,6 +104,10 @@ solve_once(Strategy, Words, Grid, Start) :-
     find_crossword(Strategy, Grid, Words, Start, _Grid, _Placed),
     !.
 
+% Min and "median" of a value list. For even-length lists this reports the upper
+% of the two central values (no averaging), unlike run_benchmarks.pl's median/3.
+% Immaterial for the authoritative inference metric (deterministic, so
+% upper-median == true median); only wall-clock (machine noise) would differ.
 col(Values, Min, Median) :-
     msort(Values, Sorted),
     Sorted = [Min|_],

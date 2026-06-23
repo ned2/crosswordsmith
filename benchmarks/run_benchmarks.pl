@@ -243,9 +243,9 @@ repo_file(Relative, File) :-
 
 
 summarize_times(Times, _{wall: Wall, cpu: Cpu, inferences: Inferences}) :-
-    findall(W, (member(Time, Times), get_dict(wall, Time, W)), Walls),
-    findall(C, (member(Time, Times), get_dict(cpu, Time, C)), Cpus),
-    findall(I, (member(Time, Times), get_dict(inferences, Time, I)), InferenceCounts),
+    maplist(get_dict(wall), Times, Walls),
+    maplist(get_dict(cpu), Times, Cpus),
+    maplist(get_dict(inferences), Times, InferenceCounts),
     stats(Walls, Wall),
     stats(Cpus, Cpu),
     stats(InferenceCounts, Inferences).

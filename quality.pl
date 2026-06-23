@@ -79,7 +79,9 @@ seed_candidates(Words, Seeds) :-
 
 % Candidate square sizes from the word set: hold the total letters at a few
 % target densities, but never smaller than the longest word. A small, fixed,
-% deterministic set (no wall-clock budget needed).
+% deterministic set (no wall-clock budget needed). On an empty word set max_list/2
+% fails (it does not error), so this fails and quality_solve reports "no layout" -
+% the intended fail-soft for a degenerate/empty puzzle.
 grid_candidates(Words, Sizes) :-
     maplist(word_letter_count, Words, Lens),
     sum_list(Lens, Total),
@@ -96,8 +98,7 @@ grid_candidates(Words, Sizes) :-
             Raw),
     sort(Raw, Sizes).
 
-word_letter_count([A|_], N) :-
-    atom_chars(A, Cs), delete(Cs, ' ', Ls), length(Ls, N).
+word_letter_count(Entry, N) :- word_letters(Entry, _, N).
 
 % --- greedy construction from one start location --------------------------
 

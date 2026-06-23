@@ -18,7 +18,9 @@ run_suite :-
     consult('crossword.pl'),
     consult('tests/crossword.plt'),
     % summary(S) gives us the counts AND stops run_tests/2 from failing on
-    % its own, so we control the exit code explicitly from the dict.
+    % its own, so we control the exit code explicitly from the dict. Note:
+    % run_tests/2 and the summary/1 option are undocumented in the SWI 10.0.2
+    % manual (which lists only run_tests/0,1) but are verified working here.
     run_tests(all, [summary(S)]),
     format("~n== summary: ~w passed, ~w failed, ~w timed out, ~w blocked (of ~w) ==~n",
            [S.passed, S.failed, S.timeout, S.blocked, S.total]),
