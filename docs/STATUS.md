@@ -29,7 +29,7 @@ Progress tracker for the work specified in [`design-spec.md`](./design-spec.md).
 | 3 | Sizing + emit framing: `--size N`; `fixed` (exact N×N) vs `max` (tight square crop, side max(H,W)), default `max` | **done** (`emit_arrange/4`; both framings validated) | AC-ARR-5 |
 | 4 | Best-effort (drop): served by the **greedy constructor path** (drops naturally), not a drop-branch on the strict DFS; lexicographic most-placed → reward across seeds; report dropped | **done** (`arrange_best_effort/6`; +3 plunit tests) | AC-ARR-2 |
 | 5 | Fragment seeding: parse emit-schema fragment, reconcile by answer, pre-place + validate, search remainder (words-only v1) | **done** (`seed_from_fragment/6` + `arrange_fragment_strict/6` / `arrange_fragment_best_effort/7`; +10 plunit, +1 golden) | AC-FRAG-1, AC-FRAG-2, AC-FRAG-3, AC-EMIT-2 (AC-FRAG-4 thin-form deferred) |
-| 6 | Candidates: distinctness from **constructor breadth + greedy diversity**, τ-filtered (not top-K B&B leaves) | not started | AC-ARR-7 |
+| 6 | Candidates: distinctness from **constructor breadth + greedy diversity**, τ-filtered (not top-K B&B leaves) | **done** (`arrange_candidates/6`; greedy seed×corner pool, translation-invariant placement distance, τ=0.30; +7 plunit, +1 golden) | AC-ARR-7 |
 | 7 | CLI + migration: subcommand dispatch; `--enumerate`; "did you mean `arrange`?" shim; README/`run_tests.sh`/golden updates | not started | AC-CLI-1…3, AC-ARR-6, AC-ARR-8 |
 | — | ~~LNS polish pass~~ — **dropped** by the Phase-1.5 gate (no reward headroom; bound never pruned) | dropped | — |
 
@@ -81,8 +81,8 @@ Reachability calibration (`--check-target`, ε, τ) is a **required pre-weightin
 
 ## At a glance
 
-- **Done:** `arrange` Phase 1 (oracle) + 1.5 (gate → DESCOPE) + **2 (strict)** + **3 (size framing)** + **4 (best-effort via greedy)** + **5 (fragment seeding)**. All in `arrange.pl`; **30 plunit tests (`tests/arrange.plt`) + golden regression (fixed + max + fragment) wired into `run_tests.sh`/`make test`** — full suite 111/111 + 4 goldens green.
-- **Next buildable, unblocked:** `arrange` **Phase 6** (candidates) → **7** (CLI + migration).
+- **Done:** `arrange` Phase 1 (oracle) + 1.5 (gate → DESCOPE) + **2 (strict)** + **3 (size framing)** + **4 (best-effort via greedy)** + **5 (fragment seeding)** + **6 (candidates)**. All in `arrange.pl`; **37 plunit tests (`tests/arrange.plt`) + golden regression (fixed + max + fragment + candidates) wired into `run_tests.sh`/`make test`** — full suite 118/118 + 5 goldens green.
+- **Next buildable, unblocked:** `arrange` **Phase 7** (CLI + migration).
 - **Blocked:** stock-grid library (OD-5/6), `lint` barred profile (OD-7).
 - **Deferred:** `fill` engine (OD-1…4).
 - **Dropped (by the gate):** `arrange` B&B search loop, admissible bound, incremental delta, LNS polish.

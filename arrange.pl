@@ -352,25 +352,35 @@ arrange_best_effort_solve(Words, GridLen, SizeMode) :-
 %         anchored at the bbox top-left. Square keeps the single-`gridLength`
 %         output schema (rectangular grids are out of scope, design-spec §3).
 
-emit_arrange(Numbered, Words, GridLen, fixed) :-
-    emit_json(Numbered, Words, GridLen).
-emit_arrange(Numbered, Words, GridLen, max) :-
+emit_arrange(Numbered, Words, GridLen, SizeMode) :-
+    arrange_layout_dict(Numbered, Words, GridLen, SizeMode, Payload),
+    current_output(Out),
+    json_write_dict(Out, Payload),
+    nl(Out).
+
+% Build (without writing) the canonical layout dict for one placement, framed by
+% SizeMode. Splitting dict-construction from writing lets --candidates emit an
+% array of these (emit_candidates/4) while single emit writes exactly one.
+%   fixed : the canonical N x N dict (identical to emit_json/3's payload).
+%   max   : the tight enclosing-square crop dict.
+arrange_layout_dict(Numbered, Words, GridLen, fixed,
+                    _{gridLength: GridLen, grid: Rows, words: WordObjs}) :-
+    build_grid_rows(Numbered, GridLen, Rows),
+    build_words(Numbered, Words, GridLen, WordObjs).
+arrange_layout_dict(Numbered, Words, GridLen, max, Dict) :-
     placed_bbox(Numbered, GridLen, bbox(MinR, MaxR, MinC, MaxC), _Area),
     H is MaxR - MinR + 1, W is MaxC - MinC + 1, S is max(H, W),
-    emit_cropped(Numbered, Words, GridLen, MinR, MinC, S).
+    cropped_layout_dict(Numbered, Words, GridLen, MinR, MinC, S, Dict).
 
-% Emit an S x S crop of a GridLen grid, origin at (MinR,MinC); same JSON shape
+% The S x S crop dict of a GridLen grid, origin at (MinR,MinC); same JSON shape
 % as emit_json/3, reusing add_word_cells/3, cell_coord/3 and answer_meta/3.
-emit_cropped(PlacedWords, Words, GridLen, MinR, MinC, S) :-
+cropped_layout_dict(PlacedWords, Words, GridLen, MinR, MinC, S,
+                    _{gridLength: S, grid: Rows, words: WordObjs}) :-
     empty_assoc(A0),
     foldl(add_word_cells, PlacedWords, A0, CellMap),
     Smax is S - 1, numlist(0, Smax, Idxs),
     maplist(cropped_row(CellMap, GridLen, MinR, MinC, Idxs), Idxs, Rows),
-    maplist(cropped_word(Words, GridLen, MinR, MinC), PlacedWords, WordObjs),
-    Payload = _{gridLength: S, grid: Rows, words: WordObjs},
-    current_output(Out),
-    json_write_dict(Out, Payload),
-    nl(Out).
+    maplist(cropped_word(Words, GridLen, MinR, MinC), PlacedWords, WordObjs).
 
 cropped_row(CellMap, GridLen, MinR, MinC, CIdxs, R, Row) :-
     maplist(cropped_cell(CellMap, GridLen, MinR, MinC, R), CIdxs, Row).
@@ -733,3 +743,143 @@ prolog:error_message(fragment_illegal_pin(Answer)) -->
     [ 'fragment: word ~q cannot be legally pinned (it abuts or merges with another pinned word)'-[Answer] ].
 prolog:error_message(fragment_size_mismatch(FragGridLen, OptSize)) -->
     [ 'fragment: gridLength ~w disagrees with the requested --size ~w'-[FragGridLen, OptSize] ].
+
+
+% ===========================================================================
+% Phase 6 - candidates (diverse alternative layouts). design-spec §7.4, AC-ARR-7.
+%
+% Default output is a single deterministic best. `--candidates K` opts into up
+% to K *meaningfully distinct* layouts. Distinctness comes from CONSTRUCTOR
+% BREADTH (the greedy constructor over seed x start-corner) + GREEDY DIVERSITY:
+% rank the pool best-first, take the best, then each next-best whose
+% placement-distance >= tau from ALL already-picked. This is why candidates ride
+% the greedy path, not a single deterministic search's near-duplicate leaves.
+%
+% Placement distance is TRANSLATION-INVARIANT: each word's position is taken
+% relative to its layout's bounding-box origin, so two layouts that differ only
+% by a global shift count as the same candidate (the same crossword), matching
+% AC-ARR-7's "meaningfully distinct". Distance = fraction of answers whose
+% (rel-row, rel-col, direction) differs; integer-compared (no floats) for
+% deterministic output (INV-2).
+% ===========================================================================
+
+% tau = 0.30 placement-distance threshold, as integer percent (OD-9: tunable /
+% to be calibrated against the fixtures alongside epsilon/target).
+candidate_tau_pct(30).
+
+% The candidate pool: every greedy construction over seed x start-corner,
+% ranked best-first by score(NumPlaced, Reward) in standard term order. Under
+% --strict only full placements are eligible. Each entry is tagged with its
+% translation-invariant placement assoc (answer -> RelRow-RelCol-Dir).
+arrange_candidate_pool(Words, GridLen, DropContract, Pool) :-
+    arrange_weights(WCap, WTail),
+    length(Words, Total),
+    seed_candidates(Words, Seeds),
+    start_locs(Locs),
+    findall(score(NP, R)-Placed,
+            ( member(Loc, Locs),
+              member(Seed, Seeds),
+              greedy_construct(Words, GridLen, Loc, Seed, Placed, _Dropped),
+              length(Placed, NP),
+              ( DropContract == strict -> NP =:= Total ; true ),
+              layout_reward(WCap, WTail, Placed, R) ),
+            Raw),
+    sort(1, @>=, Raw, Sorted),                 % best-first; stable for ties
+    pairs_values(Sorted, Placeds),
+    maplist(tag_with_assoc(GridLen), Placeds, Pool).
+
+tag_with_assoc(GridLen, Placed, c(Placed, Assoc)) :-
+    placement_assoc(Placed, GridLen, Assoc).
+
+% answer -> (RelRow - RelCol - Dir), positions relative to the layout's bbox
+% origin (translation-invariant). Answers are unique within a layout.
+placement_assoc(Placed, GridLen, Assoc) :-
+    placed_bbox(Placed, GridLen, bbox(MinR, _MaxR, MinC, _MaxC), _Area),
+    findall(A-(RR-RC-D),
+            ( member(PW, Placed),
+              get_dict(answer, PW, A), get_dict(start, PW, S), get_dict(dir, PW, D),
+              cell_coord(GridLen, S, [SR, SC]),
+              RR is SR - MinR, RC is SC - MinC ),
+            Pairs),
+    list_to_assoc(Pairs, Assoc).
+
+% Greedy diversity selection: best-first, keep each layout that is >= tau from
+% every already-kept one, until K kept or the pool is exhausted.
+pick_diverse(Pool, TauPct, Total, K, Picked) :-
+    pick_diverse_(Pool, TauPct, Total, K, [], Rev),
+    reverse(Rev, Picked).
+
+pick_diverse_([], _TauPct, _Total, _K, Acc, Acc).
+pick_diverse_([c(P, A)|Cs], TauPct, Total, K, Acc, Out) :-
+    length(Acc, L),
+    (   L >= K
+    ->  Out = Acc
+    ;   Acc == []
+    ->  pick_diverse_(Cs, TauPct, Total, K, [c(P, A)], Out)        % best: always kept
+    ;   far_from_all(A, Acc, TauPct, Total)
+    ->  pick_diverse_(Cs, TauPct, Total, K, [c(P, A)|Acc], Out)
+    ;   pick_diverse_(Cs, TauPct, Total, K, Acc, Out)
+    ).
+
+far_from_all(Assoc, Acc, TauPct, Total) :-
+    forall(member(c(_, A2), Acc),
+           ( pos_diff_count(Assoc, A2, Diff), Diff * 100 >= TauPct * Total )).
+
+% Number of answers placed differently between two layouts (present-vs-absent or
+% a differing relative position/direction both count as a difference).
+pos_diff_count(A1, A2, Diff) :-
+    assoc_to_keys(A1, K1), assoc_to_keys(A2, K2),
+    ord_union(K1, K2, Keys),
+    aggregate_all(count, ( member(K, Keys), \+ same_pos(K, A1, A2) ), Diff).
+
+same_pos(K, A1, A2) :- get_assoc(K, A1, P), get_assoc(K, A2, P).
+
+% Up to K diverse numbered layouts for the word set. Returned =< K; fewer only
+% when fewer >= tau-distinct layouts exist (reported by the solve wrapper).
+arrange_candidates(Words, GridLen, DropContract, K, Numbered, Returned) :-
+    arrange_candidate_pool(Words, GridLen, DropContract, Pool),
+    Pool = [_|_],
+    length(Words, Total),
+    candidate_tau_pct(TauPct),
+    pick_diverse(Pool, TauPct, Total, K, Picked),
+    findall(N, ( member(c(P, _), Picked), once(assign_clue_numbers(P, N)) ), Numbered),
+    length(Numbered, Returned).
+
+% Emit the candidates as a JSON ARRAY of canonical layout dicts (each element is
+% itself a valid fragment for re-ingestion). Single-layout emit stays a bare
+% object; the array shape is what `--candidates` opts into.
+emit_candidates(NumberedLayouts, Words, GridLen, SizeMode) :-
+    maplist(candidate_dict(Words, GridLen, SizeMode), NumberedLayouts, Dicts),
+    current_output(Out),
+    json_write_dict(Out, Dicts),
+    nl(Out).
+candidate_dict(Words, GridLen, SizeMode, Numbered, Dict) :-
+    arrange_layout_dict(Numbered, Words, GridLen, SizeMode, Dict).
+
+% Solve + emit the candidates array on stdout, report requested/returned/tau on
+% stderr (INV-3: a short return is reported, never silent). Fails (no stdout) if
+% nothing is placeable.
+arrange_candidates_solve(Words, GridLen, DropContract, SizeMode, K) :-
+    check_unique_answers(Words),
+    (   arrange_candidates(Words, GridLen, DropContract, K, Layouts, Returned),
+        Returned > 0
+    ->  emit_candidates(Layouts, Words, GridLen, SizeMode),
+        candidate_tau_pct(TauPct),
+        (   Returned < K
+        ->  format(user_error,
+                   "arrange: ~w candidate(s) requested, ~w returned (tau ~w%); \c
+fewer >=tau-distinct layouts exist~n",
+                   [K, Returned, TauPct])
+        ;   format(user_error,
+                   "arrange: ~w candidate(s) requested, ~w returned (tau ~w%)~n",
+                   [K, Returned, TauPct])
+        )
+    ;   format(user_error, "arrange: no candidate layout on ~wx~w grid~n",
+               [GridLen, GridLen]),
+        fail
+    ).
+
+% Convenience runner: load a clue file and emit up to K diverse layouts.
+arrange_candidates_run(File, GridLen, DropContract, SizeMode, K) :-
+    load_clues(File, Words),
+    arrange_candidates_solve(Words, GridLen, DropContract, SizeMode, K).

@@ -265,4 +265,67 @@ test(fragment_size_reconcile) :-
     catch(reconcile_fragment_size(17, 15, _),
           error(fragment_size_mismatch(17, 15), _), true).
 
+% --- Phase 6: candidates (diverse layouts) -----------------------------------
+
+% AC-ARR-7: --candidates K returns up to K layouts; bundled_17 yields 3 distinct
+% full layouts.
+test(candidates_returns_k_full_layouts) :-
+    arrange_bundled(Words),
+    arrange_candidates(Words, 17, strict, 3, Layouts, Returned),
+    Returned =:= 3,
+    length(Layouts, 3),
+    forall(member(L, Layouts), length(L, 6)).
+
+% AC-ARR-7: the returned layouts are pairwise >= tau apart (translation-invariant
+% placement distance).
+test(candidates_pairwise_tau_apart) :-
+    arrange_bundled(Words), length(Words, Total),
+    candidate_tau_pct(TauPct),
+    arrange_candidates(Words, 17, strict, 3, Layouts, _),
+    maplist([L, A]>>placement_assoc(L, 17, A), Layouts, Assocs),
+    forall( ( nth0(I, Assocs, A1), nth0(J, Assocs, A2), I < J ),
+            ( pos_diff_count(A1, A2, Diff), Diff * 100 >= TauPct * Total ) ).
+
+% AC-ARR-7: fewer than K only when fewer >= tau-distinct layouts exist; on the
+% 8-word benchmark the greedy breadth yields just two distinct full layouts.
+test(candidates_short_return_when_fewer_distinct) :-
+    load_clues('fixtures/benchmark_08_words.pl', Words),
+    arrange_candidates(Words, 13, strict, 5, Layouts, Returned),
+    Returned < 5, Returned >= 1, length(Layouts, Returned).
+
+% --candidates 1 yields exactly the single best layout.
+test(candidates_one_is_single_best) :-
+    arrange_bundled(Words),
+    arrange_candidates(Words, 17, strict, 1, Layouts, 1),
+    Layouts = [L], length(L, 6).
+
+% AC-ARR-6 / INV-2: candidate emission is byte-identical across runs.
+test(candidates_emit_deterministic) :-
+    arrange_bundled(Words),
+    arrange_candidates(Words, 17, strict, 3, Layouts, _),
+    with_output_to(string(S1), emit_candidates(Layouts, Words, 17, fixed)),
+    with_output_to(string(S2), emit_candidates(Layouts, Words, 17, fixed)),
+    S1 == S2.
+
+% The emitted candidates form a JSON array, each element a standalone layout.
+test(candidates_emit_is_json_array) :-
+    arrange_bundled(Words),
+    arrange_candidates(Words, 17, strict, 3, Layouts, _),
+    with_output_to(string(S), emit_candidates(Layouts, Words, 17, fixed)),
+    atom_json_dict(S, Arr, []),
+    is_list(Arr), length(Arr, 3),
+    forall(member(D, Arr),
+           ( get_dict(gridLength, D, 17), get_dict(words, D, Ws), length(Ws, 6) )).
+
+% Placement distance is translation-invariant: a layout and its one-row shift
+% have distance 0 (the same crossword, just moved).
+test(candidates_distance_translation_invariant) :-
+    L1 = [ word{answer:'ABC', dir:across, start:1,  cells:[1,2,3]},
+           word{answer:'ADE', dir:down,   start:1,  cells:[1,18,35]} ],
+    L2 = [ word{answer:'ABC', dir:across, start:18, cells:[18,19,20]},
+           word{answer:'ADE', dir:down,   start:18, cells:[18,35,52]} ],
+    placement_assoc(L1, 17, A1),
+    placement_assoc(L2, 17, A2),
+    pos_diff_count(A1, A2, 0).
+
 :- end_tests(arrange).
