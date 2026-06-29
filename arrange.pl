@@ -306,6 +306,46 @@ word_shares_letter(Entry, Words) :-
     intersection(Ls, OLs, [_|_]).
 
 
+% --- Phase 4: best-effort (drop) via the greedy constructor ----------------
+% Per the Phase-1.5 result, best-effort is served by quality.pl's greedy
+% constructor (which drops words it cannot place), NOT a drop-branch on the
+% strict DFS. Construct over the seed x start-corner sweep on the given grid,
+% rescore, and pick lexicographically: most words placed, then highest reward.
+
+% Best greedy layout on GridLen. The key score(NumPlaced, Reward) compared in
+% standard term order ranks most-placed first, then highest reward.
+arrange_best_effort(Words, GridLen, Numbered, Reward, NumPlaced, Dropped) :-
+    arrange_weights(WCap, WTail),
+    seed_candidates(Words, Seeds),
+    start_locs(Locs),
+    findall(score(NP, R)-pd(Placed, DroppedAnswers),
+            ( member(Loc, Locs),
+              member(Seed, Seeds),
+              greedy_construct(Words, GridLen, Loc, Seed, Placed, DroppedEntries),
+              length(Placed, NP),
+              layout_reward(WCap, WTail, Placed, R),
+              findall(A, member([A|_], DroppedEntries), DroppedAnswers) ),
+            Results),
+    Results = [_|_],
+    sort(1, @>=, Results, [score(NumPlaced, Reward)-pd(BestPlaced, Dropped)|_]),
+    once(assign_clue_numbers(BestPlaced, Numbered)).
+
+% Construct the best-effort layout, emit it, report placed/dropped on stderr.
+% Fails only when nothing at all is placeable (AC-ARR-2).
+arrange_best_effort_solve(Words, GridLen, SizeMode) :-
+    check_unique_answers(Words),
+    (   arrange_best_effort(Words, GridLen, Numbered, Reward, NP, Dropped)
+    ->  emit_arrange(Numbered, Words, GridLen, SizeMode),
+        length(Dropped, ND),
+        format(user_error,
+               "arrange: grid ~w, mode ~w, placed ~w, dropped ~w ~w, reward ~w~n",
+               [GridLen, SizeMode, NP, ND, Dropped, Reward])
+    ;   format(user_error, "arrange: nothing placeable on ~wx~w grid~n",
+               [GridLen, GridLen]),
+        fail
+    ).
+
+
 % --- emit framing (Phase 3) ------------------------------------------------
 % fixed : exactly GridLen x GridLen (the canonical emit_json/3).
 % max   : crop to the tight SQUARE enclosing the content (side = max(H,W)),
@@ -358,7 +398,17 @@ cropped_coord(GridLen, MinR, MinC, Cell, [R, C]) :-
     cell_coord(GridLen, Cell, [R0, C0]),
     R is R0 - MinR, C is C0 - MinC.
 
-% Convenience runner: load a clue file and emit a strict arrange layout.
+% Drop-contract dispatch (strict | best_effort) -> the matching solver.
+arrange_solve(Words, GridLen, strict, SizeMode) :-
+    arrange_strict_solve(Words, GridLen, SizeMode).
+arrange_solve(Words, GridLen, best_effort, SizeMode) :-
+    arrange_best_effort_solve(Words, GridLen, SizeMode).
+
+% Convenience runners: load a clue file and emit an arrange layout.
+% /3 keeps the strict default (golden-stable); /4 selects the drop contract.
 arrange_run(File, GridLen, SizeMode) :-
     load_clues(File, Words),
     arrange_strict_solve(Words, GridLen, SizeMode).
+arrange_run(File, GridLen, DropContract, SizeMode) :-
+    load_clues(File, Words),
+    arrange_solve(Words, GridLen, DropContract, SizeMode).

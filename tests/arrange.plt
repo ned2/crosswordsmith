@@ -122,4 +122,25 @@ test(emit_is_deterministic) :-
     with_output_to(string(S2), emit_arrange(Numbered, Words, 17, max)),
     S1 == S2.
 
+% --- Phase 4: best-effort (drop) ---------------------------------------------
+
+% When the grid fits everything, best-effort places all and drops nothing.
+test(best_effort_places_all_when_fits) :-
+    arrange_bundled(Words),
+    arrange_best_effort(Words, 17, Numbered, _R, NP, Dropped),
+    NP =:= 6, Dropped == [], length(Numbered, 6).
+
+% AC-ARR-2: best-effort succeeds where strict fails (isolated words sharing no
+% letters), placing a maximal subset and reporting the dropped remainder.
+test(best_effort_succeeds_on_isolated) :-
+    arrange_best_effort([['ABC'], ['DEF']], 9, Numbered, _R, NP, Dropped),
+    NP =:= 1, length(Dropped, 1), length(Numbered, 1).
+
+% On a too-tight grid best-effort drops, and every word is placed XOR dropped.
+test(best_effort_drops_and_partitions) :-
+    arrange_bundled(Words), length(Words, Total),
+    arrange_best_effort(Words, 11, _N, _R, NP, Dropped),
+    length(Dropped, ND),
+    NP >= 1, NP < Total, NP + ND =:= Total.
+
 :- end_tests(arrange).
