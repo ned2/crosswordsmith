@@ -16,7 +16,9 @@
 
 run_suite :-
     consult('crossword.pl'),
+    consult('arrange.pl'),             % Flavour-A engine (consults crossword.pl; no-op reload)
     consult('tests/crossword.plt'),
+    consult('tests/arrange.plt'),
     % summary(S) gives us the counts AND stops run_tests/2 from failing on
     % its own, so we control the exit code explicitly from the dict. Note:
     % run_tests/2 and the summary/1 option are undocumented in the SWI 10.0.2
