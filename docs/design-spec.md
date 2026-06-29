@@ -1,0 +1,370 @@
+# crosswordsmith — Design Specification
+
+**Status: normative.** This is the single source of truth for *what* crosswordsmith is, what it is not, and how you know a piece is done. It exists to stop the program growing by accretion: nothing gets built that is not specified here, and this document only grows by a **deliberate decision pass**, never organically during implementation.
+
+## How to read this document
+
+- Every component is tagged **LOCKED**, **PARTIAL**, or **DEFERRED**:
+  - **LOCKED** — decided; has acceptance criteria; ready to implement against.
+  - **PARTIAL** — direction decided, some sub-decisions still open (flagged inline + in the register).
+  - **DEFERRED** — design *intent* recorded and bounded, but **not buildable** until a future decision pass resolves its open decisions (see §10). Writing code for a DEFERRED component is itself scope creep.
+- Acceptance criteria are written as observable, testable statements with stable IDs (`AC-<area>-<n>`). They are the test contract: a component is "done" when its ACs pass.
+- Keywords **MUST / SHOULD / MAY** carry their usual normative force.
+
+### Relationship to the other docs
+
+| Doc | Role | Layer |
+|---|---|---|
+| [`cryptic-setter-research.md`](./cryptic-setter-research.md) | **Why** — discovery, evidence, rationale (exploratory) | Cited *from* here |
+| **`design-spec.md`** (this) | **What** + acceptance criteria (normative) | Source of truth |
+| [`arrange-implementation-plan.md`](./arrange-implementation-plan.md) | **How / phasing** for the `arrange` engine (derived) | Implements §7 |
+
+When this spec and the research doc disagree, **this spec wins** (the research doc is a snapshot of exploration; decisions made since supersede it). Implementation plans derive from this spec, never the reverse.
+
+### Change discipline
+
+1. A change to a **LOCKED** contract or acceptance criterion requires editing this doc *first*, in its own commit, with the rationale.
+2. New scope (a new verb, flag, feature, or output key) MUST appear here before it is implemented. "We can just add a flag" is the exact failure mode this doc exists to prevent.
+3. Promoting a **DEFERRED** component to **LOCKED** requires a recorded decision pass resolving every open decision in §10 for that component.
+4. Removing scope is also a change: move it to §3 (Non-goals) with a one-line reason rather than deleting silently.
+
+---
+
+## 1. Vision & scope
+
+crosswordsmith is a **free, cross-platform, scriptable, open-format, CLI-first crossword layout-and-fill engine** that emits deterministic, diffable output. It feeds clue-writing tools; it is not one. (Research doc, Executive Summary §8; Design principle #1.)
+
+It is delivered as **one CLI with two product surfaces** ("flavours"), sharing a common substrate but **not** a common placement engine:
+
+- **Flavour A — `arrange`.** "Arrange *these specific* words into a nice crossword-shaped layout." Closed word set; aesthetic interlock; does **not** aspire to authentic cryptic legality (no symmetry guarantee, no ≥50%-checking guarantee). This is the program's genuine niche — no Exet/Crossword-Compiler equivalent exists.
+- **Flavour B — cryptic setting workflow tools.** Validation (`lint`), standard-format interchange (`export`), stock-grid libraries/profiles, and — the one heavy piece — a grid-first, open-dictionary auto-`fill` engine. Flavour B is *grid-first* (legality is designed into the black-square pattern up front), the opposite inversion from Flavour A's closed set.
+
+**Why two engines and not one with flags:** the legality cores are structurally incompatible. Flavour A is closed-set-emergent (the grid emerges from how the supplied words interlock); Flavour B `fill` is grid-first-open-dictionary (a pre-validated grid, words drawn from a ~270k lexicon). Forcing one engine to serve both is the trap. (See research doc, "The closed-set vs. authentic-layout tension".) **Share the substrate, not the solver.**
+
+---
+
+## 2. Build sequence & status at a glance
+
+Sequence: **A → B-`lint`/`export` (cheap shared wins) → B-`fill` (blocked) → B-`fill` (barred, furthest out, may never ship).** This table is a reading aid; the per-component tags in §§5–8 are authoritative.
+
+| Component | Section | Tag | State |
+|---|---|---|---|
+| CLI contract | §5 | LOCKED | spec'd; built at the Phase-7 cutover |
+| Shared substrate | §6 | LOCKED | mostly exists in `crossword.pl` |
+| `arrange` (Flavour A) | §7 | LOCKED | + build plan ([`arrange-implementation-plan.md`](./arrange-implementation-plan.md)) |
+| `lint` | §8.1 | LOCKED | blocked-uk/toc/american first; barred profile waits on OD-7 |
+| `export` (ipuz/Exolve) | §8.2 | LOCKED | transformations of canonical JSON |
+| Stock-grid library / profiles | §8.3 | PARTIAL | schema + grid set open (OD-5/6) |
+| `fill` (Flavour B engine) | §8.4 | **DEFERRED** | not buildable until OD-1…4 resolved |
+| Backlog features | §8.5 | unspec'd | each needs its own decision pass |
+
+---
+
+## 3. Non-goals / out of scope
+
+These are **deliberately excluded**. Adding any of them requires a §10 decision pass and a scope change here, not a quiet PR.
+
+| Excluded | Reason |
+|---|---|
+| **Auto clue-writing / surface-reading judgement** | Even Exet and Wordplay Wizard stop at presenting candidates. Be an assistant, not a generator. (Principle #3.) |
+| **Hand-rolled binary `.puz` writer** (CRC-16 in Prolog) | Brittle, and `.puz` cannot represent bars. Reach `.puz`/`.jpz`/PDF via `kotwords` from the native `.ipuz` emitter. |
+| **Solver-facing consumption** — HTML5 applet, hosting, embedding, solve analytics/heatmaps, blogs | All require a hosted backend; orthogonal to a CLI. |
+| **Bundling paywalled dictionaries** (Chambers/Collins/Oxford) | License. Ship only permissive data (UKACD18 BSD-3, MIT/CC word lists). (Principle #9.) |
+| **Rectangular / non-square grids** (8×10 New Yorker, etc.) | Cut from the engine; square-only `--size N`. Revisit only if a Flavour-B engine ever needs it. |
+| **`free`/auto-size mode** for `arrange` | Replaced by `--size-mode max` (ceiling + crop). No size-search outer loop. |
+| **Priority / per-word importance scores** in `arrange` | De-scoped; anchoring is handled by the fragment grid instead. |
+| **Barred-grid *generation*** | Different cell/edge model entirely — a separate engine, deferred indefinitely. The barred checking-math *lint* is a cheap exception (§8.3). |
+| **Real-time co-editing / community voting platform** | Large product surfaces orthogonal to a CLI. Git-diffable source is the collaboration story instead. |
+| **Selection-from-an-open-pool in `arrange`** | Flavour A is closed-set by definition; open-dictionary fill is exclusively Flavour B `fill`. |
+
+---
+
+## 4. Architecture — shared substrate vs. divergent tops
+
+The discipline: **one substrate, two solver tops.**
+
+| Layer | Shared | Flavour A (`arrange`) | Flavour B |
+|---|---|---|---|
+| Input parsing / `meta` passthrough | ✅ | | |
+| Blocked-grid cell/coordinate model | ✅ | | |
+| Clue numbering + enumeration | ✅ | | |
+| Metric predicates (`word_meets_half/2`, `max_unch_run`, `checked_cells`, connectivity) | ✅ | used as **optimizer signals** | used as **validators** |
+| Emit layer (JSON canonical; later ipuz/Exolve) | ✅ | | |
+| Fragment-grid seeding primitive | ✅ (one primitive) | anchors | ninas / seed-then-fill |
+| **Placement engine** | ✗ | unified B&B optimizer (new) | grid-first + dictionary fill (new, separate) |
+| Legality core (`adj_is_free`, `no_word_merge`, `check_prev/next_cell`) | ✗ | free-canvas (blocked) | template-slot / barred |
+
+**Module layout (target):**
+- `crossword.pl` — shared primitives (grid model, legality core for the free-canvas case, clue numbering, emit, input). Metric helpers `crossing_count`/`placed_bbox`/`word_meets_half` lifted here from `quality.pl` so both engines call them.
+- `arrange.pl` — Flavour-A engine (consults `crossword.pl`).
+- Flavour-B modules (`lint.pl`, `export.pl`, `fill.pl`) — added as those components are built.
+- `quality.pl` — legacy; retired at the Phase-7 CLI cutover (§7), superseded by `arrange`.
+
+**Cross-cutting invariants (apply to all components):**
+- **INV-1 — Metadata-agnostic engine.** Clue text, annotations, cluing scores, review flags ride in an opaque `meta` object joined to the answer at emit time. They MUST NOT be threaded through placement or clue-numbering. The JSON contract changes only by *additive* keys. (Principle #2.)
+- **INV-2 — Deterministic, diffable output.** Output is stable sorted-key JSON; identical input + flags ⇒ byte-identical output. No engine path carries randomization (`solve_shuffled` is NOT carried into `arrange`). (Principle #8.)
+- **INV-3 — Report, never silently degrade.** Dropped words, layout compromises, lint failures, and infeasible seeds are always reported, never swallowed. (Principle #5.)
+- **INV-4 — License-clean by default.** Only permissively-licensed bundled data. (Principle #9.)
+
+---
+
+## 5. CLI contract — explicit verbs, no catch-all default  **[LOCKED]**
+
+Every capability is a **verb**. A bare invocation prints usage and exits non-zero — it never performs an action.
+
+```
+crosswordsmith arrange [--strict | --best-effort] [--size N] [--size-mode fixed|max]
+                       [--fragment grid.json] [--candidates N] [--enumerate]
+                       --input words.json [--out file.json]
+crosswordsmith lint    --profile <name> [--allow-asymmetry] layout.json     # Flavour B
+crosswordsmith export  --to ipuz|exolve  layout.json [--out file]           # Flavour B / shared
+crosswordsmith fill    --grid template.json --seeds seeds.json              # Flavour B (DEFERRED)
+crosswordsmith                                                              # → usage, exit ≠ 0
+```
+
+### 5.1 Conventions
+- `--input <file>` is the word/clue source (JSON or `.pl` fixture), required by `arrange`.
+- `--out <file>` writes to a file instead of stdout; composes with any verb. Absent ⇒ stdout.
+- `--flag=value` and `--flag value` are both accepted.
+- Unknown flags/verbs are an error with a usage hint, not silently ignored.
+
+### 5.2 Exit codes (LOCKED)
+| Code | Meaning |
+|---|---|
+| `0` | Success: a layout/report was produced (for `lint`, PASS or WARN only). |
+| non-zero | Failure: unplaceable input under `--strict`, unsatisfiable fragment, lint FAIL, malformed input, or bare/`--help` invocation. |
+
+A non-zero exit with `--out` MUST NOT write a partial output file.
+
+### 5.3 Migration from the current CLI (LOCKED, one deliberate pass)
+The current interface — `./crossword.pl --input F [--strategy S] [--shuffle] [--all] [--quality ...] [--out O] <grid_length> [<start_loc>]` — is replaced by subcommands. This is a **breaking change**, done as one pass:
+- old `solve` (fixed-grid, place-all) ≡ `arrange --strict --size-mode fixed`
+- old `--quality` (engine-size, drop) ≡ `arrange --best-effort --size-mode max`
+- old `--all` (enumerate) ≡ `arrange --enumerate`
+- The required `GridLen` positional becomes `--size N` (resolving the current wart where `GridLen` is required but silently ignored under `--quality`).
+- `--shuffle` / `solve_shuffled` is **removed** (conflicts with INV-2 determinism).
+- Old-style invocations produce a helpful "did you mean `arrange`?" error.
+- README, `run_tests.sh`, and golden fixtures are updated in the same pass.
+
+**AC-CLI-1** Bare `crosswordsmith` prints usage and exits non-zero.
+**AC-CLI-2** Each documented verb/flag combination behaves as specified or errors with a usage hint; no undocumented flag exists.
+**AC-CLI-3** Every old-style invocation maps to a documented `arrange` equivalent or yields the migration hint; no silent behavioural change.
+
+---
+
+## 6. Shared substrate  **[LOCKED]**
+
+### 6.1 Input & metadata passthrough
+- Accepts a word/clue set as JSON or `.pl` fixture; each entry is `{answer, meta?}` where `meta` is opaque (clue text, url, scores, flags).
+- Answers MUST be unique within a set (existing `check_unique_answers/1`); duplicates are an error.
+- `meta` is joined to the answer **at emit time only**; it never influences placement (INV-1).
+
+**AC-IN-1** A set with duplicate answers is rejected with a clear error.
+**AC-IN-2** Arbitrary `meta` keys round-trip from input to emitted output unchanged.
+
+### 6.2 Grid model
+- Square N×N canvas; assoc `cell(1..N²) → empty | Letter`; row-major numbering; geometry via `cell_coord/3`, `next_cell`/`prev_cell`/`calc_num`/`calc_start`/`fits_on_grid`/`is_start_cell`/`is_end_cell`.
+- No `(W,H)` plumbing (square-only, §3).
+
+### 6.3 Clue numbering & enumeration
+- Standard crossword numbering via `assign_clue_numbers/2`.
+- **Enumeration** (e.g. `(4,3)`, `(4-2)`) is derived from preserved spaces/hyphens in the answer and carried on the emitted word. Required by every clue-bearing export format.
+
+**AC-NUM-1** Numbering matches conventional crossword rules for any legal layout.
+**AC-ENUM-1** A multi-word/hyphenated answer emits the correct enumeration string.
+
+### 6.4 Metric predicates (measurement, shared)
+`crossing_count/6`, `placed_bbox/4`, `word_meets_half/2` (`checked ≥ ceil(L/2)`), `checked_cells`, `max_unch_run`, connectivity. Flavour A consumes these as **optimizer signals**; Flavour B `lint` consumes them as **validators**. They are pure measurement — no side effects, no placement.
+
+### 6.5 Emit / output contract (canonical JSON)
+- Canonical output is the existing stable sorted-key JSON: `{gridLength, grid: rows, words: [{answer, cells, dir, num, len, start, meta}...]}`.
+- Output is deterministic (INV-2) and the **canonical fragment schema** (§6.6) — i.e. emit is round-trippable back in as input.
+- Export formats (ipuz/Exolve) are *transformations of* this canonical form (§8.2), not separate emitters.
+
+**AC-EMIT-1** Identical input + flags ⇒ byte-identical JSON across runs and machines.
+**AC-EMIT-2** Emitted JSON re-ingested as a `--fragment` reproduces the identical layout (round-trip).
+
+### 6.6 Fragment-grid primitive
+A **fragment grid** is a partial layout the engine solves *from*. It is the single mechanism behind three features: **anchors** (Flavour A — pre-placed words), **ninas** (Flavour B — fixed letters along a path), and **interactive iteration** (place some, let the engine finish).
+
+- **Schema = the emit format made partial**, with the convention **presence = fixed**: any word/cell present is pinned; everything absent is the engine's to place. There is no separate "anchor" field — *being in the fragment is the anchor*.
+- An optional **thin, hand-authorable convenience form** (e.g. `{answer, row, col, dir}` tuples + optional fixed cells) **desugars into** the canonical form.
+- **Words and letters both supported.** A placed word = a run of fixed cells of known identity; a lone fixed cell = a nina constraint. Words-only is a valid v1; the schema *permits* letter-level so Flavour-B ninas drop in later. Fixed letters not belonging to a list word are **free nina constraints, not entries** — they do not count toward `--strict`'s "place all words".
+- **Reconciliation by answer string** against `--input`; the engine places the unmatched remainder. A fragment word absent from `--input` is an error.
+- **Validate up front** against the legality core (overlaps, adjacency/merge, unsatisfiable fixed letters) and report conflicts *before* searching.
+- **Size frame:** the fragment carries grid dimensions, which set `N`; `--size` is then redundant (if both given and they disagree, error). `--size-mode` still frames the result.
+
+**AC-FRAG-1** A fragment word not present in `--input` is rejected with a clear error.
+**AC-FRAG-2** A self-conflicting fragment (overlap/merge/unsatisfiable letter) is reported before any search runs.
+**AC-FRAG-3** Pinned words/cells appear at exactly their fragment positions in every produced layout.
+**AC-FRAG-4** Thin convenience form and canonical form for the same fragment produce identical results.
+
+*(Deferred to implementation, not product decisions: exact thin-form syntax; duplicate-answer disambiguation when `--input` repeats an answer string.)*
+
+---
+
+## 7. Flavour A — `arrange`  **[LOCKED]**
+
+A single verb that unifies the old `pack`/`solve` engines into one **deterministic MRV-first layout engine** that maximizes a capped interlock objective over an N×N grid (with admissible-bound pruning + within-budget improvement where it pays). Rationale: research doc "Two flavours, one CLI"; build plan + the empirical design-exploration reframe: [`arrange-implementation-plan.md`](./arrange-implementation-plan.md). *(Earlier called a "branch-and-bound optimizer"; probes showed the bound prunes little and the cap is often inert at our densities, so that label oversold the search — see §7.3 and the plan's "Empirical reframe.")*
+
+### 7.1 Contract
+| Dimension | Decision |
+|---|---|
+| **Scenario** | General-purpose (any word list; website-TOC is one consumer). |
+| **Drop contract** | Configurable, **default `--strict`**. Strict fails only on a *genuinely unplaceable* word (no legal intersection anywhere). `--best-effort` drops unplaceable words and reports them. |
+| **Sizing** | Square `--size N` (default **15** — the dominant blocked-cryptic size) + `--size-mode {fixed\|max}`, default **`max`**. |
+| **Aesthetic goal** | High interlock + even/balanced. Explicitly *not* raw density (old `quality.pl`) and *not* target-shape. |
+| **Weak slots** | Soft-penalty only: always place any legally-placeable word; stubs are penalised, never refused. No per-word hard floor. |
+| **Objective** | Capped per-word reward + small interlock tail (§7.2). |
+| **Outputs** | Stable single best by default; opt-in `--candidates N` returns *meaningfully distinct* layouts (§7.4). |
+| **Word distinction** | Anchors via the fragment grid (§6.6); **priority scores de-scoped** (§3). |
+| **Enumerate** | `--enumerate` retained — exhaustive count/emit of *all* feasible full placements (old `--all`). |
+
+### 7.2 Objective (LOCKED form; constants empirically calibrated)
+`maximize  Σ_w [ WCap · min(checked(w), target(w)) + WTail · checked(w) ]`
+- `target(w) = ceil(L/2)` by default (reuses `word_meets_half/2`).
+- Default integer weights `WCap:WTail = 5:1` ⇒ `ε = 0.2`. The **cap creates balance** (stops rewarding already-checked words, redirecting effort to laggards, anti-stub in a length-aware way); the **tail keeps an interlock gradient above the cap** and breaks ties toward crossier layouts.
+- Integer arithmetic for deterministic tiebreaks (mirrors `placement_key`'s idiom).
+- **Reachability caveat (load-bearing — empirically confirmed).** The cap only balances when `target` is attainable at the densities Flavour A actually produces. Probes confirm this bites on realistic inputs: toc_demo reaches `ceil(L/2)` on only **1/16** words (and `--min-half` makes it infeasible outright), while the dense quality_22 mesh reaches it on **19/22** — so the cap is *inert on sparse link-sets, active on dense meshes*. Where it is inert, the objective **silently degenerates to plain total-crossings**. ⇒ `--check-target` MUST be a **real tunable**, and `target` and `ε` MUST be **calibrated against the fixtures *before weights are locked*** (calibration fixtures: toc_demo = sparse/inert, quality_22 = dense/active), lowering `target` below `ceil(L/2)` where half is unreachable, and **reporting when the objective has degenerated**. This is a calibration/tunability obligation, not a change to the objective *form*.
+- **`maximin`/leximin are NOT the search driver** (non-decomposable, useless early bound, defeats pruning). Reserve them only as a tiebreak among final top candidates, or as an optional hard per-word floor (a cheap forward-checkable *constraint*, not the objective).
+
+### 7.3 Engine properties
+- MRV-first DFS over `crossword.pl`'s skeleton with incumbent tracking + admissible-bound pruning; branch step reuses `select_inc`/`find_intersecting_word`/`assign_word` unchanged. Whether the search layer *beyond the first incumbent* earns its keep is gated by a measurement (plan Phase 1.5) — probes suggest the bound prunes little at our sizes.
+- The objective is **additively decomposable** ⇒ incremental per-placement update + cheap admissible bound for pruning.
+- **Anytime with a node/inference-count budget (not wall-clock):** optimization is strictly harder than first-solution search, so the contract is **"best within budget,"** not "proven optimum." MRV-first finds a strong incumbent early; budget exhaustion returns best-so-far. The budget MUST be a node/inference count for determinism (INV-2); a wall-clock cap may exist only as a safety valve that marks output `truncated`. **Budget-exhausted ≠ unplaceable** (see AC-ARR-1).
+
+### 7.4 Sizing & candidates
+- **`max`** (default): `N` is a *ceiling*; emit the tight crop ≤ N×N (auto-shrinks for small inputs). Implemented as the tight enclosing **square**, side `max(H,W)`, anchored at the content's top-left — the output schema is single-`gridLength` square (§6.1), so the crop is squared rather than rectangular.
+- **`fixed`**: `N` is the *canvas*; emit a full N×N grid, uncovered cells as blocks.
+- Both modes are orthogonal to `--strict`/`--best-effort` (either can fail-strict or drop-best-effort when words don't fit N×N).
+- **`--candidates N`**: default is a single deterministic best. `N` opts into alternatives selected for **diversity**. Distinctness is sourced from **constructor breadth (multiple deterministic seeds) + greedy diversity**, *not* from a single deterministic B&B's leaves (which are near-duplicates — the global optimum ± one nudged word). Then greedily pick the best, then each next-best whose **placement-distance ≥ τ** from all already-picked (distance = fraction of words placed at a different cell/orientation; τ default ~0.3, tunable/calibrated). This is why candidates ride the greedy path (plan Phase 6).
+
+### 7.5 Acceptance criteria
+**AC-ARR-1** `arrange --strict` resolves to exactly one of three outcomes and never drops silently: **(a)** all words placed in a legal layout; **(b)** search *completed* without placing a word ⇒ exit non-zero **naming the unplaceable word(s)**; **(c)** budget exhausted before a complete placement ⇒ exit non-zero reporting **"not proven within budget"** (NOT "unplaceable").
+**AC-ARR-2** `arrange --best-effort` places a maximal subset, emits the layout, and reports the dropped set; never fails when ≥1 word is placeable.
+**AC-ARR-3** Every emitted layout re-validates as legal against the shared legality core (free property test).
+**AC-ARR-4** For the benchmark fixtures, the optimizer's reward ≥ the old `solve`'s arbitrary-fill reward (no regression in interlock quality).
+**AC-ARR-5** `--size-mode max` output is the tight enclosing square (side `max(H,W)` ≤ N), anchored at the content's top-left; `fixed` output is exactly N×N with blocks for empty cells.
+**AC-ARR-6** Output is deterministic (INV-2): repeated runs are byte-identical; no shuffle path exists.
+**AC-ARR-7** `--candidates K` returns up to K layouts, each pairwise ≥ τ apart; fewer than K only if fewer ≥τ-distinct layouts exist (and that is reported).
+**AC-ARR-8** `--enumerate` counts/emits all feasible full placements, matching the old `--all` count on shared fixtures.
+**AC-ARR-9** The carried incremental reward equals a from-scratch `layout_reward` recompute on the final placement (delta correctness).
+**AC-ARR-10** A run that hits the node/inference budget returns the best layout found so far and **flags** that the optimum was not proven.
+
+*(Calibration of `ε`, `target`, `τ` against fixtures is an implementation task tracked in the build plan, not a product decision.)*
+
+---
+
+## 8. Flavour B — cryptic setting tools
+
+### 8.1 `lint` — grid validator / profiles  **[LOCKED]**
+Consumes a canonical layout (what `arrange` emits) and reports **PASS / WARN / FAIL per rule, per word**, plus a summary verdict. Reuses the shared metric predicates; needs no engine change.
+
+Rules (per the research doc + symmetry/size addenda):
+| Rule | Default severity | Notes |
+|---|---|---|
+| Min length ≥ 3 | profile-dependent | FAIL for cryptic profiles; WARN for the TOC default. Always *reported*. |
+| Checked fraction ≥ `ceil(L/2)` per word | FAIL (cryptic) | Reuses `word_meets_half/2`. |
+| Longest unchecked run | FAIL if ≥ 3 (triple-unch ban) | `max_unch_run`. |
+| Times positional double-unch (no double-unch at word ends) | WARN/FAIL by profile | Optional floor predicate. |
+| Odd-vs-even checking | WARN | Advisory. |
+| Connectivity | PASS by construction | Already enforced. |
+| **Symmetry deficit** | **profile-set, never unconditional FAIL** | 180° rotational symmetry is a **strong default with theme-gated exceptions**, NOT a universal rule. Report a deficit; severity by profile; honour a per-puzzle `--allow-asymmetry` override (mirrors Exet's toggle). |
+
+Profiles (`--profile`): `blocked-uk` (enforce symmetry, ≥half checking, triple-unch ban), `barred-ximenean` (per-length unch band; relaxed symmetry), `american` (every cell checked), `toc` (advisory-only — the relaxed Flavour-A default). Inherently-judgemental checks (surface, loose synonyms) are **advisory**, never hard FAIL (Principle #7: Ximenean-configurable, never Ximenean-only).
+
+**AC-LINT-1** Given a layout + profile, `lint` emits a per-rule per-word PASS/WARN/FAIL report and a summary verdict.
+**AC-LINT-2** Exit code is 0 for PASS/WARN, non-zero only when a FAIL-severity rule trips under the chosen profile.
+**AC-LINT-3** Symmetry never hard-FAILs under `--allow-asymmetry`, and never FAILs at all under a profile that doesn't enforce it.
+**AC-LINT-4** Each profile applies exactly its documented rule/severity set; advisory checks never escalate to FAIL.
+
+*(Open: exact barred-Ximenean per-length unch table and per-barred-publication symmetry codes — §10. Build the blocked-uk/toc/american profiles first; barred-ximenean profile lands when the table is primary-sourced.)*
+
+### 8.2 `export` — standard-format interchange  **[LOCKED]**
+Transformations of the canonical JSON (§6.5), not new emitters.
+- **ipuz** (`--to ipuz`): invert `null`→`#`, split the merged cell object into parallel `puzzle`/`solution` arrays, group words by direction into a `clues` dict, add `version`/`kind`/`dimensions`. Emit **ipuz v2** (`"version":"http://ipuz.org/v2"`, `"kind":["http://ipuz.org/crossword#1"]`). ipuz carries no symmetry field — symmetry stays a crosswordsmith-side lint concept.
+- **Exolve** (`--to exolve`): plain-text, git-diffable; the only common format carrying bars, ninas, definition-span marking, annotations. Line-per-element granularity (round-trips to Exet).
+- **`.puz`/`.jpz`/PDF**: reached via off-the-shelf `kotwords` from the ipuz output — **not** emitted natively (§3).
+
+**AC-EXP-1** `export --to ipuz` produces spec-valid ipuz v2 that a third-party consumer (e.g. via kotwords) ingests without error.
+**AC-EXP-2** `export --to exolve` produces text that round-trips through Exet (load → save → equivalent grid+entries).
+**AC-EXP-3** Export preserves enumerations and `meta`-borne clue text where the target format has a field for them; no data invented.
+
+### 8.3 Stock-grid library + house-style profiles  **[PARTIAL]**
+A **bundled, curated** set of pre-validated legal grid templates (black-square patterns / slot lists), **not** a generator — real publications curate only dozens (Times 64, Guardian ~72), so this is a small static asset. Realistic presets for the *current block-only* world: **15×15** (primary), **13×13** (quick), **23×23** (jumbo) — all blocked, all odd. The `~12×12 barred` cluster and rectangular/thematic shapes are out of scope (need the barred engine / are different products).
+- Templates double as `lint` profile inputs and (later) `fill` inputs.
+- Validated once at design time with the shared metric predicates repurposed as **template validators**.
+
+*Open (§10): the template schema; which specific grids seed the library. PARTIAL until those are decided.*
+
+### 8.4 `fill` — grid-first, open-dictionary auto-fill  **[DEFERRED]**
+**Not buildable yet.** Design *intent* only; promotion to LOCKED requires a decision pass (§10).
+
+**Intent.** The only path to *authentic* cryptic layout: take a pre-validated legal grid, fill its slots from a large open dictionary subject to crossing constraints, with the user's words pinned as **seeds** (via the fragment primitive). This is how every other tool works, and it is a **separate engine** from `arrange` — it shares only the emit/metric/substrate layers, not the legality core.
+
+**Architecture sketch (from the research doc — *not* committed decisions):**
+1. Legal-grid template representation + the stock library (§8.3).
+2. Slot enumeration from a fixed black-square pattern.
+3. A filler dictionary + pattern index (UKACD18, BSD-3, license-cleared for bundling).
+4. A dictionary-driven MRV/backtracking fill search (selects *dictionary* words per slot, not a fixed list), seeds pinned.
+5. Drop the free-canvas legality core (`adj_is_free`/`no_word_merge`/`check_prev/next_cell`) — black squares delimit runs explicitly.
+
+**Bifurcation:** `fill`-blocked (reachable from the existing blocked cell model) comes first; `fill`-barred (different cell/edge model) is furthest out and may never ship.
+
+### 8.5 Backlog — tagged, not yet specified
+These are recognised future capabilities. Each is **out of scope until specified here** (a §10 decision pass per feature). Listed so they are tracked, not so they are built.
+
+| Feature | Flavour | Note |
+|---|---|---|
+| Per-entry cluing-potential annotation (`meta.cluing`) | B | Computed at emit-time answer→meta join; engine stays metadata-agnostic. |
+| Nina seeding | Shared | **Absorbed into the fragment-grid primitive** (§6.6) — not a separate feature. |
+| `min_len:3` hard floor option | B | Soft default for TOC; always *report* sub-3. |
+| Clue stockpile keyed by answer (`meta`) | B | Pure data plumbing on the answer key. |
+| Prolog-native pattern/anagram query endpoint | B | Maps onto unification/backtracking. |
+| Wordplay-decomposition engine (`meta.clueCandidates`) | B | Generate + verify via backtracking; prune hard. |
+| Batch/deck interface + shell exit codes | Shared | Pipeline embedding. |
+| Scored-fill drop-order/tiebreak | B (legacy) | **Note tension:** scores were de-scoped for `arrange` (§3); only meaningful if a scored-drop mode is ever reintroduced. Currently dormant. |
+
+---
+
+## 9. Cross-cutting requirements
+
+Re-stated as testable obligations (the invariants from §4 plus determinism/license):
+**AC-X-1** No component threads `meta` through placement or numbering (INV-1) — verifiable by a placement run being identical with `meta` stripped.
+**AC-X-2** All output is stable sorted-key JSON; no nondeterministic ordering (INV-2).
+**AC-X-3** Every drop/compromise/infeasibility is reported in output, never swallowed (INV-3).
+**AC-X-4** No bundled data carries a non-permissive license (INV-4).
+
+---
+
+## 10. Open-decisions register
+
+The **only** sanctioned places where scope is still undecided. A component cannot be promoted from DEFERRED/PARTIAL to LOCKED until its rows here are resolved in a recorded decision pass.
+
+| # | Component | Open decision | Status |
+|---|---|---|---|
+| OD-1 | `fill` (§8.4) | Blocked-only v1, or design barred-compatibility in from the start? | open |
+| OD-2 | `fill` | Dictionary integration shape: in-memory index, external index, query protocol? Which lexicon as default (UKACD18 confirmed license-clean)? | open |
+| OD-3 | `fill` | How seeds/fragment-grid semantics carry into open-dictionary fill (pin-and-fill-around vs. seed-as-hint). | open |
+| OD-4 | `fill` | Which house-style profiles ship in v1, and the failure contract when no fill exists. | open |
+| OD-5 | Stock-grid library (§8.3) | Template schema (black-square mask vs. explicit slot list vs. both). | open |
+| OD-6 | Stock-grid library | Which specific grids seed the bundled library, and provenance/license of each. | open |
+| OD-7 | `lint` barred profile (§8.1) | Exact barred-Ximenean per-length unch table; per-publication barred symmetry codes — primary-source before building. | open |
+| OD-8 | Backlog (§8.5) | Each backlog feature needs its own decision pass + spec section before implementation. | open |
+| OD-9 | `arrange` (impl, not product) | Empirical calibration of `ε`/`target`/`τ`; thin fragment-form syntax; duplicate-answer disambiguation. | tracked in build plan |
+
+---
+
+## 11. Glossary
+
+- **Flavour A / Flavour B** — the two product surfaces under one CLI (§1).
+- **Closed-set / closed-set inversion** — placing only the user-supplied words, no filler dictionary (Flavour A).
+- **Grid-first** — designing a legal black-square pattern up front, then filling it from a dictionary (Flavour B `fill`).
+- **Checking / checked cell** — a cell shared by an across and a down word (occupancy ≥ 2).
+- **Unch / unchecked run** — consecutive cells belonging to only one word; runs ≥ 3 are the triple-unch FAIL.
+- **Fragment grid** — a partial layout the engine solves from; presence = fixed (§6.6).
+- **Capped reward / cap target** — `min(checked, ceil(L/2))`; the cap is what produces balance (§7.2).
+- **Anytime / budget** — return best-so-far within a node/inference-count budget (not wall-clock, for determinism) rather than proving the optimum (§7.3).
+- **Blocked vs. barred** — black-square grid vs. bar-delimited grid; barred is a separate engine (out of scope for now).
+- **Stock grid** — a pre-validated, bundled legal grid template (§8.3).
+- **LOCKED / PARTIAL / DEFERRED** — implementation-readiness tags (see "How to read this document").
