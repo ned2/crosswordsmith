@@ -40,22 +40,19 @@ check_golden() {
 }
 
 echo
-echo "=== golden output regression ==="
-check_golden "crossword 17 topleft_across" \
-    tests/golden/grid_17_topleft_across.txt \
-    ./crossword.pl --input fixtures/bundled_17_clues.pl 17 topleft_across
-check_golden "arrange bundled_17 fixed" \
+echo "=== golden output regression (the crosswordsmith CLI, end to end) ==="
+check_golden "arrange fixed" \
     tests/golden/arrange_bundled_17_fixed.json \
-    swipl -q -g 'arrange_run("fixtures/bundled_17_clues.pl",17,fixed),halt' -t 'halt(1)' arrange.pl
-check_golden "arrange toc_demo max" \
+    ./crosswordsmith arrange --strict --size-mode fixed --size 17 --input fixtures/bundled_17_clues.pl
+check_golden "arrange max" \
     tests/golden/arrange_toc_demo_max.json \
-    swipl -q -g 'arrange_run("fixtures/toc_demo.pl",25,max),halt' -t 'halt(1)' arrange.pl
-check_golden "arrange bundled_17 fragment" \
+    ./crosswordsmith arrange --strict --size-mode max --size 25 --input fixtures/toc_demo.pl
+check_golden "arrange fragment" \
     tests/golden/arrange_bundled_17_fragment.json \
-    swipl -q -g 'arrange_fragment_run("fixtures/bundled_17_clues.pl","fixtures/bundled_17_fragment.json",fixed),halt' -t 'halt(1)' arrange.pl
-check_golden "arrange bundled_17 candidates" \
+    ./crosswordsmith arrange --strict --size-mode fixed --fragment fixtures/bundled_17_fragment.json --input fixtures/bundled_17_clues.pl
+check_golden "arrange candidates" \
     tests/golden/arrange_bundled_17_candidates.json \
-    swipl -q -g 'arrange_candidates_run("fixtures/bundled_17_clues.pl",17,strict,fixed,3),halt' -t 'halt(1)' arrange.pl
+    ./crosswordsmith arrange --strict --size-mode fixed --candidates 3 --size 17 --input fixtures/bundled_17_clues.pl
 
 echo
 if [ "$status" -eq 0 ]; then

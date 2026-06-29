@@ -883,3 +883,21 @@ fewer >=tau-distinct layouts exist~n",
 arrange_candidates_run(File, GridLen, DropContract, SizeMode, K) :-
     load_clues(File, Words),
     arrange_candidates_solve(Words, GridLen, DropContract, SizeMode, K).
+
+
+% --- enumerate (count all feasible full placements) ------------------------
+% The `--enumerate` engine seam (design-spec §7.1, AC-ARR-8): the exhaustive
+% count of every feasible full placement on an N x N grid, over all four start
+% corners. Reuses crossword.pl's all_crossword/5 with the production default
+% strategy, so the count matches the old `--all` exactly (strategies only
+% reorder the same search tree). The branch step / legality core are untouched.
+arrange_enumerate(Words, GridLen, Num) :-
+    default_strategy(Strat),
+    all_crossword(Strat, GridLen, Words, _StartLoc, Num).
+
+% Count + print the enumeration on stdout (a bare integer), as the old CLI did.
+arrange_enumerate_solve(Words, GridLen) :-
+    check_unique_answers(Words),
+    arrange_enumerate(Words, GridLen, Num),
+    current_output(Out),
+    writeln(Out, Num).

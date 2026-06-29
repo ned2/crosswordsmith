@@ -1,11 +1,15 @@
 #!/usr/bin/swipl
 
 :- set_prolog_flag(verbose, silent).
-% initialization(main, main) (vs plain `initialization main`) means main is
-% only run when this file is executed as a script. When the file is loaded
-% (consulted) by the test suite, main does not fire, so the predicates below
-% can be unit tested in isolation. It also gives a proper process exit code.
-:- initialization(main, main).
+% crossword.pl is now a LIBRARY: the shared substrate + the legacy free-canvas
+% solver core (grid model, legality, clue numbering, JSON emit, input loading),
+% reused by arrange.pl. The command-line interface moved to the `crosswordsmith`
+% script (design-spec §5, Phase-7 cutover). The only entry point left here is a
+% migration shim: running this file directly points the user at the new CLI.
+% initialization(_, main) fires only when this file is the script on the command
+% line (not when consulted by a harness/benchmark), so consulting it is still
+% side-effect-free and its predicates remain unit-testable in isolation.
+:- initialization(legacy_main, main).
 
 % crossword.pl - A crossword layout generator in Prolog
 % Copyright (C) 2011  Ned Letcher - nedned.net
@@ -40,17 +44,11 @@
 % Used by the JSON output emitter (canonically library(json) on SWI 10+).
 :- use_module(library(http/json)).
 
-% Command-line option parsing (--input/--shuffle/--all/--out + positionals).
-:- use_module(library(optparse)).
-
 % limit/2, used by the capped placement count in the mrv_capped strategy.
 :- use_module(library(solution_sequences)).
 
 % aggregate_all/3, used to count solutions in all_crossword/5.
 :- use_module(library(aggregate)).
-
-% random_permutation/2, used by shuffle/2 for the --shuffle random layout.
-:- use_module(library(random)).
 
 % The greedy quality layout engine (docs/cryptic-layout-spec.md), reached via
 % --quality. Loaded from the same directory as this script so it resolves
@@ -66,96 +64,20 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
-% Command-line entry point. Options are parsed with library(optparse), which
-% strips the flags from argv and returns the leftover positional arguments
-% (grid_length and an optional start_loc, as atoms). So the flags compose
-% freely and in any order, and adding another is a one-line spec entry rather
-% than another arg-matching clause. The dispatch lives in run/2.
-main :-
-    current_prolog_flag(argv, Argv),
-    opts_spec(Spec),
-    opt_parse(Spec, Argv, Opts, Positional),
-    run(Opts, Positional).
-
-% The option set. `input`/`out` default to '' meaning "not given". The
-% `strategy` default is the production default (default_strategy/1), so the
-% CLI and the find_crossword/5 + crossword/3 convenience wrappers all agree.
-opts_spec(Spec) :-
-    default_strategy(DefStrategy),
-    Spec =
-    [ [opt(help),    type(boolean), default(false),
-       shortflags([h]), longflags([help]),
-       help('show this help and exit')],
-      [opt(input),   type(atom),    default(''), meta('FILE'),
-       longflags([input]),
-       help('load clues from FILE (.json or .pl)')],
-      [opt(shuffle), type(boolean), default(false),
-       longflags([shuffle]),
-       help('shuffle the words and start positions for a random layout')],
-      [opt(all),     type(boolean), default(false),
-       longflags([all]),
-       help('count every solution instead of emitting one (see README)')],
-      [opt(out),     type(atom),    default(''), meta('FILE'),
-       longflags([out]),
-       help('write output to FILE instead of stdout')],
-      [opt(strategy), type(atom),   default(DefStrategy), meta('STRAT'),
-       longflags([strategy]),
-       help('variable-ordering strategy: baseline, mrv, mrv_capped, or mrv_inc')],
-      [opt(quality), type(boolean), default(false),
-       longflags([quality]),
-       help('cryptic-style quality layout: greedy density construction, the engine picks the grid, words may be dropped (no grid/start args needed)')],
-      [opt(min_half), type(boolean), default(false),
-       longflags(['min-half']),
-       help('quality floor: every word at least half-checked (drops words that cannot be)')],
-      [opt(max_unch), type(integer), default(-1), meta('K'),
-       longflags(['max-unch']),
-       help('quality floor: no word has more than K unchecked cells in a row')],
-      [opt(all_words), type(boolean), default(false),
-       longflags(['all-words']),
-       help('quality floor: every input word must be placed (fail rather than drop)')]
-    ].
-
-% Dispatch on the parsed options. The positional grammar is:
-%   --input FILE <grid_length> <start_loc>   solve and emit one JSON solution
-%   --input FILE --shuffle <grid_length>     ditto, words/start shuffled
-%   --input FILE --all <grid_length> [loc]   count solutions (all start_locs if loc omitted)
-% --out FILE is orthogonal and composes with any of these.
-run(Opts, _) :-
-    memberchk(help(true), Opts),
-    !,
-    print_usage.
-run(Opts, Positional) :-
-    memberchk(input(InputFile), Opts),
-    require_input_file(InputFile),
-    memberchk(out(OutFile), Opts),
-    memberchk(strategy(Strategy), Opts),
-    require_strategy(Strategy),
-    load_clues(InputFile, Words),
-    (   memberchk(quality(true), Opts)
-    ->  build_floors(Opts, Floors),                       % no grid/start needed
-        with_output(OutFile, quality_solve(Words, Floors))
-    ;   memberchk(all(true), Opts)
-    ->  positional_all(Positional, GridLen, StartLoc),   % StartLoc unbound if absent
-        with_output(OutFile, count_solutions(Strategy, GridLen, Words, StartLoc))
-    ;   memberchk(shuffle(true), Opts)
-    ->  Positional = [GridLenArg],
-        atom_number(GridLenArg, GridLen),
-        solve_shuffled(Strategy, GridLen, Words, OutFile)
-    ;   Positional = [GridLenArg, StartLocArg],
-        atom_number(GridLenArg, GridLen),
-        valid_loc(StartLocArg),
-        with_output(OutFile, crossword(Strategy, GridLen, Words, StartLocArg))
-    ).
-
-print_usage :-
-    opts_spec(Spec),
-    opt_help(Spec, Help),
-    format("Usage: crossword.pl --input <file> [options] <grid_length> [<start_loc>]~n~n~w", [Help]).
-
-require_input_file('') :-
-    !,
-    throw(error(missing_input_file, _)).
-require_input_file(_).
+% Migration shim. The command-line interface is now the `crosswordsmith` script
+% (design-spec §5.3); this file is a library. Running it directly only points
+% the user at the new subcommand CLI, then exits non-zero. Named `legacy_main`
+% (not `main`) so it never clashes with `crosswordsmith`'s or a benchmark
+% harness's own `main/0` when this file is consulted.
+legacy_main :-
+    format(user_error,
+"crossword.pl is now an internal library; the CLI is the `crosswordsmith` script.~n\c
+  old: ./crossword.pl --input F <N> <loc>   ->  crosswordsmith arrange --strict --size-mode fixed --size <N> --input F~n\c
+  old: ./crossword.pl --input F --quality   ->  crosswordsmith arrange --best-effort --size-mode max --input F~n\c
+  old: ./crossword.pl --input F --all <N>   ->  crosswordsmith arrange --enumerate --size <N> --input F~n\c
+Run `crosswordsmith` with no arguments for usage. (--shuffle is removed: output is deterministic.)~n",
+           []),
+    halt(1).
 
 % The variable-ordering strategies the solver can run. `baseline` is the
 % original input-order search; `mrv`, `mrv_capped` and `mrv_inc` are the
@@ -178,36 +100,6 @@ require_strategy(S) :-
     !.
 require_strategy(S) :-
     throw(error(unknown_strategy(S), _)).
-
-% Build the quality-engine Floors dict from the CLI flags (groundedness ->
-% mode: no floors = auto, some = manual/partial, all = strict). See quality.pl.
-build_floors(Opts, floors{min_half:MH, max_unch_run:MU, all_words:AW}) :-
-    ( memberchk(min_half(true), Opts)              -> MH = on ; MH = off ),
-    ( memberchk(max_unch(K), Opts), integer(K), K >= 0 -> MU = K ; MU = off ),
-    ( memberchk(all_words(true), Opts)             -> AW = on ; AW = off ).
-
-% Positional args for the --all path: grid_length is required; start_loc is
-% optional and left unbound when absent, so all four start positions are
-% enumerated by the solver.
-positional_all([GridLenArg], GridLen, _StartLoc) :-
-    atom_number(GridLenArg, GridLen).
-positional_all([GridLenArg, StartLoc], GridLen, StartLoc) :-
-    atom_number(GridLenArg, GridLen),
-    valid_loc(StartLoc).
-
-% Solve with shuffled words and start order; member/2 is the backtrack point
-% that tries successive shuffled start positions until one yields a layout.
-solve_shuffled(Strategy, GridLen, Words, OutFile) :-
-    start_locs(Locs),
-    shuffle(Words, UseWords),
-    shuffle(Locs, ShuffledLocs),
-    member(StartLoc, ShuffledLocs),
-    with_output(OutFile, crossword(Strategy, GridLen, UseWords, StartLoc)).
-
-% Count solutions for one start position (or all, with StartLoc unbound).
-count_solutions(Strategy, GridLen, Words, StartLoc) :-
-    all_crossword(Strategy, GridLen, Words, StartLoc, Num),
-    writeln(Num).
 
 valid_loc(Loc) :-
     start_locs(Locs),
@@ -310,8 +202,6 @@ prolog:error_message(json_invalid_answer(Entry)) -->
     [ 'clues file: every entry needs a string "answer" (offending entry: ~q)'-[Entry] ].
 prolog:error_message(json_invalid_meta(Answer)) -->
     [ 'clues file: "meta" for answer ~q must be a JSON object'-[Answer] ].
-prolog:error_message(missing_input_file) -->
-    [ 'missing required --input FILE option' ].
 prolog:error_message(unknown_strategy(S)) -->
     [ 'unknown --strategy ~q; expected one of baseline, mrv, mrv_capped, mrv_inc'-[S] ].
 prolog:error_message(unsupported_clue_file(File, Ext)) -->
@@ -972,9 +862,3 @@ remove_x(Y,[X|Xs],[X|Tail]) :-
 	remove_x(Y,Xs,Tail).
 remove_x(X,[X|Xs],Xs) :- !.
 remove_x(_,[],[]).
-
-
-%% shuffle(ListIn, ListOut) - randomly shuffles
-%% ListIn and unifies it with ListOut
-shuffle(List, Shuffled) :-
-    random_permutation(List, Shuffled).

@@ -82,11 +82,6 @@ test(start_bottomleft,     [true(N-D == 273-across)]):- start_loc(bottomleft, 17
 test(remove_x_first, [true(R == [a,c,b]), nondet]) :- remove_x(b, [a,b,c,b], R).
 test(remove_x_absent, [true(R == [a,b,c]), nondet]) :- remove_x(z, [a,b,c], R).
 
-% shuffle is a permutation of its input (we cannot assert order: it is
-% random, so just check the multiset of elements is preserved).
-test(shuffle_is_permutation, [true(Sorted == [1,2,3,4,5])]) :-
-    shuffle([1,2,3,4,5], Out), msort(Out, Sorted).
-
 % init_grid builds a GridLen*GridLen assoc of `empty` cells.
 test(init_grid_size, [true(Len =:= 9)]) :-
     init_grid(3, G), assoc_to_list(G, L), length(L, Len).

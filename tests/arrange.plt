@@ -328,4 +328,17 @@ test(candidates_distance_translation_invariant) :-
     placement_assoc(L2, 17, A2),
     pos_diff_count(A1, A2, 0).
 
+% --- Phase 7: enumerate seam -------------------------------------------------
+
+% AC-ARR-8: --enumerate counts every feasible full placement, matching the old
+% --all count (it is all_crossword/5 under the production default strategy, over
+% all start corners).
+test(enumerate_matches_all_crossword) :-
+    Words = [['OMEGA POINT', _{}], ['GNOSTIC GOSPELS', _{}]],
+    arrange_enumerate(Words, 17, N1),
+    default_strategy(Strat),
+    all_crossword(Strat, 17, Words, _StartLoc, N2),
+    N1 =:= N2,
+    N1 > 0.
+
 :- end_tests(arrange).

@@ -1,30 +1,30 @@
 crosswordsmith
 ===============================================================================
 
-A crossword layout generator in Prolog. 
+A CLI-first crossword layout engine in SWI-Prolog. It arranges a **closed set
+of words** into an interlocking crossword-shaped layout and emits deterministic,
+diffable JSON. It feeds clue-writing tools; it is not one. (The full product
+vision and its acceptance criteria live in
+[`docs/design-spec.md`](docs/design-spec.md).)
 
-This is a crossword grid generator implemented in SWI Prolog. The solver
+The engine is **deterministic**: the same input and flags always produce
+byte-identical output — no randomness, no shuffle. It lays words down one at a
+time so each crosses an already-placed word and never sits hard up against
+another word's letters, maximising a capped interlock objective over an N×N
+grid. The grid side is given with `--size` (the engine does not guess it); a
+length too small for the words is reported, never silently mangled. The solver
 core is portable Prolog, though the clue-input and JSON-output paths use
-SWI-specific features (see Requirements). The solver works
-deterministically, laying down one word at a time by placing it such
-that it intersects with an existing word, and also such that it
-doesn't sit hard up against any letters from another word.
+SWI-specific features (see Requirements).
 
-The solver is designed to run online, so it returns the first solution
-rather than trying to find them all.  The list of input words is
-shuffled first so repeated solutions on different runs are less
-likely. The start location for laying down the first word can also be
-shuffled or specified in advance. The algorithm does not try guess the
-grid length, so this must be specified by the user. It is of course
-possible to specify a length for which there are no solutions. Also
-note that duplicate solutions exist. These consist of the same layout
-of words, but found by laying out words in a different order.
+The command-line interface is the **`crosswordsmith`** script, with one verb
+per capability — `arrange` today; `lint`, `export`, and `fill` are specified
+for later. The former `./crossword.pl …` interface has been replaced;
+`crossword.pl` is now an internal library (see [Migration](#migration-from-the-old-crosswordpl-cli)).
 
-The words and their accompanying solutions are supplied as an input file.
-The repository includes a Prolog fixture, `fixtures/bundled_17_clues.pl`,
-which also allows you to attach a URL to each word, as this was originally
-intented for embedding in a web page, where the clues/solved words can be
-links.
+Words — and optional per-word metadata (a clue, a link, anything) — are supplied
+as a JSON file or a Prolog `clues/1` fixture. The bundled
+`fixtures/bundled_17_clues.pl` attaches a URL to each word (it was originally
+for embedding in a web page, where the clues/solved words are links).
 
 
 ## Requirements
@@ -40,84 +40,89 @@ PPA).
 
 ## Usage
 
-`crossword.pl` is an executable SWI-Prolog script (note the `#!`
-shebang at the top). Run it directly:
+`crosswordsmith` is an executable SWI-Prolog script (note the `#!` shebang). A
+bare invocation prints usage and exits non-zero; every capability is a verb. If
+you do not have execute permission set, run it as `swipl crosswordsmith <args…>`.
 
-    # Place the words using a fixed starting position.
-    $ ./crossword.pl --input <input_file> <grid_length> <start_loc>
+    $ ./crosswordsmith arrange --input <file> [options]
 
-    # Find a vaguely random layout by shuffling the input words and the
-    # order in which start positions are tried.
-    $ ./crossword.pl --input <input_file> --shuffle <grid_length>
+### `arrange` — lay out a closed set of words
 
-    # Count how many distinct solutions exist (see the note below).
-    $ ./crossword.pl --input <input_file> --all <grid_length> [<start_loc>]
+    # Strict (place every word) on a tight square crop. The bundled set needs a
+    # side of 17 (it has a 16-letter answer); --size is a ceiling under the
+    # default --size-mode max, so the result auto-shrinks to fit.
+    $ ./crosswordsmith arrange --size 17 --input fixtures/bundled_17_clues.pl
 
-    # JSON and Prolog clue inputs are both accepted.
-    $ ./crossword.pl --input puzzle.json <grid_length> <start_loc>
-    $ ./crossword.pl --input fixtures/bundled_17_clues.pl 17 topleft_across
+    # A fixed 17x17 canvas (uncovered cells emitted as blocks).
+    $ ./crosswordsmith arrange --strict --size-mode fixed --size 17 \
+        --input fixtures/bundled_17_clues.pl
 
-    # Write the output to a file. --out composes with any form above.
-    $ ./crossword.pl --input <input_file> --out solution.json <grid_length> <start_loc>
+    # Best-effort: place a maximal subset on a tight grid; report the dropped
+    # words on stderr.
+    $ ./crosswordsmith arrange --best-effort --size 11 \
+        --input fixtures/bundled_17_clues.pl
 
-    # Show all options.
-    $ ./crossword.pl --help
+    # Seed from a partial layout (anchors): pin some words, let the engine
+    # finish. The fragment's gridLength sets the size.
+    $ ./crosswordsmith arrange --fragment fixtures/bundled_17_fragment.json \
+        --input fixtures/bundled_17_clues.pl
 
-Arguments:
+    # Up to K meaningfully-distinct layouts, emitted as a JSON array.
+    $ ./crosswordsmith arrange --candidates 3 --size 17 \
+        --input fixtures/bundled_17_clues.pl
 
-- `grid_length` — an integer giving the side length of the (square)
-  grid. The words in `fixtures/bundled_17_clues.pl` are intended for a grid
-  of length 17.
-- `start_loc` — where the *first* word is placed. One of:
-  `topleft_across`, `topleft_down`, `topright`, `bottomleft`.
+    # Count every feasible full placement (the old `--all`).
+    $ ./crosswordsmith arrange --enumerate --size 17 \
+        --input fixtures/bundled_17_clues.pl
 
-Options:
+    # Write to a file instead of stdout (composes with any form above; the file
+    # is written only on success, so a failed run leaves no partial file).
+    $ ./crosswordsmith arrange --size 17 --input <file> --out solution.json
 
-- `--input <file>` — required. Load the word/clue set from a `.json` clue file
-  using the interchange schema, or from a `.pl` Prolog fixture containing a
-  `clues/1` term.
-- `--out <file>` — write the output to `<file>` instead of stdout. The file
-  is written only once a solution is found, so an unsolvable run leaves no
-  empty file behind. Without the flag, output goes to stdout as before.
-- `--strategy <name>` — the variable-ordering strategy used by the solver:
-  one of `baseline` (original input-order search), `mrv`, `mrv_capped`, or
-  `mrv_inc`. Defaults to `mrv_inc`, which solves pathological inputs orders of
-  magnitude faster than `baseline` while matching it elsewhere; see
-  `docs/experiments.md`. All strategies produce valid layouts (which one they
-  find can differ).
-- `--quality` — produce a **cryptic-style quality layout** instead of solving a
-  fixed grid: a greedy density-construction engine that picks the grid size
-  itself, interlocks the words as densely as it can, and **drops words that
-  cannot be placed** (reported on stderr). No `<grid_length>`/`<start_loc>` args
-  are needed. Intended for arranging a closed set of links (a "table of
-  contents"). See `docs/cryptic-layout-spec.md`. Optional **floors** (hard
-  constraints; omit for best-effort, combine for stricter):
-  - `--min-half` — every word at least half its cells checked (drops words that
-    can't be).
-  - `--max-unch <K>` — no word has more than `K` unchecked cells in a row.
-  - `--all-words` — every input word must be placed (fail rather than drop).
+**Options** (parsed with `library(optparse)`, so they compose in any order and
+accept the `--flag=value` form):
 
-  When the requested floors can't be met the run exits non-zero with no output
-  and a `no layout satisfies floors …` message — relax a floor and retry.
-- `--help` / `-h` — print the usage summary and exit.
+| flag | meaning |
+| --- | --- |
+| `--input <file>` | **required** — the word/clue set (`.json` or `.pl`). |
+| `--strict` | fail unless every word is placed (the **default**). |
+| `--best-effort` | place a maximal subset; report dropped words on stderr. |
+| `--size <N>` | square grid side (default `15`; a *ceiling* under `--size-mode max`). |
+| `--size-mode fixed\|max` | `fixed` = exact N×N (blocks for empty cells); `max` = tight enclosing-square crop (the **default**). |
+| `--fragment <file>` | seed from a partial-layout fragment (JSON — the emit format made partial). Its `gridLength` sets `N`; `--size` is then redundant, and an error if it disagrees. |
+| `--candidates <K>` | emit up to `K` diverse layouts as a JSON array. Returns fewer than `K` (reported on stderr) when fewer ≥τ-distinct layouts exist. |
+| `--enumerate` | count every feasible full placement instead of emitting a layout. |
+| `--out <file>` | write output to `<file>` instead of stdout. |
+| `--help` / `-h` | print the arrange options. |
 
-Flags are parsed with `library(optparse)`, so they compose in any order and
-also accept the `--flag=value` form (e.g. `--out=solution.json`).
+`--strict` and `--best-effort` are mutually exclusive; `--enumerate` does not
+combine with `--candidates`/`--fragment`, and `--candidates` does not combine
+with `--fragment` (v1). The output is **deterministic**: identical input + flags
+⇒ byte-identical JSON. `--strict` resolves to exactly one of — a full legal
+layout (exit 0); a non-zero exit naming a genuinely unplaceable word; or a
+non-zero *"not proven within budget"*. On any failure with `--out`, no partial
+file is written.
 
-If you do not have execute permission set, you can equivalently run it
-as `swipl crossword.pl <args...>`.
+> **Note on `--enumerate`:** it counts *every* solution by backtracking, and
+> many are the same physical layout reached by placing words in a different
+> order, so the count is large and the search can be slow. Use it on small
+> grids / small clue sets.
 
-Examples:
+### Migration from the old `crossword.pl` CLI
 
-    $ ./crossword.pl --input fixtures/bundled_17_clues.pl 17 topleft_across
-    $ ./crossword.pl --input fixtures/bundled_17_clues.pl --shuffle 17
+The previous `./crossword.pl --input F <N> <loc>` interface is replaced by the
+`crosswordsmith` subcommands — a one-time breaking change:
 
-> **Note on `--all`:** this enumerates *every* solution by
-> backtracking, and the search space is large — many solutions are
-> duplicates that differ only in the order words were laid down. With a
-> fixed `start_loc` it is bounded but can still be slow; with no
-> `start_loc` it additionally enumerates all four starting positions and
-> can take a very long time. Use it for small grids / small clue sets.
+| old | new |
+| --- | --- |
+| `crossword.pl --input F <N> <loc>` | `crosswordsmith arrange --strict --size-mode fixed --size <N> --input F` |
+| `crossword.pl --input F --quality` | `crosswordsmith arrange --best-effort --size-mode max --input F` |
+| `crossword.pl --input F --all <N>` | `crosswordsmith arrange --enumerate --size <N> --input F` |
+
+`--shuffle` is removed (output is now deterministic). `--strategy`/`--start_loc`
+are gone (the engine uses the production strategy internally and sweeps start
+corners itself). Running `./crossword.pl` directly — or `crosswordsmith` with
+old-style arguments — prints this mapping.
 
 
 ## Clues Fixture
@@ -157,7 +162,7 @@ Prolog fixture file with `--input`.
 For programmatic use you can supply the clue set as a JSON file instead,
 without editing any Prolog:
 
-    $ ./crossword.pl --input puzzle.json 17 topleft_across
+    $ ./crosswordsmith arrange --size 17 --input puzzle.json
 
 The file is a JSON object with a `clues` array; each entry mirrors an
 output `words[]` object minus the solver-computed fields:
@@ -240,9 +245,11 @@ The driver is `assign_words/8`. It is a greedy, backtracking placement:
    list. When the pool is empty, every word has been placed and the
    layout succeeds.
 
-Because the words are tried in order and the solver returns the first
-success, a `--shuffle` run randomises both the word order and the order
-the start positions are tried (`shuffle/2`, a thin wrapper over `random_permutation/2`).
+This describes the shared **legality core** (`crossword.pl`), which `arrange`
+reuses. `arrange` drives it with a deterministic most-constrained-first
+(MRV) ordering, constructs over the four start corners, rescores each complete
+layout by a capped interlock objective, and emits the best — so the output is
+stable and shuffle-free (the old random `--shuffle` path was removed).
 
 ### Finishing and output
 
@@ -292,14 +299,17 @@ The full schema and design rationale live in
 
 ## Implementation notes / limitations
 
-- **Grid size is not inferred.** You must pass a `grid_length` that is
-  large enough; too small and there is no solution, and the solver will
-  simply fail to find one.
-- **First-solution semantics.** The solver stops at the first valid
-  layout. `--all` exists to enumerate them but is expensive (see the
-  usage note).
-- **Duplicate solutions.** Many enumerated solutions are the same
-  physical layout reached by placing words in a different order.
+- **Grid size is not inferred.** You pass `--size N` (a ceiling under
+  `--size-mode max`). Too small for the words and `--strict` reports the
+  failure and exits non-zero rather than silently mangling the layout; under
+  `--best-effort` the unplaceable words are dropped and reported.
+- **Best-within-budget, not proven-optimal.** `arrange` constructs a strong
+  layout and rescores it; it does not exhaustively prove the optimum (the
+  search superstructure was descoped after measurement — see
+  [`docs/arrange-implementation-plan.md`](docs/arrange-implementation-plan.md)).
+- **`--enumerate` is expensive.** Many enumerated solutions are the same
+  physical layout reached by placing words in a different order; the count is
+  large and the search slow on big inputs.
 
 
 ## Development
