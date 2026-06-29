@@ -412,3 +412,324 @@ arrange_run(File, GridLen, SizeMode) :-
 arrange_run(File, GridLen, DropContract, SizeMode) :-
     load_clues(File, Words),
     arrange_solve(Words, GridLen, DropContract, SizeMode).
+
+
+% ===========================================================================
+% Phase 5 - fragment-grid seeding (the anchor mechanism). design-spec §6.6.
+%
+% A fragment grid is the emit JSON made partial (words-only v1): presence =
+% fixed. The engine pins every fragment word at exactly its cells, then solves
+% the unmatched remainder with the SAME construct path as the unseeded engine.
+% This generalises the single seed: instead of seeding one word at a start
+% corner, we seed the whole fragment into (Placed, Grid) and shrink Words.
+%
+% Load-bearing properties:
+%   AC-EMIT-2 emit -> re-ingest as fragment -> identical layout (an emitted
+%             layout IS already a valid fragment).
+%   AC-FRAG-3 pinned words sit at exactly their fragment positions.
+% Everything here reuses crossword.pl's legality core (assign_word and the
+% adjacency/merge/prev-cell checks it calls), geometry (cell_coord, word_cells,
+% fits_on_grid) and the MRV-inc remainder search; nothing is re-derived.
+% ===========================================================================
+
+:- multifile prolog:error_message//1.
+
+% --- fragment schema parsing (the emit format, made partial) ----------------
+% A fragment dict -> GridLen + [frag(Answer, Dir, Start, CellNums)]. Validates
+% shape only; reconciliation against --input and legality are seed_from_fragment's
+% job. Throws shaped error/2 terms (rendered by the hooks at the foot of file).
+
+fragment_dict_words(Dict, GridLen, Frags) :-
+    (   is_dict(Dict), get_dict(gridLength, Dict, GridLen),
+        integer(GridLen), GridLen > 0
+    ->  true
+    ;   throw(error(fragment_no_grid_length, _))
+    ),
+    (   get_dict(words, Dict, WordEntries), is_list(WordEntries)
+    ->  true
+    ;   throw(error(fragment_no_words_array, _))
+    ),
+    maplist(fragment_word(GridLen), WordEntries, Frags).
+
+% One fragment word entry -> frag(Answer, Dir, Start, CellNums). Only
+% answer/direction/cells are read; emit's `number`/`meta` are ignored (number
+% is reassigned by clue numbering, meta rejoined from --input at emit time).
+% Start is the 1-based cell number of cells[0]; CellNums is the full declared
+% run as cell numbers (validated against the answer in seed_from_fragment).
+fragment_word(GridLen, Entry, frag(Answer, Dir, Start, CellNums)) :-
+    (   is_dict(Entry), get_dict(answer, Entry, RawAns), fragment_atom(RawAns, Answer)
+    ->  true
+    ;   throw(error(fragment_invalid_answer(Entry), _))
+    ),
+    (   get_dict(direction, Entry, RawDir), fragment_dir(RawDir, Dir)
+    ->  true
+    ;   throw(error(fragment_invalid_direction(Answer), _))
+    ),
+    (   get_dict(cells, Entry, RawCells), is_list(RawCells), RawCells = [_|_]
+    ->  true
+    ;   throw(error(fragment_no_cells(Answer), _))
+    ),
+    maplist(cell_pair_to_num(GridLen, Answer), RawCells, CellNums),
+    CellNums = [Start|_].
+
+% Normalise a JSON string-or-atom to an atom (independent of the double_quotes
+% flag, which differs between consulted source and json_read_dict output).
+fragment_atom(X, A) :- atom(X), !, A = X.
+fragment_atom(X, A) :- string(X), !, atom_string(A, X).
+
+fragment_dir(Raw, Dir) :- fragment_atom(Raw, A), fragment_dir_atom(A, Dir).
+fragment_dir_atom(across, across).
+fragment_dir_atom(down,   down).
+
+% A [Row, Col] pair (0-based, on-grid) -> 1-based row-major cell number.
+cell_pair_to_num(GridLen, Answer, Pair, Num) :-
+    (   Pair = [R, C], integer(R), integer(C),
+        R >= 0, R < GridLen, C >= 0, C < GridLen
+    ->  Num is R * GridLen + C + 1
+    ;   throw(error(fragment_invalid_cell(Answer, Pair), _))
+    ).
+
+% Read a fragment file (JSON - the emit format) into GridLen + frags.
+load_fragment(File, GridLen, Frags) :-
+    setup_call_cleanup(open(File, read, S), json_read_dict(S, Dict), close(S)),
+    fragment_dict_words(Dict, GridLen, Frags).
+
+% The fragment's gridLength sets N; an explicit --size is redundant and an
+% error if it disagrees (design-spec §6.6). Ready for the Phase-7 CLI.
+reconcile_fragment_size(FragGridLen, none, FragGridLen) :- !.
+reconcile_fragment_size(FragGridLen, FragGridLen, FragGridLen) :- !.
+reconcile_fragment_size(FragGridLen, OptSize, _) :-
+    throw(error(fragment_size_mismatch(FragGridLen, OptSize), _)).
+
+
+% --- seeding: pin the fragment, validate up front, shrink Words -------------
+% Pin every fragment word into (Placed, Grid) via the legality core, returning
+% the seeded state and the remaining (unpinned) input words. ALL validation
+% happens here, before any search: AC-FRAG-1 (answer in --input), the declared
+% cells being a legal straight run, and AC-FRAG-2 (the pin is legal against the
+% already-pinned words). Any violation throws a shaped error.
+seed_from_fragment(Frags, Words, GridLen, SeededPlaced, SeededGrid, Remaining) :-
+    check_fragment_unique(Frags),
+    sort_frags_by_start(Frags, Ordered),
+    init_grid(GridLen, G0),
+    foldl(pin_fragment_word(Words, GridLen), Ordered, []-G0, SeededPlaced-SeededGrid),
+    fragment_answers(Ordered, Pinned),
+    remaining_words(Words, Pinned, Remaining).
+
+% Pin one fragment word. Order of checks is deliberate: input-membership first
+% (the clearest authoring error), then declared-cells consistency, then the
+% on-grid legality pin (whose failure is diagnosed by fragment_conflict/7).
+pin_fragment_word(Words, GridLen, frag(Answer, Dir, Start, FragCellNums),
+                  PlacedIn-GridIn, [PW|PlacedIn]-GridOut) :-
+    (   reconcile_answer(Answer, Words, Entry)
+    ->  true
+    ;   throw(error(fragment_word_not_in_input(Answer), _))
+    ),
+    word_letters(Entry, Letters, WLen),
+    (   expected_run(Start, Dir, WLen, GridLen, FragCellNums)
+    ->  true
+    ;   throw(error(fragment_cells_inconsistent(Answer), _))
+    ),
+    (   assign_word(Answer, Letters, WLen, Start, Dir, GridLen,
+                    PlacedIn, GridIn, PW, GridOut)
+    ->  true
+    ;   fragment_conflict(Answer, Letters, Start, Dir, WLen, GridLen, GridIn)
+    ).
+
+% The declared cells must be exactly the straight, on-grid run of the answer's
+% length from Start in Dir - i.e. the fragment's geometry agrees with its own
+% answer/direction. (For a fragment produced by emit this always holds.)
+expected_run(Start, Dir, WLen, GridLen, FragCellNums) :-
+    fits_on_grid(Dir, Start, WLen, GridLen),
+    word_cells(Start, Dir, WLen, GridLen, Run),
+    Run == FragCellNums.
+
+% Diagnose (and throw on) an illegal pin. A clashing fixed letter is the common,
+% precisely-reportable case; anything else (adjacency/merge/abutment) is reported
+% generically. fragment_conflict/7 always throws.
+fragment_conflict(Answer, Letters, Start, Dir, WLen, GridLen, Grid) :-
+    word_cells(Start, Dir, WLen, GridLen, Cells),
+    (   clashing_cell(Cells, Letters, Grid, Cell, Existing, Wanted)
+    ->  cell_coord(GridLen, Cell, RC),
+        throw(error(fragment_letter_clash(Answer, RC, Existing, Wanted), _))
+    ;   throw(error(fragment_illegal_pin(Answer), _))
+    ).
+
+% First cell whose grid letter is already fixed to something the word cannot
+% supply (an overlap conflict). Cells and Letters are the parallel run.
+clashing_cell([Cell|_], [L|_], Grid, Cell, Existing, L) :-
+    get_assoc(Cell, Grid, Existing),
+    Existing \== empty,
+    Existing \== L,
+    !.
+clashing_cell([_|Cs], [_|Ls], Grid, Cell, Existing, Wanted) :-
+    clashing_cell(Cs, Ls, Grid, Cell, Existing, Wanted).
+
+% Reconcile a fragment answer to its --input entry (==-keyed on the answer).
+reconcile_answer(Answer, Words, Entry) :-
+    member(Entry, Words), Entry = [A|_], A == Answer, !.
+
+fragment_answers(Frags, Answers) :-
+    findall(A, member(frag(A, _, _, _), Frags), Answers).
+
+remaining_words(Words, Pinned, Remaining) :-
+    findall(E,
+            ( member(E, Words), E = [A|_], \+ memberchk(A, Pinned) ),
+            Remaining).
+
+% Stable order by start cell so pin order, error reporting and numbering are
+% deterministic (an across+down sharing a start keep fragment order).
+sort_frags_by_start(Frags, Ordered) :-
+    map_list_to_pairs(frag_start, Frags, Pairs),
+    keysort(Pairs, Sorted),
+    pairs_values(Sorted, Ordered).
+frag_start(frag(_, _, Start, _), Start).
+
+% A fragment must not pin the same answer twice (silent double-place guard;
+% mirrors check_unique_answers/1 for the input set).
+check_fragment_unique(Frags) :-
+    fragment_answers(Frags, As),
+    msort(As, Sorted),
+    (   append(_, [D, D|_], Sorted)
+    ->  throw(error(fragment_duplicate_answer(D), _))
+    ;   true
+    ).
+
+
+% --- solving from the seed --------------------------------------------------
+% Generalises the single-seed construct: start from the fragment-seeded
+% (Placed, Grid) and place Remaining via the reused MRV-inc path (select_inc's
+% non-empty-Placed clause fires immediately). One deterministic construction -
+% the fragment fixes the canvas and anchors, so there is no corner/seed sweep.
+construct_from_seed(Remaining, SeededPlaced, SeededGrid, GridLen, AllPlaced) :-
+    assign_words_inc(Remaining, SeededPlaced, none, GridLen, _S, _D,
+                     SeededGrid, _GOut, AllPlaced).
+
+% Strict fragment solve: pin (validating up front), construct the remainder
+% under a budget, rescore, number. Outcome: placed | not_proven | infeasible.
+% seed_from_fragment runs OUTSIDE the budget so conflicts are reported before
+% any search (the §6.6 "validate up front" contract).
+arrange_fragment_strict(Words, Frags, GridLen, Numbered, Reward, Outcome) :-
+    arrange_weights(WCap, WTail),
+    seed_from_fragment(Frags, Words, GridLen, SeededPlaced, SeededGrid, Remaining),
+    arrange_budget(Budget),
+    construct_fragment_one(Remaining, SeededPlaced, SeededGrid, GridLen, Budget, Res),
+    (   Res = ok(AllPlaced)
+    ->  layout_reward(WCap, WTail, AllPlaced, Reward),
+        once(assign_clue_numbers(AllPlaced, Numbered)),
+        Outcome = placed
+    ;   Numbered = [], Reward = -1,
+        ( Res == budget -> Outcome = not_proven ; Outcome = infeasible )
+    ).
+
+% First MRV-inc completion from the seed, under a budget. Always succeeds with a
+% tag: ok(Placed) | budget | exhausted (mirrors construct_one/7).
+construct_fragment_one(Remaining, SeededPlaced, SeededGrid, GridLen, Budget, Res) :-
+    catch(
+        call_with_inference_limit(
+            ( once(construct_from_seed(Remaining, SeededPlaced, SeededGrid, GridLen, P))
+            ->  Found = P
+            ;   Found = none ),
+            Budget, Outcome),
+        _Err, (Outcome = error, Found = none)),
+    (   Outcome == inference_limit_exceeded -> Res = budget
+    ;   Found == none                       -> Res = exhausted
+    ;   Res = ok(Found)
+    ).
+
+% Best-effort fragment solve: pin, then place the remainder with the greedy
+% constructor (which drops what it cannot place). greedy_loop/6 already accepts a
+% starting (Placed, Grid), and only ever drops from Remaining - the pins are
+% never dropped (AC-FRAG-3 holds under drop too).
+arrange_fragment_best_effort(Words, Frags, GridLen, Numbered, Reward, NumPlaced, Dropped) :-
+    arrange_weights(WCap, WTail),
+    seed_from_fragment(Frags, Words, GridLen, SeededPlaced, SeededGrid, Remaining),
+    greedy_loop(Remaining, SeededPlaced, GridLen, SeededGrid, FinalPlaced, DroppedEntries),
+    layout_reward(WCap, WTail, FinalPlaced, Reward),
+    length(FinalPlaced, NumPlaced),
+    findall(A, member([A|_], DroppedEntries), Dropped),
+    once(assign_clue_numbers(FinalPlaced, Numbered)).
+
+
+% --- fragment solve entry points (emit + report) ---------------------------
+% Mirror arrange_strict_solve/arrange_best_effort_solve: emit on stdout, report
+% on stderr; on any non-placed outcome report and fail with no stdout layout.
+
+arrange_fragment_solve(Words, Frags, GridLen, strict, SizeMode) :-
+    arrange_fragment_strict(Words, Frags, GridLen, Numbered, Reward, Outcome),
+    (   Outcome == placed
+    ->  emit_arrange(Numbered, Words, GridLen, SizeMode),
+        length(Numbered, NP),
+        format(user_error,
+               "arrange: fragment-seeded, grid ~w, mode ~w, placed ~w, reward ~w~n",
+               [GridLen, SizeMode, NP, Reward])
+    ;   arrange_fragment_report_failure(Outcome, Words, GridLen),
+        fail
+    ).
+arrange_fragment_solve(Words, Frags, GridLen, best_effort, SizeMode) :-
+    (   arrange_fragment_best_effort(Words, Frags, GridLen, Numbered, Reward, NP, Dropped)
+    ->  emit_arrange(Numbered, Words, GridLen, SizeMode),
+        length(Dropped, ND),
+        format(user_error,
+               "arrange: fragment-seeded, grid ~w, mode ~w, placed ~w, dropped ~w ~w, reward ~w~n",
+               [GridLen, SizeMode, NP, ND, Dropped, Reward])
+    ;   format(user_error,
+               "arrange: nothing placeable around the fragment on ~wx~w grid~n",
+               [GridLen, GridLen]),
+        fail
+    ).
+
+arrange_fragment_report_failure(not_proven, _Words, GridLen) :-
+    format(user_error,
+           "arrange: fragment search not proven within budget on ~wx~w grid \c
+(search did not complete; feasibility unresolved)~n",
+           [GridLen, GridLen]).
+arrange_fragment_report_failure(infeasible, Words, GridLen) :-
+    (   unplaceable_words(Words, Bad), Bad = [_|_]
+    ->  format(user_error,
+               "arrange: cannot place all words around the fragment on ~wx~w grid; \c
+words with no possible crossing: ~w~n",
+               [GridLen, GridLen, Bad])
+    ;   format(user_error,
+               "arrange: no complete placement around the fragment on ~wx~w grid \c
+(remaining words cannot all interlock with the pinned seed)~n",
+               [GridLen, GridLen])
+    ).
+
+% Convenience runners: load an input clue file + a fragment file and emit a
+% fragment-seeded arrange layout. /3 keeps the strict default (golden-stable);
+% /4 selects the drop contract. The fragment's gridLength sets N.
+arrange_fragment_run(InputFile, FragmentFile, SizeMode) :-
+    arrange_fragment_run(InputFile, FragmentFile, strict, SizeMode).
+arrange_fragment_run(InputFile, FragmentFile, DropContract, SizeMode) :-
+    load_clues(InputFile, Words),
+    check_unique_answers(Words),
+    load_fragment(FragmentFile, GridLen, Frags),
+    arrange_fragment_solve(Words, Frags, GridLen, DropContract, SizeMode).
+
+
+% --- fragment error messages ------------------------------------------------
+prolog:error_message(fragment_no_grid_length) -->
+    [ 'fragment: expected a JSON object with a positive integer "gridLength"' ].
+prolog:error_message(fragment_no_words_array) -->
+    [ 'fragment: expected a "words" array' ].
+prolog:error_message(fragment_invalid_answer(Entry)) -->
+    [ 'fragment: every word needs a string "answer" (offending entry: ~q)'-[Entry] ].
+prolog:error_message(fragment_invalid_direction(Answer)) -->
+    [ 'fragment: word ~q needs a "direction" of "across" or "down"'-[Answer] ].
+prolog:error_message(fragment_no_cells(Answer)) -->
+    [ 'fragment: word ~q needs a non-empty "cells" array'-[Answer] ].
+prolog:error_message(fragment_invalid_cell(Answer, Pair)) -->
+    [ 'fragment: word ~q has an invalid cell ~q (need [row,col] within the grid)'-[Answer, Pair] ].
+prolog:error_message(fragment_duplicate_answer(Answer)) -->
+    [ 'fragment: answer ~q appears more than once; a fragment pins each answer at most once'-[Answer] ].
+prolog:error_message(fragment_word_not_in_input(Answer)) -->
+    [ 'fragment: word ~q is not one of the --input answers (a fragment word must come from the input set)'-[Answer] ].
+prolog:error_message(fragment_cells_inconsistent(Answer)) -->
+    [ 'fragment: the cells of word ~q are not a straight on-grid run matching its direction and length'-[Answer] ].
+prolog:error_message(fragment_letter_clash(Answer, RC, Existing, Wanted)) -->
+    [ 'fragment: word ~q conflicts at cell ~w - already-pinned letter ~w but this word needs ~w'-[Answer, RC, Existing, Wanted] ].
+prolog:error_message(fragment_illegal_pin(Answer)) -->
+    [ 'fragment: word ~q cannot be legally pinned (it abuts or merges with another pinned word)'-[Answer] ].
+prolog:error_message(fragment_size_mismatch(FragGridLen, OptSize)) -->
+    [ 'fragment: gridLength ~w disagrees with the requested --size ~w'-[FragGridLen, OptSize] ].

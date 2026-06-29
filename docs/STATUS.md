@@ -28,7 +28,7 @@ Progress tracker for the work specified in [`design-spec.md`](./design-spec.md).
 | 2 | Strict layout (fixed N): **construct + rescore + emit** — best of 4-corner MRV-inc placements, rescored; place-all-or-fail; budget-aware 3-outcome semantics (`placed`/`infeasible`-names-words/`not_proven`) | **done** (`arrange_strict_solve/3`; validated, deterministic) | AC-ARR-1, AC-ARR-3, AC-ARR-4, AC-ARR-9, AC-ARR-10 |
 | 3 | Sizing + emit framing: `--size N`; `fixed` (exact N×N) vs `max` (tight square crop, side max(H,W)), default `max` | **done** (`emit_arrange/4`; both framings validated) | AC-ARR-5 |
 | 4 | Best-effort (drop): served by the **greedy constructor path** (drops naturally), not a drop-branch on the strict DFS; lexicographic most-placed → reward across seeds; report dropped | **done** (`arrange_best_effort/6`; +3 plunit tests) | AC-ARR-2 |
-| 5 | Fragment seeding: parse emit-schema fragment, reconcile by answer, pre-place + validate, search remainder (words-only v1) | not started | AC-FRAG-1…4, AC-EMIT-2 |
+| 5 | Fragment seeding: parse emit-schema fragment, reconcile by answer, pre-place + validate, search remainder (words-only v1) | **done** (`seed_from_fragment/6` + `arrange_fragment_strict/6` / `arrange_fragment_best_effort/7`; +10 plunit, +1 golden) | AC-FRAG-1, AC-FRAG-2, AC-FRAG-3, AC-EMIT-2 (AC-FRAG-4 thin-form deferred) |
 | 6 | Candidates: distinctness from **constructor breadth + greedy diversity**, τ-filtered (not top-K B&B leaves) | not started | AC-ARR-7 |
 | 7 | CLI + migration: subcommand dispatch; `--enumerate`; "did you mean `arrange`?" shim; README/`run_tests.sh`/golden updates | not started | AC-CLI-1…3, AC-ARR-6, AC-ARR-8 |
 | — | ~~LNS polish pass~~ — **dropped** by the Phase-1.5 gate (no reward headroom; bound never pruned) | dropped | — |
@@ -46,7 +46,7 @@ Reachability calibration (`--check-target`, ε, τ) is a **required pre-weightin
 | Clue numbering & enumeration (§6.3) | legacy | Numbering exists (AC-NUM-1); enumeration string derivation to confirm (AC-ENUM-1). |
 | Metric predicates (§6.4) | legacy | Split across `crossword.pl`/`quality.pl`; lift `crossing_count`/`placed_bbox`/`word_meets_half` to shared layer (arrange Phase 1/7). |
 | Emit / canonical JSON (§6.5) | legacy | Stable sorted-key JSON exists; confirm round-trip AC-EMIT-1/2. |
-| Fragment-grid primitive (§6.6) | not started | Realized in arrange Phase 5; AC-FRAG-1…4. |
+| Fragment-grid primitive (§6.6) | **done** (words-only v1) | Realized in arrange Phase 5 (`arrange.pl`): emit-schema parse + reconcile + pin-via-legality-core + remainder search. AC-FRAG-1/2/3 + AC-EMIT-2 pass; AC-FRAG-4 (thin form) deferred. |
 | CLI contract + migration (§5) | legacy → not started | Old flag CLI exists; subcommand cutover is arrange Phase 7; AC-CLI-1…3. |
 
 ---
@@ -81,8 +81,8 @@ Reachability calibration (`--check-target`, ε, τ) is a **required pre-weightin
 
 ## At a glance
 
-- **Done:** `arrange` Phase 1 (oracle) + 1.5 (gate → DESCOPE) + **2 (strict)** + **3 (size framing)** + **4 (best-effort via greedy)**. All in `arrange.pl`; **20 plunit tests (`tests/arrange.plt`) + golden regression (fixed + max) wired into `run_tests.sh`/`make test`** — full suite 101/101 + 3 goldens green.
-- **Next buildable, unblocked:** `arrange` **Phase 5** (fragment seeding) → **6** (candidates) → **7** (CLI + migration).
+- **Done:** `arrange` Phase 1 (oracle) + 1.5 (gate → DESCOPE) + **2 (strict)** + **3 (size framing)** + **4 (best-effort via greedy)** + **5 (fragment seeding)**. All in `arrange.pl`; **30 plunit tests (`tests/arrange.plt`) + golden regression (fixed + max + fragment) wired into `run_tests.sh`/`make test`** — full suite 111/111 + 4 goldens green.
+- **Next buildable, unblocked:** `arrange` **Phase 6** (candidates) → **7** (CLI + migration).
 - **Blocked:** stock-grid library (OD-5/6), `lint` barred profile (OD-7).
 - **Deferred:** `fill` engine (OD-1…4).
 - **Dropped (by the gate):** `arrange` B&B search loop, admissible bound, incremental delta, LNS polish.

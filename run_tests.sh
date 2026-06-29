@@ -50,6 +50,9 @@ check_golden "arrange bundled_17 fixed" \
 check_golden "arrange toc_demo max" \
     tests/golden/arrange_toc_demo_max.json \
     swipl -q -g 'arrange_run("fixtures/toc_demo.pl",25,max),halt' -t 'halt(1)' arrange.pl
+check_golden "arrange bundled_17 fragment" \
+    tests/golden/arrange_bundled_17_fragment.json \
+    swipl -q -g 'arrange_fragment_run("fixtures/bundled_17_clues.pl","fixtures/bundled_17_fragment.json",fixed),halt' -t 'halt(1)' arrange.pl
 
 echo
 if [ "$status" -eq 0 ]; then

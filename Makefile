@@ -31,6 +31,9 @@ golden:
 	@diff -u tests/golden/arrange_toc_demo_max.json \
 		<(swipl -q -g 'arrange_run("fixtures/toc_demo.pl",25,max),halt' -t 'halt(1)' arrange.pl 2>/dev/null) \
 		&& echo "golden (arrange max): OK"
+	@diff -u tests/golden/arrange_bundled_17_fragment.json \
+		<(swipl -q -g 'arrange_fragment_run("fixtures/bundled_17_clues.pl","fixtures/bundled_17_fragment.json",fixed),halt' -t 'halt(1)' arrange.pl 2>/dev/null) \
+		&& echo "golden (arrange fragment): OK"
 
 # Regenerate the golden files. Use only after an INTENTIONAL output change,
 # and review the diff before committing.
@@ -38,7 +41,8 @@ update-golden:
 	./crossword.pl --input fixtures/bundled_17_clues.pl 17 topleft_across 2>/dev/null > tests/golden/grid_17_topleft_across.txt
 	swipl -q -g 'arrange_run("fixtures/bundled_17_clues.pl",17,fixed),halt' -t 'halt(1)' arrange.pl 2>/dev/null > tests/golden/arrange_bundled_17_fixed.json
 	swipl -q -g 'arrange_run("fixtures/toc_demo.pl",25,max),halt' -t 'halt(1)' arrange.pl 2>/dev/null > tests/golden/arrange_toc_demo_max.json
-	@echo "Regenerated golden files (crossword + arrange fixed/max)"
+	swipl -q -g 'arrange_fragment_run("fixtures/bundled_17_clues.pl","fixtures/bundled_17_fragment.json",fixed),halt' -t 'halt(1)' arrange.pl 2>/dev/null > tests/golden/arrange_bundled_17_fragment.json
+	@echo "Regenerated golden files (crossword + arrange fixed/max/fragment)"
 
 # Local performance baselines. Results are machine-specific and reporting-only.
 # Benchmarks the production default strategy unless BENCH_STRATEGY is set, e.g.

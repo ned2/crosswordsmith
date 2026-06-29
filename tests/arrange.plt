@@ -143,4 +143,126 @@ test(best_effort_drops_and_partitions) :-
     length(Dropped, ND),
     NP >= 1, NP < Total, NP + ND =:= Total.
 
+% --- Phase 5: fragment-grid seeding (anchors) --------------------------------
+
+% Two long words of bundled_17 pinned (an across + a down crossing at a 'T'),
+% used by the partial-seed and best-effort tests below.
+bundled_two_word_fragment(Frags) :-
+    fragment_dict_words(
+        _{gridLength:17, words:[
+            _{answer:"GNOSTIC GOSPELS", direction:"down",
+              cells:[[0,3],[1,3],[2,3],[3,3],[4,3],[5,3],[6,3],[7,3],
+                     [8,3],[9,3],[10,3],[11,3],[12,3],[13,3]]},
+            _{answer:"ETERNAL RETURN", direction:"across",
+              cells:[[4,2],[4,3],[4,4],[4,5],[4,6],[4,7],[4,8],
+                     [4,9],[4,10],[4,11],[4,12],[4,13],[4,14]]} ]},
+        17, Frags).
+
+% Parse: a 4-cell across word at [0,3] on a 17-grid -> dir across, start cell 4
+% (0*17+3+1), and the declared run as 1-based cell numbers.
+test(fragment_parse_start_and_run,
+     [true(Frags == [frag('BIAS', across, 4, [4, 5, 6, 7])])]) :-
+    fragment_dict_words(
+        _{gridLength:17, words:[
+            _{answer:"BIAS", direction:"across", cells:[[0,3],[0,4],[0,5],[0,6]]}]},
+        17, Frags).
+
+% AC-EMIT-2 / AC-ARR-3 (load-bearing): an emitted layout IS a valid fragment;
+% re-ingesting it and re-emitting reproduces byte-identical JSON (all words
+% pinned -> the remainder is empty, so the seed is the whole layout).
+test(fragment_roundtrip_byte_identical) :-
+    arrange_bundled(Words),
+    arrange_best_layout(Words, 17, Numbered, _R, placed),
+    with_output_to(string(S1), emit_arrange(Numbered, Words, 17, fixed)),
+    atom_json_dict(S1, Dict, []),
+    fragment_dict_words(Dict, GL, Frags),
+    GL =:= 17,
+    arrange_fragment_strict(Words, Frags, 17, Numbered2, _R2, placed),
+    with_output_to(string(S2), emit_arrange(Numbered2, Words, 17, fixed)),
+    S1 == S2.
+
+% AC-FRAG-3: pinned words appear at exactly their fragment cells; the engine
+% places the remaining four around them (all six end up placed).
+test(fragment_pins_preserved_partial) :-
+    arrange_bundled(Words),
+    bundled_two_word_fragment(Frags),
+    arrange_fragment_strict(Words, Frags, 17, Numbered, _R, placed),
+    length(Numbered, 6),
+    once(( member(Wg, Numbered), get_dict(answer, Wg, 'GNOSTIC GOSPELS') )),
+    get_dict(cells, Wg, Cg), maplist(cell_coord(17), Cg, RCg),
+    RCg == [[0,3],[1,3],[2,3],[3,3],[4,3],[5,3],[6,3],[7,3],
+            [8,3],[9,3],[10,3],[11,3],[12,3],[13,3]],
+    once(( member(We, Numbered), get_dict(answer, We, 'ETERNAL RETURN') )),
+    get_dict(cells, We, Ce), maplist(cell_coord(17), Ce, RCe),
+    RCe == [[4,2],[4,3],[4,4],[4,5],[4,6],[4,7],[4,8],
+            [4,9],[4,10],[4,11],[4,12],[4,13],[4,14]].
+
+% AC-FRAG-1: a fragment word not present in --input is rejected up front.
+test(fragment_word_not_in_input_throws,
+     [throws(error(fragment_word_not_in_input('ZZZTOP'), _))]) :-
+    arrange_bundled(Words),
+    fragment_dict_words(
+        _{gridLength:9, words:[
+            _{answer:"ZZZTOP", direction:"across", cells:[[0,0],[0,1],[0,2],[0,3],[0,4],[0,5]]}]},
+        9, Frags),
+    arrange_fragment_strict(Words, Frags, 9, _, _, _).
+
+% AC-FRAG-2 (overlap): two pinned words demanding different letters in a shared
+% cell are reported before any search, naming the clashing cell and letters.
+test(fragment_letter_clash_throws,
+     [throws(error(fragment_letter_clash('FLOW', [0,0], 'B', 'F'), _))]) :-
+    arrange_bundled(Words),
+    fragment_dict_words(
+        _{gridLength:9, words:[
+            _{answer:"BIAS", direction:"across", cells:[[0,0],[0,1],[0,2],[0,3]]},
+            _{answer:"FLOW", direction:"down",   cells:[[0,0],[1,0],[2,0],[3,0]]}]},
+        9, Frags),
+    arrange_fragment_strict(Words, Frags, 9, _, _, _).
+
+% AC-FRAG-2 (self-inconsistent geometry): cells that are not a straight run of
+% the answer's length are rejected up front.
+test(fragment_cells_inconsistent_throws,
+     [throws(error(fragment_cells_inconsistent('BIAS'), _))]) :-
+    arrange_bundled(Words),
+    fragment_dict_words(
+        _{gridLength:9, words:[
+            _{answer:"BIAS", direction:"across", cells:[[0,0],[0,1],[0,2]]}]},  % 3 cells, 4 letters
+        9, Frags),
+    arrange_fragment_strict(Words, Frags, 9, _, _, _).
+
+% A fragment may not pin the same answer twice.
+test(fragment_duplicate_answer_throws,
+     [throws(error(fragment_duplicate_answer('BIAS'), _))]) :-
+    arrange_bundled(Words),
+    fragment_dict_words(
+        _{gridLength:9, words:[
+            _{answer:"BIAS", direction:"across", cells:[[0,0],[0,1],[0,2],[0,3]]},
+            _{answer:"BIAS", direction:"down",   cells:[[0,0],[1,0],[2,0],[3,0]]}]},
+        9, Frags),
+    arrange_fragment_strict(Words, Frags, 9, _, _, _).
+
+% An off-grid cell is a parse-time error.
+test(fragment_invalid_cell_throws,
+     [throws(error(fragment_invalid_cell('BIAS', [0,9]), _))]) :-
+    fragment_dict_words(
+        _{gridLength:9, words:[
+            _{answer:"BIAS", direction:"across", cells:[[0,9],[0,10],[0,11],[0,12]]}]},
+        _, _).
+
+% Best-effort with a fragment: the seed is pinned, the rest greedily placed;
+% on a roomy grid nothing is dropped and the pins are kept.
+test(fragment_best_effort_places_all) :-
+    arrange_bundled(Words),
+    bundled_two_word_fragment(Frags),
+    arrange_fragment_best_effort(Words, Frags, 17, Numbered, _R, NP, Dropped),
+    NP =:= 6, Dropped == [], length(Numbered, 6).
+
+% The fragment's gridLength sets N; an explicit size is redundant unless it
+% disagrees, which is an error (design-spec §6.6).
+test(fragment_size_reconcile) :-
+    reconcile_fragment_size(17, none, 17),
+    reconcile_fragment_size(17, 17, 17),
+    catch(reconcile_fragment_size(17, 15, _),
+          error(fragment_size_mismatch(17, 15), _), true).
+
 :- end_tests(arrange).
