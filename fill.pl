@@ -60,17 +60,26 @@ cell_var(CellVar, Cell, Var) :- get_assoc(Cell, CellVar, Var).
 % --- seeds: pin fragment words at their slots (hard pins, OD-3) ---------------
 % A seed answer is unified into the slot whose cells/direction match; a seed that
 % matches no slot, or clashes with another seed at a crossing, is an error.
-apply_seeds(SeedFile, Slots) :-
+% Pin every seed. SeededKeys collects each pinned slot's Start-Dir so the search
+% and the unfillable report can EXEMPT them: a seed is a hard pin (a setter's
+% theme/own word) and need NOT be a dictionary word (R2/OD-3). Its letters still
+% constrain crossing slots via the shared cell variables, and a slot completed
+% by crossings (not a seed) is still validated against the dictionary.
+apply_seeds(SeedFile, Slots, SeededKeys) :-
     load_fragment(SeedFile, _GridLen, Frags),
-    foldl(apply_seed(Slots), Frags, _, _).
+    foldl(apply_seed(Slots), Frags, [], SeededKeys).
 
-apply_seed(Slots, frag(Answer, Dir, _Start, CellNums), _, _) :-
-    ( member(slot(_, Dir, CellNums, Vars), Slots)
+apply_seed(Slots, frag(Answer, Dir, _Start, CellNums), SeededIn, SeededOut) :-
+    ( member(slot(SStart, Dir, CellNums, Vars), Slots)
     ->  word_letters([Answer], Letters, _),
         ( Vars = Letters
-        ->  true
+        ->  SeededOut = [SStart-Dir|SeededIn]
         ;   throw(error(fill_seed_clash(Answer), _)) )
     ;   throw(error(fill_seed_no_slot(Answer), _)) ).
+
+% A slot is a seed pin (exempt from search + empty_slots) iff its Start-Dir was
+% recorded by apply_seed (Start+Dir uniquely identify a slot).
+seeded_slot(SeededKeys, slot(Start, Dir, _, _)) :- memberchk(Start-Dir, SeededKeys).
 
 
 % --- dictionary: in-memory pattern index (OD-2) ------------------------------
@@ -173,17 +182,25 @@ slot_to_word(slot(Start, Dir, Cells, Vars),
 % --- entry point -------------------------------------------------------------
 % Outcome: filled | infeasible | not_proven. seeds/dict applied before search;
 % a seed clash / no-slot throws (reported before searching).
-fill_attempt(Slots, DictByLen, Index, Outcome, Numbered, InputWords) :-
+% SearchSlots are the slots the engine fills (all slots minus seed pins);
+% AllSlots are emitted (so seed pins appear in the layout too).
+fill_attempt(SearchSlots, AllSlots, DictByLen, Index, Outcome, Numbered, InputWords) :-
     fill_budget(B),
+    fill_attempt(SearchSlots, AllSlots, DictByLen, Index, B, Outcome, Numbered, InputWords).
+
+% Budget-explicit form: Budget is the inference budget. The default /7 reads
+% fill_budget/1; passing a tiny Budget drives the AC-FILL-1 "not proven within
+% budget" path (tests/fill.plt).
+fill_attempt(SearchSlots, AllSlots, DictByLen, Index, Budget, Outcome, Numbered, InputWords) :-
     catch(
         call_with_inference_limit(
-            ( once(fill_search(Slots, DictByLen, Index, [])) -> R = ok ; R = exhausted ),
-            B, Limit),
+            ( once(fill_search(SearchSlots, DictByLen, Index, [])) -> R = ok ; R = exhausted ),
+            Budget, Limit),
         _Err, (Limit = error, R = exhausted)),
     (   Limit == inference_limit_exceeded
     ->  Outcome = not_proven, Numbered = [], InputWords = []
     ;   R == ok
-    ->  Outcome = filled, slots_to_layout(Slots, Numbered, InputWords)
+    ->  Outcome = filled, slots_to_layout(AllSlots, Numbered, InputWords)
     ;   Outcome = infeasible, Numbered = [], InputWords = []
     ).
 
@@ -191,14 +208,17 @@ fill_attempt(Slots, DictByLen, Index, Outcome, Numbered, InputWords) :-
 % non-filled outcome (INV-3: report the unfillable slot(s), never silent).
 fill_solve(GridFile, SeedFileOrNone, DictFile, SizeMode) :-
     fill_grid(GridFile, Size, Slots, _CellVar),
-    ( SeedFileOrNone == none -> true ; apply_seeds(SeedFileOrNone, Slots) ),
+    ( SeedFileOrNone == none
+    ->  SeededKeys = []
+    ;   apply_seeds(SeedFileOrNone, Slots, SeededKeys) ),
+    exclude(seeded_slot(SeededKeys), Slots, SearchSlots),
     load_dict(DictFile, DictByLen, Index),
-    fill_attempt(Slots, DictByLen, Index, Outcome, Numbered, InputWords),
+    fill_attempt(SearchSlots, Slots, DictByLen, Index, Outcome, Numbered, InputWords),
     (   Outcome == filled
     ->  emit_fill(Numbered, InputWords, Size, SizeMode),
         length(Numbered, NS),
         format(user_error, "fill: grid ~wx~w, filled ~w slots~n", [Size, Size, NS])
-    ;   fill_report_failure(Outcome, Slots, DictByLen, Index, Size),
+    ;   fill_report_failure(Outcome, SearchSlots, DictByLen, Index, Size),
         fail
     ).
 

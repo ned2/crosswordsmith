@@ -11,9 +11,10 @@
 % Run a fill and return the across/down answer lists (deterministic).
 do_fill(GridFile, SeedFile, DictFile, Across, Down) :-
     fill_grid(GridFile, _Size, Slots, _CellVar),
-    ( SeedFile == none -> true ; apply_seeds(SeedFile, Slots) ),
+    ( SeedFile == none -> SeededKeys = [] ; apply_seeds(SeedFile, Slots, SeededKeys) ),
+    exclude(seeded_slot(SeededKeys), Slots, SearchSlots),
     load_dict(DictFile, DictByLen, Index),
-    fill_attempt(Slots, DictByLen, Index, filled, Numbered, _),
+    fill_attempt(SearchSlots, Slots, DictByLen, Index, filled, Numbered, _),
     findall(A, ( member(W, Numbered), get_dict(dir, W, across), get_dict(answer, W, A) ), Across),
     findall(A, ( member(W, Numbered), get_dict(dir, W, down),   get_dict(answer, W, A) ), Down).
 
@@ -48,7 +49,7 @@ test(fill_infeasible_when_no_matching_words) :-
     tmp_file_stream(text, F, S), write(S, "FOUR\nFIVE\n"), close(S),   % 4-letter only
     fill_grid('fixtures/fill_grid_3.json', _, Slots, _),
     load_dict(F, DictByLen, Index),
-    fill_attempt(Slots, DictByLen, Index, Outcome, _, _),
+    fill_attempt(Slots, Slots, DictByLen, Index, Outcome, _, _),
     delete_file(F),
     Outcome == infeasible.
 
@@ -61,12 +62,49 @@ test(fill_respects_seed) :-
     Across == ['COW', 'ARE', 'TED'],
     Across \== ['CAT', 'ORE', 'WED'].
 
+% R2 (revamp audit): a seed is a HARD PIN, not required to be a dictionary word
+% (a setter's theme/own word). With CAT pinned across row 0 and a dictionary
+% that OMITS CAT, the grid still fills around the pin (CAT/ORE/WED across) - the
+% old code reported the user's own pinned slot as unfillable and failed.
+test(fill_seed_need_not_be_in_dict) :-
+    tmp_file_stream(text, F, S),
+    write(S, "ORE\nWED\nCOW\nARE\nTED\n"), close(S),   % the sample wordlist minus CAT
+    fill_grid('fixtures/fill_grid_3.json', _Size, Slots, _),
+    foldl(apply_seed(Slots), [frag('CAT', across, 1, [1, 2, 3])], [], SeededKeys),
+    exclude(seeded_slot(SeededKeys), Slots, SearchSlots),
+    load_dict(F, DictByLen, Index),
+    fill_attempt(SearchSlots, Slots, DictByLen, Index, Outcome, Numbered, _),
+    delete_file(F),
+    Outcome == filled,
+    findall(A, ( member(W, Numbered), get_dict(dir, W, across), get_dict(answer, W, A) ), Across),
+    Across == ['CAT', 'ORE', 'WED'].
+
 % A seed whose answer matches no slot of the grid is rejected.
 test(fill_seed_no_slot_throws, [throws(error(fill_seed_no_slot('CAT'), _))]) :-
     fill_grid('fixtures/fill_grid_3.json', _, Slots, _),
     % CAT down at col 0 cells [1,4,7] is a real slot; ask for it as a 2-cell
     % run that no slot has -> no match.
     apply_seeds_frags(Slots, [frag('CAT', across, 2, [2, 3])]).
+
+% R11 (revamp audit): AC-FILL-1 "not proven within budget". A budget too small
+% to complete the search yields Outcome==not_proven - distinct from infeasible
+% (a genuinely 0-candidate slot) and from filled.
+test(fill_budget_exhausted_not_proven) :-
+    fill_grid('fixtures/fill_grid_3.json', _Size, Slots, _),
+    load_dict('fixtures/wordlist_sample.txt', DictByLen, Index),
+    fill_attempt(Slots, Slots, DictByLen, Index, 100, Outcome, Numbered, _),
+    Outcome == not_proven,
+    Numbered == [].
+
+% R11 (revamp audit): AC-FILL-4 - a produced fill re-validates as a legal
+% layout. Linting the fill output gives a clean structural verdict: the 3x3
+% full grid is every-cell-checked, connected, and symmetric, so it PASSes the
+% strictest structural profile (american). Letters do not affect structure.
+test(fill_revalidates_under_lint) :-
+    lint_load('tests/golden/fill_3.json', GridLen, Placed),
+    lint_run(Placed, GridLen, american, false, Report),
+    get_dict(verdict, Report, V),
+    V == 'PASS'.
 
 % --- determinism (AC-FILL-3) -------------------------------------------------
 test(fill_deterministic) :-
@@ -76,6 +114,6 @@ test(fill_deterministic) :-
 
 :- end_tests(fill).
 
-% Helper: apply a list of frag/4 seeds directly (mirrors apply_seeds/2 minus the
-% file read), for the no-slot test.
-apply_seeds_frags(Slots, Frags) :- foldl(apply_seed(Slots), Frags, _, _).
+% Helper: apply a list of frag/4 seeds directly (mirrors apply_seeds/3 minus the
+% file read), for the no-slot test; the seeded-key accumulator is discarded.
+apply_seeds_frags(Slots, Frags) :- foldl(apply_seed(Slots), Frags, [], _).
