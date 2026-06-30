@@ -115,7 +115,7 @@ Every capability is a **verb**. A bare invocation prints usage and exits non-zer
 ```
 crosswordsmith arrange [--strict | --best-effort] [--size N] [--size-mode fixed|max]
                        [--fragment grid.json] [--candidates N] [--enumerate]
-                       --input words.json [--out file.json]
+                       [--check-target N] --input words.json [--out file.json]
 crosswordsmith lint    --profile <name> [--allow-asymmetry] layout.json     # Flavour B
 crosswordsmith export  --to ipuz|exolve  layout.json [--out file]           # Flavour B / shared
 crosswordsmith fill    --grid template.json --seeds seeds.json              # Flavour B (DEFERRED)
@@ -177,7 +177,7 @@ The current interface — `./crossword.pl --input F [--strategy S] [--shuffle] [
 `crossing_count/6`, `placed_bbox/4`, `word_meets_half/2` (`checked ≥ ceil(L/2)`), `checked_cells`, `max_unch_run`, connectivity. Flavour A consumes these as **optimizer signals**; Flavour B `lint` consumes them as **validators**. They are pure measurement — no side effects, no placement.
 
 ### 6.5 Emit / output contract (canonical JSON)
-- Canonical output is the existing stable sorted-key JSON: `{gridLength, grid: rows, words: [{answer, cells, dir, num, len, start, meta}...]}`.
+- Canonical output is the existing stable sorted-key JSON: `{gridLength, grid: rows, words: [{number, direction, answer, cells, meta}...]}` (the authoritative per-key contract is [`json-output-spec.md`](./json-output-spec.md) §6.2; `dir`/`num`/`len`/`start` are *internal* placed-word fields and are not emitted).
 - Output is deterministic (INV-2) and the **canonical fragment schema** (§6.6) — i.e. emit is round-trippable back in as input.
 - Export formats (ipuz/Exolve) are *transformations of* this canonical form (§8.2), not separate emitters.
 
@@ -225,7 +225,7 @@ A single verb that unifies the old `pack`/`solve` engines into one **determinist
 - `target(w) = ceil(L/2)` by default (reuses `word_meets_half/2`).
 - Default integer weights `WCap:WTail = 5:1` ⇒ `ε = 0.2`. The **cap creates balance** (stops rewarding already-checked words, redirecting effort to laggards, anti-stub in a length-aware way); the **tail keeps an interlock gradient above the cap** and breaks ties toward crossier layouts.
 - Integer arithmetic for deterministic tiebreaks (mirrors `placement_key`'s idiom).
-- **Reachability caveat (load-bearing — empirically confirmed).** The cap only balances when `target` is attainable at the densities Flavour A actually produces. Probes confirm this bites on realistic inputs: toc_demo reaches `ceil(L/2)` on only **1/16** words (and `--min-half` makes it infeasible outright), while the dense quality_22 mesh reaches it on **19/22** — so the cap is *inert on sparse link-sets, active on dense meshes*. Where it is inert, the objective **silently degenerates to plain total-crossings**. ⇒ `--check-target` MUST be a **real tunable**, and `target` and `ε` MUST be **calibrated against the fixtures *before weights are locked*** (calibration fixtures: toc_demo = sparse/inert, quality_22 = dense/active), lowering `target` below `ceil(L/2)` where half is unreachable, and **reporting when the objective has degenerated**. This is a calibration/tunability obligation, not a change to the objective *form*.
+- **Reachability caveat (load-bearing — empirically confirmed).** The cap only balances when `target` is attainable at the densities Flavour A actually produces. Probes confirm this bites on realistic inputs: toc_demo reaches `ceil(L/2)` on only **1/16** words (and `--min-half` makes it infeasible outright), while the dense quality_22 mesh reaches it on **19/22** — so the cap is *inert on sparse link-sets, active on dense meshes*. Where it is inert, the objective **silently degenerates to plain total-crossings**. ⇒ `--check-target` MUST be a **real tunable**, and `target` and `ε` MUST be **calibrated against the fixtures *before weights are locked*** (calibration fixtures: toc_demo = sparse/inert, quality_22 = dense/active), lowering `target` below `ceil(L/2)` where half is unreachable, and **reporting when the objective has degenerated**. This is a calibration/tunability obligation, not a change to the objective *form*. *(Implemented as `--check-target N` (§5): it lowers the per-word target to `min(ceil(L/2), N)` — N only ever lowers, never raises — and strict mode reports "cap inert" on stderr when no placed word reaches its target, i.e. the objective has degenerated to total-crossings.)*
 - **`maximin`/leximin are NOT the search driver** (non-decomposable, useless early bound, defeats pruning). Reserve them only as a tiebreak among final top candidates, or as an optional hard per-word floor (a cheap forward-checkable *constraint*, not the objective).
 
 ### 7.3 Engine properties
@@ -287,7 +287,7 @@ Transformations of the canonical JSON (§6.5), not new emitters.
 - **`.puz`/`.jpz`/PDF**: reached via off-the-shelf `kotwords` from the ipuz output — **not** emitted natively (§3).
 
 **AC-EXP-1** `export --to ipuz` produces spec-valid ipuz v2 that a third-party consumer (e.g. via kotwords) ingests without error.
-**AC-EXP-2** `export --to exolve` produces text that round-trips through Exet (load → save → equivalent grid+entries).
+**AC-EXP-2** `export --to exolve` produces text that round-trips through Exet (load → save → equivalent grid+entries). *(Verification: a byte-exact golden (`tests/golden/export_bundled_17.exolve`) pins the emitter, and Exet ingestion is a manual check — there is no in-repo Exolve parser, so third-party round-trip cannot be automated in plunit. See revamp-audit R13.)*
 **AC-EXP-3** Export preserves enumerations and `meta`-borne clue text where the target format has a field for them; no data invented.
 
 ### 8.3 Stock-grid library + house-style profiles  **[LOCKED]**
@@ -295,7 +295,7 @@ A **bundled, curated** set of pre-validated legal grid templates (black-square p
 - Templates double as `lint` profile inputs and (later) `fill` inputs.
 - Validated once at design time with the shared metric predicates repurposed as **template validators**.
 
-**Template schema (OD-5, resolved by DP-1): a black-square mask is the single source of truth** — `{name, size, symmetry, mask:["#.....", ...]}` (one string per row; `#` = block, any other char = light). Slots are *derived* on load by the existing run-scanning / clue-numbering, not stored — no redundant slot list. Each shipped grid is **validated at design time by `lint --profile blocked-uk`** (the metric predicates as template validators).
+**Template schema (OD-5, resolved by DP-1): a black-square mask is the single source of truth** — required fields `{name, size, mask:["#.....", ...]}` (one string per row; `#` = block, any other char = light). An optional `symmetry` annotation MAY appear (the shipped grids carry `"rot180"`) but is **not** trusted or required — the validator re-derives symmetry from the mask, so a declared value is descriptive only (revamp-audit R10). Slots are *derived* on load by the existing run-scanning / clue-numbering, not stored — no redundant slot list. Each shipped grid is **validated at design time by `lint --profile blocked-uk`** (the metric predicates as template validators).
 
 **OD-6 (resolved): the v1 library ships three original, `lint`-validated, license-clean grids** — `blocked_13a`, `blocked_13b` (13×13), `blocked_15a` (15×15), all 180°-rotational, all PASS under `lint --profile blocked-uk`. A small starter set, as intended (real publications curate only dozens); it grows by adding more validated masks under `grids/`. Loaded + validated by `stockgrid.pl` (the mask → lights derivation + the blocked-uk validator); the set's legality is a CI regression (`tests/stockgrid.plt`).
 

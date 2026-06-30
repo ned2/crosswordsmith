@@ -2,8 +2,13 @@
 % by DP-1 / OD-5). A stock grid is a curated, pre-validated legal blocked
 % template, stored as a black-square MASK (the single source of truth):
 %
-%   { "name": "...", "size": N, "symmetry": "rot180",
-%     "mask": ["#.....", ...] }   % one string per row; '#' = block, else light
+%   { "name": "...", "size": N, "mask": ["#.....", ...] }
+%   % one string per row; '#' = block, else light
+%
+% Required fields: name, size, mask. An optional "symmetry" annotation MAY
+% appear in the file (the shipped grids carry "rot180") but is NOT trusted or
+% required - stockgrid_load/2 ignores it and the validator RE-DERIVES the actual
+% symmetry from the mask, so a declared value is descriptive only.
 %
 % Slots (lights) are DERIVED on load - not stored - by run-scanning the mask,
 % then validated by `lint --profile blocked-uk` (the metric predicates as

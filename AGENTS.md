@@ -22,13 +22,19 @@ the README.
 
 ## Project Shape
 
-- The implementation is a SWI-Prolog crossword layout generator.
-- `crossword.pl` is the executable script and main implementation.
+- The implementation is a SWI-Prolog crossword layout-and-fill toolkit.
+- `crosswordsmith` is the CLI entry point (verbs: `arrange`, `lint`, `export`,
+  `fill`). `crossword.pl` is now a shared-substrate *library* (grid model,
+  free-canvas legality core, clue numbering, emit, input), not the CLI; a bare
+  or old-style `./crossword.pl ...` invocation only prints a migration hint.
+- The engines are `arrange.pl` (Flavour A) and `fill.pl` / `lint.pl` /
+  `export.pl` / `stockgrid.pl` (Flavour B); `quality.pl` holds the shared metric
+  predicates + the greedy constructor.
 - `fixtures/bundled_17_clues.pl` is the bundled clue dataset used by examples,
   benchmarks, and the golden regression.
-- `tests/crossword.plt` contains the plunit coverage.
-- `tests/golden/grid_17_topleft_across.txt` is the deterministic CLI golden
-  output for `./crossword.pl --input fixtures/bundled_17_clues.pl 17 topleft_across`.
+- `tests/*.plt` hold the plunit coverage (one suite per module); the
+  deterministic CLI goldens live under `tests/golden/`. Run all three layers
+  (plunit + goldens + CLI exit-code checks) via `./run_tests.sh` or `make test`.
 
 ## Working Instructions
 
