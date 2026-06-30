@@ -89,6 +89,11 @@ check_exit "lint blocked-uk FAIL -> nonzero" 1 \
 # ...while PASS/WARN (advisory toc never FAILs) exits zero.
 check_exit "lint toc PASS/WARN -> zero" 0 \
     ./crosswordsmith lint --profile toc tests/golden/arrange_bundled_17_fixed.json
+# A --no-<bool> negation (optparse auto-negates booleans) is an undocumented
+# flag name and must be rejected, not silently accepted (AC-CLI-2, R9). Without
+# the guard this run would be accepted (best_effort(false) -> still strict) -> 0.
+check_exit "arrange --no- flag rejected" 1 \
+    ./crosswordsmith arrange --no-best-effort --size 17 --input fixtures/bundled_17_clues.pl
 
 echo
 if [ "$status" -eq 0 ]; then

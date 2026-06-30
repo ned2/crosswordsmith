@@ -48,6 +48,11 @@ main :-
 % error_message//1 hooks with a non-zero exit, per the spec's exit-code table.
 cli([]) :- !, usage(user_error), fail.                       % AC-CLI-1: bare -> usage, non-zero
 cli([H|_]) :- help_flag(H), !, usage(user_output), fail.     % --help -> usage, non-zero (§5.2)
+cli([Verb|Args]) :- verb(Verb), negation_flag(Args, Bad), !, % R9: reject --no-<x>
+    format(user_error,
+           "crosswordsmith ~w: unknown flag `~w` (boolean flags are not \c
+negatable with --no-; see `crosswordsmith ~w --help`)~n", [Verb, Bad, Verb]),
+    fail.
 cli([arrange|Args]) :- !, arrange_cli(Args).
 cli([lint|Args])    :- !, lint_cli(Args).
 cli([export|Args])  :- !, export_cli(Args).
@@ -58,6 +63,15 @@ cli([Verb|_]) :-
     usage(user_error), fail.
 
 help_flag('--help'). help_flag('-h'). help_flag(help).
+
+verb(arrange). verb(lint). verb(export). verb(fill).
+
+% optparse auto-negates every boolean flag (--no-strict, --no-allow-asymmetry,
+% ...), but those flag NAMES are undocumented and a footgun (--no-strict reads as
+% the opposite of its actual effect), so reject any --no-<x> token up front
+% (AC-CLI-2: no undocumented flag exists) - R9.
+negation_flag(Args, Bad) :-
+    member(Bad, Args), atom(Bad), atom_concat('--no-', _, Bad), !.
 
 % A first token that looks like an old-style invocation (a grid-length number,
 % or any flag where a verb was expected) -> the migration hint.
