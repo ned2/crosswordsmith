@@ -56,6 +56,12 @@ check_golden "arrange candidates" \
 check_golden "lint toc" \
     tests/golden/lint_bundled_17_toc.json \
     ./crosswordsmith lint --profile toc tests/golden/arrange_bundled_17_fixed.json
+check_golden "export ipuz" \
+    tests/golden/export_bundled_17.ipuz \
+    ./crosswordsmith export --to ipuz tests/golden/arrange_bundled_17_fixed.json
+check_golden "export exolve" \
+    tests/golden/export_bundled_17.exolve \
+    ./crosswordsmith export --to exolve tests/golden/arrange_bundled_17_fixed.json
 
 echo
 if [ "$status" -eq 0 ]; then

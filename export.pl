@@ -1,0 +1,169 @@
+% export.pl - Flavour-B standard-format interchange (design-spec §8.2). These
+% are TRANSFORMATIONS of the canonical layout JSON (what `arrange` emits), not
+% new emitters:
+%
+%   --to ipuz   : ipuz v2 crossword (a JSON object; reachable onward to
+%                 .puz/.jpz/PDF via off-the-shelf kotwords, §3).
+%   --to exolve : Exolve plain text (git-diffable; round-trips to Exet).
+%
+% Enumerations are derived from the answer's spaces/hyphens (§6.3); clue text
+% rides in meta.clue. Nothing is invented (AC-EXP-3): a missing clue is empty.
+% Consult AFTER crossword.pl (it only needs JSON + lists).
+
+:- use_module(library(http/json)).
+:- use_module(library(apply)).
+:- use_module(library(lists)).
+
+
+% --- load + validate a canonical layout --------------------------------------
+export_load(File, Dict) :-
+    setup_call_cleanup(open(File, read, S), json_read_dict(S, Dict0), close(S)),
+    (   is_dict(Dict0),
+        get_dict(gridLength, Dict0, N), integer(N), N > 0,
+        get_dict(grid, Dict0, Rows), is_list(Rows),
+        get_dict(words, Dict0, Ws), is_list(Ws)
+    ->  Dict = Dict0
+    ;   throw(error(export_invalid_layout, _))
+    ).
+
+% A grid cell is white iff it is a dict (a filled cell object); anything else
+% (JSON null, however the reader represents it) is a black square. This keeps
+% the transforms independent of the null representation.
+white_cell(Cell) :- is_dict(Cell).
+
+% Match a word's (string) direction against an atom.
+word_dir(W, Dir) :-
+    get_dict(direction, W, Raw),
+    ( atom(Raw) -> A = Raw ; atom_string(A, Raw) ),
+    A == Dir.
+
+% Clue text from meta.clue, or "" when absent (no data invented).
+word_clue_text(W, Text) :-
+    ( get_dict(meta, W, M), is_dict(M), get_dict(clue, M, C) -> Text = C ; Text = "" ).
+
+
+% --- enumeration: derive "(5,5)" / "(4-5)" from spaces/hyphens (§6.3) ---------
+answer_enumeration(Answer, Enum) :-
+    ( atom(Answer) -> atom_chars(Answer, Chars) ; string_chars(Answer, Chars) ),
+    enum_segments(Chars, 0, Segs),
+    atomic_list_concat(Segs, Body),
+    atomic_list_concat(['(', Body, ')'], Enum).
+
+% Walk the chars: count a letter run, emit its length + the following separator
+% (',' for a space, '-' for a hyphen), then the final run length.
+enum_segments([], N, [N]).
+enum_segments([C|Cs], N, Segs) :-
+    ( C == ' ' -> Segs = [N, ',' | Rest], enum_segments(Cs, 0, Rest)
+    ; C == '-' -> Segs = [N, '-' | Rest], enum_segments(Cs, 0, Rest)
+    ; N1 is N + 1, enum_segments(Cs, N1, Segs)
+    ).
+
+
+% --- ipuz v2 -----------------------------------------------------------------
+% Invert null->"#", split the merged cell into parallel puzzle/solution arrays,
+% group words by direction into a clues dict, add version/kind/dimensions.
+% ipuz carries no symmetry field - symmetry stays a crosswordsmith lint concept.
+layout_to_ipuz(Dict,
+    _{ version: "http://ipuz.org/v2",
+       kind: ["http://ipuz.org/crossword#1"],
+       dimensions: _{width:N, height:N},
+       empty: 0,
+       puzzle: Puzzle,
+       solution: Solution,
+       clues: _{'Across':Across, 'Down':Down} }) :-
+    get_dict(gridLength, Dict, N),
+    get_dict(grid, Dict, Rows),
+    maplist(ipuz_puzzle_row, Rows, Puzzle),
+    maplist(ipuz_solution_row, Rows, Solution),
+    get_dict(words, Dict, Words),
+    ipuz_clues(Words, across, Across),
+    ipuz_clues(Words, down, Down).
+
+ipuz_puzzle_row(Row, Out) :- maplist(ipuz_puzzle_cell, Row, Out).
+ipuz_puzzle_cell(Cell, Out) :-
+    ( white_cell(Cell)
+    -> ( get_dict(number, Cell, Num), integer(Num) -> Out = Num ; Out = 0 )
+    ;  Out = '#' ).
+
+ipuz_solution_row(Row, Out) :- maplist(ipuz_solution_cell, Row, Out).
+ipuz_solution_cell(Cell, Out) :-
+    ( white_cell(Cell) -> get_dict(letter, Cell, Out) ; Out = '#' ).
+
+% Clue objects {number, clue, enumeration}, sorted by number.
+ipuz_clues(Words, Dir, Clues) :-
+    findall(Num-Clue,
+            ( member(W, Words), word_dir(W, Dir), ipuz_clue(W, Num, Clue) ),
+            Pairs),
+    keysort(Pairs, Sorted),
+    pairs_values(Sorted, Clues).
+ipuz_clue(W, Num, _{number:Num, clue:Text, enumeration:Enum}) :-
+    get_dict(number, W, Num),
+    word_clue_text(W, Text),
+    get_dict(answer, W, Answer),
+    answer_enumeration(Answer, Enum).
+
+
+% --- Exolve ------------------------------------------------------------------
+% Plain text: a grid of letters (white) and '.' (block), then the across/down
+% clue lines (number, clue, enumeration). Exolve numbers the grid itself; our
+% standard numbering matches, so the clue-line numbers align.
+layout_to_exolve(Dict, Text) :-
+    get_dict(gridLength, Dict, N),
+    get_dict(grid, Dict, Rows),
+    get_dict(words, Dict, Words),
+    maplist(exolve_grid_row, Rows, GridLines),
+    exolve_clue_lines(Words, across, AcrossLines),
+    exolve_clue_lines(Words, down, DownLines),
+    format(atom(WLine), "  exolve-width: ~w", [N]),
+    format(atom(HLine), "  exolve-height: ~w", [N]),
+    append([ ['exolve-begin',
+              '  exolve-id: crosswordsmith-export',
+              WLine, HLine,
+              '  exolve-grid:' ],
+             GridLines,
+             ['  exolve-across:'], AcrossLines,
+             ['  exolve-down:'],   DownLines,
+             ['exolve-end'] ],
+           AllLines),
+    atomic_list_concat(AllLines, '\n', Body),
+    atom_concat(Body, '\n', Text).
+
+exolve_grid_row(Row, Line) :-
+    maplist(exolve_cell_char, Row, Chars),
+    atomic_list_concat(Chars, Body),
+    atom_concat('    ', Body, Line).
+exolve_cell_char(Cell, Ch) :-
+    ( white_cell(Cell) -> get_dict(letter, Cell, L), atom_string(Ch, L) ; Ch = '.' ).
+
+exolve_clue_lines(Words, Dir, Lines) :-
+    findall(Num-Line,
+            ( member(W, Words), word_dir(W, Dir), exolve_clue_line(W, Num, Line) ),
+            Pairs),
+    keysort(Pairs, Sorted),
+    pairs_values(Sorted, Lines).
+exolve_clue_line(W, Num, Line) :-
+    get_dict(number, W, Num),
+    word_clue_text(W, Clue),
+    get_dict(answer, W, Answer),
+    answer_enumeration(Answer, Enum),
+    format(atom(Line), "    ~w ~w ~w", [Num, Clue, Enum]).
+
+
+% --- entry point -------------------------------------------------------------
+export_solve(File, ipuz) :-
+    export_load(File, Dict),
+    layout_to_ipuz(Dict, Ipuz),
+    current_output(Out),
+    json_write_dict(Out, Ipuz),
+    nl(Out).
+export_solve(File, exolve) :-
+    export_load(File, Dict),
+    layout_to_exolve(Dict, Text),
+    current_output(Out),
+    write(Out, Text).
+
+
+% --- error messages ----------------------------------------------------------
+:- multifile prolog:error_message//1.
+prolog:error_message(export_invalid_layout) -->
+    [ 'export: input is not a canonical layout (needs gridLength, grid, words)' ].

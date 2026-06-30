@@ -17,8 +17,8 @@ core is portable Prolog, though the clue-input and JSON-output paths use
 SWI-specific features (see Requirements).
 
 The command-line interface is the **`crosswordsmith`** script, with one verb per
-capability — `arrange` (lay out words) and `lint` (validate a layout) today;
-`export` and `fill` are specified for later. The former `./crossword.pl …`
+capability — `arrange` (lay out words), `lint` (validate a layout), and `export`
+(convert to ipuz/Exolve) today; `fill` is deferred. The former `./crossword.pl …`
 interface has been replaced; `crossword.pl` is now an internal library (see
 [Migration](#migration-from-the-old-crosswordpl-cli)).
 
@@ -153,6 +153,29 @@ count, grid-level results (`connectivity`, `symmetry`), and per-word `results`
 odd/even balance — exactly the rule set the chosen profile defines). The report
 is always emitted; the **exit code** is non-zero only when a FAIL-severity rule
 trips under the chosen profile.
+
+### `export` — convert a layout to a standard format
+
+`export` transforms a canonical layout into a standard interchange format (it is
+a transformation, not a new emitter):
+
+    # ipuz v2 (JSON). From here, reach .puz/.jpz/PDF via off-the-shelf kotwords.
+    $ ./crosswordsmith export --to ipuz   layout.json > puzzle.ipuz
+
+    # Exolve plain text (git-diffable; round-trips to Exet).
+    $ ./crosswordsmith export --to exolve layout.json > puzzle.exolve
+
+| flag | meaning |
+| --- | --- |
+| `--to ipuz\|exolve` | **required** — the target format. |
+| `--out <file>` | write to `<file>` instead of stdout. |
+| `--help` / `-h` | print the export options. |
+
+Enumerations (e.g. `(5,5)`, `(4-5)`) are derived from the spaces and hyphens in
+each answer; clue text rides through from each word's `meta.clue`. Nothing is
+invented — a word with no clue exports an empty clue. (Spec-valid ingestion by a
+third party — kotwords for ipuz, Exet for Exolve — is the intended consumer; that
+round-trip is a manual verification step.)
 
 
 ## Clues Fixture
