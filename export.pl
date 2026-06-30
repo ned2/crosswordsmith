@@ -45,17 +45,37 @@ word_clue_text(W, Text) :-
 % --- enumeration: derive "(5,5)" / "(4-5)" from spaces/hyphens (§6.3) ---------
 answer_enumeration(Answer, Enum) :-
     ( atom(Answer) -> atom_chars(Answer, Chars) ; string_chars(Answer, Chars) ),
-    enum_segments(Chars, 0, Segs),
-    atomic_list_concat(Segs, Body),
+    enum_tokens(Chars, 0, Tokens),
+    enum_clean(Tokens, Segs),
+    ( Segs == [] -> Body = 0 ; atomic_list_concat(Segs, Body) ),
     atomic_list_concat(['(', Body, ')'], Enum).
 
-% Walk the chars: count a letter run, emit its length + the following separator
-% (',' for a space, '-' for a hyphen), then the final run length.
-enum_segments([], N, [N]).
-enum_segments([C|Cs], N, Segs) :-
-    ( C == ' ' -> Segs = [N, ',' | Rest], enum_segments(Cs, 0, Rest)
-    ; C == '-' -> Segs = [N, '-' | Rest], enum_segments(Cs, 0, Rest)
-    ; N1 is N + 1, enum_segments(Cs, N1, Segs)
+% Tokenize into letter-run lengths and the separators between them (',' for a
+% space, '-' for a hyphen): the result is R0, S0, R1, S1, ..., Rk - always
+% run-delimited (runs may be 0 for adjacent/leading/trailing separators).
+enum_tokens([], N, [N]).
+enum_tokens([C|Cs], N, Toks) :-
+    ( sep_char(C, S) -> Toks = [N, S | Rest], enum_tokens(Cs, 0, Rest)
+    ; N1 is N + 1, enum_tokens(Cs, N1, Toks)
+    ).
+
+sep_char(' ', ',').
+sep_char('-', '-').
+
+% Keep only positive runs; a separator is emitted ONLY between two kept runs
+% (the one immediately preceding the later run). Leading/trailing/adjacent
+% separators and 0-length runs (authoring typos) thus produce no empty segment
+% like (2,0) (R5); an all-separator answer collapses to body 0.
+enum_clean([R0|Pairs], Clean) :-
+    ( R0 > 0 -> Clean = [R0|More], enum_clean_pairs(Pairs, true, More)
+    ;          enum_clean_pairs(Pairs, false, Clean) ).
+
+enum_clean_pairs([], _Emitted, []).
+enum_clean_pairs([S, R | Rest], Emitted, Out) :-
+    ( R > 0
+    ->  ( Emitted == true -> Out = [S, R | More] ; Out = [R | More] ),
+        enum_clean_pairs(Rest, true, More)
+    ;   enum_clean_pairs(Rest, Emitted, Out)
     ).
 
 

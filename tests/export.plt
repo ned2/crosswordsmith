@@ -33,6 +33,13 @@ test(enum_hyphenated)    :- answer_enumeration('WELL-BEING', '(4-5)').
 test(enum_mixed_hyphens) :- answer_enumeration('MOTHER-IN-LAW', '(6-2-3)').
 test(enum_from_string)   :- answer_enumeration("NEW YORK CITY", '(3,4,4)').
 
+% R5 (revamp audit): leading/trailing/adjacent separators (authoring typos)
+% must NOT emit 0-length segments like (2,0).
+test(enum_trailing_space)  :- answer_enumeration('TT ', '(2)').
+test(enum_leading_space)   :- answer_enumeration(' AB', '(2)').
+test(enum_double_space)    :- answer_enumeration('ROCK  ROLL', '(4,4)').
+test(enum_trailing_hyphen) :- answer_enumeration('RE-', '(2)').
+
 % --- ipuz v2 (AC-EXP-1 structure) --------------------------------------------
 
 % version / kind / dimensions are the ipuz v2 crossword identifiers.
