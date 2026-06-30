@@ -45,19 +45,25 @@ mask_white_cells(Mask, Size, WhiteSet) :-
 % length-1 white run is not a light in that direction; the cell must still belong
 % to a perpendicular light (else it is an isolated cell - reported separately).
 grid_lights(Size, WhiteSet, Numbered) :-
-    Smax is Size - 1,
     findall(W,
-            ( between(0, Smax, R),
-              Lo is R * Size + 1, Hi is R * Size + Size, numlist(Lo, Hi, RowCells),
-              line_lights(RowCells, WhiteSet, Cells), light_word(across, Cells, W) ),
+            ( grid_run(Size, WhiteSet, across, Cells), light_word(across, Cells, W) ),
             Across),
     findall(W,
-            ( between(0, Smax, C),
-              col_cells(C, Size, ColCells),
-              line_lights(ColCells, WhiteSet, Cells), light_word(down, Cells, W) ),
+            ( grid_run(Size, WhiteSet, down, Cells), light_word(down, Cells, W) ),
             Down),
     append(Across, Down, Lights),
     once(assign_clue_numbers(Lights, Numbered)).
+
+% Backtrack over the light cell-lists (maximal white runs >= 2) of one direction.
+% Exposed so `fill` can build its slots from the same derivation.
+grid_run(Size, WhiteSet, across, Cells) :-
+    Smax is Size - 1, between(0, Smax, R),
+    Lo is R * Size + 1, Hi is R * Size + Size, numlist(Lo, Hi, RowCells),
+    line_lights(RowCells, WhiteSet, Cells).
+grid_run(Size, WhiteSet, down, Cells) :-
+    Smax is Size - 1, between(0, Smax, C),
+    col_cells(C, Size, ColCells),
+    line_lights(ColCells, WhiteSet, Cells).
 
 col_cells(C, Size, Cells) :-
     Smax is Size - 1,

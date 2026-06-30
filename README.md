@@ -17,10 +17,10 @@ core is portable Prolog, though the clue-input and JSON-output paths use
 SWI-specific features (see Requirements).
 
 The command-line interface is the **`crosswordsmith`** script, with one verb per
-capability — `arrange` (lay out words), `lint` (validate a layout), and `export`
-(convert to ipuz/Exolve) today; `fill` is deferred. The former `./crossword.pl …`
-interface has been replaced; `crossword.pl` is now an internal library (see
-[Migration](#migration-from-the-old-crosswordpl-cli)).
+capability — `arrange` (lay out words), `lint` (validate a layout), `export`
+(convert to ipuz/Exolve), and `fill` (grid-first auto-fill). The former
+`./crossword.pl …` interface has been replaced; `crossword.pl` is now an internal
+library (see [Migration](#migration-from-the-old-crosswordpl-cli)).
 
 Words — and optional per-word metadata (a clue, a link, anything) — are supplied
 as a JSON file or a Prolog `clues/1` fixture. The bundled
@@ -176,6 +176,35 @@ each answer; clue text rides through from each word's `meta.clue`. Nothing is
 invented — a word with no clue exports an empty clue. (Spec-valid ingestion by a
 third party — kotwords for ipuz, Exet for Exolve — is the intended consumer; that
 round-trip is a manual verification step.)
+
+### `fill` — grid-first auto-fill
+
+`fill` takes a **legal blocked grid** (a stock-grid mask under `grids/`, or your
+own) and fills every slot with a dictionary word so that crossings agree, with
+your own words pinned as **seeds**. Output is a canonical layout, so it composes
+with `lint`/`export`.
+
+    # Fill a grid from a word list (a tiny sample ships; real fills want UKACD18).
+    $ ./crosswordsmith fill --grid grids/blocked_13a.json --dict UKACD18.txt
+
+    # Pin some answers (a fragment, the same format arrange consumes) and fill
+    # around them.
+    $ ./crosswordsmith fill --grid grids/blocked_13a.json --seeds seeds.json \
+        --dict UKACD18.txt
+
+| flag | meaning |
+| --- | --- |
+| `--grid <file>` | **required** — the grid template (a `grids/` black-square mask). |
+| `--seeds <file>` | seed words to pin (a fragment, §6.6); filled around as hard pins. |
+| `--dict <file>` | word list, one per line (default: a small bundled sample; real fills: `--dict UKACD18`). |
+| `--out <file>` | write to `<file>` instead of stdout. |
+
+Each white cell is a shared logical variable, so crossings are consistent by
+construction; the search is MRV backtracking (most-constrained slot first) over
+an in-memory pattern index, and is **deterministic**. When no complete fill
+exists, `fill` reports the unfillable slot(s) and exits non-zero (it never emits
+a partial grid). The bundled lexicon is a tiny sample for the demo grids; supply
+a real dictionary (UKACD18, BSD-3) with `--dict` for production fills.
 
 
 ## Clues Fixture

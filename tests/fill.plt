@@ -1,0 +1,81 @@
+% tests/fill.plt - plunit suite for fill.pl (grid-first auto-fill, §8.4).
+%
+% Assumes crossword.pl, quality.pl, lint.pl, stockgrid.pl, arrange.pl and
+% fill.pl are consulted by the runner before this file. Covers slot derivation
+% + the SHARED cell-variable invariant (the crossing constraint), the fill
+% search (AC-FILL-1), seeds (AC-FILL-2), determinism (AC-FILL-3), and the
+% no-fill report. The byte-exact fill is pinned by tests/golden/fill_3.json.
+
+:- use_module(library(plunit)).
+
+% Run a fill and return the across/down answer lists (deterministic).
+do_fill(GridFile, SeedFile, DictFile, Across, Down) :-
+    fill_grid(GridFile, _Size, Slots, _CellVar),
+    ( SeedFile == none -> true ; apply_seeds(SeedFile, Slots) ),
+    load_dict(DictFile, DictByLen, Index),
+    fill_attempt(Slots, DictByLen, Index, filled, Numbered, _),
+    findall(A, ( member(W, Numbered), get_dict(dir, W, across), get_dict(answer, W, A) ), Across),
+    findall(A, ( member(W, Numbered), get_dict(dir, W, down),   get_dict(answer, W, A) ), Down).
+
+
+:- begin_tests(fill).
+
+% --- slots + the shared-variable invariant (the crossing constraint) ---------
+% The 3x3 has 3 across + 3 down slots.
+test(fill_derives_slots) :-
+    fill_grid('fixtures/fill_grid_3.json', 3, Slots, _),
+    length(Slots, 6).
+
+% REGRESSION: a crossing cell's variable must be SHARED between its across and
+% down slot (cell 1 starts both row-0-across and col-0-down). A findall-copied
+% or yall-lambda-copied template breaks this and the fill is inconsistent.
+test(fill_crossing_cells_are_shared) :-
+    fill_grid('fixtures/fill_grid_3.json', 3, Slots, _),
+    once(( member(slot(1, across, [1,2,3], [A1|_]), Slots) )),
+    once(( member(slot(1, down,   [1,4,7], [D1|_]), Slots) )),
+    A1 == D1.
+
+% --- the fill (AC-FILL-1) ----------------------------------------------------
+% A complete, consistent fill: every across is a row, every down is a column
+% (deterministic - pinned to the exact result).
+test(fill_produces_consistent_square) :-
+    do_fill('fixtures/fill_grid_3.json', none, 'fixtures/wordlist_sample.txt', Across, Down),
+    Across == ['CAT', 'ORE', 'WED'],
+    Down   == ['COW', 'ARE', 'TED'].
+
+% No dictionary word of the slot length -> infeasible (reported, not silent).
+test(fill_infeasible_when_no_matching_words) :-
+    tmp_file_stream(text, F, S), write(S, "FOUR\nFIVE\n"), close(S),   % 4-letter only
+    fill_grid('fixtures/fill_grid_3.json', _, Slots, _),
+    load_dict(F, DictByLen, Index),
+    fill_attempt(Slots, DictByLen, Index, Outcome, _, _),
+    delete_file(F),
+    Outcome == infeasible.
+
+% --- seeds (AC-FILL-2) -------------------------------------------------------
+% Pinning COW across row 0 forces the transpose square; the pin appears at its
+% slot, and the unseeded default (CAT across) is overridden.
+test(fill_respects_seed) :-
+    do_fill('fixtures/fill_grid_3.json', 'fixtures/fill_seed_3.json',
+            'fixtures/wordlist_sample.txt', Across, _Down),
+    Across == ['COW', 'ARE', 'TED'],
+    Across \== ['CAT', 'ORE', 'WED'].
+
+% A seed whose answer matches no slot of the grid is rejected.
+test(fill_seed_no_slot_throws, [throws(error(fill_seed_no_slot('CAT'), _))]) :-
+    fill_grid('fixtures/fill_grid_3.json', _, Slots, _),
+    % CAT down at col 0 cells [1,4,7] is a real slot; ask for it as a 2-cell
+    % run that no slot has -> no match.
+    apply_seeds_frags(Slots, [frag('CAT', across, 2, [2, 3])]).
+
+% --- determinism (AC-FILL-3) -------------------------------------------------
+test(fill_deterministic) :-
+    do_fill('fixtures/fill_grid_3.json', none, 'fixtures/wordlist_sample.txt', A1, D1),
+    do_fill('fixtures/fill_grid_3.json', none, 'fixtures/wordlist_sample.txt', A2, D2),
+    A1 == A2, D1 == D2.
+
+:- end_tests(fill).
+
+% Helper: apply a list of frag/4 seeds directly (mirrors apply_seeds/2 minus the
+% file read), for the no-slot test.
+apply_seeds_frags(Slots, Frags) :- foldl(apply_seed(Slots), Frags, _, _).

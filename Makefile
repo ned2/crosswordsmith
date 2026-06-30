@@ -43,6 +43,9 @@ golden:
 	@diff -u tests/golden/export_bundled_17.exolve \
 		<(./crosswordsmith export --to exolve tests/golden/arrange_bundled_17_fixed.json 2>/dev/null) \
 		&& echo "golden (export exolve): OK"
+	@diff -u tests/golden/fill_3.json \
+		<(./crosswordsmith fill --grid fixtures/fill_grid_3.json --dict fixtures/wordlist_sample.txt 2>/dev/null) \
+		&& echo "golden (fill 3x3): OK"
 
 # Regenerate the golden files. Use only after an INTENTIONAL output change,
 # and review the diff before committing.
@@ -54,7 +57,8 @@ update-golden:
 	./crosswordsmith lint --profile toc tests/golden/arrange_bundled_17_fixed.json 2>/dev/null > tests/golden/lint_bundled_17_toc.json
 	./crosswordsmith export --to ipuz tests/golden/arrange_bundled_17_fixed.json 2>/dev/null > tests/golden/export_bundled_17.ipuz
 	./crosswordsmith export --to exolve tests/golden/arrange_bundled_17_fixed.json 2>/dev/null > tests/golden/export_bundled_17.exolve
-	@echo "Regenerated golden files (arrange fixed/max/fragment/candidates + lint toc + export ipuz/exolve)"
+	./crosswordsmith fill --grid fixtures/fill_grid_3.json --dict fixtures/wordlist_sample.txt 2>/dev/null > tests/golden/fill_3.json
+	@echo "Regenerated golden files (arrange fixed/max/fragment/candidates + lint toc + export ipuz/exolve + fill)"
 
 # Local performance baselines. Results are machine-specific and reporting-only.
 # Benchmarks the production default strategy unless BENCH_STRATEGY is set, e.g.

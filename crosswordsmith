@@ -22,6 +22,16 @@
 :- prolog_load_context(directory, Dir),
    directory_file_path(Dir, 'export.pl', ExportFile),
    ensure_loaded(ExportFile).
+:- prolog_load_context(directory, Dir),
+   directory_file_path(Dir, 'stockgrid.pl', StockgridFile),
+   ensure_loaded(StockgridFile).
+:- prolog_load_context(directory, Dir),
+   directory_file_path(Dir, 'fill.pl', FillFile),
+   ensure_loaded(FillFile).
+
+% Remember the script directory so the default fill dictionary resolves no
+% matter the working directory.
+:- prolog_load_context(directory, Dir), assertz(script_directory(Dir)).
 
 :- use_module(library(optparse)).
 
@@ -41,7 +51,7 @@ cli([H|_]) :- help_flag(H), !, usage(user_output), fail.     % --help -> usage, 
 cli([arrange|Args]) :- !, arrange_cli(Args).
 cli([lint|Args])    :- !, lint_cli(Args).
 cli([export|Args])  :- !, export_cli(Args).
-cli([fill|_])   :- !, deferred(fill).
+cli([fill|Args])    :- !, fill_cli(Args).
 cli([First|_])  :- old_style_arg(First), !, migration_hint.  % AC-CLI-3
 cli([Verb|_]) :-
     format(user_error, "crosswordsmith: unknown verb `~w`~n~n", [Verb]),
@@ -53,17 +63,6 @@ help_flag('--help'). help_flag('-h'). help_flag(help).
 % or any flag where a verb was expected) -> the migration hint.
 old_style_arg(A) :- atom_number(A, _), !.
 old_style_arg(A) :- atom_concat('-', _, A).
-
-not_built(Verb) :-
-    format(user_error,
-           "crosswordsmith: `~w` is specified (design-spec §8) but not yet implemented (Flavour B).~n",
-           [Verb]),
-    fail.
-deferred(Verb) :-
-    format(user_error,
-           "crosswordsmith: `~w` is deferred (design-spec §8.4) and not buildable yet.~n",
-           [Verb]),
-    fail.
 
 migration_hint :-
     format(user_error,
@@ -84,7 +83,7 @@ Verbs:~n\c
   arrange   arrange a closed set of words into a layout (Flavour A)~n\c
   lint      validate a layout against a profile          (Flavour B)~n\c
   export    convert a layout to ipuz v2 / Exolve          (Flavour B)~n\c
-  fill      grid-first open-dictionary fill               (deferred, §8.4)~n~n\c
+  fill      grid-first open-dictionary auto-fill          (Flavour B)~n~n\c
 Each verb has a --help (e.g. `crosswordsmith arrange --help`).~n",
            []).
 
@@ -201,6 +200,7 @@ fail_with(Prefix, Msg) :-
 cli_error(X)  :- fail_with('crosswordsmith arrange', X).
 lint_err(X)   :- fail_with('crosswordsmith lint', X).
 export_err(X) :- fail_with('crosswordsmith export', X).
+fill_err(X)   :- fail_with('crosswordsmith fill', X).
 
 
 % --- the `lint` verb (design-spec §8.1) -------------------------------------
@@ -309,6 +309,56 @@ resolve_export_format(ipuz, ipuz) :- !.
 resolve_export_format(exolve, exolve) :- !.
 resolve_export_format(F, _) :-
     export_err('unknown format ~w; choose ipuz or exolve'-[F]).
+
+
+% --- the `fill` verb (design-spec §8.4) -------------------------------------
+
+fill_opts_spec(
+    [ [opt(help),  type(boolean), default(false),
+       shortflags([h]), longflags([help]),  help('show these fill options')],
+      [opt(grid),  type(atom),    default(''), meta('FILE'),
+       longflags([grid]),                    help('REQUIRED: the grid template (a §8.3 black-square mask)')],
+      [opt(seeds), type(atom),    default(''), meta('FILE'),
+       longflags([seeds]),                   help('seed words to pin (a fragment, §6.6)')],
+      [opt(dict),  type(atom),    default(''), meta('FILE'),
+       longflags([dict]),                    help('word list, one per line (default: a small bundled sample; real fills: --dict UKACD18)')],
+      [opt(out),   type(atom),    default(''), meta('FILE'),
+       longflags([out]),                     help('write output to FILE instead of stdout')]
+    ]).
+
+fill_cli(Args) :-
+    fill_opts_spec(Spec),
+    catch(opt_parse(Spec, Args, Opts, Positional),
+          _Err,
+          (fill_err('could not parse options'), fail)),
+    (   memberchk(help(true), Opts)
+    ->  fill_usage(user_output), fail
+    ;   fill_dispatch(Opts, Positional)
+    ).
+
+fill_usage(S) :-
+    fill_opts_spec(Spec),
+    opt_help(Spec, Help),
+    format(S,
+"Usage: crosswordsmith fill --grid <mask.json> [--seeds <frag.json>] [--dict <words>]~n~n\c
+Fills a legal blocked grid from a word list, seeds pinned. Output is a canonical~n\c
+layout (composes with lint/export). Exit is non-zero, naming the unfillable~n\c
+slot(s), when no complete fill exists.~n~n~w", [Help]).
+
+fill_dispatch(Opts, Positional) :-
+    ( Positional == [] -> true ; fill_err('takes only flags (got ~w)'-[Positional]) ),
+    memberchk(grid(Grid), Opts),
+    ( Grid \== '' -> true ; fill_err('requires --grid FILE (a stock-grid mask)') ),
+    memberchk(seeds(Seeds0), Opts), ( Seeds0 == '' -> Seeds = none ; Seeds = Seeds0 ),
+    memberchk(dict(Dict0), Opts),   ( Dict0 == ''  -> default_dict(Dict) ; Dict = Dict0 ),
+    memberchk(out(OutFile), Opts),
+    with_output(OutFile, fill_solve(Grid, Seeds, Dict, fixed)).
+
+% The default dictionary is the small bundled sample, resolved relative to the
+% script directory (real fills pass --dict <UKACD18>).
+default_dict(Dict) :-
+    ( script_directory(Dir) -> true ; Dir = '.' ),
+    directory_file_path(Dir, 'fixtures/wordlist_sample.txt', Dict).
 
 
 :- initialization(main, main).

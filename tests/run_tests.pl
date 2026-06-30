@@ -20,11 +20,13 @@ run_suite :-
     consult('lint.pl'),                % Flavour-B validator (uses crossword.pl + quality.pl metrics)
     consult('export.pl'),              % Flavour-B interchange (ipuz v2 / Exolve)
     consult('stockgrid.pl'),           % Flavour-B stock-grid library (uses lint blocked-uk to validate)
+    consult('fill.pl'),                % Flavour-B auto-fill (uses stockgrid slots + arrange load_fragment)
     consult('tests/crossword.plt'),
     consult('tests/arrange.plt'),
     consult('tests/lint.plt'),
     consult('tests/export.plt'),
     consult('tests/stockgrid.plt'),
+    consult('tests/fill.plt'),
     % summary(S) gives us the counts AND stops run_tests/2 from failing on
     % its own, so we control the exit code explicitly from the dict. Note:
     % run_tests/2 and the summary/1 option are undocumented in the SWI 10.0.2

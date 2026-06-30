@@ -62,6 +62,9 @@ check_golden "export ipuz" \
 check_golden "export exolve" \
     tests/golden/export_bundled_17.exolve \
     ./crosswordsmith export --to exolve tests/golden/arrange_bundled_17_fixed.json
+check_golden "fill 3x3" \
+    tests/golden/fill_3.json \
+    ./crosswordsmith fill --grid fixtures/fill_grid_3.json --dict fixtures/wordlist_sample.txt
 
 echo
 if [ "$status" -eq 0 ]; then
