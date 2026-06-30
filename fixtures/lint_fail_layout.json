@@ -1,0 +1,6 @@
+{
+  "gridLength": 5,
+  "words": [
+    { "answer": "AT", "direction": "across", "cells": [[0, 0], [0, 1]] }
+  ]
+}

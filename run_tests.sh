@@ -2,11 +2,11 @@
 #
 # run_tests.sh - run the full crosswordsmith test suite.
 #
-# Two layers:
-#   1. plunit unit/integration tests (tests/crossword.plt, tests/arrange.plt)
-#      via tests/run_tests.pl
-#   2. golden-output regression tests: deterministic runs whose stdout must
-#      match tests/golden/ (the legacy crossword CLI + the arrange engine).
+# Three layers:
+#   1. plunit unit/integration tests (tests/*.plt) via tests/run_tests.pl
+#   2. golden-output regression: deterministic crosswordsmith CLI runs whose
+#      stdout must match tests/golden/ byte-for-byte
+#   3. CLI exit-code contract checks (e.g. AC-LINT-2: FAIL -> non-zero)
 #
 # Exits non-zero if any layer fails. Run from anywhere.
 
@@ -39,6 +39,21 @@ check_golden() {
     rm -f "$actual"
 }
 
+# check_exit <name> <expected-code> <command...>: run the command (stdout +
+# stderr discarded) and assert its exit status. Covers the AC-LINT-2 exit-code
+# contract (FAIL -> non-zero), which check_golden cannot (it discards the code).
+check_exit() {
+    local name="$1" want="$2"; shift 2
+    "$@" >/dev/null 2>&1
+    local got=$?
+    if [ "$got" -eq "$want" ]; then
+        echo "exit ($name): OK (exit $got)"
+    else
+        echo "exit ($name): FAILED (got exit $got, want $want)"
+        status=1
+    fi
+}
+
 echo
 echo "=== golden output regression (the crosswordsmith CLI, end to end) ==="
 check_golden "arrange fixed" \
@@ -65,6 +80,15 @@ check_golden "export exolve" \
 check_golden "fill 3x3" \
     tests/golden/fill_3.json \
     ./crosswordsmith fill --grid fixtures/fill_grid_3.json --dict fixtures/wordlist_sample.txt
+
+echo
+echo "=== CLI exit-code contract (AC-LINT-2) ==="
+# A FAIL-severity verdict under an enforcing profile must exit non-zero...
+check_exit "lint blocked-uk FAIL -> nonzero" 1 \
+    ./crosswordsmith lint --profile blocked-uk fixtures/lint_fail_layout.json
+# ...while PASS/WARN (advisory toc never FAILs) exits zero.
+check_exit "lint toc PASS/WARN -> zero" 0 \
+    ./crosswordsmith lint --profile toc tests/golden/arrange_bundled_17_fixed.json
 
 echo
 if [ "$status" -eq 0 ]; then
