@@ -287,7 +287,7 @@ Transformations of the canonical JSON (§6.5), not new emitters.
 - **`.puz`/`.jpz`/PDF**: reached via off-the-shelf `kotwords` from the ipuz output — **not** emitted natively (§3).
 
 **AC-EXP-1** `export --to ipuz` produces spec-valid ipuz v2 that a third-party consumer (e.g. via kotwords) ingests without error.
-**AC-EXP-2** `export --to exolve` produces text that round-trips through Exet (load → save → equivalent grid+entries). *(Verification: a byte-exact golden (`tests/golden/export_bundled_17.exolve`) pins the emitter, and Exet ingestion is a manual check — there is no in-repo Exolve parser, so third-party round-trip cannot be automated in plunit. See revamp-audit R13.)*
+**AC-EXP-2** `export --to exolve` produces text that round-trips through Exet (load → save → equivalent grid+entries). *(Verification: a byte-exact golden (`tests/golden/export_bundled_17.exolve`) pins the emitter, and Exet ingestion is a manual check — there is no in-repo Exolve parser, so third-party round-trip cannot be automated in plunit. Run the step-by-step round-trip via [`exet-verification.md`](./exet-verification.md); see revamp-audit R13.)*
 **AC-EXP-3** Export preserves enumerations and `meta`-borne clue text where the target format has a field for them; no data invented.
 
 ### 8.3 Stock-grid library + house-style profiles  **[LOCKED]**

@@ -315,8 +315,9 @@ a correct contract; this is a §6.5 summary-line inconsistency only.
 ## Coverage gaps (not adequately assessed this pass)
 
 - **AC-EXP-2 (Exolve/Exet round-trip)** — un-automatable in-repo (Exet is a third-party
-  web tool). Follow-up: record a manual Exet ingestion check and amend the spec to mark
-  AC-EXP-2 as manually/golden-verified (see R13).
+  web tool). A step-by-step manual checklist now exists ([`exet-verification.md`](./exet-verification.md),
+  with a verification log); the spec marks AC-EXP-2 as golden-pinned + manually verified
+  (see R13). Remaining action is a one-off human Exet round-trip recorded in that log.
 - **INV-4 (license-clean bundled data)** — **done** (2026-06-30); see the *License /
   provenance pass* section below. No AC-X-4 violation in bundled data; surfaced two
   documentation findings (L1 UKACD18 mislabel, L2 vendored manual is CC BY-SA 3.0).
