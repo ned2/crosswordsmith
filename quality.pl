@@ -57,8 +57,13 @@ seed_word(Entry, Start, Dir, GridLen, GIn, PW, GOut) :-
     Entry = [Word|_],
     assign_word(Word, Letters, WLen, Start, Dir, GridLen, [], GIn, PW, GOut).
 
+% The "placement footprint" of an answer: its letters with word separators
+% (spaces AND hyphens) removed - those are enumeration markers, not grid cells.
+% The original answer atom is carried to emit (placed_to_word/4) so export still
+% derives the enumeration; only the placed run/length drops the separators.
 word_letters([Word|_], Letters, WLen) :-
-    atom_chars(Word, L0), delete(L0, ' ', Letters), length(Letters, WLen).
+    atom_chars(Word, L0), delete(L0, ' ', L1), delete(L1, '-', Letters),
+    length(Letters, WLen).
 
 % Place the globally best-scoring placeable word, repeat; drop the rest. The
 % construction is cut-free: instead of an `( Best -> place ; stop )` if-then-else,

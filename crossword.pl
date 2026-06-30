@@ -267,7 +267,8 @@ assign_words(Strategy, Words, PlacedWords, GridLen, Start, Dir, GIn, GOut, Place
     select_word(Strategy, Words, PlacedWords, GridLen, Start, Dir, GIn, Entry, RemWords),
     Entry = [Word|_],   % the solver uses only the answer; metadata is ignored
     atom_chars(Word, Letters),
-    delete(Letters, ' ', Letters2),
+    delete(Letters, ' ', Letters1),
+    delete(Letters1, '-', Letters2),
     length(Letters2, WLen),
     % on first pass, Start and Dir will be grounded with the start values
     % then afterwards will be unground, with find_intersecting_word grounding them
@@ -334,7 +335,8 @@ positive_key(Count-_) :- Count > 0.
 mrv_count(Cap, PlacedWords, GridLen, Start, Dir, GIn, Entry, Count) :-
     Entry = [Word|_],
     atom_chars(Word, Letters),
-    delete(Letters, ' ', Letters2),
+    delete(Letters, ' ', Letters1),
+    delete(Letters1, '-', Letters2),
     length(Letters2, WLen),
     aggregate_all(count,
             capped(Cap,
@@ -378,7 +380,8 @@ assign_words_inc(Words, PlacedWords, StateIn, GridLen, Start, Dir, GIn, GOut, Ou
                Entry, RemWords, StateOut),
     Entry = [Word|_],
     atom_chars(Word, Letters),
-    delete(Letters, ' ', Letters2),
+    delete(Letters, ' ', Letters1),
+    delete(Letters1, '-', Letters2),
     length(Letters2, WLen),
     find_intersecting_word(Letters2, WLen, PlacedWords, GridLen, Start, Dir),
     assign_word(Word, Letters2, WLen, Start, Dir, GridLen, PlacedWords, GIn, Placed, G1),
@@ -442,7 +445,8 @@ inc_count(PrevMap, LastLetters, PlacedWords, GridLen, Start, Dir, GIn, Entry, AI
 
 entry_letters([Word|_], Letters) :-
     atom_chars(Word, L0),
-    delete(L0, ' ', Letters).
+    delete(L0, ' ', L1),
+    delete(L1, '-', Letters).
 
 shares_letter(Letters, OtherLetters) :-
     member(L, Letters),
