@@ -53,6 +53,9 @@ check_golden "arrange fragment" \
 check_golden "arrange candidates" \
     tests/golden/arrange_bundled_17_candidates.json \
     ./crosswordsmith arrange --strict --size-mode fixed --candidates 3 --size 17 --input fixtures/bundled_17_clues.pl
+check_golden "lint toc" \
+    tests/golden/lint_bundled_17_toc.json \
+    ./crosswordsmith lint --profile toc tests/golden/arrange_bundled_17_fixed.json
 
 echo
 if [ "$status" -eq 0 ]; then

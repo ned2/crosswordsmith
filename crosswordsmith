@@ -16,6 +16,9 @@
 :- prolog_load_context(directory, Dir),
    directory_file_path(Dir, 'arrange.pl', ArrangeFile),
    ensure_loaded(ArrangeFile).
+:- prolog_load_context(directory, Dir),
+   directory_file_path(Dir, 'lint.pl', LintFile),
+   ensure_loaded(LintFile).
 
 :- use_module(library(optparse)).
 
@@ -33,7 +36,7 @@ main :-
 cli([]) :- !, usage(user_error), fail.                       % AC-CLI-1: bare -> usage, non-zero
 cli([H|_]) :- help_flag(H), !, usage(user_output), fail.     % --help -> usage, non-zero (§5.2)
 cli([arrange|Args]) :- !, arrange_cli(Args).
-cli([lint|_])   :- !, not_built(lint).
+cli([lint|Args])    :- !, lint_cli(Args).
 cli([export|_]) :- !, not_built(export).
 cli([fill|_])   :- !, deferred(fill).
 cli([First|_])  :- old_style_arg(First), !, migration_hint.  % AC-CLI-3
@@ -76,10 +79,10 @@ usage(S) :-
 Usage: crosswordsmith <verb> [options]~n~n\c
 Verbs:~n\c
   arrange   arrange a closed set of words into a layout (Flavour A)~n\c
-  lint      validate a layout against a profile          (Flavour B; not yet implemented)~n\c
+  lint      validate a layout against a profile          (Flavour B)~n\c
   export    convert a layout to ipuz/Exolve               (Flavour B; not yet implemented)~n\c
   fill      grid-first open-dictionary fill               (deferred, §8.4)~n~n\c
-`crosswordsmith arrange --help` lists the arrange options.~n",
+`crosswordsmith arrange --help` and `crosswordsmith lint --help` list their options.~n",
            []).
 
 
@@ -182,14 +185,76 @@ arrange_action(false, _K, _Frag, Words, SizeOpt, Drop, Mode, OutFile) :-
     resolve_size(SizeOpt, GridLen),
     with_output(OutFile, arrange_solve(Words, GridLen, Drop, Mode)).
 
-% Print a CLI usage error on stderr and fail (-> exit 1). Accepts a bare message
-% or a Format-Args pair.
-cli_error(Fmt-Args) :- !,
-    format(user_error, "crosswordsmith arrange: ", []),
+% Print a usage error under the given verb prefix on stderr and fail (-> exit 1).
+% Accepts a bare message or a Format-Args pair. cli_error/1 and lint_err/1 are the
+% per-verb wrappers.
+fail_with(Prefix, Fmt-Args) :- !,
+    format(user_error, "~w: ", [Prefix]),
     format(user_error, Fmt, Args),
     nl(user_error), fail.
-cli_error(Msg) :-
-    format(user_error, "crosswordsmith arrange: ~w~n", [Msg]), fail.
+fail_with(Prefix, Msg) :-
+    format(user_error, "~w: ~w~n", [Prefix, Msg]), fail.
+
+cli_error(X) :- fail_with('crosswordsmith arrange', X).
+lint_err(X)  :- fail_with('crosswordsmith lint', X).
+
+
+% --- the `lint` verb (design-spec §8.1) -------------------------------------
+
+lint_opts_spec(
+    [ [opt(help),            type(boolean), default(false),
+       shortflags([h]), longflags([help]),   help('show these lint options')],
+      [opt(profile),         type(atom),    default(''), meta('NAME'),
+       longflags([profile]),                 help('rule/severity profile: toc, blocked-uk, american')],
+      [opt(allow_asymmetry), type(boolean), default(false),
+       longflags(['allow-asymmetry']),       help('symmetry never hard-FAILs (downgrade to WARN)')],
+      [opt(out),             type(atom),    default(''), meta('FILE'),
+       longflags([out]),                     help('write the report to FILE instead of stdout')]
+    ]).
+
+lint_cli(Args) :-
+    lint_opts_spec(Spec),
+    catch(opt_parse(Spec, Args, Opts, Positional),
+          _Err,
+          (lint_err('could not parse options'), fail)),
+    (   memberchk(help(true), Opts)
+    ->  lint_usage(user_output), fail
+    ;   lint_dispatch(Opts, Positional)
+    ).
+
+lint_usage(S) :-
+    lint_opts_spec(Spec),
+    opt_help(Spec, Help),
+    format(S,
+"Usage: crosswordsmith lint --profile <name> [--allow-asymmetry] <layout.json>~n~n\c
+Validates a canonical layout (what `arrange` emits). Profiles: toc (advisory),~n\c
+blocked-uk, american. (barred-ximenean is blocked on OD-7.) Exit is non-zero~n\c
+only when a FAIL-severity rule trips.~n~n~w", [Help]).
+
+lint_dispatch(Opts, Positional) :-
+    (   Positional = [LayoutFile]
+    ->  true
+    ;   Positional == []
+    ->  lint_err('needs a layout file: crosswordsmith lint --profile <name> <layout.json>')
+    ;   lint_err('takes exactly one layout file (got ~w)'-[Positional])
+    ),
+    memberchk(profile(P0), Opts),
+    resolve_lint_profile(P0, Profile),
+    memberchk(allow_asymmetry(Allow), Opts),
+    memberchk(out(OutFile), Opts),
+    % lint_solve always succeeds (it emits the report regardless of verdict and
+    % binds Verdict), so --out always captures the report; the exit code is the
+    % verdict (AC-LINT-2): FAIL -> fail -> exit non-zero.
+    with_output(OutFile, lint_solve(LayoutFile, Profile, Allow, Verdict)),
+    ( Verdict == 'FAIL' -> fail ; true ).
+
+resolve_lint_profile('', _) :- !,
+    lint_err('requires --profile <name> (toc, blocked-uk, american)').
+resolve_lint_profile(P, P) :- lint_known_profile(P), !.
+resolve_lint_profile(P, _) :- lint_blocked_profile(P), !,
+    lint_err('profile ~w is blocked on OD-7 (barred-Ximenean unch table not yet primary-sourced)'-[P]).
+resolve_lint_profile(P, _) :-
+    lint_err('unknown profile ~w; choose toc, blocked-uk, or american'-[P]).
 
 
 :- initialization(main, main).

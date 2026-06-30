@@ -55,7 +55,7 @@ Reachability calibration (`--check-target`, ε, τ) is a **required pre-weightin
 
 | Component | Spec | Status | Notes / ACs |
 |---|---|---|---|
-| `lint` (validator/profiles) | §8.1 | not started | blocked-uk/toc/american profiles first; AC-LINT-1…4. Barred profile ⊘ on OD-7. |
+| `lint` (validator/profiles) | §8.1 | **done** (toc / blocked-uk / american) | `lint.pl` + `crosswordsmith lint` verb: per-word/per-rule PASS/WARN/FAIL report + verdict over the canonical layout JSON; reuses the shared metric predicates. AC-LINT-1/2/3/4. 14 plunit + 1 golden. **barred-ximenean ⊘ on OD-7** (recognised but reports "blocked"). |
 | `export` (ipuz v2 / Exolve) | §8.2 | not started | Transformations of canonical JSON; AC-EXP-1…3. |
 | Stock-grid library / profiles | §8.3 | ⊘ blocked | PARTIAL — schema + grid set open (OD-5, OD-6). |
 | `fill` engine (grid-first, open-dict) | §8.4 | deferred | Not buildable until OD-1…4 resolved. |
@@ -82,7 +82,8 @@ Reachability calibration (`--check-target`, ε, τ) is a **required pre-weightin
 ## At a glance
 
 - **Done — Flavour A `arrange` is feature-complete:** Phase 1 (oracle) + 1.5 (gate → DESCOPE) + **2 (strict)** + **3 (size framing)** + **4 (best-effort via greedy)** + **5 (fragment seeding)** + **6 (candidates)** + **7 (CLI + migration)**. Engine in `arrange.pl`; CLI in `crosswordsmith` (`crossword.pl` is now a library); **38 plunit tests (`tests/arrange.plt`) + 4 CLI goldens (fixed + max + fragment + candidates)** wired into `run_tests.sh`/`make test` — full suite **118/118 plunit + 4 goldens green**.
-- **Next buildable, unblocked:** Flavour B — `lint` (§8.1, blocked-uk/toc/american profiles) then `export` (§8.2, ipuz v2 / Exolve). Both are transformations/validators over the canonical JSON that `arrange` now emits.
+- **Flavour B `lint` (§8.1): done** — `lint.pl` + `crosswordsmith lint` verb (toc / blocked-uk / american; barred-ximenean ⊘ OD-7). Consumes the canonical layout JSON, reports per-word/per-rule PASS/WARN/FAIL + verdict; 14 plunit + 1 golden.
+- **Next buildable, unblocked:** Flavour B — `export` (§8.2, ipuz v2 / Exolve): transformations of the canonical JSON `arrange` emits / `lint` consumes.
 - **Blocked:** stock-grid library (OD-5/6), `lint` barred profile (OD-7).
 - **Deferred:** `fill` engine (OD-1…4).
 - **Dropped (by the gate):** `arrange` B&B search loop, admissible bound, incremental delta, LNS polish.

@@ -1,0 +1,149 @@
+% tests/lint.plt - plunit suite for lint.pl (Flavour-B grid validator, §8.1).
+%
+% Assumes crossword.pl, quality.pl (via crossword.pl) and lint.pl are consulted
+% by the runner (tests/run_tests.pl) before this file. Run via `make test`.
+%
+% Covers the loader, the rule evaluators, the per-profile rule/severity sets
+% (AC-LINT-4), the symmetry override (AC-LINT-3), and the report shape +
+% verdict (AC-LINT-1/2). lint_run/5 is exercised directly on small hand-built
+% layouts so each severity is checkable; the CLI exit-code mapping and the
+% byte-exact report live in the golden (tests/golden/lint_bundled_17_toc.json).
+
+:- use_module(library(plunit)).
+
+% A tiny controlled layout on a 5x5 grid: across CAT (cells 1,2,3) crossing down
+% COT (cells 1,6,11) at cell 1. Each word is checked at only its shared cell, so
+% neither is half-checked; each has an unchecked run of 2 ending the word.
+mini_layout([ word{answer:'CAT', dir:across, cells:[1,2,3],  len:3, num:1},
+              word{answer:'COT', dir:down,   cells:[1,6,11], len:3, num:1} ]).
+
+% A fully-interlocked 2x2 mesh (every cell checked); also symmetric + connected.
+dense_mesh([ word{answer:'AB', dir:across, cells:[1,2], len:2, num:1},
+             word{answer:'CD', dir:across, cells:[3,4], len:2, num:2},
+             word{answer:'AC', dir:down,   cells:[1,3], len:2, num:1},
+             word{answer:'BD', dir:down,   cells:[2,4], len:2, num:2} ]).
+
+grid_rule_sev(Report, Rule, Sev) :-
+    get_dict(grid, Report, Grid),
+    once(( member(GR, Grid), get_dict(rule, GR, Rule), get_dict(severity, GR, Sev) )).
+
+
+:- begin_tests(lint).
+
+% --- loader ------------------------------------------------------------------
+
+% A canonical words[] entry parses to a placed word: [r,c] cells -> 1-based
+% numbers, direction -> atom, len from the cell count.
+test(lint_loads_canonical_word) :-
+    lint_dict_layout(
+        _{gridLength:5, words:[
+            _{number:1, direction:"across", answer:"CAT", cells:[[0,0],[0,1],[0,2]]}]},
+        5, [W]),
+    get_dict(answer, W, 'CAT'), get_dict(dir, W, across),
+    get_dict(cells, W, [1,2,3]), get_dict(len, W, 3), get_dict(num, W, 1).
+
+test(lint_layout_no_grid_length_throws, [throws(error(lint_no_grid_length, _))]) :-
+    lint_dict_layout(_{words:[]}, _, _).
+
+% --- report shape (AC-LINT-1) ------------------------------------------------
+
+test(lint_report_shape) :-
+    mini_layout(L),
+    lint_run(L, 5, toc, false, R),
+    get_dict(verdict, R, V), memberchk(V, ['PASS','WARN','FAIL']),
+    get_dict(summary, R, Sum),
+    get_dict(pass, Sum, _), get_dict(warn, Sum, _), get_dict(fail, Sum, _),
+    get_dict(words, R, Ws), length(Ws, 2),
+    once(( member(W, Ws), get_dict(results, W, Rs), Rs = [_|_] )).
+
+% --- verdict / severity (AC-LINT-2) ------------------------------------------
+
+% toc is advisory-only: never FAIL, so the mini layout verdicts WARN.
+test(lint_verdict_warn_under_toc) :-
+    mini_layout(L),
+    lint_run(L, 5, toc, false, R),
+    get_dict(verdict, R, 'WARN').
+
+% Under blocked-uk the same layout FAILs (sub-half checking + asymmetry).
+test(lint_verdict_fail_under_blocked_uk) :-
+    mini_layout(L),
+    lint_run(L, 5, 'blocked-uk', false, R),
+    get_dict(verdict, R, 'FAIL'),
+    % the checked-fraction rule is the FAIL for both words
+    get_dict(words, R, Ws),
+    forall( member(W, Ws),
+            once(( get_dict(results, W, Rs), member(Res, Rs),
+                   get_dict(rule, Res, checked_half), get_dict(severity, Res, 'FAIL') )) ).
+
+% A fully-checked mesh passes checked_full under american (every cell checked).
+test(lint_checked_full_passes_on_dense_mesh) :-
+    dense_mesh(M),
+    lint_run(M, 2, american, false, R),
+    get_dict(words, R, Ws),
+    forall( member(W, Ws),
+            once(( get_dict(results, W, Rs), member(Res, Rs),
+                   get_dict(rule, Res, checked_full), get_dict(severity, Res, 'PASS') )) ).
+
+% --- per-profile rule sets (AC-LINT-4) ---------------------------------------
+
+% american applies EXACTLY min_length + checked_full per word (its documented
+% per-word set), nothing else.
+test(lint_american_applies_exact_per_word_ruleset) :-
+    mini_layout(L),
+    lint_run(L, 5, american, false, R),
+    get_dict(words, R, Ws),
+    once(( member(W, Ws), get_dict(results, W, Rs),
+           findall(Rule, ( member(Res, Rs), get_dict(rule, Res, Rule) ), Rules),
+           Rules == [min_length, checked_full] )).
+
+% --- connectivity ------------------------------------------------------------
+
+% Two non-touching words on one grid form two components -> connectivity trips.
+test(lint_connectivity_detects_split) :-
+    Split = [ word{answer:'CAT', dir:across, cells:[1,2,3],    len:3, num:1},
+              word{answer:'DOG', dir:across, cells:[13,14,15], len:3, num:2} ],
+    lint_run(Split, 5, toc, false, R),
+    grid_rule_sev(R, connectivity, 'WARN').
+
+% A single connected word passes connectivity.
+test(lint_connectivity_passes_connected) :-
+    One = [ word{answer:'CAT', dir:across, cells:[4,5,6], len:3, num:1} ],
+    lint_run(One, 3, toc, false, R),
+    grid_rule_sev(R, connectivity, 'PASS').
+
+% --- symmetry + the --allow-asymmetry override (AC-LINT-3) -------------------
+
+% A centred 3x3 row {4,5,6} is 180-symmetric -> PASS even under blocked-uk.
+test(lint_symmetry_passes_on_symmetric_pattern) :-
+    Sym = [ word{answer:'CAT', dir:across, cells:[4,5,6], len:3, num:1} ],
+    lint_run(Sym, 3, 'blocked-uk', false, R),
+    grid_rule_sev(R, symmetry, 'PASS').
+
+% The top row {1,2,3} is asymmetric -> FAIL under blocked-uk...
+test(lint_symmetry_fails_asymmetric_under_blocked_uk) :-
+    Asym = [ word{answer:'CAT', dir:across, cells:[1,2,3], len:3, num:1} ],
+    lint_run(Asym, 3, 'blocked-uk', false, R),
+    grid_rule_sev(R, symmetry, 'FAIL').
+
+% ...never hard-FAILs under --allow-asymmetry (downgraded to WARN)...
+test(lint_symmetry_allow_asymmetry_downgrades_to_warn) :-
+    Asym = [ word{answer:'CAT', dir:across, cells:[1,2,3], len:3, num:1} ],
+    lint_run(Asym, 3, 'blocked-uk', true, R),
+    grid_rule_sev(R, symmetry, 'WARN').
+
+% ...and never FAILs at all under a profile that does not enforce it (toc).
+test(lint_symmetry_advisory_under_toc) :-
+    Asym = [ word{answer:'CAT', dir:across, cells:[1,2,3], len:3, num:1} ],
+    lint_run(Asym, 3, toc, false, R),
+    grid_rule_sev(R, symmetry, 'WARN').
+
+% --- profile registry --------------------------------------------------------
+
+test(lint_known_and_blocked_profiles) :-
+    lint_known_profile(toc),
+    lint_known_profile('blocked-uk'),
+    lint_known_profile(american),
+    \+ lint_known_profile('barred-ximenean'),
+    lint_blocked_profile('barred-ximenean').
+
+:- end_tests(lint).

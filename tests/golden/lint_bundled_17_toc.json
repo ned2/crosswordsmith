@@ -1,0 +1,152 @@
+{
+  "allowAsymmetry":false,
+  "grid": [
+    {"rule":"connectivity","severity":"PASS"},
+    {
+      "detail":"180-rotational asymmetry at 22 cell(s)",
+      "rule":"symmetry",
+      "severity":"WARN"
+    }
+  ],
+  "profile":"toc",
+  "summary": {"fail":0,"pass":15,"warn":17},
+  "verdict":"WARN",
+  "words": [
+    {
+      "answer":"OMEGA POINT",
+      "direction":"across",
+      "number":1,
+      "results": [
+	{"rule":"min_length","severity":"PASS"},
+	{
+	  "detail":"checked 1 of 10, need 5",
+	  "rule":"checked_half",
+	  "severity":"WARN"
+	},
+	{
+	  "detail":"unchecked run of 6 (max 2)",
+	  "rule":"max_unch_run",
+	  "severity":"WARN"
+	},
+	{
+	  "detail":"double-unchecked at the start",
+	  "rule":"double_unch_ends",
+	  "severity":"WARN"
+	},
+	{"rule":"odd_even","severity":"PASS"}
+      ]
+    },
+    {
+      "answer":"GNOSTIC GOSPELS",
+      "direction":"down",
+      "number":2,
+      "results": [
+	{"rule":"min_length","severity":"PASS"},
+	{
+	  "detail":"checked 3 of 14, need 7",
+	  "rule":"checked_half",
+	  "severity":"WARN"
+	},
+	{
+	  "detail":"unchecked run of 7 (max 2)",
+	  "rule":"max_unch_run",
+	  "severity":"WARN"
+	},
+	{"rule":"double_unch_ends","severity":"PASS"},
+	{
+	  "detail":"checked cells all share one parity (odd/even imbalance)",
+	  "rule":"odd_even",
+	  "severity":"WARN"
+	}
+      ]
+    },
+    {
+      "answer":"NARRATIVE FALLACY",
+      "direction":"down",
+      "number":3,
+      "results": [
+	{"rule":"min_length","severity":"PASS"},
+	{
+	  "detail":"checked 2 of 16, need 8",
+	  "rule":"checked_half",
+	  "severity":"WARN"
+	},
+	{
+	  "detail":"unchecked run of 9 (max 2)",
+	  "rule":"max_unch_run",
+	  "severity":"WARN"
+	},
+	{
+	  "detail":"double-unchecked at the start",
+	  "rule":"double_unch_ends",
+	  "severity":"WARN"
+	},
+	{"rule":"odd_even","severity":"PASS"}
+      ]
+    },
+    {
+      "answer":"ETERNAL RETURN",
+      "direction":"across",
+      "number":4,
+      "results": [
+	{"rule":"min_length","severity":"PASS"},
+	{
+	  "detail":"checked 2 of 13, need 7",
+	  "rule":"checked_half",
+	  "severity":"WARN"
+	},
+	{
+	  "detail":"unchecked run of 9 (max 2)",
+	  "rule":"max_unch_run",
+	  "severity":"WARN"
+	},
+	{"rule":"double_unch_ends","severity":"PASS"},
+	{
+	  "detail":"checked cells all share one parity (odd/even imbalance)",
+	  "rule":"odd_even",
+	  "severity":"WARN"
+	}
+      ]
+    },
+    {
+      "answer":"BIAS",
+      "direction":"across",
+      "number":5,
+      "results": [
+	{"rule":"min_length","severity":"PASS"},
+	{
+	  "detail":"checked 1 of 4, need 2",
+	  "rule":"checked_half",
+	  "severity":"WARN"
+	},
+	{"rule":"max_unch_run","severity":"PASS"},
+	{
+	  "detail":"double-unchecked at the end",
+	  "rule":"double_unch_ends",
+	  "severity":"WARN"
+	},
+	{"rule":"odd_even","severity":"PASS"}
+      ]
+    },
+    {
+      "answer":"FLOW",
+      "direction":"across",
+      "number":6,
+      "results": [
+	{"rule":"min_length","severity":"PASS"},
+	{
+	  "detail":"checked 1 of 4, need 2",
+	  "rule":"checked_half",
+	  "severity":"WARN"
+	},
+	{"rule":"max_unch_run","severity":"PASS"},
+	{
+	  "detail":"double-unchecked at the end",
+	  "rule":"double_unch_ends",
+	  "severity":"WARN"
+	},
+	{"rule":"odd_even","severity":"PASS"}
+      ]
+    }
+  ]
+}

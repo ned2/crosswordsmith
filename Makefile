@@ -34,6 +34,9 @@ golden:
 	@diff -u tests/golden/arrange_bundled_17_candidates.json \
 		<(./crosswordsmith arrange --strict --size-mode fixed --candidates 3 --size 17 --input fixtures/bundled_17_clues.pl 2>/dev/null) \
 		&& echo "golden (arrange candidates): OK"
+	@diff -u tests/golden/lint_bundled_17_toc.json \
+		<(./crosswordsmith lint --profile toc tests/golden/arrange_bundled_17_fixed.json 2>/dev/null) \
+		&& echo "golden (lint toc): OK"
 
 # Regenerate the golden files. Use only after an INTENTIONAL output change,
 # and review the diff before committing.
@@ -42,7 +45,8 @@ update-golden:
 	./crosswordsmith arrange --strict --size-mode max --size 25 --input fixtures/toc_demo.pl 2>/dev/null > tests/golden/arrange_toc_demo_max.json
 	./crosswordsmith arrange --strict --size-mode fixed --fragment fixtures/bundled_17_fragment.json --input fixtures/bundled_17_clues.pl 2>/dev/null > tests/golden/arrange_bundled_17_fragment.json
 	./crosswordsmith arrange --strict --size-mode fixed --candidates 3 --size 17 --input fixtures/bundled_17_clues.pl 2>/dev/null > tests/golden/arrange_bundled_17_candidates.json
-	@echo "Regenerated golden files (arrange fixed/max/fragment/candidates)"
+	./crosswordsmith lint --profile toc tests/golden/arrange_bundled_17_fixed.json 2>/dev/null > tests/golden/lint_bundled_17_toc.json
+	@echo "Regenerated golden files (arrange fixed/max/fragment/candidates + lint toc)"
 
 # Local performance baselines. Results are machine-specific and reporting-only.
 # Benchmarks the production default strategy unless BENCH_STRATEGY is set, e.g.

@@ -16,10 +16,11 @@ length too small for the words is reported, never silently mangled. The solver
 core is portable Prolog, though the clue-input and JSON-output paths use
 SWI-specific features (see Requirements).
 
-The command-line interface is the **`crosswordsmith`** script, with one verb
-per capability — `arrange` today; `lint`, `export`, and `fill` are specified
-for later. The former `./crossword.pl …` interface has been replaced;
-`crossword.pl` is now an internal library (see [Migration](#migration-from-the-old-crosswordpl-cli)).
+The command-line interface is the **`crosswordsmith`** script, with one verb per
+capability — `arrange` (lay out words) and `lint` (validate a layout) today;
+`export` and `fill` are specified for later. The former `./crossword.pl …`
+interface has been replaced; `crossword.pl` is now an internal library (see
+[Migration](#migration-from-the-old-crosswordpl-cli)).
 
 Words — and optional per-word metadata (a clue, a link, anything) — are supplied
 as a JSON file or a Prolog `clues/1` fixture. The bundled
@@ -123,6 +124,35 @@ The previous `./crossword.pl --input F <N> <loc>` interface is replaced by the
 are gone (the engine uses the production strategy internally and sweeps start
 corners itself). Running `./crossword.pl` directly — or `crosswordsmith` with
 old-style arguments — prints this mapping.
+
+### `lint` — validate a layout against a profile
+
+`lint` consumes a **canonical layout** (exactly what `arrange` emits) and reports
+**PASS / WARN / FAIL per rule, per word**, plus a summary verdict, under a named
+profile. It is a validator — no engine — so it works on any canonical layout,
+including hand-authored ones.
+
+    # Validate a saved layout under the relaxed (advisory) default profile.
+    $ ./crosswordsmith lint --profile toc layout.json
+
+    # Pipe arrange straight into lint under a strict profile.
+    $ ./crosswordsmith arrange --size-mode fixed --size 17 \
+        --input fixtures/bundled_17_clues.pl --out layout.json
+    $ ./crosswordsmith lint --profile blocked-uk layout.json
+
+| flag | meaning |
+| --- | --- |
+| `--profile <name>` | **required** — `toc` (advisory-only), `blocked-uk`, or `american`. (`barred-ximenean` is recognised but blocked on OD-7.) |
+| `--allow-asymmetry` | symmetry never hard-FAILs (its deficit is downgraded to WARN). |
+| `--out <file>` | write the report to `<file>` instead of stdout. |
+| `--help` / `-h` | print the lint options. |
+
+The report is deterministic JSON: a `verdict` (`PASS`/`WARN`/`FAIL`), a `summary`
+count, grid-level results (`connectivity`, `symmetry`), and per-word `results`
+(min length, checked fraction, longest unchecked run, double-unchecked ends,
+odd/even balance — exactly the rule set the chosen profile defines). The report
+is always emitted; the **exit code** is non-zero only when a FAIL-severity rule
+trips under the chosen profile.
 
 
 ## Clues Fixture
