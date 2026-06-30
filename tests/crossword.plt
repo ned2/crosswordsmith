@@ -11,7 +11,6 @@
 
 :- use_module(library(plunit)).
 :- use_module(library(http/json)).
-:- use_module(library(time)).      % call_with_time_limit/2 for the quality smoke test
 
 bundled_words(Words) :-
     load_clues('fixtures/bundled_17_clues.pl', Words).
@@ -377,25 +376,20 @@ test(with_output_no_file_on_failure) :-
 :- end_tests(cli).
 
 
-% The quality engine
+% Shared layout metrics + greedy constructor (quality.pl)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% quality.pl's greedy density engine is loaded alongside crossword.pl (via its
-% ensure_loaded). This smoke test guards that the engine TERMINATES and produces
-% a complete layout on real, metadata-carrying input.
-%
-% Regression for F016: next_move/5 gathers candidates with findall, which COPIES
-% each entry; a .pl fixture entry [Answer, _{...}] has an unbound dict tag, so
-% the copy is \== the original. apply_move/6 must therefore remove the placed
-% word by its ground answer atom, not via ==-based remove_x, or the just-placed
-% word is re-offered forever (an infinite loop). The bundled fixture carries
-% exactly such dicts, so before the fix this hung. The goal is time-bounded, so
-% a regression FAILS the suite instead of hanging it.
+% quality.pl is loaded alongside crossword.pl (via its ensure_loaded). After the
+% Phase-7 cutover it holds only the shared metric predicates (consumed by
+% arrange.pl as optimizer signals and by lint as validators) and the greedy
+% density constructor (arrange's best-effort/candidates path; its termination on
+% real metadata-carrying input is exercised by the arrange tests). These tests
+% pin the metrics + seed selection.
 
 :- begin_tests(quality).
 
-% --- fixtures: two hand-built layouts with cell_rc-consistent geometry -------
+% --- fixture: a hand-built layout with cell_rc-consistent geometry -----------
 % A placed word is a dict carrying at least answer, dir and cells (the keys the
-% scoring/floor predicates read); cells are numbered as in the live engine.
+% metric predicates read); cells are numbered as in the live engine.
 
 % An across word crossed by two down words at its END cells (17-grid). Across A
 % spans row 0, cols 0..2; each down spans a column over rows 0..2, sharing one
@@ -405,29 +399,7 @@ sample_cross([Wa, Wd1, Wd2]) :-
     Wd1 = word{answer:'ADE', dir:down,   cells:[1,18,35]},
     Wd2 = word{answer:'CFG', dir:down,   cells:[3,20,37]}.
 
-% A dense 2x2 mesh: every cell is shared by an across and a down word, so every
-% word is fully checked and passes any per-word floor.
-dense_mesh([Wa1, Wa2, Wd1, Wd2]) :-
-    Wa1 = word{answer:'AB', dir:across, cells:[1,2]},
-    Wa2 = word{answer:'CD', dir:across, cells:[18,19]},
-    Wd1 = word{answer:'AC', dir:down,   cells:[1,18]},
-    Wd2 = word{answer:'BD', dir:down,   cells:[2,19]}.
-
-% --- smoke: the engine terminates on real metadata-carrying input (F016) -----
-
-% The engine terminates and places every word of the bundled metadata-carrying
-% fixture with no drops, choosing its own (square) grid.
-test(quality_terminates_and_places_all_bundled, [nondet]) :-
-    bundled_words(Words),
-    no_floors(Floors),
-    call_with_time_limit(10,
-        quality_layout(Words, Floors, Placed, Dropped, GridLen)),
-    integer(GridLen),
-    Dropped == [],
-    length(Words, NWords),
-    length(Placed, NWords).
-
-% --- scoring (layout_score / checked_cells / dir_cells) ----------------------
+% --- scoring (checked_cells / dir_cells) -------------------------------------
 
 % dir_cells/3 collects, per direction, the sorted ordset of covered cells.
 test(dir_cells_partition_by_direction) :-
@@ -440,16 +412,7 @@ test(checked_cells_counts_crossings, [true(N =:= 2)]) :-
     sample_cross(Placed),
     checked_cells(Placed, N).
 
-% Q = w_check*Checked - w_area*Area - w_elong*Elong. For sample_cross: Checked=2,
-% bounding box 3x3 (Area 9, Elong 0), weights (6,1,2) -> 6*2 - 9 - 0 = 3.
-test(layout_score_trades_checking_against_bbox, [true(Score =:= 3)]) :-
-    sample_cross(Placed),
-    layout_score(Placed, 17, Score).
-
-% The editorial weight knob is fixed at w_check:w_area:w_elong = 6:1:2.
-test(quality_weights_are_6_1_2) :- quality_weights(6, 1, 2).
-
-% --- floors: per-word floor predicates ---------------------------------------
+% --- per-word metrics (the lint-rule primitives) -----------------------------
 
 % word_checked_count/3 = how many of a word's cells a perpendicular word covers.
 test(word_checked_count_per_word) :-
@@ -472,58 +435,13 @@ test(word_max_unch_run_longest_gap) :-
     word_max_unch_run(Wa,  Placed, 1),    % A: checked,unchecked,checked
     word_max_unch_run(Wd1, Placed, 2).    % D1: checked,unchecked,unchecked
 
-% floors_ok/2 only gates on all_words: reject any layout with drops when on.
-test(floors_ok_all_words_gate) :-
-    floors_ok(floors{min_half:off, max_unch_run:off, all_words:on},  []),
-    \+ floors_ok(floors{min_half:off, max_unch_run:off, all_words:on},  ['X']),
-    floors_ok(floors{min_half:off, max_unch_run:off, all_words:off}, ['X']).
-
-% --- floors: floor_drop (drop-to-satisfy) ------------------------------------
-
-% With no active floors, floor_drop/4 keeps every word and drops nothing.
-test(floor_drop_noop_when_floors_off) :-
-    sample_cross(Placed),
-    no_floors(Floors),
-    floor_drop(Floors, Placed, Final, Dropped),
-    Final == Placed,
-    Dropped == [].
-
-% A fully-checked mesh satisfies min_half outright, so nothing is dropped.
-test(floor_drop_keeps_fully_checked_mesh_under_min_half) :-
-    dense_mesh(Mesh),
-    floor_drop(floors{min_half:on, max_unch_run:off, all_words:off},
-               Mesh, Final, Dropped),
-    Final == Mesh,
-    Dropped == [].
-
-% Drop-to-satisfy cascades: in sample_cross every word has a >1 unchecked run,
-% and removing a crosser un-checks its partner, so a max_unch_run:1 floor drops
-% all three (their answers come back as the dropped set).
-test(floor_drop_drops_to_satisfy_max_unch_run) :-
-    sample_cross(Placed),
-    floor_drop(floors{min_half:off, max_unch_run:1, all_words:off},
-               Placed, Final, Dropped),
-    Final == [],
-    msort(Dropped, ['ABC','ADE','CFG']).
-
-% --- helpers (length / seed / grid sizing) -----------------------------------
-
-% word_letter_count/2 measures the PLACED footprint: spaces are not letters.
-test(word_letter_count_strips_spaces, [true(N =:= 10)]) :-
-    word_letter_count(['OMEGA POINT', _{}], N).   % 11 chars, 10 letters
+% --- helpers (word_letters / seed selection) ---------------------------------
 
 % word_letters/3 yields the space-stripped char list and its length.
 test(word_letters_strips_spaces) :-
     word_letters(['NEW YORK', _{}], Letters, WLen),
     Letters == ['N','E','W','Y','O','R','K'],
     WLen =:= 7.
-
-% grid_candidates/2 yields a small sorted set of square sizes spanning the
-% target densities, never below longest-word+1. Six 2-letter words -> [5,6,7].
-test(grid_candidates_span_target_densities) :-
-    grid_candidates([['AB',_{}],['CD',_{}],['EF',_{}],
-                     ['GH',_{}],['IJ',_{}],['KL',_{}]], Sizes),
-    Sizes == [5,6,7].
 
 % seed_candidates/2 returns the longest words first (restart diversity). With
 % fewer words than the cap K, all are returned, longest-first.
