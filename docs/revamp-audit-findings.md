@@ -331,23 +331,24 @@ a correct contract; this is a §6.5 summary-line inconsistency only.
 
 ## Remediation log
 
-Fix pass **2026-06-30**. Scope of this pass: the two `high` defects, the
+Fix passes **2026-06-30** (two passes): pass 1 — the two `high` defects, the
 test-gap findings, the doc-drift sweep, and R8 (resolved by decision: implement
-`--check-target`). Status: `fixed` / `open`. After the pass the suite is **161
-plunit + 8 goldens + 2 CLI exit-code checks, all green** (was 152 + 8 at audit
-time; +9 plunit + 2 exit checks added below).
+`--check-target`); pass 2 — the remaining med/low code findings R3, R5, R6, R7,
+R9. Status: **all 16 `fixed`**. After remediation the suite is **168 plunit + 8
+goldens + 3 CLI exit-code checks, all green** (was 152 + 8 at audit time; +16
+plunit + 3 exit checks added below).
 
 | id | severity | status | resolution |
 |----|----------|--------|------------|
 | R1 | high | **fixed** | strip hyphens (and spaces) at all placement-letter sites — `crossword.pl` 270/337/381/`entry_letters`, `quality.pl` `word_letters/3`; original answer atom still carried to emit (export enumeration unaffected). Test `arrange:hyphenated_answer_strips_separator`. |
 | R2 | high | **fixed** | track seed pins by `Start-Dir`; exempt them from search + `empty_slots` (a seed need not be a dictionary word); slots completed by crossings are still dict-validated. `fill.pl` `apply_seeds/3`+`seeded_slot/2`, search over `SearchSlots`, emit over all. Test `fill:fill_seed_need_not_be_in_dict`. |
-| R3 | med  | open | canonicalize emitted `words` order (sort by `(number, direction)`) — **not in this pass.** |
+| R3 | med  | **fixed** | `build_words` now emits the `words` array in canonical `(number, direction)` order (`canonical_word_order/2`; across before down), so a placement order from the strict DFS or a fragment re-solve serializes identically. Grid rows (cell-occupancy) unaffected; all goldens byte-identical. Test `arrange:fragment_roundtrip_byte_identical_reordering` (benchmark_08 size 13 — the flipping repro). |
 | R4 | med  | **fixed** | parameterized `arrange_best_layout/6` (budget); tests `arrange:strict_budget_exhausted_not_proven` (+ the placed counterpart) assert `not_proven` is distinct from `infeasible`. Fixed the misleading `(c)/(b)` comment at `arrange.plt`. |
-| R5 | low  | open | normalize/guard enumeration segments — **not in this pass.** |
-| R6 | low  | open | carry direction in the MRV sort key + fix comment — **not in this pass.** |
-| R7 | low  | open | share one inference budget across the corner sweep — **not in this pass.** |
+| R5 | low  | **fixed** | rewrote the enumeration tokenizer (`export.pl` `enum_tokens`/`enum_clean`): a separator is emitted only between two non-empty runs, so leading/trailing/adjacent separators no longer produce 0-length segments like `(2,0)`. Tests `export:enum_trailing_space` / `_leading_space` / `_double_space` / `_trailing_hyphen`. |
+| R6 | low  | **fixed** | `select_mrv` sort key is now `c(Count, Start, Dir)` and the slot is recovered by `(Start, Dir)`, so a same-start across/down tie expands the genuinely fewest-candidate slot; fixed the contradictory comment. Test `fill:select_mrv_recovers_correct_direction_on_tie`. |
+| R7 | low  | **fixed** | the 4-corner sweep now threads ONE decrementing inference budget (`construct_corners/7`), bounding a hard/infeasible input to ~Budget total instead of Budget×4 (toc_demo size 15: ~100s → ~28s). Realistic inputs are unchanged (each corner ≪ budget); all goldens byte-identical. Test `arrange:arrange_budget_shared_across_corners`. |
 | R8 | low  | **fixed** (decided: implement) | added `--check-target N` — a `crosswordsmith` opt setting `check_target_override/1`, read by `check_target/2`: target = `min(ceil(L/2), N)` (only ever lowers). Listed in §5 + §7.2; strict mode now reports "cap inert" on stderr when the objective has degenerated. Tests `arrange:check_target_override_lowers` / `_only_lowers` / `_makes_cap_bind`. |
-| R9 | low  | open | suppress/validate optparse `--no-` negations — **not in this pass.** |
+| R9 | low  | **fixed** | the CLI rejects any `--no-<x>` token up front (`negation_flag/2` at the verb-dispatch chokepoint) with a verb-aware "unknown flag" error, so optparse's auto-negation names (`--no-strict` etc.) no longer silently apply (AC-CLI-2). CLI exit-check `arrange --no- flag rejected`. |
 | R10| low  | **fixed** (doc) | documented that `symmetry` is an untrusted/optional annotation (mask is the source of truth; validator re-derives) — `stockgrid.pl` header + `design-spec` §8.3, resolving the header-vs-error-message inconsistency. |
 | R11| low  | **fixed** | parameterized `fill_attempt/8` (budget); tests `fill:fill_budget_exhausted_not_proven` and `fill:fill_revalidates_under_lint` (lints the fill output → `PASS` under `american`). |
 | R12| low  | **fixed** | added `check_exit` to `run_tests.sh` + a deliberately-failing `fixtures/lint_fail_layout.json`; asserts `blocked-uk` FAIL → exit 1 and `toc` PASS/WARN → exit 0 (AC-LINT-2). |
@@ -356,6 +357,4 @@ time; +9 plunit + 2 exit checks added below).
 | R15| low  | **fixed** (doc) | `STATUS.md` aggregate count → 158 plunit + 8 goldens + 2 exit checks; points at this doc. |
 | R16| nit  | **fixed** (doc) | `design-spec` §6.5 word object → `{number, direction, answer, cells, meta}` (matches the emitter + `json-output-spec`). |
 
-**Still open after this pass:** R3 (med — round-trip canonicalization) and
-R5/R6/R7/R9 (low — code robustness/heuristic/UX). None are correctness-critical
-on realistic input; tracked for a follow-up pass.
+**All 16 findings are now resolved.** No open items remain from this audit.
