@@ -1,31 +1,43 @@
 crosswordsmith
 ===============================================================================
 
-A CLI-first crossword layout engine in SWI-Prolog. It arranges a **closed set
-of words** into an interlocking crossword-shaped layout and emits deterministic,
-diffable JSON. It feeds clue-writing tools; it is not one. (The full product
-vision and its acceptance criteria live in
-[`docs/design-spec.md`](docs/design-spec.md).)
+A CLI-first crossword **layout, validation, and fill** toolkit in SWI-Prolog. It
+covers the setter's grid workflow end to end — arrange a closed set of words into
+a layout, validate a grid against house-style rules, fill a blocked grid from a
+dictionary, and export to standard interchange formats — emitting deterministic,
+diffable output throughout. It feeds clue-writing tools; it is not one (no
+auto-cluing). The full product vision and acceptance criteria live in
+[`docs/design-spec.md`](docs/design-spec.md).
 
-The engine is **deterministic**: the same input and flags always produce
-byte-identical output — no randomness, no shuffle. It lays words down one at a
-time so each crosses an already-placed word and never sits hard up against
-another word's letters, maximising a capped interlock objective over an N×N
-grid. The grid side is given with `--size` (the engine does not guess it); a
-length too small for the words is reported, never silently mangled. The solver
-core is portable Prolog, though the clue-input and JSON-output paths use
-SWI-specific features (see Requirements).
+Everything is **deterministic**: identical input and flags always produce
+byte-identical output — no randomness, no shuffle. One CLI, one verb per
+capability:
 
-The command-line interface is the **`crosswordsmith`** script, with one verb per
-capability — `arrange` (lay out words), `lint` (validate a layout), `export`
-(convert to ipuz/Exolve), and `fill` (grid-first auto-fill). The former
-`./crossword.pl …` interface has been replaced; `crossword.pl` is now an internal
-library (see [Migration](#migration-from-the-old-crosswordpl-cli)).
+- **`arrange`** — lay out *these specific* words into an interlocking,
+  crossword-shaped layout (*Flavour A* — a closed word set, aesthetic interlock).
+  It places words so each crosses an already-placed word and never sits flush
+  against another, maximising a capped interlock objective over an N×N grid.
+- **`lint`** — validate a layout against a profile (`toc`, `blocked-uk`,
+  `american`, `barred-ximenean`): PASS / WARN / FAIL per rule, per word.
+- **`fill`** — take a legal blocked grid and fill every slot from a dictionary,
+  your own words pinned as seeds (*Flavour B* — grid-first, open-dictionary).
+- **`export`** — convert a layout to ipuz v2 or Exolve (onward to `.puz`/`.jpz`/
+  PDF via off-the-shelf [kotwords](https://github.com/jpd236/kotwords)).
+
+The four verbs are glued together by one **canonical layout JSON**: `arrange`
+and `fill` emit it, `lint` and `export` consume it, and it round-trips back in
+as a seed/fragment. A small bundled **stock-grid library** (`grids/`) of
+lint-validated blocked templates feeds `lint` and `fill`. The core is portable
+Prolog; the clue-input and JSON paths use SWI-specific features (see
+Requirements).
+
+The former `./crossword.pl …` interface has been replaced; `crossword.pl` is now
+an internal library (see [Migration](#migration-from-the-old-crosswordpl-cli)).
 
 Words — and optional per-word metadata (a clue, a link, anything) — are supplied
-as a JSON file or a Prolog `clues/1` fixture. The bundled
-`fixtures/bundled_17_clues.pl` attaches a URL to each word (it was originally
-for embedding in a web page, where the clues/solved words are links).
+to `arrange` as a JSON file or a Prolog `clues/1` fixture. The bundled
+`fixtures/bundled_17_clues.pl` attaches a URL to each word (it was originally for
+embedding in a web page, where the clues/solved words are links).
 
 
 ## Requirements
@@ -207,11 +219,11 @@ a partial grid). The bundled lexicon is a tiny sample for the demo grids; supply
 a real dictionary (UKACD18, BSD-3) with `--dict` for production fills.
 
 
-## Clues Fixture
+## Word/clue input (for `arrange`)
 
-The bundled words and clues live in `fixtures/bundled_17_clues.pl`. Prolog
-fixture files define a single `clues/1` term whose argument is a list of
-`[Answer, Metadata]` pairs:
+`arrange`'s `--input` is a word/clue set. The bundled example lives in
+`fixtures/bundled_17_clues.pl`. Prolog fixture files define a single `clues/1`
+term whose argument is a list of `[Answer, Metadata]` pairs:
 
     clues([
            ['OMEGA POINT',
@@ -278,9 +290,28 @@ rationale; `tests/clues.json` is a worked example.
 
 ## How it works
 
+### Modules
+
+One shared substrate, two solver tops, with the Flavour-B tools as
+transformations/validators over the canonical JSON:
+
+| file | role |
+| --- | --- |
+| `crossword.pl` | **shared substrate** — grid model, the free-canvas legality core, clue numbering, JSON emit + input loading. Now a library (no CLI). |
+| `quality.pl` | shared **metric predicates** (checked cells, unchecked runs, bbox, crossings) + the greedy density constructor that `arrange` reuses. |
+| `arrange.pl` | **Flavour A** — the deterministic MRV-first layout engine: construct + rescore + emit, with fragment seeding and diverse candidates. |
+| `lint.pl` | **Flavour B** — the profile-driven grid validator (consumes the canonical layout, reuses the metric predicates). |
+| `export.pl` | **Flavour B** — ipuz v2 / Exolve transforms of the canonical layout. |
+| `stockgrid.pl` + `grids/` | **Flavour B** — the bundled stock-grid library: black-square masks, slots derived on load, each validated by `lint --profile blocked-uk`. |
+| `fill.pl` | **Flavour B** — grid-first auto-fill: each white cell a shared logical variable, MRV backtracking over an in-memory dictionary index, seeds pinned. |
+| `crosswordsmith` | the CLI: verb dispatch (`arrange`/`lint`/`export`/`fill`) + the migration shim. |
+
+The rest of this section describes the shared substrate and the `arrange`
+engine; the `lint`/`export`/`fill` sections above describe their own behaviour.
+
 ### Data structures
 
-The solver uses two structures (see the comments at the top of
+The substrate uses two structures (see the comments at the top of
 `crossword.pl`):
 
 1. **The grid** — an association list (`library(assoc)`) keyed by cell
@@ -392,6 +423,18 @@ The full schema and design rationale live in
 - **`--enumerate` is expensive.** Many enumerated solutions are the same
   physical layout reached by placing words in a different order; the count is
   large and the search slow on big inputs.
+- **`fill` needs a dictionary.** Only a tiny sample wordlist ships (enough for
+  the demo grids); pass a real lexicon (UKACD18, BSD-3) with `--dict` for
+  production fills. The full dictionary is not bundled.
+- **`export`'s third-party round-trip is a manual step.** The output is
+  spec-valid ipuz v2 / Exolve by construction, but actual ingestion by kotwords
+  (ipuz) or Exet (Exolve) is verified by hand, not in CI.
+- **The stock-grid library is a curated starter set.** A handful of
+  lint-validated blocked grids under `grids/`, not a grid *generator*; it grows
+  by adding more validated masks.
+- **No barred bar/edge model.** The `barred-ximenean` lint profile applies the
+  Ximenean per-length checking math to a canonical (blocked-shaped) layout's
+  words; a dedicated barred-grid representation is out of scope.
 
 
 ## Development
