@@ -151,18 +151,23 @@ fill_search(Slots, DictByLen, Index, Used) :-
     Vars = Word,                          % unify into the shared cell variables
     fill_search(Rest, DictByLen, Index, [Word|Used]).
 
-% Pick the slot with the fewest current candidates (>=0); tie-break lowest start.
+% Pick the slot with the fewest current candidates (>=0); deterministic
+% tie-break: lowest start cell, then direction. Recovering the slot by BOTH
+% start AND direction is load-bearing when a cell begins an across and a down
+% slot (e.g. cell 1): the slot whose count was the minimum must be the one
+% expanded, not whichever shares the start and appears first in the list (R6).
 select_mrv(Slots, DictByLen, Index, Best, Rest, BestCands) :-
     maplist(slot_candidate_count(DictByLen, Index), Slots, Counted),
-    sort(0, @=<, Counted, [c(_, BestStart)|_]),
-    Best = slot(BestStart, _, _, _),
+    sort(0, @=<, Counted, [c(_, BestStart, BestDir)|_]),
+    Best = slot(BestStart, BestDir, _, _),
     select(Best, Slots, Rest),
     Best = slot(_, _, _, Vars),
     candidates(Vars, DictByLen, Index, BestCands).
 
-% c(Count, Start) - sorted by Count then Start gives most-constrained-first
-% deterministically. (The slot itself is recovered by its unique start+dir.)
-slot_candidate_count(DictByLen, Index, slot(Start, _, _, Vars), c(Count, Start)) :-
+% c(Count, Start, Dir) - sorted by Count, then Start, then Dir gives
+% most-constrained-first deterministically AND uniquely identifies the slot
+% (start+dir), so select_mrv recovers exactly the slot the count was computed for.
+slot_candidate_count(DictByLen, Index, slot(Start, Dir, _, Vars), c(Count, Start, Dir)) :-
     candidates(Vars, DictByLen, Index, Cands),
     length(Cands, Count).
 

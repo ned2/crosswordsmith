@@ -106,6 +106,20 @@ test(fill_revalidates_under_lint) :-
     get_dict(verdict, Report, V),
     V == 'PASS'.
 
+% R6 (revamp audit): when a start cell begins both an across and a down slot,
+% select_mrv must expand the slot that actually has the fewest candidates, not
+% whichever shares the start and was generated first. Here start 1's down slot
+% is fully constrained to CAT (1 candidate) while its across slot has 3 (C__);
+% the down slot (the minimum) must be chosen.
+test(select_mrv_recovers_correct_direction_on_tie) :-
+    tmp_file_stream(text, F, S), write(S, "CAT\nCOW\nCUB\nDOG\n"), close(S),
+    load_dict(F, DictByLen, Index), delete_file(F),
+    Across = slot(1, across, [1, 2, 3], ['C', _, _]),       % C__ -> CAT/COW/CUB (3)
+    Down   = slot(1, down,   [1, 4, 7], ['C', 'A', 'T']),   % CAT (1, the minimum)
+    select_mrv([Across, Down], DictByLen, Index, Best, _Rest, Cands),
+    Best = slot(1, down, _, _),
+    Cands == [['C', 'A', 'T']].
+
 % --- determinism (AC-FILL-3) -------------------------------------------------
 test(fill_deterministic) :-
     do_fill('fixtures/fill_grid_3.json', none, 'fixtures/wordlist_sample.txt', A1, D1),
