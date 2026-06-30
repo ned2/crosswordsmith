@@ -69,7 +69,7 @@ These are **deliberately excluded**. Adding any of them requires a §10 decision
 | **Auto clue-writing / surface-reading judgement** | Even Exet and Wordplay Wizard stop at presenting candidates. Be an assistant, not a generator. (Principle #3.) |
 | **Hand-rolled binary `.puz` writer** (CRC-16 in Prolog) | Brittle, and `.puz` cannot represent bars. Reach `.puz`/`.jpz`/PDF via `kotwords` from the native `.ipuz` emitter. |
 | **Solver-facing consumption** — HTML5 applet, hosting, embedding, solve analytics/heatmaps, blogs | All require a hosted backend; orthogonal to a CLI. |
-| **Bundling paywalled dictionaries** (Chambers/Collins/Oxford) | License. Ship only permissive data (UKACD18 BSD-3, MIT/CC word lists). (Principle #9.) |
+| **Bundling paywalled dictionaries** (Chambers/Collins/Oxford) | License. Ship only freely-redistributable data — MIT/CC0/CC-BY word lists, or UKACD18 (J Ross Beresford's *redistributable freeware* lexicon; **not** BSD-3 — if bundled, ship its copyright notice + license text verbatim). (Principle #9.) |
 | **Rectangular / non-square grids** (8×10 New Yorker, etc.) | Cut from the engine; square-only `--size N`. Revisit only if a Flavour-B engine ever needs it. |
 | **`free`/auto-size mode** for `arrange` | Replaced by `--size-mode max` (ceiling + crop). No size-search outer loop. |
 | **Priority / per-word importance scores** in `arrange` | De-scoped; anchoring is handled by the fragment grid instead. |
@@ -304,7 +304,7 @@ The path to *authentic* cryptic layout: take a pre-validated legal blocked grid 
 
 **Architecture (decided — DP-1/DP-2 §10):**
 1. Grid template = a §8.3 black-square mask; slots derived by run-scanning (reuses `stockgrid.pl`).
-2. Dictionary = an **in-memory pattern index** (by length + a (length, position, letter) index), normalised to A–Z. Default lexicon **UKACD18** (BSD-3); `--dict FILE` overrides; a small fixture wordlist ships for tests until the full data is bundled.
+2. Dictionary = an **in-memory pattern index** (by length + a (length, position, letter) index), normalised to A–Z. Default lexicon **UKACD18** (redistributable freeware — J Ross Beresford; ship its copyright + license text verbatim when bundled; **not** BSD-3, contrary to earlier drafts — see the license-pass note in [`revamp-audit-findings.md`](./revamp-audit-findings.md)); `--dict FILE` overrides; a small fixture wordlist ships for tests until the full data is bundled.
 3. **MRV/backtracking** search selecting *dictionary* words per slot (not a fixed list); deterministic (dictionary order + lowest-start tiebreak; INV-2), bounded by a node/inference budget.
 4. **Seeds** are HARD PINS via the §6.6 fragment-grid primitive (OD-3): pin-and-fill-around.
 5. **No-fill contract** (OD-4, INV-3): report the unfillable slot(s) and exit non-zero — `arrange` strict's outcomes (filled / infeasible-naming-slots / not-proven-within-budget).
@@ -350,7 +350,7 @@ The **only** sanctioned places where scope is still undecided. A component canno
 | # | Component | Open decision | Status |
 |---|---|---|---|
 | OD-1 | `fill` (§8.4) | Blocked-only v1, or design barred-compatibility in from the start? | **resolved (DP-1): blocked-only v1** — reuse the existing blocked cell model; barred is a separate engine, deferred indefinitely (§3). |
-| OD-2 | `fill` | Dictionary integration shape: in-memory index, external index, query protocol? Which lexicon as default (UKACD18 confirmed license-clean)? | **resolved (DP-2): in-memory pattern index** (by length + a (length,position,letter) index), normalised to A–Z; **default lexicon UKACD18** (BSD-3) via `--dict FILE` (bundled when the data is on hand; a small fixture wordlist ships for tests). |
+| OD-2 | `fill` | Dictionary integration shape: in-memory index, external index, query protocol? Which lexicon as default (UKACD18 confirmed license-clean)? | **resolved (DP-2): in-memory pattern index** (by length + a (length,position,letter) index), normalised to A–Z; **default lexicon UKACD18** (redistributable freeware — **not** BSD-3; ship its license text verbatim when bundled) via `--dict FILE` (bundled when the data is on hand; a small fixture wordlist ships for tests). |
 | OD-3 | `fill` | How seeds/fragment-grid semantics carry into open-dictionary fill (pin-and-fill-around vs. seed-as-hint). | **resolved (DP-1): pin-and-fill-around** — seeds are HARD PINS via the §6.6 fragment-grid primitive, identical to `arrange`. |
 | OD-4 | `fill` | Which house-style profiles ship in v1, and the failure contract when no fill exists. | **resolved (DP-2): the §8.3 stock-grid templates ARE the v1 profiles** — `fill` fills any pre-validated blocked grid (stock or user-supplied) from the dictionary, seeds pinned. **No-fill contract:** report the unfillable slot(s) and exit non-zero (INV-3), mirroring `arrange` strict's outcomes (filled / infeasible-naming-slots / not-proven-within-budget). |
 | OD-5 | Stock-grid library (§8.3) | Template schema (black-square mask vs. explicit slot list vs. both). | **resolved (DP-1): black-square mask** is the single source of truth; slots are derived on load (no redundant slot list). |

@@ -216,7 +216,7 @@ construction; the search is MRV backtracking (most-constrained slot first) over
 an in-memory pattern index, and is **deterministic**. When no complete fill
 exists, `fill` reports the unfillable slot(s) and exits non-zero (it never emits
 a partial grid). The bundled lexicon is a tiny sample for the demo grids; supply
-a real dictionary (UKACD18, BSD-3) with `--dict` for production fills.
+a real dictionary (UKACD18 — redistributable freeware; ship its license verbatim) with `--dict` for production fills.
 
 
 ## Word/clue input (for `arrange`)
@@ -424,8 +424,9 @@ The full schema and design rationale live in
   physical layout reached by placing words in a different order; the count is
   large and the search slow on big inputs.
 - **`fill` needs a dictionary.** Only a tiny sample wordlist ships (enough for
-  the demo grids); pass a real lexicon (UKACD18, BSD-3) with `--dict` for
-  production fills. The full dictionary is not bundled.
+  the demo grids); pass a real lexicon (UKACD18 — redistributable freeware,
+  ship its license verbatim) with `--dict` for production fills. The full
+  dictionary is not bundled.
 - **`export`'s third-party round-trip is a manual step.** The output is
   spec-valid ipuz v2 / Exolve by construction, but actual ingestion by kotwords
   (ipuz) or Exet (Exolve) is verified by hand, not in CI.
