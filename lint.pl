@@ -24,15 +24,19 @@ lint_profile('blocked-uk',
       double_unch_ends-warn, odd_even-warn, connectivity-fail, symmetry-fail ]).
 lint_profile(american,
     [ min_length-fail, checked_full-fail, connectivity-fail, symmetry-fail ]).
-% 'barred-ximenean' is BLOCKED on OD-7 (per-length unch table + per-publication
-% symmetry codes need a primary source); recognised but not yet available.
-lint_blocked_profile('barred-ximenean').
+% barred-ximenean (OD-7, resolved): the Ximenean per-length unchecked-letter band
+% (checked_band) with RELAXED symmetry (advisory). The band table is primary-
+% sourced (Ximenes 1966 + Azed); per-publication symmetry codes are not modelled
+% (a documented v1 simplification - symmetry is advisory here).
+lint_profile('barred-ximenean',
+    [ min_length-fail, checked_band-fail, connectivity-fail, symmetry-warn ]).
 
 lint_known_profile(P) :- lint_profile(P, _).
 
 per_word_rule(min_length).
 per_word_rule(checked_half).
 per_word_rule(checked_full).
+per_word_rule(checked_band).
 per_word_rule(max_unch_run).
 per_word_rule(double_unch_ends).
 per_word_rule(odd_even).
@@ -149,6 +153,13 @@ eval_word_rule(checked_full, CS, W, Placed, _GL, result(checked_full, Sev, Detai
     get_dict(len, W, L), word_checked_count(W, Placed, C),
     ( C >= L -> Sev = pass, Detail = null
     ; Sev = CS, format(atom(Detail), "checked ~w of ~w (every cell must be checked)", [C, L]) ).
+% The Ximenean barred-grid band: unchecked count must not exceed barred_max_unch/2.
+eval_word_rule(checked_band, CS, W, Placed, _GL, result(checked_band, Sev, Detail)) :-
+    get_dict(len, W, L), word_checked_count(W, Placed, C),
+    Unch is L - C, barred_max_unch(L, Max),
+    ( Unch =< Max -> Sev = pass, Detail = null
+    ; Sev = CS, format(atom(Detail),
+                       "~w unchecked of ~w (Ximenean max ~w at this length)", [Unch, L, Max]) ).
 eval_word_rule(max_unch_run, CS, W, Placed, _GL, result(max_unch_run, Sev, Detail)) :-
     word_max_unch_run(W, Placed, R),
     ( R =< 2 -> Sev = pass, Detail = null
@@ -163,6 +174,18 @@ eval_word_rule(odd_even, CS, W, Placed, _GL, result(odd_even, Sev, Detail)) :-
     ( lopsided_parity(Bits)
     -> Sev = CS, Detail = "checked cells all share one parity (odd/even imbalance)"
     ; Sev = pass, Detail = null ).
+
+% Maximum unchecked letters per entry length for the barred-ximenean band
+% (primary-sourced: Ximenes' 1966 "Ximenes on the Art of the Crossword" + Azed
+% slip conventions): none in a 3, one in 4-5, two in 6-7, three in 8 (Azed
+% self-limits to 2), and no more than a third (floor L/3) in entries of 9+.
+barred_max_unch(L, 0) :- L =< 3, !.
+barred_max_unch(4, 1) :- !.
+barred_max_unch(5, 1) :- !.
+barred_max_unch(6, 2) :- !.
+barred_max_unch(7, 2) :- !.
+barred_max_unch(8, 3) :- !.
+barred_max_unch(L, M) :- L >= 9, M is L // 3.
 
 % A word's per-cell checked flags (1 = crossed by a perpendicular word).
 word_checked_bitmap(W, Placed, Bits) :-

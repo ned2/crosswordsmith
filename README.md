@@ -142,7 +142,7 @@ including hand-authored ones.
 
 | flag | meaning |
 | --- | --- |
-| `--profile <name>` | **required** — `toc` (advisory-only), `blocked-uk`, or `american`. (`barred-ximenean` is recognised but blocked on OD-7.) |
+| `--profile <name>` | **required** — `toc` (advisory-only), `blocked-uk`, `american`, or `barred-ximenean` (the Ximenean per-length unchecked-letter band). |
 | `--allow-asymmetry` | symmetry never hard-FAILs (its deficit is downgraded to WARN). |
 | `--out <file>` | write the report to `<file>` instead of stdout. |
 | `--help` / `-h` | print the lint options. |

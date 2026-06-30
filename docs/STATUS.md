@@ -55,7 +55,7 @@ Reachability calibration (`--check-target`, ε, τ) is a **required pre-weightin
 
 | Component | Spec | Status | Notes / ACs |
 |---|---|---|---|
-| `lint` (validator/profiles) | §8.1 | **done** (toc / blocked-uk / american) | `lint.pl` + `crosswordsmith lint` verb: per-word/per-rule PASS/WARN/FAIL report + verdict over the canonical layout JSON; reuses the shared metric predicates. AC-LINT-1/2/3/4. 14 plunit + 1 golden. **barred-ximenean ⊘ on OD-7** (recognised but reports "blocked"). |
+| `lint` (validator/profiles) | §8.1 | **done** (toc / blocked-uk / american / barred-ximenean) | `lint.pl` + `crosswordsmith lint` verb: per-word/per-rule PASS/WARN/FAIL report + verdict over the canonical layout JSON; reuses the shared metric predicates. AC-LINT-1/2/3/4. 18 plunit + 1 golden. **barred-ximenean built (OD-7 resolved, DP-3)**: primary-sourced Ximenean per-length unch band; symmetry relaxed to advisory. |
 | `export` (ipuz v2 / Exolve) | §8.2 | **done** | `export.pl` + `crosswordsmith export --to ipuz\|exolve`: transformations of the canonical JSON. ipuz v2 (puzzle/solution/clues, enumerations derived from spaces/hyphens); Exolve plain text. AC-EXP-1/3 (structure + enumeration/clue preservation); AC-EXP-2 structure. 11 plunit + 2 goldens. Real kotwords/Exet ingestion is a manual step. |
 | Stock-grid library / profiles | §8.3 | **done** | `stockgrid.pl` + `grids/` (mask schema OD-5, grid set OD-6). Ships 3 lint-validated 180°-symmetric blocked grids (`blocked_13a`/`13b`/`15a`); legality is a CI regression (7 plunit). LOCKED. |
 | `fill` engine (grid-first, open-dict) | §8.4 | **done** | `fill.pl` + `crosswordsmith fill --grid <mask> [--seeds <frag>] [--dict <words>]`: each white cell is a shared logical variable, MRV backtracking over an in-memory pattern index, fragment seeds as hard pins; deterministic; reports unfillable slots + fails. 7 plunit + 1 golden. AC-FILL-1…4. Bundles a small sample wordlist; real fills via `--dict UKACD18`. |
@@ -73,7 +73,7 @@ Reachability calibration (`--check-target`, ε, τ) is a **required pre-weightin
 | OD-4 | `fill`: v1 profiles + no-fill failure contract | **resolved (DP-2): stock-grids-as-profiles; report unfillable slots + fail** |
 | OD-5 | Stock-grid: template schema | **resolved (DP-1): black-square mask (slots derived)** |
 | OD-6 | Stock-grid: which grids seed the library | **resolved: ships blocked_13a/13b/15a (lint-validated)** |
-| OD-7 | `lint`: barred-Ximenean unch table + barred symmetry codes | open |
+| OD-7 | `lint`: barred-Ximenean unch table + barred symmetry codes | **resolved (DP-3): Ximenean band primary-sourced + built; symmetry relaxed** |
 | OD-8 | Backlog: per-feature decision pass | open |
 | OD-9 | `arrange` impl detail: ε/target/τ calibration, thin-form syntax, dup-answer disambiguation | **resolved (DP-1): 5:1 / ceil(L/2) / τ=0.30; thin-form deferred; unique answers** |
 
@@ -82,15 +82,13 @@ Reachability calibration (`--check-target`, ε, τ) is a **required pre-weightin
 ## At a glance
 
 - **Done — Flavour A `arrange` is feature-complete:** Phase 1 (oracle) + 1.5 (gate → DESCOPE) + **2 (strict)** + **3 (size framing)** + **4 (best-effort via greedy)** + **5 (fragment seeding)** + **6 (candidates)** + **7 (CLI + migration)**. Engine in `arrange.pl`; CLI in `crosswordsmith` (`crossword.pl` is now a library); **38 plunit tests (`tests/arrange.plt`) + 4 CLI goldens (fixed + max + fragment + candidates)** wired into `run_tests.sh`/`make test` — full suite **118/118 plunit + 4 goldens green**.
-- **Flavour B `lint` (§8.1): done** — `lint.pl` + `crosswordsmith lint` verb (toc / blocked-uk / american; barred-ximenean ⊘ OD-7). Consumes the canonical layout JSON, reports per-word/per-rule PASS/WARN/FAIL + verdict; 14 plunit + 1 golden.
+- **Flavour B `lint` (§8.1): done** — `lint.pl` + `crosswordsmith lint` verb (toc / blocked-uk / american / barred-ximenean). Consumes the canonical layout JSON, reports per-word/per-rule PASS/WARN/FAIL + verdict; 18 plunit + 1 golden. The barred-ximenean band is primary-sourced (DP-3).
 - **Flavour B `export` (§8.2): done** — `export.pl` + `crosswordsmith export --to ipuz|exolve`: ipuz v2 JSON + Exolve plain text, enumerations derived from the answer; 11 plunit + 2 goldens. (Real kotwords/Exet round-trip is a manual verification step.)
 - **Flavour B stock-grid library (§8.3): done** — DP-1 fixed OD-5 (mask schema); the build resolved OD-6 (ships 3 lint-validated grids). `stockgrid.pl` + `grids/`; 7 plunit.
 - **Flavour B `fill` (§8.4): done** — DP-2 resolved OD-2/OD-4 (completing OD-1…4); `fill.pl` + `crosswordsmith fill`. Grid-first MRV backtracking over an in-memory pattern index, fragment seeds as hard pins, deterministic; 7 plunit + 1 golden. (Ships a sample wordlist; real fills via `--dict UKACD18`.)
-- **Every spec'd component is now built.** Remaining open: **OD-7** (barred-ximenean lint profile — being built next) and **OD-8** (backlog features, each its own future pass). The CLI does `arrange` / `lint` / `export` / `fill`.
-- **Blocked:** stock-grid library (OD-5/6), `lint` barred profile (OD-7).
-- **Deferred:** `fill` engine (OD-1…4).
+- **Every spec'd component is now built, and OD-1…7 are all resolved.** The only thing still open is **OD-8** (backlog features in §8.5, each needs its own decision pass + spec section before implementation). The CLI does `arrange` / `lint` / `export` / `fill`.
 - **Dropped (by the gate):** `arrange` B&B search loop, admissible bound, incremental delta, LNS polish.
-- **Nothing in progress.**
+- **Nothing in progress; nothing deferred or blocked.** Only OD-8 (unspec'd backlog) remains open.
 
 ### De-accretion / retirement roadmap
 

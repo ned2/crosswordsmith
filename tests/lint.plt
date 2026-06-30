@@ -139,11 +139,40 @@ test(lint_symmetry_advisory_under_toc) :-
 
 % --- profile registry --------------------------------------------------------
 
-test(lint_known_and_blocked_profiles) :-
-    lint_known_profile(toc),
-    lint_known_profile('blocked-uk'),
-    lint_known_profile(american),
-    \+ lint_known_profile('barred-ximenean'),
-    lint_blocked_profile('barred-ximenean').
+test(lint_known_profiles) :-
+    forall(member(P, [toc, 'blocked-uk', american, 'barred-ximenean']),
+           lint_known_profile(P)),
+    \+ lint_known_profile(nope).
+
+% --- barred-ximenean: the Ximenean per-length unchecked-letter band (OD-7) ----
+
+% The primary-sourced table: none in a 3, one in 4-5, two in 6-7, three in 8,
+% a third (floor L/3) in 9+.
+test(barred_band_table) :-
+    barred_max_unch(3, 0), barred_max_unch(4, 1), barred_max_unch(5, 1),
+    barred_max_unch(6, 2), barred_max_unch(7, 2), barred_max_unch(8, 3),
+    barred_max_unch(9, 3), barred_max_unch(12, 4).
+
+% A 5-letter entry checked at only 1 cell has 4 unches > the max of 1 -> FAIL.
+test(barred_band_fails_underchecked_five) :-
+    W = word{answer:'ABCDE', dir:across, cells:[1,2,3,4,5], len:5, num:1},
+    D = word{answer:'XYZ',   dir:down,   cells:[3,20,37],   len:3, num:2},
+    eval_word_rule(checked_band, fail, W, [W, D], 17, result(checked_band, Sev, _)),
+    Sev == fail.
+
+% A fully-checked entry has 0 unches, within any band -> PASS.
+test(barred_band_passes_fully_checked) :-
+    dense_mesh(M),
+    once(( member(W, M), eval_word_rule(checked_band, fail, W, M, 2,
+                                        result(checked_band, pass, _)) )).
+
+% The profile applies the band per word and RELAXES symmetry to advisory (WARN).
+test(barred_profile_applies_band_relaxed_symmetry) :-
+    mini_layout(L),
+    lint_run(L, 5, 'barred-ximenean', false, R),
+    get_dict(words, R, Ws),
+    once(( member(WR, Ws), get_dict(results, WR, Rs),
+           member(Res, Rs), get_dict(rule, Res, checked_band) )),
+    grid_rule_sev(R, symmetry, 'WARN').
 
 :- end_tests(lint).

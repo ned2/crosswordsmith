@@ -52,7 +52,7 @@ Sequence: **A → B-`lint`/`export` (cheap shared wins) → B-`fill` (blocked) �
 | CLI contract | §5 | LOCKED | spec'd; built at the Phase-7 cutover |
 | Shared substrate | §6 | LOCKED | mostly exists in `crossword.pl` |
 | `arrange` (Flavour A) | §7 | LOCKED | + build plan ([`arrange-implementation-plan.md`](./arrange-implementation-plan.md)) |
-| `lint` | §8.1 | LOCKED | blocked-uk/toc/american first; barred profile waits on OD-7 |
+| `lint` | §8.1 | LOCKED | toc/blocked-uk/american + barred-ximenean (OD-7 resolved: Ximenean band) |
 | `export` (ipuz/Exolve) | §8.2 | LOCKED | transformations of canonical JSON |
 | Stock-grid library / profiles | §8.3 | LOCKED | mask schema (OD-5) + grid set (OD-6) resolved; ships 3 lint-validated grids |
 | `fill` (Flavour B engine) | §8.4 | LOCKED | OD-1…4 resolved (DP-1/DP-2); blocked-only, in-memory index, stock-grid profiles |
@@ -278,7 +278,7 @@ Profiles (`--profile`): `blocked-uk` (enforce symmetry, ≥half checking, triple
 **AC-LINT-3** Symmetry never hard-FAILs under `--allow-asymmetry`, and never FAILs at all under a profile that doesn't enforce it.
 **AC-LINT-4** Each profile applies exactly its documented rule/severity set; advisory checks never escalate to FAIL.
 
-*(Open: exact barred-Ximenean per-length unch table and per-barred-publication symmetry codes — §10. Build the blocked-uk/toc/american profiles first; barred-ximenean profile lands when the table is primary-sourced.)*
+*(OD-7 resolved (DP-3): the barred-ximenean profile ships the **primary-sourced** Ximenean per-length unchecked-letter band — none in a 3, one in 4–5, two in 6–7, three in 8 (Azed self-limits to 2), ⌊L/3⌋ in 9+ — from Ximenes' 1966 *Ximenes on the Art of the Crossword* + the Azed slip conventions (`lint.pl` `barred_max_unch/2`). Symmetry is **relaxed to advisory** (WARN); exact per-publication barred symmetry codes are not modelled — a documented v1 simplification, not a barred-grid bar/edge model (§3).)*
 
 ### 8.2 `export` — standard-format interchange  **[LOCKED]**
 Transformations of the canonical JSON (§6.5), not new emitters.
@@ -355,13 +355,14 @@ The **only** sanctioned places where scope is still undecided. A component canno
 | OD-4 | `fill` | Which house-style profiles ship in v1, and the failure contract when no fill exists. | **resolved (DP-2): the §8.3 stock-grid templates ARE the v1 profiles** — `fill` fills any pre-validated blocked grid (stock or user-supplied) from the dictionary, seeds pinned. **No-fill contract:** report the unfillable slot(s) and exit non-zero (INV-3), mirroring `arrange` strict's outcomes (filled / infeasible-naming-slots / not-proven-within-budget). |
 | OD-5 | Stock-grid library (§8.3) | Template schema (black-square mask vs. explicit slot list vs. both). | **resolved (DP-1): black-square mask** is the single source of truth; slots are derived on load (no redundant slot list). |
 | OD-6 | Stock-grid library | Which specific grids seed the bundled library, and provenance/license of each. | **resolved (§8.3 build): ships `blocked_13a`, `blocked_13b`, `blocked_15a`** — original, 180°-symmetric, all PASS under `lint --profile blocked-uk`. Set grows by adding validated masks. |
-| OD-7 | `lint` barred profile (§8.1) | Exact barred-Ximenean per-length unch table; per-publication barred symmetry codes — primary-source before building. | open |
+| OD-7 | `lint` barred profile (§8.1) | Exact barred-Ximenean per-length unch table; per-publication barred symmetry codes — primary-source before building. | **resolved (DP-3): the Ximenean band is primary-sourced + built** (Ximenes 1966 + Azed); symmetry relaxed to advisory (per-publication codes not modelled — documented simplification). |
 | OD-8 | Backlog (§8.5) | Each backlog feature needs its own decision pass + spec section before implementation. | open |
 | OD-9 | `arrange` (impl, not product) | Empirical calibration of `ε`/`target`/`τ`; thin fragment-form syntax; duplicate-answer disambiguation. | **resolved (DP-1):** calibration locked at `WCap:WTail=5:1` (ε=0.2) / `target=ceil(L/2)` / `τ=0.30`, with `--check-target` the tunable escape hatch; thin fragment-form **deferred** (canonical-only); duplicate input answers **rejected** (answers are unique). |
 
 ### Decision passes
 
 - **DP-1 (2026-06-30).** Resolved OD-1, OD-3, OD-5, OD-9 (see rows above). Rationale: these are no-regret — OD-9 was already settled by the shipped `arrange` (Phases 1–7); OD-1/OD-3 reuse existing primitives (the blocked cell model, the fragment-grid pins) so `fill`, *when built*, inherits `arrange`'s seed semantics; OD-5 picks the smallest asset (a mask; slots are derivable). **`fill` (§8.4) stays DEFERRED** — promotion to LOCKED still needs OD-2 (dictionary shape/lexicon) and OD-4 (profiles + no-fill contract). **Stock-grid (§8.3)** moves to buildable: OD-5 fixed here, OD-6 closes as its grids are authored.
+- **DP-3 (2026-06-30).** Resolved OD-7. The Ximenean per-length unchecked-letter band was **primary-sourced** (Ximenes' 1966 *Ximenes on the Art of the Crossword* + the Azed slip conventions, two corroborating sources) and built as the `barred-ximenean` `lint` profile (`checked_band` rule over `barred_max_unch/2`). Barred symmetry is **relaxed to advisory** (WARN); exact per-publication symmetry codes are *not* modelled and barred linting applies the checking math to the canonical layout's words — a dedicated bar/edge model stays out of scope (§3). Documented simplification, recorded so the deviation is explicit.
 - **DP-2 (2026-06-30).** Resolved OD-2, OD-4 (see rows above), completing the OD-1…4 set, so **`fill` (§8.4) is promoted DEFERRED → LOCKED** and built. Rationale: a single-puzzle CLI fill wants the simplest self-contained machinery — an in-memory pattern index over a bundled, license-clean lexicon (UKACD18, `--dict`-overridable) — and it should reuse what already exists: the stock-grid templates as the grid/profile, the fragment-grid primitive as hard pins (OD-3), and `arrange` strict's report-and-fail outcome contract (INV-3). The full UKACD18 is added when the data is on hand; a small fixture wordlist ships so the engine is tested end-to-end now.
 
 ---

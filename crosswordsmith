@@ -209,7 +209,7 @@ lint_opts_spec(
     [ [opt(help),            type(boolean), default(false),
        shortflags([h]), longflags([help]),   help('show these lint options')],
       [opt(profile),         type(atom),    default(''), meta('NAME'),
-       longflags([profile]),                 help('rule/severity profile: toc, blocked-uk, american')],
+       longflags([profile]),                 help('rule/severity profile: toc, blocked-uk, american, barred-ximenean')],
       [opt(allow_asymmetry), type(boolean), default(false),
        longflags(['allow-asymmetry']),       help('symmetry never hard-FAILs (downgrade to WARN)')],
       [opt(out),             type(atom),    default(''), meta('FILE'),
@@ -232,8 +232,8 @@ lint_usage(S) :-
     format(S,
 "Usage: crosswordsmith lint --profile <name> [--allow-asymmetry] <layout.json>~n~n\c
 Validates a canonical layout (what `arrange` emits). Profiles: toc (advisory),~n\c
-blocked-uk, american. (barred-ximenean is blocked on OD-7.) Exit is non-zero~n\c
-only when a FAIL-severity rule trips.~n~n~w", [Help]).
+blocked-uk, american, barred-ximenean (the Ximenean per-length unch band). Exit~n\c
+is non-zero only when a FAIL-severity rule trips.~n~n~w", [Help]).
 
 lint_dispatch(Opts, Positional) :-
     (   Positional = [LayoutFile]
@@ -253,12 +253,10 @@ lint_dispatch(Opts, Positional) :-
     ( Verdict == 'FAIL' -> fail ; true ).
 
 resolve_lint_profile('', _) :- !,
-    lint_err('requires --profile <name> (toc, blocked-uk, american)').
+    lint_err('requires --profile <name> (toc, blocked-uk, american, barred-ximenean)').
 resolve_lint_profile(P, P) :- lint_known_profile(P), !.
-resolve_lint_profile(P, _) :- lint_blocked_profile(P), !,
-    lint_err('profile ~w is blocked on OD-7 (barred-Ximenean unch table not yet primary-sourced)'-[P]).
 resolve_lint_profile(P, _) :-
-    lint_err('unknown profile ~w; choose toc, blocked-uk, or american'-[P]).
+    lint_err('unknown profile ~w; choose toc, blocked-uk, american, or barred-ximenean'-[P]).
 
 
 % --- the `export` verb (design-spec §8.2) -----------------------------------
