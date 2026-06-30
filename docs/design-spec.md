@@ -199,7 +199,7 @@ A **fragment grid** is a partial layout the engine solves *from*. It is the sing
 **AC-FRAG-3** Pinned words/cells appear at exactly their fragment positions in every produced layout.
 **AC-FRAG-4** Thin convenience form and canonical form for the same fragment produce identical results.
 
-*(Deferred to implementation, not product decisions: exact thin-form syntax; duplicate-answer disambiguation when `--input` repeats an answer string.)*
+*(Resolved by DP-1 (§10): the thin convenience form is **deferred** — v1 is canonical-only (the emit format made partial). Duplicate `--input` answers are **rejected** (answers are unique, `check_unique_answers/1`), so no fragment duplicate-answer disambiguation is needed.)*
 
 ---
 
@@ -251,7 +251,7 @@ A single verb that unifies the old `pack`/`solve` engines into one **determinist
 **AC-ARR-9** The carried incremental reward equals a from-scratch `layout_reward` recompute on the final placement (delta correctness).
 **AC-ARR-10** A run that hits the node/inference budget returns the best layout found so far and **flags** that the optimum was not proven.
 
-*(Calibration of `ε`, `target`, `τ` against fixtures is an implementation task tracked in the build plan, not a product decision.)*
+*(Calibration **locked by DP-1 (§10)** at the v1 defaults: `WCap:WTail = 5:1` (ε = 0.2), `target = ceil(L/2)`, `τ = 0.30`. The Phase-1.5 gate showed the cap is largely inert on realistic inputs (objective ≈ total-crossings), so fine-tuning has low leverage; `--check-target` remains the tunable escape hatch where `ceil(L/2)` is unreachable.)*
 
 ---
 
@@ -295,7 +295,9 @@ A **bundled, curated** set of pre-validated legal grid templates (black-square p
 - Templates double as `lint` profile inputs and (later) `fill` inputs.
 - Validated once at design time with the shared metric predicates repurposed as **template validators**.
 
-*Open (§10): the template schema; which specific grids seed the library. PARTIAL until those are decided.*
+**Template schema (OD-5, resolved by DP-1): a black-square mask is the single source of truth** — `{name, size, symmetry, mask:["#.....", ...]}` (one string per row; `#` = block, any other char = light). Slots are *derived* on load by the existing run-scanning / clue-numbering, not stored — no redundant slot list. Each shipped grid is **validated at design time by `lint --profile blocked-uk`** (the metric predicates as template validators).
+
+*Open (§10): OD-6 — which specific grids seed the library (closing as the §8.3 build authors them: original, `lint`-validated, license-clean). PARTIAL until OD-6 closes.*
 
 ### 8.4 `fill` — grid-first, open-dictionary auto-fill  **[DEFERRED]**
 **Not buildable yet.** Design *intent* only; promotion to LOCKED requires a decision pass (§10).
@@ -310,6 +312,8 @@ A **bundled, curated** set of pre-validated legal grid templates (black-square p
 5. Drop the free-canvas legality core (`adj_is_free`/`no_word_merge`/`check_prev/next_cell`) — black squares delimit runs explicitly.
 
 **Bifurcation:** `fill`-blocked (reachable from the existing blocked cell model) comes first; `fill`-barred (different cell/edge model) is furthest out and may never ship.
+
+**Resolved by DP-1 (§10), but still DEFERRED:** OD-1 — **blocked-only v1** (barred is a separate engine, §3); OD-3 — seeds carry as **hard pins via the §6.6 fragment-grid primitive** (pin-and-fill-around), the same semantics as `arrange`. Promotion to LOCKED still needs **OD-2** (dictionary integration shape + default lexicon — UKACD18 is license-clean) and **OD-4** (v1 house-style profiles + the no-fill failure contract).
 
 ### 8.5 Backlog — tagged, not yet specified
 These are recognised future capabilities. Each is **out of scope until specified here** (a §10 decision pass per feature). Listed so they are tracked, not so they are built.
@@ -343,15 +347,19 @@ The **only** sanctioned places where scope is still undecided. A component canno
 
 | # | Component | Open decision | Status |
 |---|---|---|---|
-| OD-1 | `fill` (§8.4) | Blocked-only v1, or design barred-compatibility in from the start? | open |
+| OD-1 | `fill` (§8.4) | Blocked-only v1, or design barred-compatibility in from the start? | **resolved (DP-1): blocked-only v1** — reuse the existing blocked cell model; barred is a separate engine, deferred indefinitely (§3). |
 | OD-2 | `fill` | Dictionary integration shape: in-memory index, external index, query protocol? Which lexicon as default (UKACD18 confirmed license-clean)? | open |
-| OD-3 | `fill` | How seeds/fragment-grid semantics carry into open-dictionary fill (pin-and-fill-around vs. seed-as-hint). | open |
+| OD-3 | `fill` | How seeds/fragment-grid semantics carry into open-dictionary fill (pin-and-fill-around vs. seed-as-hint). | **resolved (DP-1): pin-and-fill-around** — seeds are HARD PINS via the §6.6 fragment-grid primitive, identical to `arrange`. |
 | OD-4 | `fill` | Which house-style profiles ship in v1, and the failure contract when no fill exists. | open |
-| OD-5 | Stock-grid library (§8.3) | Template schema (black-square mask vs. explicit slot list vs. both). | open |
-| OD-6 | Stock-grid library | Which specific grids seed the bundled library, and provenance/license of each. | open |
+| OD-5 | Stock-grid library (§8.3) | Template schema (black-square mask vs. explicit slot list vs. both). | **resolved (DP-1): black-square mask** is the single source of truth; slots are derived on load (no redundant slot list). |
+| OD-6 | Stock-grid library | Which specific grids seed the bundled library, and provenance/license of each. | open (closing with the §8.3 build: original, `lint`-validated grids) |
 | OD-7 | `lint` barred profile (§8.1) | Exact barred-Ximenean per-length unch table; per-publication barred symmetry codes — primary-source before building. | open |
 | OD-8 | Backlog (§8.5) | Each backlog feature needs its own decision pass + spec section before implementation. | open |
-| OD-9 | `arrange` (impl, not product) | Empirical calibration of `ε`/`target`/`τ`; thin fragment-form syntax; duplicate-answer disambiguation. | tracked in build plan |
+| OD-9 | `arrange` (impl, not product) | Empirical calibration of `ε`/`target`/`τ`; thin fragment-form syntax; duplicate-answer disambiguation. | **resolved (DP-1):** calibration locked at `WCap:WTail=5:1` (ε=0.2) / `target=ceil(L/2)` / `τ=0.30`, with `--check-target` the tunable escape hatch; thin fragment-form **deferred** (canonical-only); duplicate input answers **rejected** (answers are unique). |
+
+### Decision passes
+
+- **DP-1 (2026-06-30).** Resolved OD-1, OD-3, OD-5, OD-9 (see rows above). Rationale: these are no-regret — OD-9 was already settled by the shipped `arrange` (Phases 1–7); OD-1/OD-3 reuse existing primitives (the blocked cell model, the fragment-grid pins) so `fill`, *when built*, inherits `arrange`'s seed semantics; OD-5 picks the smallest asset (a mask; slots are derivable). **`fill` (§8.4) stays DEFERRED** — promotion to LOCKED still needs OD-2 (dictionary shape/lexicon) and OD-4 (profiles + no-fill contract). **Stock-grid (§8.3)** moves to buildable: OD-5 fixed here, OD-6 closes as its grids are authored.
 
 ---
 

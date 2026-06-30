@@ -67,15 +67,15 @@ Reachability calibration (`--check-target`, ε, τ) is a **required pre-weightin
 
 | # | Gates | Status |
 |---|---|---|
-| OD-1 | `fill`: blocked-only v1 vs barred-compatible from start | open |
+| OD-1 | `fill`: blocked-only v1 vs barred-compatible from start | **resolved (DP-1): blocked-only** |
 | OD-2 | `fill`: dictionary integration + default lexicon | open |
-| OD-3 | `fill`: seed/fragment semantics into open-dict fill | open |
+| OD-3 | `fill`: seed/fragment semantics into open-dict fill | **resolved (DP-1): pin-and-fill (fragment primitive)** |
 | OD-4 | `fill`: v1 profiles + no-fill failure contract | open |
-| OD-5 | Stock-grid: template schema | open |
-| OD-6 | Stock-grid: which grids seed the library | open |
+| OD-5 | Stock-grid: template schema | **resolved (DP-1): black-square mask (slots derived)** |
+| OD-6 | Stock-grid: which grids seed the library | open (closing with the §8.3 build) |
 | OD-7 | `lint`: barred-Ximenean unch table + barred symmetry codes | open |
 | OD-8 | Backlog: per-feature decision pass | open |
-| OD-9 | `arrange` impl detail: ε/target/τ calibration, thin-form syntax, dup-answer disambiguation | tracked in plan |
+| OD-9 | `arrange` impl detail: ε/target/τ calibration, thin-form syntax, dup-answer disambiguation | **resolved (DP-1): 5:1 / ceil(L/2) / τ=0.30; thin-form deferred; unique answers** |
 
 ---
 
