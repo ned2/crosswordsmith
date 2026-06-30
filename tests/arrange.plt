@@ -27,6 +27,30 @@ test(check_target_even) :- check_target(4, 2).
 test(check_target_one)  :- check_target(1, 1).
 test(check_target_two)  :- check_target(2, 1).
 
+% R8 (revamp audit): --check-target N (check_target_override/1) lowers the
+% per-word target to min(ceil(L/2), N); N above ceil(L/2) is a no-op (only lowers).
+% (check_target_override/1 is asserted into `user` - where arrange.pl's
+% check_target/2 reads it - because plunit runs these in module plunit_arrange.)
+test(check_target_override_lowers, [true(T =:= 2)]) :-
+    setup_call_cleanup(assertz(user:check_target_override(2)),
+                       check_target(9, T),                 % min(ceil(9/2)=5, 2) = 2
+                       retractall(user:check_target_override(_))).
+test(check_target_override_only_lowers, [true(T =:= 3)]) :-
+    setup_call_cleanup(assertz(user:check_target_override(10)),
+                       check_target(6, T),                 % min(ceil(6/2)=3, 10) = 3
+                       retractall(user:check_target_override(_))).
+% End to end: bundled_17's cap is inert by default (cap_binding_count 0); with
+% the target lowered to 1, every interlocking placed word reaches it.
+test(check_target_makes_cap_bind) :-
+    arrange_bundled(Words),
+    arrange_best_layout(Words, 17, Numbered0, _R0, placed),
+    cap_binding_count(Numbered0, CB0), CB0 =:= 0,
+    setup_call_cleanup(assertz(user:check_target_override(1)),
+                       ( arrange_best_layout(Words, 17, Numbered1, _R1, placed),
+                         cap_binding_count(Numbered1, CB1) ),
+                       retractall(user:check_target_override(_))),
+    CB1 > 0.
+
 % The carried reward equals the from-scratch oracle on the final (numbered)
 % layout (AC-ARR-9): numbering adds only `num`, so layout_reward is unchanged.
 test(layout_reward_matches_after_numbering) :-
@@ -65,12 +89,30 @@ test(reward_ge_single_corner) :-
     layout_reward(5, 1, P0, R0),
     RBest >= R0.
 
-% AC-ARR-1 outcome (c)/(b): too-small grid -> infeasible, no stdout layout.
+% AC-ARR-1 outcome (b): too-small grid -> infeasible, no stdout layout.
 test(strict_grid_too_small_infeasible) :-
     arrange_bundled(Words),
     arrange_best_layout(Words, 3, Numbered, _R, Outcome),
     Outcome == infeasible,
     Numbered == [].
+
+% AC-ARR-1 outcome (c) + AC-ARR-10 (R4, revamp audit): when the per-corner
+% inference budget is exhausted before any corner completes, the outcome is
+% `not_proven` - DISTINCT from `infeasible`. A budget too small to finish even
+% one corner (1000 inferences << a 6-word grid-17 construction) forces it.
+test(strict_budget_exhausted_not_proven) :-
+    arrange_bundled(Words),
+    arrange_best_layout(Words, 17, 1000, Numbered, Reward, Outcome),
+    Outcome == not_proven,
+    Numbered == [],
+    Reward =:= -1.
+
+% The same input completes (placed) under the real budget - so `not_proven`
+% above is the budget biting, not genuine infeasibility (the (b) vs (c) split).
+test(strict_budget_not_proven_is_not_infeasible) :-
+    arrange_bundled(Words),
+    arrange_best_layout(Words, 17, _N, _R, Outcome),
+    Outcome == placed.
 
 % AC-ARR-1 outcome (b): words sharing no letters -> infeasible, named.
 test(strict_isolated_words_infeasible) :-
@@ -83,6 +125,17 @@ test(unplaceable_names_isolated, [true(Bad == ['ABC', 'DEF'])]) :-
 test(unplaceable_empty_when_interlocking, [true(Bad == [])]) :-
     arrange_bundled(Words),
     unplaceable_words(Words, Bad).
+
+% R1 (revamp audit): a multi-word/hyphenated answer is placed by its letters
+% ONLY - the separator (space or hyphen) is an enumeration marker, not a grid
+% cell. WELL-BEING is a 9-cell run (not 10), no placed cell is '-', and the
+% original answer atom (with the hyphen) is preserved for export enumeration.
+test(hyphenated_answer_strips_separator, [nondet]) :-
+    arrange_best_layout([['WELL-BEING'], ['BELOW']], 15, Numbered, _R, placed),
+    member(W, Numbered), get_dict(answer, W, 'WELL-BEING'), !,
+    get_dict(len, W, Len), Len =:= 9,
+    get_dict(cells, W, Cells), length(Cells, 9),
+    get_dict(letters, W, Ls), \+ memberchk('-', Ls), \+ memberchk(' ', Ls).
 
 % --- Phase 3: emit framing ---------------------------------------------------
 

@@ -24,9 +24,16 @@
 % Default integer weights: WCap:WTail = 5:1  => epsilon = WTail/WCap = 0.2.
 arrange_weights(5, 1).
 
-% ceil(L/2): the per-word checking cap (== word_meets_half/2's threshold in
-% quality.pl). L is the word length in cells (the placed dict's `len`).
-check_target(L, T) :- T is (L + 1) // 2.
+% Per-word checking target: ceil(L/2) by default (== word_meets_half/2's
+% threshold in quality.pl; L is the placed dict's `len`). The §7.2 reachability
+% escape hatch `--check-target N` lowers the ceiling to min(ceil(L/2), N) via
+% check_target_override/1 (absent => the default). min/2 means N only ever
+% LOWERS the target - an N above ceil(L/2) is a no-op - matching the spec intent
+% ("lowering target below ceil(L/2) where half is unreachable").
+:- dynamic check_target_override/1.
+check_target(L, T) :-
+    T0 is (L + 1) // 2,
+    ( check_target_override(K) -> T is min(T0, K) ; T = T0 ).
 
 % Per-word integer reward contribution:
 %   WCap * min(checked, target) + WTail * checked
@@ -56,6 +63,15 @@ cap_binding_count(Placed, Count) :-
                     C >= T ),
                   Count).
 
+% §7.2 (INV-3): when the cap binds on NO placed word, the objective has
+% degenerated to plain total-crossings - report it (on stderr), pointing the
+% user at --check-target as the knob to lower an unreachable target.
+cap_status_note(Placed, Note) :-
+    cap_binding_count(Placed, CB),
+    ( CB =:= 0
+    ->  Note = ' (cap inert: objective = total-crossings; tune with --check-target)'
+    ;   Note = '' ).
+
 
 % ---------------------------------------------------------------------------
 % Phase 2-3 - strict layout (construct + rescore + emit) with size framing.
@@ -75,8 +91,14 @@ arrange_budget(500_000_000).
 % Outcome: placed | not_proven (budget hit) | infeasible (search completed,
 % no full placement).
 arrange_best_layout(Words, GridLen, Numbered, Reward, Outcome) :-
-    arrange_weights(WCap, WTail),
     arrange_budget(Budget),
+    arrange_best_layout(Words, GridLen, Budget, Numbered, Reward, Outcome).
+
+% Budget-parameterized form: Budget is the per-corner inference budget. The
+% default /5 reads arrange_budget/1; passing a tiny Budget drives the
+% AC-ARR-1c / AC-ARR-10 "not proven within budget" path (tests/arrange.plt).
+arrange_best_layout(Words, GridLen, Budget, Numbered, Reward, Outcome) :-
+    arrange_weights(WCap, WTail),
     start_locs(Locs),
     findall(Res,
             ( member(Loc, Locs),
@@ -116,8 +138,9 @@ arrange_strict_solve(Words, GridLen, SizeMode) :-
     (   Outcome == placed
     ->  emit_arrange(Numbered, Words, GridLen, SizeMode),
         length(Numbered, NP),
-        format(user_error, "arrange: grid ~w, mode ~w, placed ~w, reward ~w~n",
-               [GridLen, SizeMode, NP, Reward])
+        cap_status_note(Numbered, Note),
+        format(user_error, "arrange: grid ~w, mode ~w, placed ~w, reward ~w~w~n",
+               [GridLen, SizeMode, NP, Reward, Note])
     ;   arrange_report_failure(Outcome, Words, GridLen),
         fail
     ).
