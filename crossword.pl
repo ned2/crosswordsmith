@@ -731,7 +731,23 @@ rows_of(Flat, GridLen, [Row|Rows]) :-
 
 % Build the `words` array. Metadata is rejoined from the input list by answer.
 build_words(PlacedWords, Words, GridLen, WordObjs) :-
-    maplist(placed_to_word(Words, GridLen), PlacedWords, WordObjs).
+    canonical_word_order(PlacedWords, Ordered),
+    maplist(placed_to_word(Words, GridLen), Ordered, WordObjs).
+
+% Canonical emit order for the `words` array: by clue number, then across before
+% down (atom order 'across' @< 'down'). Two words sharing a start cell (same
+% number, one across + one down) are otherwise emitted in placement order, which
+% differs between the strict DFS and a fragment re-solve - breaking the
+% emit -> re-ingest-as-fragment byte-identity (AC-EMIT-2, R3). num+dir is unique
+% per word, so this is a total, stable order. The grid rows are built from cell
+% occupancy and are unaffected. map_list_to_pairs (not findall) keeps the
+% original word dicts (no copy).
+canonical_word_order(PlacedWords, Ordered) :-
+    map_list_to_pairs(word_canon_key, PlacedWords, Keyed),
+    keysort(Keyed, Sorted),
+    pairs_values(Sorted, Ordered).
+
+word_canon_key(PW, Num-Dir) :- get_dict(num, PW, Num), get_dict(dir, PW, Dir).
 
 
 placed_to_word(Words, GridLen, PW, WordObj) :-

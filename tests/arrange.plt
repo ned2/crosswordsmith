@@ -114,6 +114,21 @@ test(strict_budget_not_proven_is_not_infeasible) :-
     arrange_best_layout(Words, 17, _N, _R, Outcome),
     Outcome == placed.
 
+% R7 (revamp audit): the 4-corner sweep shares ONE inference budget, so a HARD
+% input (toc_demo at size 15 - the finding's repro, which the full budget cannot
+% finish) costs ~Budget total, not Budget x 4. With a 5M budget too small for
+% any corner to complete, the total inferences consumed stay near one budget,
+% well under the 4x the per-corner version would burn.
+test(arrange_budget_shared_across_corners) :-
+    arrange_toc(Words),
+    B = 5_000_000,
+    statistics(inferences, I0),
+    arrange_best_layout(Words, 15, B, _N, _R, Outcome),
+    statistics(inferences, I1),
+    Used is I1 - I0,
+    Outcome == not_proven,
+    Used < 2 * B.
+
 % AC-ARR-1 outcome (b): words sharing no letters -> infeasible, named.
 test(strict_isolated_words_infeasible) :-
     arrange_best_layout([['ABC'], ['DEF']], 9, _N, _R, Outcome),
@@ -232,6 +247,22 @@ test(fragment_roundtrip_byte_identical) :-
     GL =:= 17,
     arrange_fragment_strict(Words, Frags, 17, Numbered2, _R2, placed),
     with_output_to(string(S2), emit_arrange(Numbered2, Words, 17, fixed)),
+    S1 == S2.
+
+% R3 (revamp audit): the round-trip above passes on bundled_17 only because its
+% shared-start pairs happen not to flip. benchmark_08 at size 13 DOES flip (the
+% strict DFS and the fragment re-solve build a start-1 across/down pair in
+% opposite order), so without the canonical (number, direction) emit ordering
+% the re-ingest diverges. This is the finding's exact repro.
+test(fragment_roundtrip_byte_identical_reordering) :-
+    load_clues('fixtures/benchmark_08_words.pl', Words),
+    arrange_best_layout(Words, 13, Numbered, _R, placed),
+    with_output_to(string(S1), emit_arrange(Numbered, Words, 13, fixed)),
+    atom_json_dict(S1, Dict, []),
+    fragment_dict_words(Dict, GL, Frags),
+    GL =:= 13,
+    arrange_fragment_strict(Words, Frags, 13, Numbered2, _R2, placed),
+    with_output_to(string(S2), emit_arrange(Numbered2, Words, 13, fixed)),
     S1 == S2.
 
 % AC-FRAG-3: pinned words appear at exactly their fragment cells; the engine

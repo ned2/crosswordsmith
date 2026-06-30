@@ -100,10 +100,7 @@ arrange_best_layout(Words, GridLen, Numbered, Reward, Outcome) :-
 arrange_best_layout(Words, GridLen, Budget, Numbered, Reward, Outcome) :-
     arrange_weights(WCap, WTail),
     start_locs(Locs),
-    findall(Res,
-            ( member(Loc, Locs),
-              construct_one(Loc, Words, GridLen, WCap, WTail, Budget, Res) ),
-            Results),
+    construct_corners(Locs, Words, GridLen, WCap, WTail, Budget, Results),
     findall(R-P, member(ok(R, P), Results), OKs),
     (   OKs = [_|_]
     ->  sort(1, @>=, OKs, [Reward-BestPlaced|_]),
@@ -113,6 +110,27 @@ arrange_best_layout(Words, GridLen, Budget, Numbered, Reward, Outcome) :-
         Outcome = placed
     ;   Numbered = [], Reward = -1,
         ( memberchk(budget, Results) -> Outcome = not_proven ; Outcome = infeasible )
+    ).
+
+% Try each start corner under ONE shared inference budget (§7.3 reads the budget
+% as a single cap on the operation, not per-corner): the running budget is
+% decremented by what each corner actually consumes, so a hard/infeasible input
+% costs at most ~Budget total, not Budget x |corners|. On realistic inputs every
+% corner completes in << Budget, so all corners still run and the
+% best-of-corners selection is unchanged - only the worst case is bounded. Once
+% the running budget is spent, the remaining corners are tagged `budget` without
+% running. Deterministic: inference counts are reproducible (INV-2).
+construct_corners([], _Words, _GL, _WC, _WT, _Budget, []).
+construct_corners([Loc|Locs], Words, GL, WC, WT, Budget, [Res|Rest]) :-
+    (   Budget < 1
+    ->  Res = budget,
+        construct_corners(Locs, Words, GL, WC, WT, Budget, Rest)
+    ;   statistics(inferences, I0),
+        construct_one(Loc, Words, GL, WC, WT, Budget, Res),
+        statistics(inferences, I1),
+        Used is I1 - I0,
+        Budget1 is Budget - Used,
+        construct_corners(Locs, Words, GL, WC, WT, Budget1, Rest)
     ).
 
 % First MRV-inc complete placement from one corner, rescored, under a budget.
