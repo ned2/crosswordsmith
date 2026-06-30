@@ -54,7 +54,7 @@ Sequence: **A → B-`lint`/`export` (cheap shared wins) → B-`fill` (blocked) �
 | `arrange` (Flavour A) | §7 | LOCKED | + build plan ([`arrange-implementation-plan.md`](./arrange-implementation-plan.md)) |
 | `lint` | §8.1 | LOCKED | blocked-uk/toc/american first; barred profile waits on OD-7 |
 | `export` (ipuz/Exolve) | §8.2 | LOCKED | transformations of canonical JSON |
-| Stock-grid library / profiles | §8.3 | PARTIAL | schema + grid set open (OD-5/6) |
+| Stock-grid library / profiles | §8.3 | LOCKED | mask schema (OD-5) + grid set (OD-6) resolved; ships 3 lint-validated grids |
 | `fill` (Flavour B engine) | §8.4 | **DEFERRED** | not buildable until OD-1…4 resolved |
 | Backlog features | §8.5 | unspec'd | each needs its own decision pass |
 
@@ -97,7 +97,7 @@ The discipline: **one substrate, two solver tops.**
 **Module layout (target):**
 - `crossword.pl` — shared primitives (grid model, legality core for the free-canvas case, clue numbering, emit, input). Metric helpers `crossing_count`/`placed_bbox`/`word_meets_half` lifted here from `quality.pl` so both engines call them.
 - `arrange.pl` — Flavour-A engine (consults `crossword.pl`).
-- Flavour-B modules (`lint.pl`, `export.pl`, `fill.pl`) — added as those components are built.
+- Flavour-B modules (`lint.pl`, `export.pl`, `stockgrid.pl` built; `fill.pl` deferred) — added as those components are built.
 - `quality.pl` — legacy; retired at the Phase-7 CLI cutover (§7), superseded by `arrange`.
 
 **Cross-cutting invariants (apply to all components):**
@@ -290,14 +290,14 @@ Transformations of the canonical JSON (§6.5), not new emitters.
 **AC-EXP-2** `export --to exolve` produces text that round-trips through Exet (load → save → equivalent grid+entries).
 **AC-EXP-3** Export preserves enumerations and `meta`-borne clue text where the target format has a field for them; no data invented.
 
-### 8.3 Stock-grid library + house-style profiles  **[PARTIAL]**
+### 8.3 Stock-grid library + house-style profiles  **[LOCKED]**
 A **bundled, curated** set of pre-validated legal grid templates (black-square patterns / slot lists), **not** a generator — real publications curate only dozens (Times 64, Guardian ~72), so this is a small static asset. Realistic presets for the *current block-only* world: **15×15** (primary), **13×13** (quick), **23×23** (jumbo) — all blocked, all odd. The `~12×12 barred` cluster and rectangular/thematic shapes are out of scope (need the barred engine / are different products).
 - Templates double as `lint` profile inputs and (later) `fill` inputs.
 - Validated once at design time with the shared metric predicates repurposed as **template validators**.
 
 **Template schema (OD-5, resolved by DP-1): a black-square mask is the single source of truth** — `{name, size, symmetry, mask:["#.....", ...]}` (one string per row; `#` = block, any other char = light). Slots are *derived* on load by the existing run-scanning / clue-numbering, not stored — no redundant slot list. Each shipped grid is **validated at design time by `lint --profile blocked-uk`** (the metric predicates as template validators).
 
-*Open (§10): OD-6 — which specific grids seed the library (closing as the §8.3 build authors them: original, `lint`-validated, license-clean). PARTIAL until OD-6 closes.*
+**OD-6 (resolved): the v1 library ships three original, `lint`-validated, license-clean grids** — `blocked_13a`, `blocked_13b` (13×13), `blocked_15a` (15×15), all 180°-rotational, all PASS under `lint --profile blocked-uk`. A small starter set, as intended (real publications curate only dozens); it grows by adding more validated masks under `grids/`. Loaded + validated by `stockgrid.pl` (the mask → lights derivation + the blocked-uk validator); the set's legality is a CI regression (`tests/stockgrid.plt`).
 
 ### 8.4 `fill` — grid-first, open-dictionary auto-fill  **[DEFERRED]**
 **Not buildable yet.** Design *intent* only; promotion to LOCKED requires a decision pass (§10).
@@ -352,7 +352,7 @@ The **only** sanctioned places where scope is still undecided. A component canno
 | OD-3 | `fill` | How seeds/fragment-grid semantics carry into open-dictionary fill (pin-and-fill-around vs. seed-as-hint). | **resolved (DP-1): pin-and-fill-around** — seeds are HARD PINS via the §6.6 fragment-grid primitive, identical to `arrange`. |
 | OD-4 | `fill` | Which house-style profiles ship in v1, and the failure contract when no fill exists. | open |
 | OD-5 | Stock-grid library (§8.3) | Template schema (black-square mask vs. explicit slot list vs. both). | **resolved (DP-1): black-square mask** is the single source of truth; slots are derived on load (no redundant slot list). |
-| OD-6 | Stock-grid library | Which specific grids seed the bundled library, and provenance/license of each. | open (closing with the §8.3 build: original, `lint`-validated grids) |
+| OD-6 | Stock-grid library | Which specific grids seed the bundled library, and provenance/license of each. | **resolved (§8.3 build): ships `blocked_13a`, `blocked_13b`, `blocked_15a`** — original, 180°-symmetric, all PASS under `lint --profile blocked-uk`. Set grows by adding validated masks. |
 | OD-7 | `lint` barred profile (§8.1) | Exact barred-Ximenean per-length unch table; per-publication barred symmetry codes — primary-source before building. | open |
 | OD-8 | Backlog (§8.5) | Each backlog feature needs its own decision pass + spec section before implementation. | open |
 | OD-9 | `arrange` (impl, not product) | Empirical calibration of `ε`/`target`/`τ`; thin fragment-form syntax; duplicate-answer disambiguation. | **resolved (DP-1):** calibration locked at `WCap:WTail=5:1` (ε=0.2) / `target=ceil(L/2)` / `τ=0.30`, with `--check-target` the tunable escape hatch; thin fragment-form **deferred** (canonical-only); duplicate input answers **rejected** (answers are unique). |
