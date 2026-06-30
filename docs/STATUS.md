@@ -87,3 +87,11 @@ Reachability calibration (`--check-target`, ε, τ) is a **required pre-weightin
 - **Deferred:** `fill` engine (OD-1…4).
 - **Dropped (by the gate):** `arrange` B&B search loop, admissible bound, incremental delta, LNS polish.
 - **Nothing in progress.**
+
+### De-accretion / retirement roadmap
+
+The new `arrange` engine grew on top of the old machinery's primitives and orphaned its drivers. Tracking the cleanup so it doesn't just accrete:
+
+- **Done:** removed the dead Phase-1.5 `gate_*` measurement harness + the orphaned `arrange_*_run` convenience runners (the `crosswordsmith` CLI is the entry point); `arrange.pl` 903 → 729 lines. The CLI fragment path now checks input uniqueness like the other modes.
+- **Queued for the `lint` phase (the natural moment):** dissolve `quality.pl`. Lift the live primitives (the greedy constructor family + `placed_bbox`/`crossing_count`/`word_checked_count`/`word_letters`/`word_cells`) **and** the lint-rule metrics (`word_meets_half`/`word_max_unch_run`/`checked_cells`/`dir_cells`) into the shared layer (spec §4 already calls for this lift); **delete the dead `--quality` engine** (`quality_solve`/`quality_layout`/`grid_candidates`/the floor subsystem) and its orphaned tests; flip the spec §4 `quality.pl` row to "retired; primitives shared." `lint` then consumes shared metrics, not a legacy file.
+- **Decided — keep:** the legacy `crossword/3,4` top-level and the alternate strategies `baseline`/`mrv`/`mrv_capped` stay as a **benchmark-only research surface** (the evidence base for choosing `mrv_inc`, the only production strategy); to be relabelled/test-migrated off the production path during the dissolution above. The `legacy_main` migration shim retires once old muscle-memory fades.

@@ -1,10 +1,13 @@
-% arrange.pl - Flavour-A layout engine: scoring oracle (Phase 1) + the
-% search-value gate (Phase 1.5). See docs/arrange-implementation-plan.md.
+% arrange.pl - Flavour-A layout engine: the scoring oracle + the
+% construct/rescore/emit driver, fragment seeding, and diverse candidates.
+% See docs/arrange-implementation-plan.md and docs/design-spec.md §7.
 %
 % This file deliberately does NOT define `main`/initialization, so it can be
-% consulted by a harness (or `swipl -g gate_run`) without side effects. It
-% consults crossword.pl (which in turn loads quality.pl), reusing the legality
-% core, the MRV-inc branch step, and the existing checking metrics verbatim.
+% consulted by a harness without side effects. It consults crossword.pl (which
+% in turn loads quality.pl), reusing the legality core, the MRV-inc branch step,
+% and the existing checking metrics verbatim. (The Phase-1.5 `gate_*`
+% measurement harness that lived here was removed once the gate's descope
+% decision was recorded in the implementation plan.)
 
 :- prolog_load_context(directory, Dir),
    directory_file_path(Dir, 'crossword.pl', CrosswordFile),
@@ -52,162 +55,6 @@ cap_binding_count(Placed, Count) :-
                     word_checked_count(PW, Placed, C),
                     C >= T ),
                   Count).
-
-
-% ---------------------------------------------------------------------------
-% Phase 1.5 - the search-value gate.
-%
-% A minimal branch-and-bound over crossword.pl's MRV-inc branch step
-% (select_inc -> find_intersecting_word -> assign_word, all reused verbatim):
-% record the FIRST complete placement (the MRV incumbent), then continue the
-% DFS recording any STRICTLY BETTER complete placement, pruned by a cheap,
-% admissible upper bound. Node and prune counters + an inference budget make
-% it a measurement: does any search beat the first incumbent, and does the
-% bound ever fire?
-% ---------------------------------------------------------------------------
-
-% Inference budget per fixture (call_with_inference_limit/3). Generous: the
-% point is to give the search its best shot at finding a better layout.
-gate_budget(800_000_000).
-
-incr(Key) :- nb_getval(Key, V), V1 is V + 1, nb_setval(Key, V1).
-
-record_first(R) :-
-    nb_getval(arrange_first, F),
-    ( F == none -> nb_setval(arrange_first, R) ; true ).
-
-record_best(Placed, R) :-
-    nb_getval(arrange_best, _-BestR),
-    ( R > BestR -> nb_setval(arrange_best, Placed-R) ; true ).
-
-% Cheap, loose, ADMISSIBLE upper bound on the reward of any completion from
-% this node: current partial reward + optimistic room on each placed word
-% (fill all its remaining cells as checked, up to the cap) + optimistic max for
-% each unplaced word (fully capped and fully checked). Never under-estimates,
-% so pruning a branch with UB =< incumbent cannot discard a better layout.
-upper_bound(Unplaced, Placed, WCap, WTail, UB) :-
-    layout_reward(WCap, WTail, Placed, PartialR),
-    foldl(placed_room(WCap, WTail, Placed), Placed, 0, PRoom),
-    foldl(unplaced_max(WCap, WTail), Unplaced, 0, UMax),
-    UB is PartialR + PRoom + UMax.
-
-placed_room(WCap, WTail, Placed, PW, A, A1) :-
-    get_dict(len, PW, L),
-    check_target(L, T),
-    word_checked_count(PW, Placed, C),
-    Room is WCap * (T - min(C, T)) + WTail * (L - C),
-    A1 is A + Room.
-
-unplaced_max(WCap, WTail, Entry, A, A1) :-
-    word_letters(Entry, _, L),
-    check_target(L, T),
-    A1 is A + WCap * T + WTail * L.
-
-% Complete placement: record incumbents, then FAIL to keep searching.
-gate_search([], Placed, _GridLen, WCap, WTail, _G, _St, _Start, _Dir) :-
-    incr(arrange_nodes),
-    layout_reward(WCap, WTail, Placed, R),
-    record_first(R),
-    record_best(Placed, R),
-    fail.
-% Partial: count the node, prune if the bound says this subtree cannot beat the
-% incumbent, else branch via the reused MRV-inc step and recurse.
-gate_search([W|Ws], Placed, GridLen, WCap, WTail, G, St, Start, Dir) :-
-    incr(arrange_nodes),
-    nb_getval(arrange_best, _-BestR),
-    (   BestR >= 0,
-        upper_bound([W|Ws], Placed, WCap, WTail, UB),
-        UB =< BestR
-    ->  incr(arrange_prunes),
-        fail
-    ;   select_inc([W|Ws], Placed, St, GridLen, Start, Dir, G, Entry, RemWords, St1),
-        Entry = [Word|_],
-        word_letters(Entry, Letters, WLen),
-        find_intersecting_word(Letters, WLen, Placed, GridLen, Start, Dir),
-        assign_word(Word, Letters, WLen, Start, Dir, GridLen, Placed, G, PW, G1),
-        gate_search(RemWords, [PW|Placed], GridLen, WCap, WTail, G1, St1, _S, _D)
-    ).
-
-% Run the exhaustive-with-budget search for one word set on an N x N grid,
-% seeded at the canonical topleft_across corner (mirrors find_crossword/6's
-% mrv_inc path). Records first/best/nodes/prunes/outcome in globals.
-gate_search_run(Words, GridLen, Outcome) :-
-    arrange_weights(WCap, WTail),
-    nb_setval(arrange_first, none),
-    nb_setval(arrange_best, none-(-1)),
-    nb_setval(arrange_nodes, 0),
-    nb_setval(arrange_prunes, 0),
-    init_grid(GridLen, G0),
-    start_loc(topleft_across, GridLen, StartNum, StartDir),
-    gate_budget(Budget),
-    catch(
-        (   call_with_inference_limit(
-                ( gate_search(Words, [], GridLen, WCap, WTail, G0, none,
-                              StartNum, StartDir), fail ; true ),
-                Budget, Outcome0)
-        ->  Outcome = Outcome0
-        ;   Outcome = failed
-        ),
-        E, Outcome = error(E)).
-
-% A greedy-construct layout's reward, for comparison (it may drop words).
-greedy_reward(Words, GridLen, R, NP, ND) :-
-    arrange_weights(WCap, WTail),
-    (   seed_candidates(Words, [Seed|_]),
-        greedy_construct(Words, GridLen, topleft_across, Seed, Placed, Dropped)
-    ->  layout_reward(WCap, WTail, Placed, R),
-        length(Placed, NP), length(Dropped, ND)
-    ;   R = -1, NP = 0, ND = -1
-    ).
-
-
-% ---------------------------------------------------------------------------
-% Gate driver + report.
-% ---------------------------------------------------------------------------
-
-% (fixture file, canonical grid size) - the puzzle-shaped inputs where the DFS
-% seeds quickly (probe: 5-462 ms). Grids per benchmarks/fixtures + the probe.
-gate_fixtures([
-    fix('fixtures/benchmark_08_words.pl', 13),
-    fix('fixtures/benchmark_14_words.pl', 17),
-    fix('fixtures/benchmark_20_words.pl', 37),
-    fix('fixtures/benchmark_26_words.pl', 49),
-    fix('fixtures/toc_demo.pl',           25)
-]).
-
-gate_one(File, GridLen) :-
-    load_clues(File, Words),
-    length(Words, NW),
-    gate_search_run(Words, GridLen, Outcome),
-    nb_getval(arrange_first, FirstR),
-    nb_getval(arrange_best, BestPlaced-BestR),
-    nb_getval(arrange_nodes, Nodes),
-    nb_getval(arrange_prunes, Prunes),
-    ( BestPlaced == none -> CapBind = 'n/a (no full placement)'
-    ; cap_binding_count(BestPlaced, CapBind) ),
-    greedy_reward(Words, GridLen, GR, GNP, GND),
-    format("~n=== ~w  (~w words, grid ~w) ===~n", [File, NW, GridLen]),
-    format("  search : first=~w  best=~w  delta=~w  nodes=~w  prunes=~w  outcome=~w~n",
-           [FirstR, BestR, '?', Nodes, Prunes, Outcome]),
-    report_delta(FirstR, BestR),
-    format("  capbind: ~w of ~w placed words meet ceil(L/2) in best layout~n",
-           [CapBind, NW]),
-    format("  greedy : reward=~w  placed=~w  dropped=~w~n", [GR, GNP, GND]).
-
-report_delta(none, _) :- !,
-    format("  verdict: NO complete placement found within budget~n").
-report_delta(F, B) :-
-    D is B - F,
-    ( D =:= 0
-    ->  format("  verdict: best == first (search added NOTHING over the first incumbent)~n")
-    ;   format("  verdict: best > first by ~w (search improved the layout)~n", [D])
-    ).
-
-gate_run :-
-    gate_fixtures(Fixtures),
-    format("arrange Phase 1.5 search-value gate  (weights 5:1, budget per gate_budget/1)~n"),
-    forall(member(fix(File, Grid), Fixtures), gate_one(File, Grid)),
-    nl.
 
 
 % ---------------------------------------------------------------------------
@@ -408,20 +255,13 @@ cropped_coord(GridLen, MinR, MinC, Cell, [R, C]) :-
     cell_coord(GridLen, Cell, [R0, C0]),
     R is R0 - MinR, C is C0 - MinC.
 
-% Drop-contract dispatch (strict | best_effort) -> the matching solver.
+% Drop-contract dispatch (strict | best_effort) -> the matching solver. The
+% crosswordsmith CLI is the entry point; it calls arrange_solve/4 (and the
+% fragment/candidates/enumerate solvers) directly on a loaded Words list.
 arrange_solve(Words, GridLen, strict, SizeMode) :-
     arrange_strict_solve(Words, GridLen, SizeMode).
 arrange_solve(Words, GridLen, best_effort, SizeMode) :-
     arrange_best_effort_solve(Words, GridLen, SizeMode).
-
-% Convenience runners: load a clue file and emit an arrange layout.
-% /3 keeps the strict default (golden-stable); /4 selects the drop contract.
-arrange_run(File, GridLen, SizeMode) :-
-    load_clues(File, Words),
-    arrange_strict_solve(Words, GridLen, SizeMode).
-arrange_run(File, GridLen, DropContract, SizeMode) :-
-    load_clues(File, Words),
-    arrange_solve(Words, GridLen, DropContract, SizeMode).
 
 
 % ===========================================================================
@@ -666,6 +506,7 @@ arrange_fragment_best_effort(Words, Frags, GridLen, Numbered, Reward, NumPlaced,
 % on stderr; on any non-placed outcome report and fail with no stdout layout.
 
 arrange_fragment_solve(Words, Frags, GridLen, strict, SizeMode) :-
+    check_unique_answers(Words),
     arrange_fragment_strict(Words, Frags, GridLen, Numbered, Reward, Outcome),
     (   Outcome == placed
     ->  emit_arrange(Numbered, Words, GridLen, SizeMode),
@@ -677,6 +518,7 @@ arrange_fragment_solve(Words, Frags, GridLen, strict, SizeMode) :-
         fail
     ).
 arrange_fragment_solve(Words, Frags, GridLen, best_effort, SizeMode) :-
+    check_unique_answers(Words),
     (   arrange_fragment_best_effort(Words, Frags, GridLen, Numbered, Reward, NP, Dropped)
     ->  emit_arrange(Numbered, Words, GridLen, SizeMode),
         length(Dropped, ND),
@@ -705,17 +547,6 @@ words with no possible crossing: ~w~n",
 (remaining words cannot all interlock with the pinned seed)~n",
                [GridLen, GridLen])
     ).
-
-% Convenience runners: load an input clue file + a fragment file and emit a
-% fragment-seeded arrange layout. /3 keeps the strict default (golden-stable);
-% /4 selects the drop contract. The fragment's gridLength sets N.
-arrange_fragment_run(InputFile, FragmentFile, SizeMode) :-
-    arrange_fragment_run(InputFile, FragmentFile, strict, SizeMode).
-arrange_fragment_run(InputFile, FragmentFile, DropContract, SizeMode) :-
-    load_clues(InputFile, Words),
-    check_unique_answers(Words),
-    load_fragment(FragmentFile, GridLen, Frags),
-    arrange_fragment_solve(Words, Frags, GridLen, DropContract, SizeMode).
 
 
 % --- fragment error messages ------------------------------------------------
@@ -878,11 +709,6 @@ fewer >=tau-distinct layouts exist~n",
                [GridLen, GridLen]),
         fail
     ).
-
-% Convenience runner: load a clue file and emit up to K diverse layouts.
-arrange_candidates_run(File, GridLen, DropContract, SizeMode, K) :-
-    load_clues(File, Words),
-    arrange_candidates_solve(Words, GridLen, DropContract, SizeMode, K).
 
 
 % --- enumerate (count all feasible full placements) ------------------------

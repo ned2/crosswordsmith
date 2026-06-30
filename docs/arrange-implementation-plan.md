@@ -159,7 +159,7 @@ Implemented in `arrange.pl` (the `layout_reward/4` oracle + a minimal incumbent-
 - **Risk 2 (delta correctness) largely evaporates** — with no incremental search there is no `placement_delta`; the oracle scores the final layout from scratch, so AC-ARR-9 reduces to "the oracle is correct," not "the delta matches the oracle."
 - The marginal toc_demo gain, if ever wanted, is far more cheaply captured by **construction/seed diversity + rescore-and-pick-best** (the candidates path, Phase 6) than by exhaustive search.
 - **Scope caveat:** this verdict is for the puzzle-shaped Flavour-A domain (the intended one). Dense `quality_*` meshes are a separate *feasibility* question, deliberately out of the gate's scope.
-- *(The `gate_*` predicates in `arrange.pl` are the throwaway measurement harness; `layout_reward/4`, `word_reward/5`, `check_target/2`, `cap_binding_count/2` are the production scoring layer that stays.)*
+- *(The `gate_*` predicates were the throwaway measurement harness; they were **removed from `arrange.pl`** once this descope decision was recorded (see this RESULT). The production scoring layer that stays is `layout_reward/4`, `word_reward/5`, `check_target/2`, `cap_binding_count/2`.)*
 
 ### Phase 2 — strict layout (fixed N) — *descoped to construct + rescore + emit*
 
