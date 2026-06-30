@@ -2,7 +2,7 @@
 
 SHELL := /bin/bash
 
-.PHONY: test unit golden update-golden bench bench-matrix
+.PHONY: test unit golden update-golden fuzz bench bench-matrix
 
 BENCH_FIXTURE ?= fixtures/bundled_17_clues.pl
 BENCH_GRID ?= 17
@@ -19,6 +19,13 @@ test:
 # Just the plunit unit/integration tests.
 unit:
 	swipl -q tests/run_tests.pl
+
+# Determinism + degenerate-input fuzz (INV-2 / AC-EMIT-1 / AC-X-2 byte-identity,
+# the §5.2 --out partial-write contract, and graceful handling of pathological
+# inputs). On-demand: it spawns many CLI subprocesses, so it is NOT part of the
+# fast `make test`.
+fuzz:
+	./tests/determinism_fuzz.sh
 
 # Just the golden-output regression checks (the crosswordsmith CLI, end to end).
 golden:

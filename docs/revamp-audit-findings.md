@@ -320,9 +320,8 @@ a correct contract; this is a §6.5 summary-line inconsistency only.
 - **INV-4 (license-clean bundled data)** — **done** (2026-06-30); see the *License /
   provenance pass* section below. No AC-X-4 violation in bundled data; surfaced two
   documentation findings (L1 UKACD18 mislabel, L2 vendored manual is CC BY-SA 3.0).
-- **Determinism (INV-2) under broad flag/input fuzzing** — only spot-checked (R3 path,
-  R9 flags). Follow-up: fuzz flag combinations and degenerate inputs (empty clue lists,
-  single-letter answers, unicode answers) for byte-identical output.
+- **Determinism (INV-2) under broad flag/input fuzzing** — **done** (2026-06-30); see the
+  *Determinism fuzz* section below. INV-2 holds across the matrix; no nondeterminism found.
 - **Worst-case strict-arrange latency (§7.3)** across grid sizes — only `toc_demo` at
   default size probed (R7). Follow-up: characterize and document the budget/wall-clock
   behaviour.
@@ -410,3 +409,31 @@ attribution. Either (a) read §3 as "freely-redistributable with attribution" (n
 working wording — UKACD18 stays the default, shipped with its verbatim notice), or
 (b) hold to strictly-permissive and pick an MIT/CC0 default lexicon. (a) is the
 low-friction reading and matches DP-2; recorded here so the choice is explicit.
+
+---
+
+## Determinism fuzz (INV-2 · AC-EMIT-1 · AC-X-2 · §5.2 — 2026-06-30)
+
+Follow-up on the determinism coverage gap. Added `tests/determinism_fuzz.sh`
+(`make fuzz`) — an on-demand harness (~22 s, **not** part of the fast `make
+test`) that runs a matrix of **54 cases** spanning every verb, broad flag
+combinations (`--strict`/`--best-effort`, both size-modes, `--candidates`,
+`--enumerate`, `--check-target`, `--fragment`, `--flag=value` form, all four
+lint profiles ± `--allow-asymmetry`, both export formats, fill ± seeds) and
+**degenerate inputs** (empty clue list, single-letter, unicode, duplicate,
+hyphen/space/punct/digit/lowercase answers, malformed JSON). Each case runs as
+**three separate processes**; the harness asserts identical exit code + **byte-
+identical stdout** across runs, a defined exit (0/1, never a hang/crash), and
+the §5.2 `--out` partial-write contract.
+
+**Result: INV-2 holds — 0 nondeterministic cases, 0 hangs, 0 ungraceful
+crashes.** Every degenerate input either produces a valid layout or fails
+cleanly (reported error, exit 1). The only thing the fuzz surfaced was a
+distinction worth recording (no code defect):
+
+- **§5.2 `--out` semantics differ by verb (by design).** `arrange`/`fill` exit
+  non-zero on a genuine production failure and correctly leave **no** file (no
+  partial write). `lint` always writes a **complete** report and uses its exit
+  code as the *verdict* (AC-LINT-2), so a FAIL verdict legitimately pairs a
+  complete `--out` file with exit 1 — not a "partial" file, so §5.2 is honoured.
+  The harness encodes both contracts (`nofile_on_fail` vs `report_always`).
