@@ -58,7 +58,7 @@ Reachability calibration (`--check-target`, ε, τ) is a **required pre-weightin
 | `lint` (validator/profiles) | §8.1 | **done** (toc / blocked-uk / american) | `lint.pl` + `crosswordsmith lint` verb: per-word/per-rule PASS/WARN/FAIL report + verdict over the canonical layout JSON; reuses the shared metric predicates. AC-LINT-1/2/3/4. 14 plunit + 1 golden. **barred-ximenean ⊘ on OD-7** (recognised but reports "blocked"). |
 | `export` (ipuz v2 / Exolve) | §8.2 | **done** | `export.pl` + `crosswordsmith export --to ipuz\|exolve`: transformations of the canonical JSON. ipuz v2 (puzzle/solution/clues, enumerations derived from spaces/hyphens); Exolve plain text. AC-EXP-1/3 (structure + enumeration/clue preservation); AC-EXP-2 structure. 11 plunit + 2 goldens. Real kotwords/Exet ingestion is a manual step. |
 | Stock-grid library / profiles | §8.3 | **done** | `stockgrid.pl` + `grids/` (mask schema OD-5, grid set OD-6). Ships 3 lint-validated 180°-symmetric blocked grids (`blocked_13a`/`13b`/`15a`); legality is a CI regression (7 plunit). LOCKED. |
-| `fill` engine (grid-first, open-dict) | §8.4 | deferred | Not buildable until OD-1…4 resolved. |
+| `fill` engine (grid-first, open-dict) | §8.4 | in progress | OD-1…4 resolved (DP-1/DP-2); LOCKED. Building `fill.pl` (in-memory index, MRV backtracking, fragment seeds) + `crosswordsmith fill`. AC-FILL-1…4. |
 | Backlog features | §8.5 | — | Unspecified; each needs its own decision pass before it gets a row here. |
 
 ---
@@ -68,9 +68,9 @@ Reachability calibration (`--check-target`, ε, τ) is a **required pre-weightin
 | # | Gates | Status |
 |---|---|---|
 | OD-1 | `fill`: blocked-only v1 vs barred-compatible from start | **resolved (DP-1): blocked-only** |
-| OD-2 | `fill`: dictionary integration + default lexicon | open |
+| OD-2 | `fill`: dictionary integration + default lexicon | **resolved (DP-2): in-memory pattern index; UKACD18 default via --dict** |
 | OD-3 | `fill`: seed/fragment semantics into open-dict fill | **resolved (DP-1): pin-and-fill (fragment primitive)** |
-| OD-4 | `fill`: v1 profiles + no-fill failure contract | open |
+| OD-4 | `fill`: v1 profiles + no-fill failure contract | **resolved (DP-2): stock-grids-as-profiles; report unfillable slots + fail** |
 | OD-5 | Stock-grid: template schema | **resolved (DP-1): black-square mask (slots derived)** |
 | OD-6 | Stock-grid: which grids seed the library | **resolved: ships blocked_13a/13b/15a (lint-validated)** |
 | OD-7 | `lint`: barred-Ximenean unch table + barred symmetry codes | open |
