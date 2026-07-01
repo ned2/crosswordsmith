@@ -108,6 +108,16 @@ The audit's **four coverage gaps are all closed:**
 
 Full per-finding record + remediation log: [`revamp-audit-findings.md`](./revamp-audit-findings.md). Post-remediation suite: **168 plunit + 8 goldens + 3 CLI exit-code checks** (`make test`), plus the on-demand `make fuzz`.
 
+### SWI-Prolog idiom audit (2026-07-01) — remediation open
+
+A 5-lane parallel review swept the *whole* current core (`crossword.pl`, `arrange.pl`, `fill.pl`, `lint.pl`, `quality.pl`, `export.pl`, `stockgrid.pl` + harness) specifically for **predicate-use correctness, stdlib reuse, and idiom**, grounding every claim in the version-matched SWI 10.0.2 manual under [`reference/swi-manual/`](./reference/swi-manual/). Verdict: high-quality, idiomatic Prolog — **no deprecated predicates, no `format/2` mismatches, no state leaks**. Produced **17 findings (0 high · 4 med · 7 low · 5 nit)**:
+
+- **P1 (med, the only behaviour-risk item):** a one-cell `is_end_cell(down,…)` off-by-one (`crossword.pl:832`, `>=` → `>`) lets a down word merge collinearly at cell `(L-1)*L` — reproduced with `swipl`; needs a fix + regression test + golden-diff.
+- **P2 (med):** a broad `catch/3` in both `arrange.pl` and `fill.pl` reports genuine exceptions as "infeasible" (`call_with_inference_limit/3` handles the budget itself, so the catch only ever swallows real errors).
+- **P3/P4 (med):** two hot-path efficiency items — `fill` MRV counting materializes candidate lists just to `length/2` them; the checked-bitmap metric is recomputed ~4×/word and belongs in `quality.pl`.
+
+Per-finding record + **remediation tracker** (checklist + status log): [`prolog-idiom-audit-findings.md`](./prolog-idiom-audit-findings.md). **Status: all 17 open** as of 2026-07-01.
+
 ### De-accretion / retirement roadmap
 
 The new `arrange` engine grew on top of the old machinery's primitives and orphaned its drivers. Tracking the cleanup so it doesn't just accrete:
