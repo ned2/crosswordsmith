@@ -220,9 +220,9 @@ eval_grid_rule(symmetry, CS, Filled, GridLen, result(symmetry, Sev, Detail)) :-
 connected([], _GridLen) :- !.
 connected(Filled, GridLen) :-
     Filled = [Start|_],
-    list_to_ord_set(Filled, FilledSet),
-    reach([Start], FilledSet, GridLen, [Start], Reached),
-    length(FilledSet, N), length(Reached, N).
+    % Filled is already an ordset (filled_cells/2 sorts it), so use it directly (P16).
+    reach([Start], Filled, GridLen, [Start], Reached),
+    length(Filled, N), length(Reached, N).
 
 reach([], _FilledSet, _GridLen, Acc, Acc).
 reach([Cell|Q], FilledSet, GridLen, Acc, Reached) :-
@@ -245,10 +245,10 @@ cell_neighbour(Cell, GridLen, Nb) :-
 
 % Count of filled cells whose 180-rotation is NOT filled (0 iff symmetric).
 symmetry_deficit(Filled, GridLen, Deficit) :-
-    list_to_ord_set(Filled, FS),
+    % Filled is already an ordset (filled_cells/2 sorts it), so use it directly (P16).
     aggregate_all(count,
                   ( member(Cell, Filled), rot180(Cell, GridLen, Cell2),
-                    \+ ord_memberchk(Cell2, FS) ),
+                    \+ ord_memberchk(Cell2, Filled) ),
                   Deficit).
 
 rot180(Cell, GridLen, Cell2) :-

@@ -78,7 +78,7 @@ col_cells(C, Size, Cells) :-
 line_lights(Cells, WhiteSet, Run) :-
     split_runs(Cells, WhiteSet, Runs),
     member(Run, Runs),
-    length(Run, L), L >= 2.
+    Run = [_,_|_].   % length >= 2, in O(1) (P7)
 
 split_runs([], _WS, []).
 split_runs([Cell|Cs], WS, Runs) :-

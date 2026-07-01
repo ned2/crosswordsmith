@@ -95,17 +95,17 @@ Tick as landed. `→ §Pn` links to the finding. Batches match the recommended o
 
 **Batch 3 — cleanup (all behaviour-preserving)**
 - [x] **P5** `low·C` — `answer_meta/3` O(n²) emit → `crossword.pl:766`
-- [ ] **P6** `low·C` — `intersection/3` to test non-emptiness → `arrange.pl:194`
-- [ ] **P7** `low·C` — `length/2` walks whole run → `stockgrid.pl:81`
+- [x] **P6** `low·C` — `intersection/3` to test non-emptiness → `arrange.pl:194`
+- [x] **P7** `low·C` — `length/2` walks whole run → `stockgrid.pl:81`
 - [x] **P8** `low·B` — **REJECTED** (entry_letters in the hot search loop regresses stack) → `crossword.pl:269,337,383`
 - [x] **P9** `low·B` — ipuz/exolve clue collection duplicated → `export.pl:118,168`
 - [x] **P10** `low·B` — `checked_half` re-derives `word_meets_half/2` threshold → `lint.pl:148`
 - [ ] **P11** `low·A` — `quality.pl` uses `library(pairs)` without importing it → `quality.pl:25`
 - [ ] **P12** `nit·C` — missing `meta_predicate` on `with_output/2`,`capped/2` → `crossword.pl:112`
-- [ ] **P13** `nit·C` — spurious choicepoint from `select/3` → `fill.pl:163`
-- [ ] **P14** `nit·C` — redundant `Ch = V` in `findall` → `fill.pl:123`
+- [x] **P13** `nit·C` — spurious choicepoint from `select/3` → `fill.pl:163`
+- [x] **P14** `nit·C` — redundant `Ch = V` in `findall` → `fill.pl:123`
 - [ ] **P15** `nit·C` — redundant trailing `!` after if-then-else → `crossword.pl:589,604`
-- [ ] **P16** `nit·C` — redundant `list_to_ord_set/2` on an already-ordered set → `lint.pl:219,244`
+- [x] **P16** `nit·C` — redundant `list_to_ord_set/2` on an already-ordered set → `lint.pl:219,244`
 - [ ] **P17** `low·A` — optional silent-fail boundary hardening → `export.pl:114` · `crossword.pl:629` · `arrange.pl:33`
 
 ---
@@ -256,7 +256,7 @@ small for crosswords, so this is minor.
   byte-identical; fuzz green. +1 plunit (`answer_meta_assoc_join`, incl. the no-metadata `→ {}` case).
 
 ### P6 — `intersection/3` builds the whole list just to test non-emptiness
-`arrange.pl:194` · category `C` · behaviour `preserving` · verdict **CONFIRMED** · status **open**
+`arrange.pl:194` · category `C` · behaviour `preserving` · verdict **CONFIRMED** · status **fixed**
 
 `word_shares_letter/2` does `intersection(Ls, OLs, [_|_])`, computing the full intersection only to
 check "≥1 shared letter". Runs on the rare infeasible-report path, so negligible, but a short-circuit
@@ -264,12 +264,17 @@ is cheaper and clearer.
 - **Evidence:** `/usr/lib/swi-prolog/library/lists.pl:793-796` — "The complexity of this predicate is
   |Set1|*|Set2|".
 - **Fix:** `( member(L, Ls), memberchk(L, OLs) -> true ; fail )`.
+- **Resolution (fixed):** reused the existing `shares_letter/2` (`crossword.pl:451`), which is exactly
+  that short-circuit (`member`+`memberchk`+`!`) — so this is a DRY reuse *and* the perf fix. Called
+  under `\+` so determinism is irrelevant; goldens byte-identical.
 
 ### P7 — `length/2` walks the whole run to compare against 2
-`stockgrid.pl:81` · category `C` · behaviour `preserving` · verdict **CONFIRMED** · status **open**
+`stockgrid.pl:81` · category `C` · behaviour `preserving` · verdict **CONFIRMED** · status **fixed**
 
 `line_lights` does `length(Run, L), L >= 2`, an O(run) traversal for an O(1) test.
 **Fix:** `Run = [_,_|_]`.
+- **Resolution (fixed):** applied as suggested (`Run = [_,_|_]`); `Run` is a bound list from
+  `split_runs/3`, so this is an O(1) structural test. Stock-grid legality goldens/tests unchanged.
 
 ### P8 — Inlined letter-normalization duplicates the existing `entry_letters/2`
 `crossword.pl:269-271, 337-339, 383-385` · category `B` · behaviour `preserving` · verdict **CONFIRMED**
@@ -374,17 +379,23 @@ is ever wrapped in a module.
 **Fix:** `:- meta_predicate with_output(+, 0), capped(+, 0).`
 
 ### P13 — Spurious choicepoint from `select/3` in `select_mrv`
-`fill.pl:163` · category `C` · behaviour `preserving` · status **open**
+`fill.pl:163` · category `C` · behaviour `preserving` · status **fixed**
 
 `select(Best, Slots, Rest)` with a unique `Start+Dir` still leaves a choicepoint, explored and failed
 on every backtrack.
 **Fix:** `once(select(Best, Slots, Rest))`.
+- **Resolution (fixed):** applied `once(select(...))`. Behaviour-preserving (same first/only
+  solution); determinism fuzz green. +1 plunit (`select_mrv_leaves_no_choicepoint`) with the winner
+  placed FIRST in the slot list so the test genuinely discriminates — verified by A/B `deterministic/1`
+  (plain `select/3` → `false`, `once` → `true`).
 
 ### P14 — Redundant unification in `candidates/4`
-`fill.pl:123` · category `C` · behaviour `preserving` · status **open**
+`fill.pl:123` · category `C` · behaviour `preserving` · status **fixed**
 
 `findall(P-Ch, ( nth0(P, Vars, V), nonvar(V), Ch = V ), Bound)` — the `Ch = V` is superfluous.
 **Fix:** `findall(P-C, ( nth0(P, Vars, C), nonvar(C) ), Bound)`.
+- **Resolution (fixed):** applied `findall(P-V, ( nth0(P, Vars, V), nonvar(V) ), Bound)`. (This block
+  now lives in `slot_bucket/5`, factored out by P3; same idiom.) Fill golden byte-identical.
 
 ### P15 — Redundant trailing `!` after an already-deterministic if-then-else
 `crossword.pl:589, 604` · category `C` · behaviour `preserving` · status **open**
@@ -395,11 +406,14 @@ cut *is* load-bearing — leave those.)
 **Fix:** drop the trailing `!` in `adj_is_free/4`.
 
 ### P16 — Redundant `list_to_ord_set/2` on an already-ordered set
-`lint.pl:219, 244` · category `C` · behaviour `preserving` · status **open**
+`lint.pl:219, 244` · category `C` · behaviour `preserving` · status **fixed**
 
 `connected/2` and `symmetry_deficit/3` call `list_to_ord_set(Filled, …)`, but `Filled` comes from
 `filled_cells/2` via `sort/2` (`lint.pl:96`) and is already a dedup'd ordset at every call site.
 **Fix:** use `Filled` directly.
+- **Resolution (fixed):** both call sites are reached only from `lint_run/5`'s `filled_cells/2`
+  result (verified: the only callers), so `Filled` is already a sorted ordset — dropped both
+  `list_to_ord_set/2` calls and use `Filled` directly. Lint golden byte-identical.
 
 ---
 
@@ -454,3 +468,8 @@ one-line note`. Update the finding's **status** line and tick its box in the
 - 2026-07-02 · P8 · rejected · pending · Substituting `entry_letters/2` for the inline normalization at the `assign_words_inc/9` production `mrv_inc` search loop causes unbounded local-stack growth: the `arrange` max golden (`toc_demo@25`) overflows even an 8Gb stack (valid layout → empty output). Byte-identical letters, so a WAM stack interaction, not semantics. Bisected to that one site; the two cache-path callers + the `mrv_count/8` site are fine. Kept all three inline (consistency) + an inline warning comment. DRY win not worth regressing a golden-tested search path.
 - 2026-07-02 · P9 · fixed · pending · Batch-3 group A. `collect_by_number/4` (meta_predicate) factors the shared ipuz/exolve clue-collection skeleton; `ipuz_clues/3` + `exolve_clue_lines/3` delegate. Emitted shape untouched — both export goldens byte-identical.
 - 2026-07-02 · P10 · fixed · pending · Batch-3 group A. `word_half_threshold/2` in `quality.pl` is the single ceil(L/2) definition; `word_meets_half/2` + lint `checked_half` reuse it. Lint golden byte-identical. +1 plunit.
+- 2026-07-02 · P6 · fixed · pending · Batch-3 group B (efficiency micro-fixes). `word_shares_letter/2` (arrange) now calls the existing `shares_letter/2` short-circuit instead of `intersection/3` (full-list build). Under `\+`, goldens byte-identical.
+- 2026-07-02 · P7 · fixed · pending · Batch-3 group B. `stockgrid` `line_lights/3`: `length(Run,L), L>=2` → `Run = [_,_|_]` (O(1)).
+- 2026-07-02 · P13 · fixed · pending · Batch-3 group B. `fill` `select_mrv/6`: `select/3` → `once(select/3)` (unique Start+Dir, prune the spurious CP). Fuzz green. +1 plunit (winner-first, A/B-verified discriminating).
+- 2026-07-02 · P14 · fixed · pending · Batch-3 group B. `fill` `slot_bucket/5` (ex-`candidates/4`): dropped the redundant `Ch = V` in the `findall`. Fill golden byte-identical.
+- 2026-07-02 · P16 · fixed · pending · Batch-3 group B. `lint` `connected/2` + `symmetry_deficit/3`: dropped the redundant `list_to_ord_set/2` (`Filled` is already sorted by `filled_cells/2`). Lint golden byte-identical.

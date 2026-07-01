@@ -131,6 +131,21 @@ test(select_mrv_recovers_correct_direction_on_tie) :-
     Best = slot(1, down, _, _),
     Cands == [['C', 'A', 'T']].
 
+% P13: select_mrv/6 must succeed DETERMINISTICALLY - the winning slot's Start+Dir
+% is unique, so once(select/3) prunes the spurious choicepoint plain select/3
+% would otherwise leave. The winner (Down, 1 candidate) is placed FIRST in the
+% slot list so a stray choicepoint from select/3 (scanning the rest of the list)
+% is possible - that is exactly what once/1 removes.
+test(select_mrv_leaves_no_choicepoint) :-
+    tmp_file_stream(text, F, S), write(S, "CAT\nCOW\nCUB\nDOG\n"), close(S),
+    load_dict(F, DictByLen, Index), delete_file(F),
+    Across = slot(1, across, [1, 2, 3], ['C', _, _]),
+    Down   = slot(1, down,   [1, 4, 7], ['C', 'A', 'T']),
+    select_mrv([Down, Across], DictByLen, Index, Best, _Rest, _Cands),
+    Best = slot(1, down, _, _),
+    deterministic(Det),
+    Det == true.
+
 % P3: candidate_count/4 (the count-only MRV metric, no word materialization) must
 % agree with length(candidates/4) on BOTH branches - `all` (no cell bound) and
 % idx (some cells bound). select_mrv orders slots by these counts, so if the two

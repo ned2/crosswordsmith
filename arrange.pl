@@ -195,7 +195,7 @@ word_shares_letter(Entry, Words) :-
     Entry = [A|_], word_letters(Entry, Ls, _),
     member(Other, Words), Other = [B|_], B \== A,
     word_letters(Other, OLs, _),
-    intersection(Ls, OLs, [_|_]).
+    shares_letter(Ls, OLs).   % short-circuits at the first shared letter (P6)
 
 
 % --- Phase 4: best-effort (drop) via the greedy constructor ----------------

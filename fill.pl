@@ -124,7 +124,7 @@ build_index(DictByLen, Index) :-
 slot_bucket(Vars, DictByLen, Index, Words, Sel) :-
     length(Vars, Len),
     ( get_assoc(Len, DictByLen, Words) -> true ; Words = [] ),
-    findall(P-Ch, ( nth0(P, Vars, V), nonvar(V), Ch = V ), Bound),
+    findall(P-V, ( nth0(P, Vars, V), nonvar(V) ), Bound),
     ( Bound == []
     ->  Sel = all
     ;   index_intersection(Bound, Len, Index, Indices), Sel = idx(Indices)
@@ -182,7 +182,7 @@ select_mrv(Slots, DictByLen, Index, Best, Rest, BestCands) :-
     maplist(slot_candidate_count(DictByLen, Index), Slots, Counted),
     sort(0, @=<, Counted, [c(_, BestStart, BestDir)|_]),
     Best = slot(BestStart, BestDir, _, _),
-    select(Best, Slots, Rest),
+    once(select(Best, Slots, Rest)),   % Start+Dir is unique, so prune the CP (P13)
     Best = slot(_, _, _, Vars),
     candidates(Vars, DictByLen, Index, BestCands).
 
