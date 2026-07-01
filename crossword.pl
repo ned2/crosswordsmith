@@ -829,7 +829,7 @@ fits_on_grid(down, Start, WLen, GridLen) :-
 is_start_cell(across, Num, Length) :- 1 is Num mod Length.
 is_start_cell(down, Num, Length) :- Num =< Length.
 is_end_cell(across, Num, Length) :- 0 is Num mod Length.
-is_end_cell(down, Num, Length) :- Num >= (Length - 1) * Length.
+is_end_cell(down, Num, Length) :- Num > (Length - 1) * Length.
 
 
 prev_cell(across, Num, _Length, Prev) :- Prev is Num - 1.

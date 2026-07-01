@@ -61,6 +61,13 @@ test(is_start_down)              :- is_start_cell(down, 5, 17).      % row 1
 test(is_start_down_no, [fail])   :- is_start_cell(down, 18, 17).
 test(is_end_across)              :- is_end_cell(across, 17, 17).     % last col
 test(is_end_down)                :- is_end_cell(down, 289, 17).      % last row
+% P1 regression (is_end_cell(down) off-by-one): on a 5x5 the bottom row is
+% cells 21..25 and cell 20 is the LAST cell of row 4 - cell 25 lies directly
+% below it - so cell 20 is NOT a down end cell. The old `>=` (Num >= 20)
+% misclassified it as one; the fix is `>` (Num > 20).
+test(is_end_down_penultimate_row_not_end, [fail]) :- is_end_cell(down, 20, 5).
+test(is_end_down_bottom_row_start) :- is_end_cell(down, 21, 5).
+test(is_end_down_bottom_row_end)   :- is_end_cell(down, 25, 5).
 
 % The four named start locations resolve to the expected cell + direction.
 test(start_topleft_across, [true(N-D == 1-across)])  :- start_loc(topleft_across, 17, N, D).
@@ -171,6 +178,20 @@ test(allows_separated_collinear_word, [nondet]) :-
     init_grid(10, G0),
     assign_word('DFEE', [d,f,e,e], 4, 1, across, 10, [],   G0, P1, G1),
     assign_word('DOG',  [d,o,g],   3, 6, across, 10, [P1], G1, _, _).
+
+% Regression for P1: a down word ending at cell (L-1)*L must still honour the
+% "cell directly below must be empty" guard (check_next_cell/4). On a 5x5, a
+% down word ending at cell 20 sits directly above cell 25; if cell 25 already
+% holds a letter, placing that down word would splice a 4th cell onto its run -
+% the forbidden collinear "word inside a word" merge (crossword.pl:491-506).
+% The old is_end_cell(down) `>=` classified cell 20 as a bottom-row end and so
+% SKIPPED the below-must-be-empty check, wrongly allowing the placement.
+test(rejects_down_word_ending_above_filled_cell, [fail]) :-
+    init_grid(5, G0),
+    % fill the whole bottom row across, so cell 25 (below cell 20) is occupied
+    assign_word('VWXYZ', [v,w,x,y,z], 5, 21, across, 5, [], G0, PA, G1),
+    % a down word ending exactly at cell 20 must be rejected: cell 25 is filled
+    assign_word('PQR', [p,q,r], 3, 10, down, 5, [PA], G1, _, _).
 
 % all_crossword/5 (the --all/count path) totals every solution for a start
 % position. It must agree with independently enumerating find_crossword's

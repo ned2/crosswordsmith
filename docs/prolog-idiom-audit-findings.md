@@ -86,7 +86,7 @@ placement decision, so it needs a golden/diff check plus a new regression test.)
 Tick as landed. `→ §Pn` links to the finding. Batches match the recommended order.
 
 **Batch 1 — behavioural (needs tests / golden-diff)**
-- [ ] **P1** `med·A·risk` — `is_end_cell(down)` off-by-one → `crossword.pl:832` (+ new plunit)
+- [x] **P1** `med·A·risk` — `is_end_cell(down)` off-by-one → `crossword.pl:832` (+ new plunit)
 - [ ] **P2** `med·A` — broad `catch/3` hides real errors → `arrange.pl:139,518` · `fill.pl:200`
 
 **Batch 2 — hot-path efficiency**
@@ -113,7 +113,7 @@ Tick as landed. `→ §Pn` links to the finding. Batches match the recommended o
 ## Med
 
 ### P1 — `is_end_cell(down,…)` off-by-one lets a down word merge collinearly
-`crossword.pl:832` · category `A` · behaviour `risk` · verdict **CONFIRMED** · status **open**
+`crossword.pl:832` · category `A` · behaviour `risk` · verdict **CONFIRMED** · status **fixed**
 
 ```prolog
 is_end_cell(down, Num, Length) :- Num >= (Length - 1) * Length.   % should be  >
@@ -378,3 +378,4 @@ one-line note`. Update the finding's **status** line and tick its box in the
 [tracker](#remediation-tracker) at the same time.
 
 - 2026-07-01 · audit opened · P1–P17 raised (0 high · 4 med · 7 low · 5 nit); all `open`.
+- 2026-07-01 · P1 · fixed · (this commit) · `is_end_cell(down)` `>=`→`>`; cell `(L-1)*L` no longer skips the below-must-be-empty guard. +4 plunit (3 geometry, 1 solver collinear-merge regression). Suite 172 plunit + 8 goldens byte-identical + 54 fuzz cases, all green.
