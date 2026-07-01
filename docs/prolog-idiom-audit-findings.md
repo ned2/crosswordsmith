@@ -378,4 +378,4 @@ one-line note`. Update the finding's **status** line and tick its box in the
 [tracker](#remediation-tracker) at the same time.
 
 - 2026-07-01 · audit opened · P1–P17 raised (0 high · 4 med · 7 low · 5 nit); all `open`.
-- 2026-07-01 · P1 · fixed · (this commit) · `is_end_cell(down)` `>=`→`>`; cell `(L-1)*L` no longer skips the below-must-be-empty guard. +4 plunit (3 geometry, 1 solver collinear-merge regression). Suite 172 plunit + 8 goldens byte-identical + 54 fuzz cases, all green.
+- 2026-07-01 · P1 · fixed · 7269b10 · `is_end_cell(down)` `>=`→`>`; cell `(L-1)*L` no longer skips the below-must-be-empty guard. +4 plunit (3 geometry, 1 solver collinear-merge regression). Suite 172 plunit + 8 goldens byte-identical + 54 fuzz cases, all green.
