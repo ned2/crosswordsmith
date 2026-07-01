@@ -456,6 +456,21 @@ test(word_max_unch_run_longest_gap) :-
     word_max_unch_run(Wa,  Placed, 1),    % A: checked,unchecked,checked
     word_max_unch_run(Wd1, Placed, 2).    % D1: checked,unchecked,unchecked
 
+% P4: the hoisted canonical bitmap. layout_dir_cells/2 computes both directions
+% ONCE; word_checked_bitmap/3 turns it into the word's 1/0 checked flags, and the
+% derived count/max-run (bits_*) are the single source of truth that the
+% convenience (W, Placed) forms also use - so they must agree.
+test(word_checked_bitmap_canonical_and_derived) :-
+    sample_cross(Placed),
+    Placed = [Wa, Wd1, _],
+    layout_dir_cells(Placed, DirCells),
+    word_checked_bitmap(Wa,  DirCells, BitsA), BitsA == [1, 0, 1],   % crossed at 1 & 3
+    word_checked_bitmap(Wd1, DirCells, BitsD), BitsD == [1, 0, 0],   % crossed at start only
+    bits_checked_count(BitsA, 2), bits_max_unch_run(BitsA, 1),
+    bits_checked_count(BitsD, 1), bits_max_unch_run(BitsD, 2),
+    % identical to the single-direction (W, Placed) forms used by arrange:
+    word_checked_count(Wa, Placed, 2), word_max_unch_run(Wd1, Placed, 2).
+
 % --- helpers (word_letters / seed selection) ---------------------------------
 
 % word_letters/3 yields the space-stripped char list and its length.

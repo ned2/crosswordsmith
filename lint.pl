@@ -2,7 +2,7 @@
 % layout (what `arrange` emits) and reports PASS / WARN / FAIL per rule, per
 % word, plus a summary verdict, under a named profile. It needs no engine: it
 % reuses crossword.pl's geometry/JSON and quality.pl's shared metric predicates
-% (word_meets_half, word_max_unch_run, word_checked_count, dir_cells, ...).
+% (word_checked_bitmap, layout_dir_cells, word_checked_count, dir_cells, ...).
 % Consult AFTER crossword.pl (and quality.pl).
 
 :- use_module(library(http/json)).
@@ -100,9 +100,13 @@ filled_cells(PlacedWords, Filled) :-
 lint_run(PlacedWords, GridLen, Profile, AllowAsym, Report) :-
     lint_profile(Profile, Rules),
     filled_cells(PlacedWords, Filled),
+    % compute both directions' covered-cell sets ONCE (P4): every checked-based
+    % per-word rule derives from the word's bitmap, so dir_cells/3 (a findall+sort
+    % over ALL placed words) is not re-run per rule per word.
+    layout_dir_cells(PlacedWords, DirCells),
     findall(_{number:Num, direction:Dir, answer:A, results:Results},
             ( member(W, PlacedWords),
-              word_rule_results(Rules, W, PlacedWords, GridLen, Results),
+              word_rule_results(Rules, W, DirCells, Results),
               get_dict(answer, W, A), get_dict(num, W, Num), get_dict(dir, W, Dir) ),
             WordReports),
     findall(GR,
@@ -118,10 +122,13 @@ lint_run(PlacedWords, GridLen, Profile, AllowAsym, Report) :-
                 summary:_{pass:Pass, warn:Warn, fail:Fail},
                 grid:GridReports, words:WordReports }.
 
-word_rule_results(Rules, W, Placed, GridLen, Results) :-
+word_rule_results(Rules, W, DirCells, Results) :-
+    % one bitmap per word; every per-word checked rule reads it (double_unch_ends
+    % / odd_even directly, checked_* / max_unch_run via the derived count/run).
+    word_checked_bitmap(W, DirCells, Bits),
     findall(RD,
             ( member(Rule-Sev, Rules), per_word_rule(Rule),
-              eval_word_rule(Rule, Sev, W, Placed, GridLen, Res),
+              eval_word_rule(Rule, Sev, W, Bits, Res),
               result_to_dict(Res, RD) ),
             Results).
 
@@ -141,36 +148,38 @@ upcase_sev(fail, 'FAIL').
 
 % --- per-word rule evaluators (Sev is the configured violation severity) -----
 % Each yields result(Rule, pass|Sev, Detail) - Detail null on PASS.
-eval_word_rule(min_length, CS, W, _Placed, _GL, result(min_length, Sev, Detail)) :-
+% Sev is the configured violation severity; Bits is the word's precomputed
+% checked bitmap (word_rule_results/4). checked-count and max-unchecked-run come
+% from the shared bitmap primitives (quality.pl); the two bit-pattern rules read
+% Bits directly.
+eval_word_rule(min_length, CS, W, _Bits, result(min_length, Sev, Detail)) :-
     get_dict(len, W, L),
     ( L >= 3 -> Sev = pass, Detail = null
     ; Sev = CS, format(atom(Detail), "length ~w is below 3", [L]) ).
-eval_word_rule(checked_half, CS, W, Placed, _GL, result(checked_half, Sev, Detail)) :-
-    get_dict(len, W, L), word_checked_count(W, Placed, C), T is (L + 1) // 2,
+eval_word_rule(checked_half, CS, W, Bits, result(checked_half, Sev, Detail)) :-
+    get_dict(len, W, L), bits_checked_count(Bits, C), T is (L + 1) // 2,
     ( C >= T -> Sev = pass, Detail = null
     ; Sev = CS, format(atom(Detail), "checked ~w of ~w, need ~w", [C, L, T]) ).
-eval_word_rule(checked_full, CS, W, Placed, _GL, result(checked_full, Sev, Detail)) :-
-    get_dict(len, W, L), word_checked_count(W, Placed, C),
+eval_word_rule(checked_full, CS, W, Bits, result(checked_full, Sev, Detail)) :-
+    get_dict(len, W, L), bits_checked_count(Bits, C),
     ( C >= L -> Sev = pass, Detail = null
     ; Sev = CS, format(atom(Detail), "checked ~w of ~w (every cell must be checked)", [C, L]) ).
 % The Ximenean barred-grid band: unchecked count must not exceed barred_max_unch/2.
-eval_word_rule(checked_band, CS, W, Placed, _GL, result(checked_band, Sev, Detail)) :-
-    get_dict(len, W, L), word_checked_count(W, Placed, C),
+eval_word_rule(checked_band, CS, W, Bits, result(checked_band, Sev, Detail)) :-
+    get_dict(len, W, L), bits_checked_count(Bits, C),
     Unch is L - C, barred_max_unch(L, Max),
     ( Unch =< Max -> Sev = pass, Detail = null
     ; Sev = CS, format(atom(Detail),
                        "~w unchecked of ~w (Ximenean max ~w at this length)", [Unch, L, Max]) ).
-eval_word_rule(max_unch_run, CS, W, Placed, _GL, result(max_unch_run, Sev, Detail)) :-
-    word_max_unch_run(W, Placed, R),
+eval_word_rule(max_unch_run, CS, _W, Bits, result(max_unch_run, Sev, Detail)) :-
+    bits_max_unch_run(Bits, R),
     ( R =< 2 -> Sev = pass, Detail = null
     ; Sev = CS, format(atom(Detail), "unchecked run of ~w (max 2)", [R]) ).
-eval_word_rule(double_unch_ends, CS, W, Placed, _GL, result(double_unch_ends, Sev, Detail)) :-
-    word_checked_bitmap(W, Placed, Bits),
+eval_word_rule(double_unch_ends, CS, _W, Bits, result(double_unch_ends, Sev, Detail)) :-
     ( double_unch_end(Bits, Which)
     -> Sev = CS, format(atom(Detail), "double-unchecked at the ~w", [Which])
     ; Sev = pass, Detail = null ).
-eval_word_rule(odd_even, CS, W, Placed, _GL, result(odd_even, Sev, Detail)) :-
-    word_checked_bitmap(W, Placed, Bits),
+eval_word_rule(odd_even, CS, _W, Bits, result(odd_even, Sev, Detail)) :-
     ( lopsided_parity(Bits)
     -> Sev = CS, Detail = "checked cells all share one parity (odd/even imbalance)"
     ; Sev = pass, Detail = null ).
@@ -187,12 +196,7 @@ barred_max_unch(7, 2) :- !.
 barred_max_unch(8, 3) :- !.
 barred_max_unch(L, M) :- L >= 9, M is L // 3.
 
-% A word's per-cell checked flags (1 = crossed by a perpendicular word).
-word_checked_bitmap(W, Placed, Bits) :-
-    get_dict(cells, W, Cells), get_dict(dir, W, Dir),
-    other_dir(Dir, OD), dir_cells(Placed, OD, ODCells),
-    maplist([C, B]>>( ord_memberchk(C, ODCells) -> B = 1 ; B = 0 ), Cells, Bits).
-
+% Bit-pattern rule helpers over a word's checked bitmap (quality.pl builds it).
 double_unch_end(Bits, start) :- Bits = [0, 0|_], !.
 double_unch_end(Bits, end)   :- reverse(Bits, [0, 0|_]).
 

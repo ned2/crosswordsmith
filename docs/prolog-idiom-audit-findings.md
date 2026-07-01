@@ -91,7 +91,7 @@ Tick as landed. `→ §Pn` links to the finding. Batches match the recommended o
 
 **Batch 2 — hot-path efficiency**
 - [x] **P3** `med·C` — MRV counting materializes candidate lists → `fill.pl:159`
-- [ ] **P4** `med·C` — checked-bitmap metric recomputed ~4×/word; hoist to `quality.pl` → `lint.pl:191`
+- [x] **P4** `med·C` — checked-bitmap metric recomputed ~4×/word; hoist to `quality.pl` → `lint.pl:191`
 
 **Batch 3 — cleanup (all behaviour-preserving)**
 - [ ] **P5** `low·C` — `answer_meta/3` O(n²) emit → `crossword.pl:766`
@@ -202,7 +202,7 @@ time — O(n²) over an ascending index set.
 
 ### P4 — Checked-bitmap metric recomputed ~4×/word, and lives in the wrong module
 `lint.pl:191` + `quality.pl:204,210` · category `C` (+DRY) · behaviour `preserving` ·
-verdict **CONFIRMED** · status **open**
+verdict **CONFIRMED** · status **fixed**
 
 `word_checked_bitmap/3` (lint) hand-computes per-cell checkedness with the same core inside
 `word_checked_count/3` (`quality.pl:204`) and `word_max_unch_run/3` (`quality.pl:210`). During a lint
@@ -220,6 +220,20 @@ delegate.
   `word_checked_bitmap/…` into `quality.pl` and derive count (`sum_list`/`aggregate_all(count)`) and
   max-run (a fold over the bits) from it. Small at lint's scale (dozens of words) but removes the
   duplication and the redundant sorts.
+- **Resolution (fixed):** hoisted `word_checked_bitmap/3` into `quality.pl` as the canonical
+  per-word metric, taking a precomputed `dircells(AC, DC)` from the new `layout_dir_cells/2`
+  (both directions, once). Added pure primitives `checked_bits/3`, `bits_checked_count/2`
+  (`sum_list`), `bits_max_unch_run/2` (a fold over the bits); the `(W, Placed)` convenience forms
+  (`word_checked_count/3`, `word_max_unch_run/3` — read by `arrange.pl`'s rescore) now derive from
+  the same primitives over a single perpendicular direction, so behaviour + cost are unchanged for
+  arrange. `lint_run/5` computes `layout_dir_cells` once and threads it in; `word_rule_results/4`
+  builds one bitmap per word; `eval_word_rule/5` takes that bitmap, so `dir_cells/3` is no longer
+  re-run per rule per word. `checkedness` now has one source of truth. Behaviour-preserving: all
+  goldens (incl. lint) byte-identical; determinism fuzz green. **Benchmark (INFERENCES):**
+  `lint_run(toc)` over the 16-word `toc_demo` layout (4 checked-based per-word rules) **70,103 →
+  48,566 inf/run, −31%** (200 reps). +1 plunit (`quality:word_checked_bitmap_canonical_and_derived`)
+  pins the canonical bitmap + agreement with the `(W, Placed)` forms; two lint white-box tests
+  updated to the `eval_word_rule/5` (bitmap) signature.
 
 ---
 
@@ -407,3 +421,4 @@ one-line note`. Update the finding's **status** line and tick its box in the
 - 2026-07-01 · P1 · fixed · 7269b10 · `is_end_cell(down)` `>=`→`>`; cell `(L-1)*L` no longer skips the below-must-be-empty guard. +4 plunit (3 geometry, 1 solver collinear-merge regression). Suite 172 plunit + 8 goldens byte-identical + 54 fuzz cases, all green.
 - 2026-07-01 · P2 · fixed · pending · dropped the broad `catch/3` at all three sites (`arrange.pl` construct_one/7 + construct_fragment_one/6, `fill.pl` fill_attempt/8) — no expected infeasibility exception exists, so a genuine error now propagates to `main/0` (exit 1) instead of being masked as infeasible. +2 plunit (error-propagation regressions, one per engine). Suite 174 plunit + 8 goldens byte-identical + 54 fuzz cases, all green. (Commit hash backfilled at close.)
 - 2026-07-01 · P3 · fixed · pending · `fill.pl` MRV counting no longer materializes candidate word-lists: shared `slot_bucket/5` + count-only `candidate_count/4` (`length(Indices)`), winner built once not twice. Behaviour-preserving (counts/order/golden identical). Benchmark: counting map 207,372 → 90,957 inf/call (−56%) on `blocked_13a` + synthetic 3000-word/len dict. +1 plunit. Suite 175 plunit + 8 goldens byte-identical + 54 fuzz cases, all green. (Commit hash backfilled at close.)
+- 2026-07-01 · P4 · fixed · pending · hoisted `word_checked_bitmap/3` into `quality.pl` (canonical, over `layout_dir_cells/2`'s once-computed `dircells`); count/max-run derive from shared bit primitives; `lint_run` computes `dir_cells` once and threads it, so it is not re-run ~4×/word. arrange's `(W,Placed)` forms unchanged. Behaviour-preserving (lint + all goldens byte-identical). Benchmark: `lint_run(toc)` 70,103 → 48,566 inf/run (−31%) on the 16-word `toc_demo` layout. +1 plunit; 2 lint white-box tests updated to `eval_word_rule/5`. Suite 176 plunit + 8 goldens byte-identical + 54 fuzz cases, all green. (Commit hash backfilled at close.)

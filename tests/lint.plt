@@ -154,17 +154,23 @@ test(barred_band_table) :-
     barred_max_unch(9, 3), barred_max_unch(12, 4).
 
 % A 5-letter entry checked at only 1 cell has 4 unches > the max of 1 -> FAIL.
+% (P4: eval_word_rule/5 now takes the word's precomputed checked bitmap; build it
+% via the same layout_dir_cells/word_checked_bitmap path lint_run uses.)
 test(barred_band_fails_underchecked_five) :-
     W = word{answer:'ABCDE', dir:across, cells:[1,2,3,4,5], len:5, num:1},
     D = word{answer:'XYZ',   dir:down,   cells:[3,20,37],   len:3, num:2},
-    eval_word_rule(checked_band, fail, W, [W, D], 17, result(checked_band, Sev, _)),
+    layout_dir_cells([W, D], DirCells),
+    word_checked_bitmap(W, DirCells, Bits),
+    eval_word_rule(checked_band, fail, W, Bits, result(checked_band, Sev, _)),
     Sev == fail.
 
 % A fully-checked entry has 0 unches, within any band -> PASS.
 test(barred_band_passes_fully_checked) :-
     dense_mesh(M),
-    once(( member(W, M), eval_word_rule(checked_band, fail, W, M, 2,
-                                        result(checked_band, pass, _)) )).
+    layout_dir_cells(M, DirCells),
+    once(( member(W, M),
+           word_checked_bitmap(W, DirCells, Bits),
+           eval_word_rule(checked_band, fail, W, Bits, result(checked_band, pass, _)) )).
 
 % The profile applies the band per word and RELAXES symmetry to advisory (WARN).
 test(barred_profile_applies_band_relaxed_symmetry) :-

@@ -194,25 +194,59 @@ dir_cells(Placed, Dir, Set) :-
             Cs),
     sort(Cs, Set).
 
+% --- per-word checkedness: one canonical bitmap, everything derived from it ----
+% A "checked" cell is covered by a perpendicular word. dir_cells/3 is a findall +
+% sort over ALL placed words, so re-deriving it per rule per word is costly (P4).
+% layout_dir_cells/2 computes both directions ONCE; lint threads the result
+% through every per-word rule, and word_checked_bitmap/3 turns it into the word's
+% per-cell 1/0 flags. Checked count (sum) and max-unchecked-run (a fold) derive
+% from the bitmap, so "checkedness" has a single source of truth.
+
+% Both directions' covered-cell ordsets over a layout, computed once.
+layout_dir_cells(Placed, dircells(AcrossCells, DownCells)) :-
+    dir_cells(Placed, across, AcrossCells),
+    dir_cells(Placed, down, DownCells).
+
+% A word's per-cell checked bitmap (1 = crossed by a perpendicular word) from a
+% precomputed dircells/2: an across word's crossings live in the down set, and
+% vice versa.
+word_checked_bitmap(W, dircells(AcrossCells, DownCells), Bits) :-
+    get_dict(cells, W, Cells), get_dict(dir, W, Dir),
+    ( Dir == across -> Perp = DownCells ; Perp = AcrossCells ),
+    checked_bits(Cells, Perp, Bits).
+
+% Flag each cell 1/0 by membership in the perpendicular covered-cell ordset.
+checked_bits(Cells, Perp, Bits) :- maplist(cell_checked(Perp), Cells, Bits).
+cell_checked(Perp, C, B) :- ( ord_memberchk(C, Perp) -> B = 1 ; B = 0 ).
+
+% Derived from the bitmap: number of checked cells; longest UNchecked run.
+bits_checked_count(Bits, Count) :- sum_list(Bits, Count).
+bits_max_unch_run(Bits, MaxRun) :- max_unch_run(Bits, 0, 0, MaxRun).
+max_unch_run([], _, M, M).
+max_unch_run([B|Bs], Cur, M0, M) :-
+    ( B =:= 0 -> Cur1 is Cur + 1 ; Cur1 = 0 ),
+    M1 is max(M0, Cur1),
+    max_unch_run(Bs, Cur1, M1, M).
+
 % A word is "half-checked" iff at least ceil(L/2) of its cells are crossings.
 word_meets_half(W, Placed) :-
     get_dict(cells, W, Cells), length(Cells, L),
     word_checked_count(W, Placed, CC),
     CC >= (L + 1) // 2.
 
-% W's cells that are crossings = also covered by a perpendicular word.
+% Convenience (W, Placed) forms: derive from the same bitmap primitives, but over
+% only THIS word's perpendicular direction. arrange.pl reads word_checked_count/3
+% per word during rescore and needs just the one direction, so these compute
+% dir_cells/3 once (not both, as lint's threaded path does).
 word_checked_count(W, Placed, Count) :-
-    get_dict(cells, W, Cells), get_dict(dir, W, Dir),
-    other_dir(Dir, OD), dir_cells(Placed, OD, ODCells),
-    aggregate_all(count, ( member(C, Cells), ord_memberchk(C, ODCells) ), Count).
+    word_perp_bits(W, Placed, Bits),
+    bits_checked_count(Bits, Count).
 
-% Longest run of consecutive UNchecked cells along the word.
 word_max_unch_run(W, Placed, MaxRun) :-
+    word_perp_bits(W, Placed, Bits),
+    bits_max_unch_run(Bits, MaxRun).
+
+word_perp_bits(W, Placed, Bits) :-
     get_dict(cells, W, Cells), get_dict(dir, W, Dir),
     other_dir(Dir, OD), dir_cells(Placed, OD, ODCells),
-    maxrun(Cells, ODCells, 0, 0, MaxRun).
-maxrun([], _, _, M, M).
-maxrun([C|Cs], ODCells, Cur, M0, MaxRun) :-
-    ( ord_memberchk(C, ODCells) -> Cur1 = 0 ; Cur1 is Cur + 1 ),
-    M1 is max(M0, Cur1),
-    maxrun(Cs, ODCells, Cur1, M1, MaxRun).
+    checked_bits(Cells, ODCells, Bits).
