@@ -138,6 +138,11 @@ layout_to_exolve(Dict, Text) :-
     format(atom(HLine), "  exolve-height: ~w", [N]),
     append([ ['exolve-begin',
               '  exolve-id: crosswordsmith-export',
+              % A default title: Exet requires a non-null title to save (its
+              % fileTitle() does title.replace(...) and crashes on a null/absent
+              % title), so emit one even though the canonical layout has none.
+              % It is an editable placeholder in any downstream tool. (AC-EXP-2.)
+              '  exolve-title: Untitled',
               WLine, HLine,
               '  exolve-grid:' ],
              GridLines,

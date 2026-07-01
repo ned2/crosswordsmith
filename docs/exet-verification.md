@@ -31,6 +31,25 @@ these must match the crosswordsmith output:
 7. **Clue text** — preserved verbatim for every entry that had a clue; entries with
    no clue stay blank (Exet/crosswordsmith must not invent text — AC-EXP-3).
 
+## Automated load-half check (exolve engine) — reproducible
+
+`tests/exolve_ingest_check.sh` covers the **load** half of the round-trip
+automatically. It exports a layout to Exolve, then has the **real Exolve engine**
+(`exolve-m.js` — the parser Exet is built on, by the same author) ingest it in a
+headless browser and confirms it reconstructs the source layout's *exact* grid,
+block pattern, solution letters, entry set, enumerations, and clue text:
+
+```sh
+tests/exolve_ingest_check.sh [layout.json]   # needs Chrome/Chromium + curl + python3
+```
+
+This is the substantive risk in AC-EXP-2 — *does a third-party tool read our
+Exolve correctly?* — and it is verified. It does **not** cover the **save-back**
+half (Exet UI Open → Save → download), which stays the manual procedure below;
+that half is low-risk (Exet re-serialises its own exolve-parsed model to standard
+Exolve), so the manual run is a confirmation, not the primary evidence. Optional /
+not part of `make test`.
+
 ## Prerequisites
 
 - A current build of `crosswordsmith` in this repo.
@@ -119,6 +138,7 @@ it here.
 
 Record each manual run so AC-EXP-2's status is auditable.
 
-| Date | Exet version | crosswordsmith commit | Artifact | Result | Notes |
+| Date | Engine / tool | crosswordsmith commit | Artifact | Result | Notes |
 |---|---|---|---|---|---|
-| _not yet run_ | — | — | — | — | initial checklist; awaiting a manual Exet round-trip |
+| 2026-07-01 | exolve engine (`exolve-m.js`, headless Chrome) | `aaf1e88` | `arrange_bundled_17_fixed` (17×17) + `arrange_toc_demo_max` (22×22) | **Load half: PASS** (automated) | The real Exolve engine ingests the export and reconstructs grid + block pattern + solution letters + entry set + enumerations + clue text *exactly*, via `tests/exolve_ingest_check.sh`. **Save-back half (Exet UI Open→Save) NOT run** — it needs a human at a browser; low-risk, still pending. |
+| 2026-07-01 | Exet v1.06 (browser UI) | `aaf1e88` + export title fix | `arrange_bundled_17_fixed` → Exet → `.ipuz` + `.puz` | **Save-back: PASS** | Full Exet Open→Save→export; both re-exports match the source exactly (dimensions, solution grid, 4 across + 2 down entries, all enumerations, all clue text). **Note:** Exet's Save crashed on the null title (`fileTitle`/`updateSavePanel`) until a title was set — export now emits a default `exolve-title` (see revamp-audit V1). AC-EXP-2 fully verified (load + save-back). |

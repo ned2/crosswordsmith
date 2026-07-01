@@ -77,6 +77,7 @@ test(exolve_structure) :-
     mini_canonical(D), layout_to_exolve(D, Text),
     atomic_list_concat(Lines, '\n', Text),
     memberchk('exolve-begin', Lines),
+    memberchk('  exolve-title: Untitled', Lines),  % non-null title (Exet Save needs it; AC-EXP-2)
     memberchk('  exolve-width: 3', Lines),
     memberchk('  exolve-height: 3', Lines),
     memberchk('    CAT', Lines),                 % row 0: all white

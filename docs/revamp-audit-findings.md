@@ -315,9 +315,18 @@ a correct contract; this is a §6.5 summary-line inconsistency only.
 ## Coverage gaps (not adequately assessed this pass)
 
 - **AC-EXP-2 (Exolve/Exet round-trip)** — un-automatable in-repo (Exet is a third-party
-  web tool). A step-by-step manual checklist now exists ([`exet-verification.md`](./exet-verification.md),
-  with a verification log); the spec marks AC-EXP-2 as golden-pinned + manually verified
-  (see R13). Remaining action is a one-off human Exet round-trip recorded in that log.
+  web tool). A step-by-step manual checklist + log now exists ([`exet-verification.md`](./exet-verification.md));
+  the spec marks AC-EXP-2 as golden-pinned + manually verified (see R13). The **load** half
+  is now verified automatically: `tests/exolve_ingest_check.sh` has the real Exolve engine
+  (Exet's parser) ingest a crosswordsmith export and reconstruct the exact grid/entries/
+  enumerations/clue-text (PASS on the 17×17 and 22×22 goldens, 2026-07-01). Only the
+  low-risk Exet-UI **save-back** confirmation remains a human step. **Done
+  (2026-07-01):** a human ran the full Exet round-trip (crosswordsmith Exolve →
+  Exet Open → Exet Save → `.ipuz` + `.puz`); both re-exports match the source
+  layout exactly (grid, solution, entries, enumerations, clue text). The run
+  surfaced a real interop defect (the Exet null-title Save crash) — now fixed;
+  see the *AC-EXP-2 verification* section below. **AC-EXP-2 is fully verified**
+  (load: automated engine + Exet UI; save-back: Exet re-export).
 - **INV-4 (license-clean bundled data)** — **done** (2026-06-30); see the *License /
   provenance pass* section below. No AC-X-4 violation in bundled data; surfaced two
   documentation findings (L1 UKACD18 mislabel, L2 vendored manual is CC BY-SA 3.0).
@@ -438,3 +447,33 @@ distinction worth recording (no code defect):
   code as the *verdict* (AC-LINT-2), so a FAIL verdict legitimately pairs a
   complete `--out` file with exit 1 — not a "partial" file, so §5.2 is honoured.
   The harness encodes both contracts (`nofile_on_fail` vs `report_always`).
+
+---
+
+## AC-EXP-2 verification (2026-07-01)
+
+Closed the last coverage gap — the Exet round-trip — in two parts:
+
+- **Load half (automated + reproducible).** `tests/exolve_ingest_check.sh` has the
+  real Exolve engine (`exolve-m.js`, headless Chrome) ingest a crosswordsmith
+  export and reconstruct the source's exact grid, block pattern, solution letters,
+  entry set, enumerations, and clue text — **PASS** on the 17×17 and 22×22 goldens.
+- **Save-back half (human, verified).** A human ran the full round-trip in Exet
+  (crosswordsmith Exolve → Exet **Open** → Exet **Save** → `.ipuz` + `.puz`). Both
+  Exet re-exports match the source layout exactly (dimensions, solution grid, 4
+  across + 2 down entries, every enumeration, every clue text). Logged in
+  [`exet-verification.md`](./exet-verification.md).
+
+### V1 — Exet's Save crashes on a null title; crosswordsmith emitted none
+`export.pl` (`layout_to_exolve/2`) · severity=low (interop) · AC-EXP-2 · **fixed**
+
+crosswordsmith's Exolve emitted no `exolve-title`, so Exet set the title to `null`
+and its `fileTitle()` (`title.replace(...)`) threw
+`TypeError: Cannot read properties of null (reading 'replace')` in
+`updateSavePanel`, silently breaking **Save**. (Arguably an Exet bug — the title is
+"optional" — but the actionable fix is ours.) **Fix:** emit a default
+`  exolve-title: Untitled` (an editable placeholder). Verified: the export re-ingests
+cleanly and the golden gains exactly that one line; the human confirmed Save works
+once a title is present. `tests/export.plt` asserts the title line. *(ipuz export is
+untouched — the verified-broken path was Exolve→Exet; ipuz-into-Exet is a separate,
+untested path.)*

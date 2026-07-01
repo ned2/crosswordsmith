@@ -283,7 +283,7 @@ Profiles (`--profile`): `blocked-uk` (enforce symmetry, ≥half checking, triple
 ### 8.2 `export` — standard-format interchange  **[LOCKED]**
 Transformations of the canonical JSON (§6.5), not new emitters.
 - **ipuz** (`--to ipuz`): invert `null`→`#`, split the merged cell object into parallel `puzzle`/`solution` arrays, group words by direction into a `clues` dict, add `version`/`kind`/`dimensions`. Emit **ipuz v2** (`"version":"http://ipuz.org/v2"`, `"kind":["http://ipuz.org/crossword#1"]`). ipuz carries no symmetry field — symmetry stays a crosswordsmith-side lint concept.
-- **Exolve** (`--to exolve`): plain-text, git-diffable; the only common format carrying bars, ninas, definition-span marking, annotations. Line-per-element granularity (round-trips to Exet).
+- **Exolve** (`--to exolve`): plain-text, git-diffable; the only common format carrying bars, ninas, definition-span marking, annotations. Line-per-element granularity (round-trips to Exet). Emits a default `exolve-title` — Exet's Save path does `title.replace(...)` and crashes on a null/absent title, so a non-null one is required to round-trip (found + fixed during the 2026-07-01 AC-EXP-2 verification; see [`exet-verification.md`](./exet-verification.md)).
 - **`.puz`/`.jpz`/PDF**: reached via off-the-shelf `kotwords` from the ipuz output — **not** emitted natively (§3).
 
 **AC-EXP-1** `export --to ipuz` produces spec-valid ipuz v2 that a third-party consumer (e.g. via kotwords) ingests without error.
