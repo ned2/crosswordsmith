@@ -83,12 +83,30 @@ Reachability calibration (`--check-target`, ε, τ) is a **required pre-weightin
 
 - **Done — Flavour A `arrange` is feature-complete:** Phase 1 (oracle) + 1.5 (gate → DESCOPE) + **2 (strict)** + **3 (size framing)** + **4 (best-effort via greedy)** + **5 (fragment seeding)** + **6 (candidates)** + **7 (CLI + migration)**. Engine in `arrange.pl`; CLI in `crosswordsmith` (`crossword.pl` is now a library); **38 plunit tests (`tests/arrange.plt`) + 4 CLI goldens (fixed + max + fragment + candidates)** wired into `run_tests.sh`/`make test` — full suite **168 plunit + 8 goldens + 3 CLI exit-code checks, all green** (counts current as of the 2026-06-30 revamp audit + remediation, all 16 findings resolved — see [`revamp-audit-findings.md`](./revamp-audit-findings.md)).
 - **Flavour B `lint` (§8.1): done** — `lint.pl` + `crosswordsmith lint` verb (toc / blocked-uk / american / barred-ximenean). Consumes the canonical layout JSON, reports per-word/per-rule PASS/WARN/FAIL + verdict; 18 plunit + 1 golden. The barred-ximenean band is primary-sourced (DP-3).
-- **Flavour B `export` (§8.2): done** — `export.pl` + `crosswordsmith export --to ipuz|exolve`: ipuz v2 JSON + Exolve plain text, enumerations derived from the answer; 11 plunit + 2 goldens. (Real kotwords/Exet round-trip is a manual verification step.)
+- **Flavour B `export` (§8.2): done** — `export.pl` + `crosswordsmith export --to ipuz|exolve`: ipuz v2 JSON + Exolve plain text, enumerations derived from the answer; 11 plunit + 2 goldens. (Real kotwords/Exet round-trip is a manual verification step — checklist in [`exet-verification.md`](./exet-verification.md).)
 - **Flavour B stock-grid library (§8.3): done** — DP-1 fixed OD-5 (mask schema); the build resolved OD-6 (ships 3 lint-validated grids). `stockgrid.pl` + `grids/`; 7 plunit.
 - **Flavour B `fill` (§8.4): done** — DP-2 resolved OD-2/OD-4 (completing OD-1…4); `fill.pl` + `crosswordsmith fill`. Grid-first MRV backtracking over an in-memory pattern index, fragment seeds as hard pins, deterministic; 7 plunit + 1 golden. (Ships a sample wordlist; real fills via `--dict UKACD18`.)
 - **Every spec'd component is now built, and OD-1…7 are all resolved.** The only thing still open is **OD-8** (backlog features in §8.5, each needs its own decision pass + spec section before implementation). The CLI does `arrange` / `lint` / `export` / `fill`.
 - **Dropped (by the gate):** `arrange` B&B search loop, admissible bound, incremental delta, LNS polish.
 - **Nothing in progress; nothing deferred or blocked.** Only OD-8 (unspec'd backlog) remains open.
+- **Audited + remediated (2026-06-30): done.** A full multi-agent code review found 16 findings; **all 16 are resolved** and all four coverage gaps are closed. See *Audit & remediation* below and [`revamp-audit-findings.md`](./revamp-audit-findings.md).
+
+### Audit & remediation (2026-06-30) — done
+
+A full 7-lane multi-agent code review (spec-conformance AC-by-AC, per-module correctness for `arrange`/`fill`/`lint`/`stockgrid`/`export`, CLI + cross-cutting invariants, tests + docs integrity) with adversarial per-finding verification produced **16 findings** (2 high, 2 med, 11 low, 1 nit); **all 16 are fixed**. Highlights:
+
+- **The two high defects were real correctness bugs, now fixed + regression-tested:** hyphenated answers placed a literal `-` grid cell (R1); a `fill` seed absent from the dictionary rejected a grid that has a legal fill (R2).
+- **`--check-target` (§7.2 MUST) was implemented** during remediation (R8), resolving a LOCKED spec self-contradiction.
+- **Doc/spec drift swept:** stale test counts, `AGENTS.md`, §6.5 word-object fields, the stock-grid `symmetry` annotation, and the mislabelled UKACD18 license.
+
+The audit's **four coverage gaps are all closed:**
+
+- **INV-4 license/provenance** — audited every bundled/vendored asset; **no AC-X-4 violation**. Corrected UKACD18's license (redistributable freeware, ship its notice verbatim — **not** BSD-3) and flagged the vendored SWI manual as CC BY-SA 3.0.
+- **§7.3 worst-case latency** — the strict 4-corner sweep now shares one inference budget (R7; `toc_demo`@15 ≈100 s → ≈28 s).
+- **INV-2 determinism** — `tests/determinism_fuzz.sh` (`make fuzz`): a 54-case verb × flag × degenerate-input fuzz, each run as 3 processes for byte-identity; **INV-2 holds (0 nondeterministic cases, 0 hangs)**.
+- **AC-EXP-2 Exet round-trip** — un-automatable in-repo; a step-by-step manual checklist + audit log ships at [`exet-verification.md`](./exet-verification.md) (the one remaining human-in-the-loop step).
+
+Full per-finding record + remediation log: [`revamp-audit-findings.md`](./revamp-audit-findings.md). Post-remediation suite: **168 plunit + 8 goldens + 3 CLI exit-code checks** (`make test`), plus the on-demand `make fuzz`.
 
 ### De-accretion / retirement roadmap
 
