@@ -116,18 +116,40 @@ build_index(DictByLen, Index) :-
     maplist([K-Is, K-Set]>>list_to_ord_set(Is, Set), Grouped, GroupedSets),
     list_to_assoc(GroupedSets, Index).
 
-% Candidate words for a slot, given its currently-bound positions.
-candidates(Vars, DictByLen, Index, Cands) :-
+% Resolve a slot to its length-bucket Words plus a selector Sel over that bucket:
+% `all` (no cell bound yet - every word of the length is a candidate) or
+% idx(Indices) (the ordset of bucket indices matching the bound cells). Shared by
+% candidates/4 (which materializes the words) and candidate_count/4 (which needs
+% only the size), so the Bound + index-intersection work is written once.
+slot_bucket(Vars, DictByLen, Index, Words, Sel) :-
     length(Vars, Len),
     ( get_assoc(Len, DictByLen, Words) -> true ; Words = [] ),
     findall(P-Ch, ( nth0(P, Vars, V), nonvar(V), Ch = V ), Bound),
     ( Bound == []
-    ->  Cands = Words
-    ;   index_intersection(Bound, Len, Index, Indices),
-        maplist(nth0_of(Words), Indices, Cands)
+    ->  Sel = all
+    ;   index_intersection(Bound, Len, Index, Indices), Sel = idx(Indices)
+    ).
+
+% Candidate words for a slot, given its currently-bound positions.
+candidates(Vars, DictByLen, Index, Cands) :-
+    slot_bucket(Vars, DictByLen, Index, Words, Sel),
+    ( Sel == all -> Cands = Words
+    ; Sel = idx(Indices), maplist(nth0_of(Words), Indices, Cands)
     ).
 
 nth0_of(Words, I, W) :- nth0(I, Words, W).
+
+% Number of candidate words for a slot WITHOUT materializing the word list (P3).
+% The MRV metric only needs the size, so count the matching index ordset (or the
+% whole length bucket) directly and skip the per-slot maplist(nth0_of...) word
+% build that select_mrv/6 otherwise ran for every unfilled slot at every search
+% node. |Indices| == |maplist(nth0_of(Words), Indices)| by construction (every
+% index into Words is valid), so the count is identical to length(Cands).
+candidate_count(Vars, DictByLen, Index, Count) :-
+    slot_bucket(Vars, DictByLen, Index, Words, Sel),
+    ( Sel == all -> length(Words, Count)
+    ; Sel = idx(Indices), length(Indices, Count)
+    ).
 
 index_intersection([P-Ch|Rest], Len, Index, Indices) :-
     index_set(Len, P, Ch, Index, S0),
@@ -168,8 +190,7 @@ select_mrv(Slots, DictByLen, Index, Best, Rest, BestCands) :-
 % most-constrained-first deterministically AND uniquely identifies the slot
 % (start+dir), so select_mrv recovers exactly the slot the count was computed for.
 slot_candidate_count(DictByLen, Index, slot(Start, Dir, _, Vars), c(Count, Start, Dir)) :-
-    candidates(Vars, DictByLen, Index, Cands),
-    length(Cands, Count).
+    candidate_count(Vars, DictByLen, Index, Count).
 
 
 % --- emit the filled layout --------------------------------------------------

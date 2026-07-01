@@ -90,7 +90,7 @@ Tick as landed. `→ §Pn` links to the finding. Batches match the recommended o
 - [x] **P2** `med·A` — broad `catch/3` hides real errors → `arrange.pl:139,518` · `fill.pl:200`
 
 **Batch 2 — hot-path efficiency**
-- [ ] **P3** `med·C` — MRV counting materializes candidate lists → `fill.pl:159`
+- [x] **P3** `med·C` — MRV counting materializes candidate lists → `fill.pl:159`
 - [ ] **P4** `med·C` — checked-bitmap metric recomputed ~4×/word; hoist to `quality.pl` → `lint.pl:191`
 
 **Batch 3 — cleanup (all behaviour-preserving)**
@@ -167,7 +167,7 @@ A programming error is thus reported to the user as a normal infeasibility.
 
 ### P3 — MRV counting materializes full candidate word-lists just to `length/2` them
 `fill.pl:159-172` (+`:127`) · category `C` · behaviour `preserving` · verdict **CONFIRMED** ·
-status **open**
+status **fixed**
 
 `select_mrv` maps `slot_candidate_count/4` over every unfilled slot at every search node; that helper
 calls the full `candidates/4`, which builds the entire candidate word list via
@@ -183,6 +183,22 @@ time — O(n²) over an ascending index set.
   candidate list *out* of the count pass instead of recomputing it — or store word refs directly in
   the index (`k(Len,Pos,Char) → ordset-of-word-refs`) so no `nth0` mapping is needed. `needs-benchmark`
   (portable metric = INFERENCES, per `experiments.md`).
+- **Resolution (fixed):** factored the shared prefix into `slot_bucket/5` (length bucket + a `all` /
+  `idx(Indices)` selector) and added `candidate_count/4`, which counts via `length(Indices, Count)` /
+  `length(Words, Count)` **without** materializing the word list; `slot_candidate_count/4` now calls
+  it. The winner's list is still built once (`select_mrv/6:165`) — and since the MRV winner is by
+  definition the fewest-candidate slot, its remaining `nth0_of` build is small, so the deeper
+  index-stores-words restructure was unnecessary. Behaviour-preserving by construction:
+  `|Indices| == |maplist(nth0_of(Words),Indices)|` (every bucket index is valid), so counts, the MRV
+  winner, and its candidate list are all identical; the double-build of the winner is eliminated.
+  **Benchmark (INFERENCES, deterministic):** targeted micro-bench = the counting map
+  (`maplist(slot_candidate_count, Slots, _)`) over `blocked_13a`'s 54 slots (42 partially bound) with a
+  synthetic 3000-word/length dict: **207,372 → 90,957 inf/call, −56%** (median of 30 reps). The removed
+  ~116 k was pure word-materialization; the residual ~91 k is the index-intersection the count
+  genuinely needs. +1 plunit (`fill:candidate_count_matches_candidates`) pins
+  `candidate_count == length(candidates)` on both branches. Suite 175 plunit + 8 goldens byte-identical
+  + 54 fuzz cases, all green. (UKACD18 is not in-repo, so the bench uses a synthetic dict; the metric
+  is machine-independent INFERENCES.)
 
 ### P4 — Checked-bitmap metric recomputed ~4×/word, and lives in the wrong module
 `lint.pl:191` + `quality.pl:204,210` · category `C` (+DRY) · behaviour `preserving` ·
@@ -390,3 +406,4 @@ one-line note`. Update the finding's **status** line and tick its box in the
 - 2026-07-01 · audit opened · P1–P17 raised (0 high · 4 med · 7 low · 5 nit); all `open`.
 - 2026-07-01 · P1 · fixed · 7269b10 · `is_end_cell(down)` `>=`→`>`; cell `(L-1)*L` no longer skips the below-must-be-empty guard. +4 plunit (3 geometry, 1 solver collinear-merge regression). Suite 172 plunit + 8 goldens byte-identical + 54 fuzz cases, all green.
 - 2026-07-01 · P2 · fixed · pending · dropped the broad `catch/3` at all three sites (`arrange.pl` construct_one/7 + construct_fragment_one/6, `fill.pl` fill_attempt/8) — no expected infeasibility exception exists, so a genuine error now propagates to `main/0` (exit 1) instead of being masked as infeasible. +2 plunit (error-propagation regressions, one per engine). Suite 174 plunit + 8 goldens byte-identical + 54 fuzz cases, all green. (Commit hash backfilled at close.)
+- 2026-07-01 · P3 · fixed · pending · `fill.pl` MRV counting no longer materializes candidate word-lists: shared `slot_bucket/5` + count-only `candidate_count/4` (`length(Indices)`), winner built once not twice. Behaviour-preserving (counts/order/golden identical). Benchmark: counting map 207,372 → 90,957 inf/call (−56%) on `blocked_13a` + synthetic 3000-word/len dict. +1 plunit. Suite 175 plunit + 8 goldens byte-identical + 54 fuzz cases, all green. (Commit hash backfilled at close.)

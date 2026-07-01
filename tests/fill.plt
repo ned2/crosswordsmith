@@ -131,6 +131,23 @@ test(select_mrv_recovers_correct_direction_on_tie) :-
     Best = slot(1, down, _, _),
     Cands == [['C', 'A', 'T']].
 
+% P3: candidate_count/4 (the count-only MRV metric, no word materialization) must
+% agree with length(candidates/4) on BOTH branches - `all` (no cell bound) and
+% idx (some cells bound). select_mrv orders slots by these counts, so if the two
+% ever diverged the MRV choice would silently differ from the true candidate set.
+test(candidate_count_matches_candidates) :-
+    load_dict('fixtures/wordlist_sample.txt', DictByLen, Index),
+    % all-unbound (`all` branch): count == number of length-3 words materialized
+    length(Free, 3),
+    candidates(Free, DictByLen, Index, CAll), length(CAll, NAll),
+    candidate_count(Free, DictByLen, Index, NAll),
+    NAll > 0,
+    % one cell bound to 'C' (idx branch): only CAT, COW match
+    Bound = ['C', _, _],
+    candidates(Bound, DictByLen, Index, CB), length(CB, NB),
+    candidate_count(Bound, DictByLen, Index, NB),
+    NB =:= 2.
+
 % --- determinism (AC-FILL-3) -------------------------------------------------
 test(fill_deterministic) :-
     do_fill('fixtures/fill_grid_3.json', none, 'fixtures/wordlist_sample.txt', A1, D1),
