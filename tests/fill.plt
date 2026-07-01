@@ -53,6 +53,17 @@ test(fill_infeasible_when_no_matching_words) :-
     delete_file(F),
     Outcome == infeasible.
 
+% Regression for P2: fill_attempt/8 must NOT swallow a genuine error from
+% fill_search and report it as `infeasible`. call_with_inference_limit/3 handles
+% the budget itself and re-throws real exceptions; infeasibility is a search
+% FAILURE (R == exhausted), never a throw. Feeding a malformed pattern index (a
+% non-assoc) makes get_assoc/3 raise a type_error, which must propagate rather
+% than be masked as infeasibility. The old broad catch/3 returned `infeasible`.
+test(fill_propagates_genuine_error,
+     [throws(error(type_error(btree, _), _))]) :-
+    fill_attempt([slot(a, across, 3, [_,_,_])], [slot(a, across, 3, [_,_,_])],
+                 [], not_an_assoc, 1_000_000, _Outcome, _Numbered, _InputWords).
+
 % --- seeds (AC-FILL-2) -------------------------------------------------------
 % Pinning COW across row 0 forces the transpose square; the pin appears at its
 % slot, and the unseeded default (CAT across) is overridden.

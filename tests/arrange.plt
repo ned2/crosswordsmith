@@ -134,6 +134,17 @@ test(strict_isolated_words_infeasible) :-
     arrange_best_layout([['ABC'], ['DEF']], 9, _N, _R, Outcome),
     Outcome == infeasible.
 
+% Regression for P2: construct_one/7 must NOT swallow a genuine error from the
+% search and report it as a normal outcome. call_with_inference_limit/3 handles
+% the budget itself (binds inference_limit_exceeded and succeeds) and re-throws
+% real exceptions; infeasibility is a search FAILURE, never a throw. So a real
+% error (here a non-integer GridLen forcing is/2 to raise) must propagate, not
+% be reclassified as `exhausted`. The old broad catch/3 returned `exhausted`.
+% (construct_fragment_one/6 shares the identical no-catch pattern.)
+test(construct_one_propagates_genuine_error,
+     [throws(error(type_error(evaluable, not_an_int/0), _))]) :-
+    construct_one(topleft_across, [['CAT', _{}]], not_an_int, 5, 3, 1_000_000, _Res).
+
 test(unplaceable_names_isolated, [true(Bad == ['ABC', 'DEF'])]) :-
     unplaceable_words([['ABC'], ['DEF']], Bad).
 

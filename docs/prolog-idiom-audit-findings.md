@@ -87,7 +87,7 @@ Tick as landed. `→ §Pn` links to the finding. Batches match the recommended o
 
 **Batch 1 — behavioural (needs tests / golden-diff)**
 - [x] **P1** `med·A·risk` — `is_end_cell(down)` off-by-one → `crossword.pl:832` (+ new plunit)
-- [ ] **P2** `med·A` — broad `catch/3` hides real errors → `arrange.pl:139,518` · `fill.pl:200`
+- [x] **P2** `med·A` — broad `catch/3` hides real errors → `arrange.pl:139,518` · `fill.pl:200`
 
 **Batch 2 — hot-path efficiency**
 - [ ] **P3** `med·C` — MRV counting materializes candidate lists → `fill.pl:159`
@@ -136,7 +136,7 @@ merge the code documents as forbidden (`crossword.pl:491-506`).
 
 ### P2 — Broad `catch/3` reports genuine errors as "infeasible" (two engines)
 `arrange.pl:139-148` & `arrange.pl:518-529`; `fill.pl:200-210` · category `A` · behaviour `preserving`
-· verdict **CONFIRMED** · status **open**
+· verdict **CONFIRMED** · status **fixed**
 
 Both engines wrap the search in `catch(call_with_inference_limit(...), _, <infeasible outcome>)`. But
 `call_with_inference_limit/3` handles the budget **internally** — on hitting the limit it binds
@@ -154,6 +154,16 @@ A programming error is thus reported to the user as a normal infeasibility.
   `catch(Goal, E, ( expected_infeasible(E) -> Recover ; throw(E) ))`. Same one-line change at all
   three sites. (If the broad catch is deliberate belt-and-braces, add a comment saying so — currently
   it reads as a bug.)
+- **Resolution (fixed):** the set of expected infeasibility exceptions is *empty* — infeasibility is
+  signalled by search *failure* (`Found == none` / `R == exhausted`), never by a throw — so the
+  narrowed recovery would be a no-op catch. Dropped the `catch/3` entirely at all three sites,
+  leaving the bare `call_with_inference_limit/3`; a genuine error now propagates to `main/0`'s
+  top-level handler (`crosswordsmith:39-44` → `print_message(error, …)`, exit 1) instead of being
+  reclassified as infeasible. Each site carries a comment explaining why no catch is needed.
+  Grounded in `reference/swi-manual/metacall.md` (re-read: on limit, `Result`←`inference_limit_exceeded`
+  and the call *succeeds*; on a `Goal` exception it *re-throws*). +2 plunit regressions
+  (`arrange:construct_one_propagates_genuine_error`, `fill:fill_propagates_genuine_error`) — each
+  verified against a buggy copy (old catch returned `exhausted`/`infeasible`; new code throws).
 
 ### P3 — MRV counting materializes full candidate word-lists just to `length/2` them
 `fill.pl:159-172` (+`:127`) · category `C` · behaviour `preserving` · verdict **CONFIRMED** ·
@@ -379,3 +389,4 @@ one-line note`. Update the finding's **status** line and tick its box in the
 
 - 2026-07-01 · audit opened · P1–P17 raised (0 high · 4 med · 7 low · 5 nit); all `open`.
 - 2026-07-01 · P1 · fixed · 7269b10 · `is_end_cell(down)` `>=`→`>`; cell `(L-1)*L` no longer skips the below-must-be-empty guard. +4 plunit (3 geometry, 1 solver collinear-merge regression). Suite 172 plunit + 8 goldens byte-identical + 54 fuzz cases, all green.
+- 2026-07-01 · P2 · fixed · pending · dropped the broad `catch/3` at all three sites (`arrange.pl` construct_one/7 + construct_fragment_one/6, `fill.pl` fill_attempt/8) — no expected infeasibility exception exists, so a genuine error now propagates to `main/0` (exit 1) instead of being masked as infeasible. +2 plunit (error-propagation regressions, one per engine). Suite 174 plunit + 8 goldens byte-identical + 54 fuzz cases, all green. (Commit hash backfilled at close.)

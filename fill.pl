@@ -197,11 +197,13 @@ fill_attempt(SearchSlots, AllSlots, DictByLen, Index, Outcome, Numbered, InputWo
 % fill_budget/1; passing a tiny Budget drives the AC-FILL-1 "not proven within
 % budget" path (tests/fill.plt).
 fill_attempt(SearchSlots, AllSlots, DictByLen, Index, Budget, Outcome, Numbered, InputWords) :-
-    catch(
-        call_with_inference_limit(
-            ( once(fill_search(SearchSlots, DictByLen, Index, [])) -> R = ok ; R = exhausted ),
-            Budget, Limit),
-        _Err, (Limit = error, R = exhausted)),
+    % No catch/3: see construct_one/7 in arrange.pl - call_with_inference_limit/3
+    % binds Limit = inference_limit_exceeded on the budget path and only re-throws
+    % genuine errors. Infeasibility is a search FAILURE (R == exhausted), so a
+    % thrown error is a real bug and must surface, not be masked as infeasible.
+    call_with_inference_limit(
+        ( once(fill_search(SearchSlots, DictByLen, Index, [])) -> R = ok ; R = exhausted ),
+        Budget, Limit),
     (   Limit == inference_limit_exceeded
     ->  Outcome = not_proven, Numbered = [], InputWords = []
     ;   R == ok

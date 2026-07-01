@@ -136,12 +136,16 @@ construct_corners([Loc|Locs], Words, GL, WC, WT, Budget, [Res|Rest]) :-
 % First MRV-inc complete placement from one corner, rescored, under a budget.
 % Always succeeds with a Res tag: ok(Reward,Placed) | budget | exhausted.
 construct_one(Loc, Words, GridLen, WCap, WTail, Budget, Res) :-
-    catch(
-        call_with_inference_limit(
-            ( once(find_crossword(mrv_inc, GridLen, Words, Loc, _G, P)) -> Found = P
-            ; Found = none ),
-            Budget, Outcome),
-        _Err, (Outcome = error, Found = none)),
+    % No catch/3 here: call_with_inference_limit/3 handles the budget itself - on
+    % the limit it binds Outcome = inference_limit_exceeded and SUCCEEDS, and it
+    % only re-throws GENUINE exceptions (metacall.md). Infeasibility is a search
+    % FAILURE (Found == none), never an exception, so a thrown error is a real
+    % bug: let it surface (main/0 reports it, exit 1) rather than be silently
+    % reclassified as `exhausted`.
+    call_with_inference_limit(
+        ( once(find_crossword(mrv_inc, GridLen, Words, Loc, _G, P)) -> Found = P
+        ; Found = none ),
+        Budget, Outcome),
     (   Outcome == inference_limit_exceeded -> Res = budget
     ;   Found == none                       -> Res = exhausted
     ;   layout_reward(WCap, WTail, Found, R), Res = ok(R, Found)
@@ -516,13 +520,13 @@ arrange_fragment_strict(Words, Frags, GridLen, Numbered, Reward, Outcome) :-
 % First MRV-inc completion from the seed, under a budget. Always succeeds with a
 % tag: ok(Placed) | budget | exhausted (mirrors construct_one/7).
 construct_fragment_one(Remaining, SeededPlaced, SeededGrid, GridLen, Budget, Res) :-
-    catch(
-        call_with_inference_limit(
-            ( once(construct_from_seed(Remaining, SeededPlaced, SeededGrid, GridLen, P))
-            ->  Found = P
-            ;   Found = none ),
-            Budget, Outcome),
-        _Err, (Outcome = error, Found = none)),
+    % No catch/3: see construct_one/7 - the budget is handled inside
+    % call_with_inference_limit/3, and a thrown error is a real bug to surface.
+    call_with_inference_limit(
+        ( once(construct_from_seed(Remaining, SeededPlaced, SeededGrid, GridLen, P))
+        ->  Found = P
+        ;   Found = none ),
+        Budget, Outcome),
     (   Outcome == inference_limit_exceeded -> Res = budget
     ;   Found == none                       -> Res = exhausted
     ;   Res = ok(Found)
