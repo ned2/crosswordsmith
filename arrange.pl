@@ -30,6 +30,10 @@ arrange_weights(5, 1).
 % check_target_override/1 (absent => the default). min/2 means N only ever
 % LOWERS the target - an N above ceil(L/2) is a no-op - matching the spec intent
 % ("lowering target below ceil(L/2) where half is unreachable").
+% Invariant: at most ONE check_target_override/1 fact. The CLI's set_check_target/1
+% always retractall's before assertz, so check_target/2's `->` (which commits to
+% the first solution) reads the single current override. Do not assertz a second
+% without retracting (P17).
 :- dynamic check_target_override/1.
 check_target(L, T) :-
     T0 is (L + 1) // 2,

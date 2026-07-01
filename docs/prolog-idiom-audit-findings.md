@@ -100,13 +100,13 @@ Tick as landed. `→ §Pn` links to the finding. Batches match the recommended o
 - [x] **P8** `low·B` — **REJECTED** (entry_letters in the hot search loop regresses stack) → `crossword.pl:269,337,383`
 - [x] **P9** `low·B` — ipuz/exolve clue collection duplicated → `export.pl:118,168`
 - [x] **P10** `low·B` — `checked_half` re-derives `word_meets_half/2` threshold → `lint.pl:148`
-- [ ] **P11** `low·A` — `quality.pl` uses `library(pairs)` without importing it → `quality.pl:25`
-- [ ] **P12** `nit·C` — missing `meta_predicate` on `with_output/2`,`capped/2` → `crossword.pl:112`
+- [x] **P11** `low·A` — `quality.pl` uses `library(pairs)` without importing it → `quality.pl:25`
+- [x] **P12** `nit·C` — missing `meta_predicate` on `with_output/2`,`capped/2` → `crossword.pl:112`
 - [x] **P13** `nit·C` — spurious choicepoint from `select/3` → `fill.pl:163`
 - [x] **P14** `nit·C` — redundant `Ch = V` in `findall` → `fill.pl:123`
-- [ ] **P15** `nit·C` — redundant trailing `!` after if-then-else → `crossword.pl:589,604`
+- [x] **P15** `nit·C` — redundant trailing `!` after if-then-else → `crossword.pl:589,604`
 - [x] **P16** `nit·C` — redundant `list_to_ord_set/2` on an already-ordered set → `lint.pl:219,244`
-- [ ] **P17** `low·A` — optional silent-fail boundary hardening → `export.pl:114` · `crossword.pl:629` · `arrange.pl:33`
+- [x] **P17** `low·A` — optional silent-fail boundary hardening (documented invariants) → `export.pl:114` · `crossword.pl:629` · `arrange.pl:33`
 
 ---
 
@@ -339,7 +339,7 @@ detail string. The "half" definition now lives in two files.
 
 ### P11 — `quality.pl` uses `library(pairs)` predicates without importing it
 `quality.pl:25` (missing import; uses at `:35,:37,:160`) · category `A` · behaviour `preserving` ·
-verdict **CONFIRMED** · status **open**
+verdict **CONFIRMED** · status **fixed**
 
 `map_list_to_pairs/3`, `pairs_values/2`, `pairs_keys_values/3` all live in `library(pairs)`
 (`/usr/lib/swi-prolog/library/pairs.pl:38-43,180`) but `quality.pl` imports only `ordsets` and
@@ -347,10 +347,12 @@ verdict **CONFIRMED** · status **open**
 (AGENTS.md: "prefer the existing style"), and autoload reliance breaks under a standalone
 `qsave_program(..., [autoload(false)])`.
 **Fix:** add `:- use_module(library(pairs)).`
+- **Resolution (fixed):** added `:- use_module(library(pairs)).` to `quality.pl`, matching `fill.pl`'s
+  explicit style. (Behaviour unchanged — it resolved via autoload before.)
 
 ### P17 — Optional: silent-fail boundaries could fail loud
 `export.pl:114-115, 165-166`; `crossword.pl:629-642`; `arrange.pl:33-36` · category `A` ·
-behaviour `preserving` · verdict **CONFIRMED** · status **open**
+behaviour `preserving` · verdict **CONFIRMED** · status **fixed (doc)**
 
 Three spots fail silently on out-of-contract input (all safe under current invariants — optional
 hardening, not live bugs):
@@ -365,18 +367,29 @@ hardening, not live bugs):
 
 **Fix (optional):** add `must_be`/throw at these boundaries for parity with `export_load`'s
 validation, or document the invariant inline (esp. the `:- dynamic check_target_override/1` line).
+- **Resolution (fixed — doc):** took the "document the invariant inline" option (zero behavioural risk;
+  all three are safe under current invariants and this must stay behaviour-preserving, goldens
+  byte-identical). Added invariant comments at all three: `export.pl` (a white cell always carries
+  `letter`, each word `answer` — export_load-validated; a malformed cell fails rather than throws),
+  `crossword.pl` `add_clue_nums/3` (key-groups are 1–2 words; a >2 group is structurally impossible so
+  there is deliberately no clause), and `arrange.pl` on the `:- dynamic check_target_override/1` line
+  (at most one fact; `set_check_target/1` retractall's before assertz). Chose not to add throws to
+  avoid changing the fail-vs-throw contract for a low-priority optional item.
 
 ---
 
 ## Nit
 
 ### P12 — Missing `meta_predicate` decls on goal-taking helpers
-`crossword.pl:112-117, 352-353` · category `C` · behaviour `preserving` · status **open**
+`crossword.pl:112-117, 352-353` · category `C` · behaviour `preserving` · status **fixed**
 
 `with_output/2` and `capped/2` accept and `call/1` a Goal but have no `:- meta_predicate`. Harmless
 today (the file loads into `user`), but it would silently break module qualification if the substrate
 is ever wrapped in a module.
 **Fix:** `:- meta_predicate with_output(+, 0), capped(+, 0).`
+- **Resolution (fixed):** added `:- meta_predicate with_output(+, 0).` and
+  `:- meta_predicate capped(+, 0).` each just above its predicate. No behavioural change (file still
+  loads into `user`); suite green.
 
 ### P13 — Spurious choicepoint from `select/3` in `select_mrv`
 `fill.pl:163` · category `C` · behaviour `preserving` · status **fixed**
@@ -398,12 +411,17 @@ on every backtrack.
   now lives in `slot_bucket/5`, factored out by P3; same idiom.) Fill golden byte-identical.
 
 ### P15 — Redundant trailing `!` after an already-deterministic if-then-else
-`crossword.pl:589, 604` · category `C` · behaviour `preserving` · status **open**
+`crossword.pl:589, 604` · category `C` · behaviour `preserving` · status **fixed**
 
 In `adj_is_free/4` the body is `( C1 -> A1 ; C2 -> A2 ; A3 ), !` where every arm is semidet, so the
 closing cut is a no-op. (Contrast `check_prev_cell/4:534` / `check_next_cell/4:546`, whose `( A ; B ), !`
 cut *is* load-bearing — leave those.)
 **Fix:** drop the trailing `!` in `adj_is_free/4`.
+- **Resolution (fixed):** dropped the trailing `!` from both `adj_is_free/4` clauses. Confirmed the
+  cut was a true no-op: `deterministic/1` after `adj_is_free(down,…)` and `adj_is_free(across,…)`
+  reports `true` (the if-then-else is already deterministic, and first-arg indexing on `down`/`across`
+  leaves no inter-clause choicepoint). Goldens byte-identical incl. the deep toc_demo@25 search;
+  determinism fuzz green (checked with care after the P8 stack lesson).
 
 ### P16 — Redundant `list_to_ord_set/2` on an already-ordered set
 `lint.pl:219, 244` · category `C` · behaviour `preserving` · status **fixed**
@@ -473,3 +491,7 @@ one-line note`. Update the finding's **status** line and tick its box in the
 - 2026-07-02 · P13 · fixed · pending · Batch-3 group B. `fill` `select_mrv/6`: `select/3` → `once(select/3)` (unique Start+Dir, prune the spurious CP). Fuzz green. +1 plunit (winner-first, A/B-verified discriminating).
 - 2026-07-02 · P14 · fixed · pending · Batch-3 group B. `fill` `slot_bucket/5` (ex-`candidates/4`): dropped the redundant `Ch = V` in the `findall`. Fill golden byte-identical.
 - 2026-07-02 · P16 · fixed · pending · Batch-3 group B. `lint` `connected/2` + `symmetry_deficit/3`: dropped the redundant `list_to_ord_set/2` (`Filled` is already sorted by `filled_cells/2`). Lint golden byte-identical.
+- 2026-07-02 · P11 · fixed · pending · Batch-3 group C (declarations/hardening). Added `:- use_module(library(pairs)).` to `quality.pl` (was autoload-only).
+- 2026-07-02 · P12 · fixed · pending · Batch-3 group C. Added `:- meta_predicate with_output(+, 0).` and `capped(+, 0).` in `crossword.pl`.
+- 2026-07-02 · P15 · fixed · pending · Batch-3 group C. Dropped the no-op trailing `!` from both `adj_is_free/4` clauses (if-then-else already deterministic; verified via `deterministic/1`). Goldens + fuzz green.
+- 2026-07-02 · P17 · fixed (doc) · pending · Batch-3 group C. Documented the three silent-fail-boundary invariants inline (`export.pl` white-cell/answer contract, `crossword.pl` `add_clue_nums/3` 1–2-word groups, `arrange.pl` single `check_target_override/1` fact) rather than adding throws — keeps the fail-vs-throw contract for a low-priority optional item. No code-logic change.

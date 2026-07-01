@@ -109,6 +109,7 @@ valid_loc(Loc) :-
 % --out). For a file the output is captured first and written only if Goal
 % succeeds, so a no-solution run leaves no empty file behind; the stdout path
 % is the unchanged direct write.
+:- meta_predicate with_output(+, 0).   % Goal is called (P12)
 with_output('', Goal) :-
     !,
     call(Goal).
@@ -349,6 +350,7 @@ mrv_count(Cap, PlacedWords, GridLen, Start, Dir, GIn, Entry, Count) :-
 % Cap is `unbounded` (no cap, for mrv) or an integer (mrv_capped). The cut keeps
 % the unbounded case deterministic - without it, clause 2's variable head leaves a
 % spurious choicepoint on every call. The integer cap goes through limit/2.
+:- meta_predicate capped(+, 0).   % Goal is called / limited (P12)
 capped(unbounded, Goal) :- !, call(Goal).
 capped(N, Goal) :- limit(N, Goal).
 
@@ -591,7 +593,7 @@ adj_is_free(down, Num, GridLen, G) :-
     ;
      get_assoc(N1, G, empty),
      get_assoc(N2, G, empty)
-    ), !.
+    ).
 
 adj_is_free(across, Num, GridLen, G) :-
     N1 is Num - GridLen,
@@ -606,7 +608,7 @@ adj_is_free(across, Num, GridLen, G) :-
     ;
      get_assoc(N1, G, empty),
      get_assoc(N2, G, empty)
-    ), !.
+    ).
 
 
 % Takes the placed words and works out the clue numbers of each
@@ -629,9 +631,13 @@ assign_clue_numbers(PlacedWords, WordsClues) :-
 
 % Updates the placed words list by appending the clue number to the end
 % of each word. The list now looks like this:
-% placed words -- [word, letters, cells, dir, len, start, clue_num] 
-
-add_clue_nums([], _, []).    
+% placed words -- [word, letters, cells, dir, len, start, clue_num]
+%
+% Invariant: each key-group (words sharing a start cell) holds 1 or 2 words - a
+% cell begins at most one across AND one down word, never 3+. So there are
+% deliberately only [W] and [W1,W2] clauses; a >2 group is structurally
+% impossible and (by design) has no clause (P17).
+add_clue_nums([], _, []).
 
 % a word whose start cell only belongs to a down or an across word
 add_clue_nums([_-[W]|Rest], ClueNum, [WClue|RestClues]) :-    

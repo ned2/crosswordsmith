@@ -23,6 +23,10 @@
 
 :- use_module(library(ordsets)).
 :- use_module(library(apply)).
+% map_list_to_pairs/3, pairs_values/2, pairs_keys_values/3 live here; imported
+% explicitly (not via autoload) to match fill.pl's style and survive a
+% qsave_program(..., [autoload(false)]) (P11).
+:- use_module(library(pairs)).
 
 % --- seed selection (greedy restart diversity) ----------------------------
 

@@ -110,6 +110,11 @@ ipuz_puzzle_cell(Cell, Out) :-
     -> ( get_dict(number, Cell, Num), integer(Num) -> Out = Num ; Out = 0 )
     ;  Out = '#' ).
 
+% Invariant: a white cell always carries `letter` and each word carries `answer`
+% (the canonical layout contract, structure-checked by export_load/2 up front).
+% So the get_dict/3 reads here and in exolve_cell_char / ipuz_clue /
+% exolve_clue_line need no fallback; on a malformed cell the transform simply
+% fails (no partial ipuz/exolve is emitted) rather than throwing (P17).
 ipuz_solution_row(Row, Out) :- maplist(ipuz_solution_cell, Row, Out).
 ipuz_solution_cell(Cell, Out) :-
     ( white_cell(Cell) -> get_dict(letter, Cell, Out) ; Out = '#' ).
