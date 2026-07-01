@@ -96,6 +96,15 @@ test(init_grid_empty) :-
 test(init_grid_no_extra, [fail]) :-
     init_grid(3, G), get_assoc(10, G, _).
 
+% answer_meta_assoc/2 (P5): the answer->meta assoc that replaces the O(n^2)
+% member/2 rescan in the emit join. An entry with metadata maps to its dict; an
+% entry with none ([Answer]) maps to an empty dict.
+test(answer_meta_assoc_join) :-
+    Words = [['CAT', _{clue:"feline"}], ['DOG']],
+    answer_meta_assoc(Words, A),
+    get_assoc('CAT', A, M1), get_dict(clue, M1, "feline"),
+    get_assoc('DOG', A, M2), dict_pairs(M2, _, []).
+
 :- end_tests(utilities).
 
 
@@ -448,6 +457,14 @@ test(word_meets_half_needs_half_its_cells_checked) :-
     Placed = [Wa, Wd1, _],
     word_meets_half(Wa, Placed),          % 2 >= ceil(3/2)=2
     \+ word_meets_half(Wd1, Placed).      % 1  < 2
+
+% word_half_threshold/2 (P10): the single ceil(L/2) definition that both
+% word_meets_half and lint's checked_half rule reuse.
+test(word_half_threshold_is_ceil_half) :-
+    word_half_threshold(1, 1),
+    word_half_threshold(3, 2),
+    word_half_threshold(4, 2),
+    word_half_threshold(5, 3).
 
 % word_max_unch_run/3: longest run of consecutive UNchecked cells in the word.
 test(word_max_unch_run_longest_gap) :-

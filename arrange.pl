@@ -265,14 +265,15 @@ arrange_layout_dict(Numbered, Words, GridLen, max, Dict) :-
     cropped_layout_dict(Numbered, Words, GridLen, MinR, MinC, S, Dict).
 
 % The S x S crop dict of a GridLen grid, origin at (MinR,MinC); same JSON shape
-% as emit_json/3, reusing add_word_cells/3, cell_coord/3 and answer_meta/3.
+% as emit_json/3, reusing add_word_cells/3, cell_coord/3 and answer_meta_assoc/2.
 cropped_layout_dict(PlacedWords, Words, GridLen, MinR, MinC, S,
                     _{gridLength: S, grid: Rows, words: WordObjs}) :-
     empty_assoc(A0),
     foldl(add_word_cells, PlacedWords, A0, CellMap),
     Smax is S - 1, numlist(0, Smax, Idxs),
     maplist(cropped_row(CellMap, GridLen, MinR, MinC, Idxs), Idxs, Rows),
-    maplist(cropped_word(Words, GridLen, MinR, MinC), PlacedWords, WordObjs).
+    answer_meta_assoc(Words, MetaAssoc),
+    maplist(cropped_word(MetaAssoc, GridLen, MinR, MinC), PlacedWords, WordObjs).
 
 cropped_row(CellMap, GridLen, MinR, MinC, CIdxs, R, Row) :-
     maplist(cropped_cell(CellMap, GridLen, MinR, MinC, R), CIdxs, Row).
@@ -286,13 +287,13 @@ cropped_cell(CellMap, GridLen, MinR, MinC, R, C, Json) :-
     ;   Json = null
     ).
 
-cropped_word(Words, GridLen, MinR, MinC, PW, WordObj) :-
+cropped_word(MetaAssoc, GridLen, MinR, MinC, PW, WordObj) :-
     get_dict(answer, PW, Answer),
     get_dict(dir, PW, Dir),
     get_dict(num, PW, Num),
     get_dict(cells, PW, Cells),
     maplist(cropped_coord(GridLen, MinR, MinC), Cells, Coords),
-    answer_meta(Answer, Words, Meta),
+    get_assoc(Answer, MetaAssoc, Meta),
     WordObj = _{number: Num, direction: Dir, answer: Answer,
                 cells: Coords, meta: Meta}.
 

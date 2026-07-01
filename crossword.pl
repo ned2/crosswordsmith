@@ -168,7 +168,7 @@ read_clues_json(File, Words) :-
 % silently coerces (a number or JSON null would become a bogus atom), so each
 % type is guarded *before* conversion. Schema violations throw error/2 terms
 % rendered by the prolog:error_message//1 clauses below. Answers are
-% normalised to atoms so the emit-time answer_meta/3 join and
+% normalised to atoms so the emit-time answer_meta_assoc/2 join and
 % check_unique_answers/1 (both ==-based) behave identically across sources.
 doc_to_words(Doc, Words) :-
     (   is_dict(Doc), get_dict(clues, Doc, Clues), is_list(Clues)
@@ -379,6 +379,11 @@ assign_words_inc(Words, PlacedWords, StateIn, GridLen, Start, Dir, GIn, GOut, Ou
     select_inc(Words, PlacedWords, StateIn, GridLen, Start, Dir, GIn,
                Entry, RemWords, StateOut),
     Entry = [Word|_],
+    % Keep this normalization INLINE - do NOT fold it into entry_letters/2.
+    % Substituting the predicate call here (this is the hot mrv_inc search loop)
+    % regresses stack use on deep searches: the toc_demo@25 --size-mode max fill
+    % overflows even an 8Gb stack. entry_letters/2 is fine on the cache path
+    % (select_inc/inc_count) but not in this recursive clause. (audit P8, rejected)
     atom_chars(Word, Letters),
     delete(Letters, ' ', Letters1),
     delete(Letters1, '-', Letters2),
@@ -729,10 +734,22 @@ rows_of(Flat, GridLen, [Row|Rows]) :-
     rows_of(Rest, GridLen, Rows).
 
 
-% Build the `words` array. Metadata is rejoined from the input list by answer.
+% Build the `words` array. Metadata is rejoined from the input list by answer -
+% via a one-shot answer->meta assoc so the join is O(n log n), not a member/2
+% rescan of the whole input per placed word (P5).
 build_words(PlacedWords, Words, GridLen, WordObjs) :-
     canonical_word_order(PlacedWords, Ordered),
-    maplist(placed_to_word(Words, GridLen), Ordered, WordObjs).
+    answer_meta_assoc(Words, MetaAssoc),
+    maplist(placed_to_word(MetaAssoc, GridLen), Ordered, WordObjs).
+
+% answer -> metadata dict for every input entry. An entry may omit metadata
+% ([Answer] -> {}); answers are unique (check_unique_answers/1), so no key clash.
+answer_meta_assoc(Words, Assoc) :-
+    findall(A-Meta,
+            ( member(Entry, Words), Entry = [A|_],
+              ( Entry = [_, M] -> Meta = M ; Meta = _{} ) ),
+            Pairs),
+    list_to_assoc(Pairs, Assoc).
 
 % Canonical emit order for the `words` array: by clue number, then across before
 % down (atom order 'across' @< 'down'). Two words sharing a start cell (same
@@ -750,25 +767,15 @@ canonical_word_order(PlacedWords, Ordered) :-
 word_canon_key(PW, Num-Dir) :- get_dict(num, PW, Num), get_dict(dir, PW, Dir).
 
 
-placed_to_word(Words, GridLen, PW, WordObj) :-
+placed_to_word(MetaAssoc, GridLen, PW, WordObj) :-
     get_dict(answer, PW, Answer),
     get_dict(dir, PW, Dir),
     get_dict(num, PW, Num),
     get_dict(cells, PW, Cells),
     maplist(cell_coord(GridLen), Cells, Coords),
-    answer_meta(Answer, Words, Meta),
+    get_assoc(Answer, MetaAssoc, Meta),
     WordObj = _{number: Num, direction: Dir, answer: Answer,
                 cells: Coords, meta: Meta}.
-
-
-% Look up the (opaque) metadata for an answer in the input list. An entry may
-% omit metadata ([Answer]); answers are unique (check_unique_answers/1).
-answer_meta(Answer, Words, Meta) :-
-    member(Entry, Words),
-    Entry = [A|_],
-    A == Answer,
-    !,
-    ( Entry = [_, M] -> Meta = M ; Meta = _{} ).
 
 
 % Cell number (1-based, row-major) to 0-based [Row, Col].

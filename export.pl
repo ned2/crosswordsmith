@@ -114,13 +114,19 @@ ipuz_solution_row(Row, Out) :- maplist(ipuz_solution_cell, Row, Out).
 ipuz_solution_cell(Cell, Out) :-
     ( white_cell(Cell) -> get_dict(letter, Cell, Out) ; Out = '#' ).
 
-% Clue objects {number, clue, enumeration}, sorted by number.
-ipuz_clues(Words, Dir, Clues) :-
-    findall(Num-Clue,
-            ( member(W, Words), word_dir(W, Dir), ipuz_clue(W, Num, Clue) ),
+% Collect one item per word in direction Dir, ordered by clue number. MkItem is
+% called as MkItem(W, Num, Item); shared by the ipuz and Exolve clue collectors
+% (same findall -> keysort -> pairs_values skeleton, only the per-item goal differs).
+:- meta_predicate collect_by_number(+, +, 3, -).
+collect_by_number(Words, Dir, MkItem, Items) :-
+    findall(Num-Item,
+            ( member(W, Words), word_dir(W, Dir), call(MkItem, W, Num, Item) ),
             Pairs),
     keysort(Pairs, Sorted),
-    pairs_values(Sorted, Clues).
+    pairs_values(Sorted, Items).
+
+% Clue objects {number, clue, enumeration}, sorted by number.
+ipuz_clues(Words, Dir, Clues) :- collect_by_number(Words, Dir, ipuz_clue, Clues).
 ipuz_clue(W, Num, _{number:Num, clue:Text, enumeration:Enum}) :-
     get_dict(number, W, Num),
     word_clue_text(W, Text),
@@ -165,12 +171,7 @@ exolve_grid_row(Row, Line) :-
 exolve_cell_char(Cell, Ch) :-
     ( white_cell(Cell) -> get_dict(letter, Cell, L), atom_string(Ch, L) ; Ch = '.' ).
 
-exolve_clue_lines(Words, Dir, Lines) :-
-    findall(Num-Line,
-            ( member(W, Words), word_dir(W, Dir), exolve_clue_line(W, Num, Line) ),
-            Pairs),
-    keysort(Pairs, Sorted),
-    pairs_values(Sorted, Lines).
+exolve_clue_lines(Words, Dir, Lines) :- collect_by_number(Words, Dir, exolve_clue_line, Lines).
 exolve_clue_line(W, Num, Line) :-
     get_dict(number, W, Num),
     word_clue_text(W, Clue),

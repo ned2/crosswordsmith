@@ -94,12 +94,12 @@ Tick as landed. `→ §Pn` links to the finding. Batches match the recommended o
 - [x] **P4** `med·C` — checked-bitmap metric recomputed ~4×/word; hoist to `quality.pl` → `lint.pl:191`
 
 **Batch 3 — cleanup (all behaviour-preserving)**
-- [ ] **P5** `low·C` — `answer_meta/3` O(n²) emit → `crossword.pl:766`
+- [x] **P5** `low·C` — `answer_meta/3` O(n²) emit → `crossword.pl:766`
 - [ ] **P6** `low·C` — `intersection/3` to test non-emptiness → `arrange.pl:194`
 - [ ] **P7** `low·C` — `length/2` walks whole run → `stockgrid.pl:81`
-- [ ] **P8** `low·B` — inlined normalization duplicates `entry_letters/2` → `crossword.pl:269,337,383`
-- [ ] **P9** `low·B` — ipuz/exolve clue collection duplicated → `export.pl:118,168`
-- [ ] **P10** `low·B` — `checked_half` re-derives `word_meets_half/2` threshold → `lint.pl:148`
+- [x] **P8** `low·B` — **REJECTED** (entry_letters in the hot search loop regresses stack) → `crossword.pl:269,337,383`
+- [x] **P9** `low·B` — ipuz/exolve clue collection duplicated → `export.pl:118,168`
+- [x] **P10** `low·B` — `checked_half` re-derives `word_meets_half/2` threshold → `lint.pl:148`
 - [ ] **P11** `low·A` — `quality.pl` uses `library(pairs)` without importing it → `quality.pl:25`
 - [ ] **P12** `nit·C` — missing `meta_predicate` on `with_output/2`,`capped/2` → `crossword.pl:112`
 - [ ] **P13** `nit·C` — spurious choicepoint from `select/3` → `fill.pl:163`
@@ -240,13 +240,20 @@ delegate.
 ## Low
 
 ### P5 — `answer_meta/3` linear rescan makes emit O(n²)
-`crossword.pl:766-771` · category `C` · behaviour `preserving` · verdict **CONFIRMED** · status **open**
+`crossword.pl:766-771` · category `C` · behaviour `preserving` · verdict **CONFIRMED** · status **fixed**
 
 `answer_meta/3` does a `member/2` scan of the full input `Words` list, and `build_words/4` calls it
 once per placed word (`:733-735` → `placed_to_word/4:759`), so the metadata rejoin is O(n²). `n` is
 small for crosswords, so this is minor.
 **Fix:** build an answer→meta assoc once (`list_to_assoc`/`get_assoc`) and thread it into
 `placed_to_word/4`, making the join O(n log n).
+- **Resolution (fixed):** added `answer_meta_assoc/2` (one `findall`+`list_to_assoc`, preserving the
+  exact `[_,M] → M ; {}` per-entry semantics of the old `answer_meta/3`); `build_words/4` computes it
+  once and `placed_to_word/4` now does `get_assoc/3` (semidet — also removes the old `member`+`!`
+  choicepoint). Removed `answer_meta/3`. The *same* O(n²) join in `arrange.pl`'s `max`-crop emit path
+  (`cropped_word/6`, which the finding note says reuses `answer_meta/3`) was fixed identically —
+  `cropped_layout_dict/7` builds the assoc once and threads it in. Behaviour-preserving: all goldens
+  byte-identical; fuzz green. +1 plunit (`answer_meta_assoc_join`, incl. the no-metadata `→ {}` case).
 
 ### P6 — `intersection/3` builds the whole list just to test non-emptiness
 `arrange.pl:194` · category `C` · behaviour `preserving` · verdict **CONFIRMED** · status **open**
@@ -266,7 +273,7 @@ is cheaper and clearer.
 
 ### P8 — Inlined letter-normalization duplicates the existing `entry_letters/2`
 `crossword.pl:269-271, 337-339, 383-385` · category `B` · behaviour `preserving` · verdict **CONFIRMED**
-· status **open**
+· status **rejected**
 
 The three-line `atom_chars(Word,L0), delete(L0,' ',L1), delete(L1,'-',Letters)` is inlined at three
 sites (`assign_words/9`, `mrv_count/8`, `assign_words_inc/9`) even though `entry_letters/2`
@@ -274,6 +281,19 @@ sites (`assign_words/9`, `mrv_count/8`, `assign_words_inc/9`) even though `entry
 `[Word|_]` entry.
 **Fix:** replace each inlined block with `entry_letters(Entry, Letters)`. (Note: this is the same
 hyphen-stripping path touched by revamp R1 — keep that fix's semantics.)
+- **Resolution (REJECTED — measured regression):** substituting `entry_letters/2` for the inline
+  goals at the **`assign_words_inc/9`** site (`:383`, the *production `mrv_inc` search loop*) causes
+  **unbounded local-stack growth** on the deep `toc_demo@25 --size-mode max` construction: the
+  `arrange` `max` golden goes from a valid 16-word layout to **empty output** (stack overflow — and it
+  still overflows at `--stack-limit=8g`, so it is not merely "tight"). A trailing `!` on
+  `entry_letters/2` does not help. Bisected precisely: `entry_letters` is *fine* at the two existing
+  cache-path callers (`select_inc`, `inc_count`) and *fine* at the `mrv_count/8` site, but **not** in
+  the recursive `assign_words_inc` clause — the letters are byte-identical, so the trigger is a WAM
+  environment/stack interaction with that hot backtracking loop, not a semantic difference. The DRY win
+  (a `low·B` cleanup) is not worth regressing a golden-tested search path, so all three sites keep the
+  inline form; an inline comment at `assign_words_inc` warns against re-folding it. `entry_letters/2`
+  stays as the encapsulation for the unaffected cache path. **Verified empirically** (isolated
+  `swipl` A/B on the exact site).
 
 ### P9 — ipuz and exolve clue collection are byte-for-byte duplicated
 `export.pl:118-128` & `export.pl:168-179` · category `B` · behaviour `preserving` · verdict **CONFIRMED**
@@ -294,15 +314,23 @@ collect_by_number(Words, Dir, MkItem, Items) :-
 ```
 then `collect_by_number(Words, across, ipuz_clue, Across)`, etc. Do **not** change the emitted shape —
 it is golden-tested and spec-pinned (`json-output-spec.md`, `exet-verification.md`).
+- **Resolution (fixed):** added `collect_by_number/4` (`:- meta_predicate collect_by_number(+, +, 3,
+  -)`) exactly as sketched; `ipuz_clues/3` and `exolve_clue_lines/3` are now one-liners delegating to
+  it, with `ipuz_clue/3` / `exolve_clue_line/3` unchanged as the per-item goals. Emitted shape
+  untouched — both export goldens (ipuz + exolve) byte-identical.
 
 ### P10 — `checked_half` re-derives the `ceil(L/2)` threshold `word_meets_half/2` already owns
-`lint.pl:148-151` · category `B` · behaviour `preserving` · verdict **CONFIRMED** · status **open**
+`lint.pl:148-151` · category `B` · behaviour `preserving` · verdict **CONFIRMED** · status **fixed**
 
 The shared metric `word_meets_half/2` (`quality.pl:198`, `CC >= (L+1)//2`) already defines
 "half-checked", but the lint rule inlines `T is (L+1)//2, C >= T` because it needs `C` and `T` for the
 detail string. The "half" definition now lives in two files.
 **Fix:** expose the threshold once (e.g. `word_half_threshold(L,T)` in `quality.pl`, or have
 `word_meets_half` also yield `CC`/`T`) and have the rule reuse it.
+- **Resolution (fixed):** added `word_half_threshold(L, T) :- T is (L+1)//2.` in `quality.pl`;
+  `word_meets_half/2` and lint's `checked_half` rule (which still needs `C` and `T` for its detail
+  string) both call it, so the ceil(L/2) definition lives in one place. Behaviour-preserving (lint
+  golden byte-identical). +1 plunit (`word_half_threshold_is_ceil_half`).
 
 ### P11 — `quality.pl` uses `library(pairs)` predicates without importing it
 `quality.pl:25` (missing import; uses at `:35,:37,:160`) · category `A` · behaviour `preserving` ·
@@ -422,3 +450,7 @@ one-line note`. Update the finding's **status** line and tick its box in the
 - 2026-07-01 · P2 · fixed · pending · dropped the broad `catch/3` at all three sites (`arrange.pl` construct_one/7 + construct_fragment_one/6, `fill.pl` fill_attempt/8) — no expected infeasibility exception exists, so a genuine error now propagates to `main/0` (exit 1) instead of being masked as infeasible. +2 plunit (error-propagation regressions, one per engine). Suite 174 plunit + 8 goldens byte-identical + 54 fuzz cases, all green. (Commit hash backfilled at close.)
 - 2026-07-01 · P3 · fixed · pending · `fill.pl` MRV counting no longer materializes candidate word-lists: shared `slot_bucket/5` + count-only `candidate_count/4` (`length(Indices)`), winner built once not twice. Behaviour-preserving (counts/order/golden identical). Benchmark: counting map 207,372 → 90,957 inf/call (−56%) on `blocked_13a` + synthetic 3000-word/len dict. +1 plunit. Suite 175 plunit + 8 goldens byte-identical + 54 fuzz cases, all green. (Commit hash backfilled at close.)
 - 2026-07-01 · P4 · fixed · pending · hoisted `word_checked_bitmap/3` into `quality.pl` (canonical, over `layout_dir_cells/2`'s once-computed `dircells`); count/max-run derive from shared bit primitives; `lint_run` computes `dir_cells` once and threads it, so it is not re-run ~4×/word. arrange's `(W,Placed)` forms unchanged. Behaviour-preserving (lint + all goldens byte-identical). Benchmark: `lint_run(toc)` 70,103 → 48,566 inf/run (−31%) on the 16-word `toc_demo` layout. +1 plunit; 2 lint white-box tests updated to `eval_word_rule/5`. Suite 176 plunit + 8 goldens byte-identical + 54 fuzz cases, all green. (Commit hash backfilled at close.)
+- 2026-07-02 · P5 · fixed · pending · Batch-3 group A (DRY/reuse). `answer_meta_assoc/2` (one-shot assoc) replaces the O(n²) `member/2` emit join in BOTH `build_words/4` (`crossword.pl`) and `cropped_word/6` (`arrange.pl` max-crop); `answer_meta/3` removed. Behaviour-preserving (all goldens byte-identical). +1 plunit.
+- 2026-07-02 · P8 · rejected · pending · Substituting `entry_letters/2` for the inline normalization at the `assign_words_inc/9` production `mrv_inc` search loop causes unbounded local-stack growth: the `arrange` max golden (`toc_demo@25`) overflows even an 8Gb stack (valid layout → empty output). Byte-identical letters, so a WAM stack interaction, not semantics. Bisected to that one site; the two cache-path callers + the `mrv_count/8` site are fine. Kept all three inline (consistency) + an inline warning comment. DRY win not worth regressing a golden-tested search path.
+- 2026-07-02 · P9 · fixed · pending · Batch-3 group A. `collect_by_number/4` (meta_predicate) factors the shared ipuz/exolve clue-collection skeleton; `ipuz_clues/3` + `exolve_clue_lines/3` delegate. Emitted shape untouched — both export goldens byte-identical.
+- 2026-07-02 · P10 · fixed · pending · Batch-3 group A. `word_half_threshold/2` in `quality.pl` is the single ceil(L/2) definition; `word_meets_half/2` + lint `checked_half` reuse it. Lint golden byte-identical. +1 plunit.

@@ -228,11 +228,17 @@ max_unch_run([B|Bs], Cur, M0, M) :-
     M1 is max(M0, Cur1),
     max_unch_run(Bs, Cur1, M1, M).
 
+% The "half-checked" threshold: at least ceil(L/2) of a word's L cells must be
+% crossings. Defined once here so lint's checked_half rule reuses it rather than
+% re-deriving ceil(L/2) (P10).
+word_half_threshold(L, T) :- T is (L + 1) // 2.
+
 % A word is "half-checked" iff at least ceil(L/2) of its cells are crossings.
 word_meets_half(W, Placed) :-
     get_dict(cells, W, Cells), length(Cells, L),
     word_checked_count(W, Placed, CC),
-    CC >= (L + 1) // 2.
+    word_half_threshold(L, T),
+    CC >= T.
 
 % Convenience (W, Placed) forms: derive from the same bitmap primitives, but over
 % only THIS word's perpendicular direction. arrange.pl reads word_checked_count/3

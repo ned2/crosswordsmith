@@ -157,7 +157,7 @@ eval_word_rule(min_length, CS, W, _Bits, result(min_length, Sev, Detail)) :-
     ( L >= 3 -> Sev = pass, Detail = null
     ; Sev = CS, format(atom(Detail), "length ~w is below 3", [L]) ).
 eval_word_rule(checked_half, CS, W, Bits, result(checked_half, Sev, Detail)) :-
-    get_dict(len, W, L), bits_checked_count(Bits, C), T is (L + 1) // 2,
+    get_dict(len, W, L), bits_checked_count(Bits, C), word_half_threshold(L, T),
     ( C >= T -> Sev = pass, Detail = null
     ; Sev = CS, format(atom(Detail), "checked ~w of ~w, need ~w", [C, L, T]) ).
 eval_word_rule(checked_full, CS, W, Bits, result(checked_full, Sev, Detail)) :-
