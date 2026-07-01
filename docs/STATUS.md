@@ -108,15 +108,16 @@ The audit's **four coverage gaps are all closed:**
 
 Full per-finding record + remediation log: [`revamp-audit-findings.md`](./revamp-audit-findings.md). Post-remediation suite: **168 plunit + 8 goldens + 3 CLI exit-code checks** (`make test`), plus the on-demand `make fuzz`.
 
-### SWI-Prolog idiom audit (2026-07-01) — remediation open
+### SWI-Prolog idiom audit (2026-07-01) — remediation done
 
-A 5-lane parallel review swept the *whole* current core (`crossword.pl`, `arrange.pl`, `fill.pl`, `lint.pl`, `quality.pl`, `export.pl`, `stockgrid.pl` + harness) specifically for **predicate-use correctness, stdlib reuse, and idiom**, grounding every claim in the version-matched SWI 10.0.2 manual under [`reference/swi-manual/`](./reference/swi-manual/). Verdict: high-quality, idiomatic Prolog — **no deprecated predicates, no `format/2` mismatches, no state leaks**. Produced **17 findings (0 high · 4 med · 7 low · 5 nit)**:
+A 5-lane parallel review swept the *whole* current core (`crossword.pl`, `arrange.pl`, `fill.pl`, `lint.pl`, `quality.pl`, `export.pl`, `stockgrid.pl` + harness) specifically for **predicate-use correctness, stdlib reuse, and idiom**, grounding every claim in the version-matched SWI 10.0.2 manual under [`reference/swi-manual/`](./reference/swi-manual/). Verdict: high-quality, idiomatic Prolog — **no deprecated predicates, no `format/2` mismatches, no state leaks**. Produced **17 findings (0 high · 4 med · 7 low · 5 nit)**; **all 17 are now dispositioned — 16 fixed, 1 rejected (P8):**
 
-- **P1 (med, the only behaviour-risk item):** a one-cell `is_end_cell(down,…)` off-by-one (`crossword.pl:832`, `>=` → `>`) lets a down word merge collinearly at cell `(L-1)*L` — reproduced with `swipl`; needs a fix + regression test + golden-diff.
-- **P2 (med):** a broad `catch/3` in both `arrange.pl` and `fill.pl` reports genuine exceptions as "infeasible" (`call_with_inference_limit/3` handles the budget itself, so the catch only ever swallows real errors).
-- **P3/P4 (med):** two hot-path efficiency items — `fill` MRV counting materializes candidate lists just to `length/2` them; the checked-bitmap metric is recomputed ~4×/word and belongs in `quality.pl`.
+- **P1 (med, the only behaviour-risk item): fixed** — a one-cell `is_end_cell(down,…)` off-by-one (`crossword.pl`, `>=` → `>`) let a down word merge collinearly at cell `(L-1)*L`; fixed + 4 regression plunit, all goldens byte-identical.
+- **P2 (med): fixed** — dropped the broad `catch/3` in both engines (`call_with_inference_limit/3` handles the budget itself, so it only ever swallowed real errors); a genuine error now surfaces via `main/0` instead of as "infeasible". +2 plunit.
+- **P3/P4 (med): fixed** — two hot-path efficiency wins, benchmarked in INFERENCES: `fill` MRV counting no longer materializes candidate lists (**−56%** on the counting map), and the checked-bitmap metric is hoisted into `quality.pl` with `dir_cells` computed once per lint run (**−31%** `lint_run(toc)`).
+- **P8 (low·B): REJECTED (measured)** — substituting the existing `entry_letters/2` for the inline normalization at the `assign_words_inc/9` production search loop causes unbounded stack growth (the `arrange` max golden overflows even `--stack-limit=8g`). Kept inline with a warning comment; the DRY win is not worth regressing a golden-tested search path. **P17** was resolved as **doc** (invariant comments, not throws).
 
-Per-finding record + **remediation tracker** (checklist + status log): [`prolog-idiom-audit-findings.md`](./prolog-idiom-audit-findings.md). **Status: all 17 open** as of 2026-07-01.
+Post-remediation suite: **179 plunit + 8 goldens + 3 CLI exit-code checks** (`make test`), plus `make fuzz` (54 cases). Per-finding record + remediation log (checklist + per-commit hashes): [`prolog-idiom-audit-findings.md`](./prolog-idiom-audit-findings.md). **Status: done as of 2026-07-02.**
 
 ### De-accretion / retirement roadmap
 
