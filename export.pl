@@ -86,6 +86,11 @@ enum_clean_pairs([S, R | Rest], Emitted, Out) :-
 layout_to_ipuz(Dict,
     _{ version: "http://ipuz.org/v2",
        kind: ["http://ipuz.org/crossword#1"],
+       % A default title (optional in ipuz, so kotwords is unaffected). Exet
+       % imports ipuz by converting it to Exolve and its format-agnostic
+       % fileTitle() crashes on a null title, so a non-null one keeps the ipuz
+       % round-trippable through Exet too - mirrors the Exolve default (V1).
+       title: "Untitled",
        dimensions: _{width:N, height:N},
        empty: 0,
        puzzle: Puzzle,

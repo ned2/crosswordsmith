@@ -47,6 +47,7 @@ test(ipuz_header) :-
     mini_canonical(D), layout_to_ipuz(D, I),
     get_dict(version, I, "http://ipuz.org/v2"),
     get_dict(kind, I, ["http://ipuz.org/crossword#1"]),
+    get_dict(title, I, "Untitled"),   % non-null title (Exet imports ipuz->exolve; V1)
     get_dict(dimensions, I, Dim), get_dict(width, Dim, 3), get_dict(height, Dim, 3).
 
 % puzzle: clue-start cell -> its number, white-but-unnumbered -> 0, block -> "#".

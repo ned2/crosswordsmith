@@ -474,6 +474,13 @@ and its `fileTitle()` (`title.replace(...)`) threw
 "optional" — but the actionable fix is ours.) **Fix:** emit a default
 `  exolve-title: Untitled` (an editable placeholder). Verified: the export re-ingests
 cleanly and the golden gains exactly that one line; the human confirmed Save works
-once a title is present. `tests/export.plt` asserts the title line. *(ipuz export is
-untouched — the verified-broken path was Exolve→Exet; ipuz-into-Exet is a separate,
-untested path.)*
+once a title is present. `tests/export.plt` asserts the title line.
+
+**Sibling fix — ipuz export.** The **ipuz** export had the same gap (no `title`).
+Exet imports ipuz by converting it to Exolve (`exolveFromIpuz`) and reuses the
+same format-agnostic `fileTitle()` (`this.puz.title.replace(...)`), so a titleless
+ipuz opened in Exet would crash Save identically — confirmed by reading Exet's
+source (not re-tested in the browser). `title` is *optional* in ipuz, so kotwords
+(the ipuz export's primary consumer, AC-EXP-1) is unaffected; but for parity and
+Exet-robustness the ipuz export now emits `"title":"Untitled"` too (standard
+optional field). `tests/export.plt` `ipuz_header` asserts it; golden updated.
