@@ -45,7 +45,7 @@ Numeric conversion (`d`, `D`, `e`, `E`, `f`, `F`, `g`, `G`, `h` and `H`) accept 
   Output the next argument, which must be an atom. This option is equivalent to **w**, except that it requires the argument to be an atom. For flexibility, SWI-Prolog also accepts a packed string (see [section 5.2](string.html#sec:5.2)) as valid argument.
 
 - `c`  
-  Interpret the next argument as a character code and add it to the output. This argument must be a valid Unicode character code. Note that the actually emitted bytes are defined by the character encoding of the output stream and an exception may be raised if the output stream is not capable of representing the requested Unicode character. See [section 2.18.1](widechars.html#sec:2.18.1) for details.
+  Interpret the next argument as a character code and add it to the output. This argument must be a valid Unicode code point; integers outside `0`...`0x10FFFF` and lone UTF-16 surrogate code points (`0xD800`...`0xDFFF`) are rejected, see [section 2.18](widechars.html#sec:2.18). Note that the actually emitted bytes are defined by the character encoding of the output stream and an exception may be raised if the output stream is not capable of representing the requested Unicode character. See [section 2.18.1](widechars.html#sec:2.18.1) for details.
 
 - `d`  
   Output next argument as a decimal number. It should be an integer. If a numeric argument is specified, a dot is inserted `argument` positions from the right (useful for doing fixed point arithmetic with integers, such as handling amounts of money).

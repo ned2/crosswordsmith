@@ -5,8 +5,9 @@ SWI-Prolog offers two comprehensive predicates for classifying characters and ch
 
 In addition, there is the library `library(ctypes)` providing compatibility with some other Prolog systems. The predicates of this library are defined in terms of [code_type/2](chartype.html#code_type/2).
 
+**code_type**(`?Code, ?Type`)  
 **char_type**(`?Char, ?Type`)  
-Tests or generates alternative `Type`s or `Char`s. The character types are inspired by the standard C `<ctype.h>` primitives. The types are sensitive to the active *locale*, see [setlocale/3](system.html#setlocale/3). Most of the `Type`s are mapped to the Unicode classification functions from `<wctype.h>`, e.g., `alnum` uses **iswalnum()**. The types `prolog_var_start`, `prolog_atom_start`, `prolog_identifier_continue` and `prolog_symbol` are based on the locale-independent built-in classification routines that are also used by [read/1](termrw.html#read/1) and friends.
+Tests or generates alternative `Type`s or `Char/Code`s. The character types are inspired by the standard C `<ctype.h>` primitives. The types are sensitive to the active *locale*, see [setlocale/3](system.html#setlocale/3). Most of the `Type`s are mapped to the Unicode classification functions from `<wctype.h>`, e.g., `alnum` uses **iswalnum()**. The types `prolog_var_start`, `prolog_atom_start`, `prolog_identifier_continue` and `prolog_symbol` are based on the locale-independent built-in classification routines that are also used by [read/1](termrw.html#read/1) and friends.
 
 Note that the mode (-,+) is only efficient if the `Type` has a parameter, e.g., `char_type(C, digit(8))`. If `Type` is a atomic, the whole unicode range (0..0x1ffff) is generated and tested against the character classification function.
 
@@ -32,7 +33,7 @@ Note that the mode (-,+) is only efficient if the `Type` has a parameter, e.g., 
 `Char` is an ASCII control character (0..31), ASCII DEL character (127), or non-ASCII character in the range 128..159 or 8232..8233.
 
 **digit**  
-`Char` is a digit, i.e., `Char` is in `0 ...`. See also `decimal`.
+`Char` is a digit, i.e., `Char` is in `0 ... 9`. See also `decimal`.
 
 **digit**(`Weight`)  
 `Char` is a digit with value `Weight`. I.e. `char_type(X, digit(6))` yields `X` = `’6’`. Useful for parsing numbers.
@@ -44,7 +45,7 @@ Note that the mode (-,+) is only efficient if the `Type` has a parameter, e.g., 
 `Char` is a decimal digit in any script. This implies it has the Unicode *general category* **Nd**).
 
 **decimal**(`Weight`)  
-`Char` is a decimal digit in any script with `Weight` `0 ...`.
+`Char` is a decimal digit in any script with `Weight` `0 ... 9`.
 
 **print**  
 `Char` is printable character.
@@ -80,7 +81,7 @@ Note that the mode (-,+) is only efficient if the `Type` has a parameter, e.g., 
 `Char` is -1.
 
 **end_of_line**  
-`Char` ends a line (ASCII: 10..13).
+`Char` is one of the four ISO/POSIX line-ending control codes U+000A LF, U+000B VT, U+000C FF, U+000D CR. This is the original ISO Prolog and C-string-literal definition; `prolog_end_of_line` is the wider set used by the SWI-Prolog reader.
 
 **newline**  
 `Char` is a newline character (10).
@@ -92,7 +93,19 @@ Note that the mode (-,+) is only efficient if the `Type` has a parameter, e.g., 
 `Char` is a quote character (`"`, `'`, `` ` ``).
 
 **paren**(`Close`)  
-`Char` is an open parenthesis and `Close` is the corresponding close parenthesis.
+`Char` is an opening bracket and `Close` is its matching close. Covers the three ASCII bracket pairs `()`, `[]` and `{}`, plus every Unicode `Ps`/`Pe` pair (about 60 pairs in Unicode 17, including angle, corner, ceiling, floor, mathematical, ornamental, fullwidth and CJK brackets). The mapping is reversible: with `Close` bound, `Char` unifies with the matching open.
+
+**quote**(`Close`)  
+`Char` is an opening quotation mark and `Close` is its matching close. The ASCII quotes `’`, `"`, and `‘` have `Close` = `Char`; Unicode `Pi`/`Pf` quote pairs (the guillemets, the standard left/right curly single and double quotes, and the single/double angle and reversed quotation marks) have `Close` different from `Char`. The mapping is reversible.
+
+**width**(`Width`)  
+`Width` is the number of columns for fixed-width usage used by `Char`. True for all printable characters. Most characters require 1 column. *Unicode combining characters* require no space (they follow the *base character*). Many Asian characters and the Emojis require 2 columns. These values are used by [stream_property/2](IO.html#stream_property/2) for the `position(-Pos)` property.
+
+**prolog_layout**  
+`Char` is a Prolog *layout* character: a member of the Unicode `Pattern_White_Space` set used by [read_term/2](termrw.html#read_term/2) to separate tokens. The eleven code points are U+0009..U+000D, U+0020, U+0085, U+200E, U+200F, U+2028 and U+2029. Locale- independent; pinned to [unicode_syntax_version](flags.html#flag:unicode_syntax_version). `prolog_end_of_line` is the seven-element line-terminator subset.
+
+**prolog_end_of_line**  
+`Char` ends a line of Prolog source text. Covers the seven line-terminator-like `Pattern_White_Space` code points: U+000A (LF), U+000B (VT), U+000C (FF), U+000D (CR), U+0085 (NEL), U+2028 (LINE SEPARATOR), and U+2029 (PARAGRAPH SEPARATOR). The same set terminates `%` comments and increments the source line counter. See [section 2.15.1.9](syntax.html#sec:2.15.1.9).
 
 **prolog_var_start**  
 `Char` can start a Prolog variable name.
@@ -106,8 +119,11 @@ Note that the mode (-,+) is only efficient if the `Type` has a parameter, e.g., 
 **prolog_symbol**  
 `Char` is a Prolog symbol character. Sequences of Prolog symbol characters glue together to form an unquoted atom. Examples are `=..`, `\=`, etc.
 
-**code_type**(`?Code, ?Type`)  
-As [char_type/2](chartype.html#char_type/2), but uses character codes rather than one-character atoms. Please note that both predicates are as flexible as possible. They handle either representation if the argument is instantiated and will instantiate only with an integer code or a one-character atom, depending of the version used. See also the Prolog flag [double_quotes](flags.html#flag:double_quotes), [atom_chars/2](manipatom.html#atom_chars/2) and [atom_codes/2](manipatom.html#atom_codes/2).
+**prolog_solo**  
+`Char` is a Prolog *solo* character: a punctuation code point that forms an atom on its own and never combines with neighbouring symbol characters. In ASCII the solo set is `!`, `;` and `%`; the same flag carries over to non-ASCII code points via the Unicode syntax map (see [section 2.15.1.9](syntax.html#sec:2.15.1.9)). Solo characters are written unquoted by [writeq/1](termrw.html#writeq/1) and are accepted as single-character atoms by the reader.
+
+**pattern_syntax**  
+`Char` has the Unicode `Pattern_Syntax` property (UAX #31 R3). This is the immutable set of punctuation and symbol code points whose classification is guaranteed not to change across Unicode versions. Used by [write_canonical/1](termrw.html#write_canonical/1) and the `pattern_syntax_solo` option of [write_term/2](termrw.html#write_term/2) to decide which single-character atoms can be printed bare with round-trip safety across Unicode upgrades.
 
 ### 4.24.1 Case conversion
 

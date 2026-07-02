@@ -5,8 +5,38 @@ This section describes the basic term reading and writing predicates. The predic
 
 Reading is sensitive to the Prolog flag [character_escapes](flags.html#flag:character_escapes), which controls the interpretation of the `\` character in quoted atoms and strings.
 
+**print**(`+Term`)  
+**print**(`+Stream, +Term`)  
+\[ISO\]**write**(`+Term`)  
+\[ISO\]**write**(`+Stream, +Term`)  
+\[ISO\]**write_canonical**(`+Term`)  
+\[ISO\]**write_canonical**(`+Stream, +Term`)  
+**writeln**(`+Term`)  
+**writeln**(`+Stream, +Term`)  
+\[ISO\]**writeq**(`+Term`)  
+\[ISO\]**writeq**(`+Stream, +Term`)  
 \[ISO\]**write_term**(`+Term, +Options`)  
-The predicate [write_term/2](termrw.html#write_term/2) is the generic form of all Prolog term-write predicates. Valid options are:
+\[ISO\]**write_term**(`+Stream, +Term, +Options`)  
+The predicate [write_term/3](termrw.html#write_term/3) is the most general form of all Prolog term-write predicates. Variations that lack the `Stream` argument write to the `current_output` stream. The options for variants that lack the `Options` argument depend on the predicate:
+
+**[print/1](termrw.html#print/1)**  
+From the flag [print_write_options](flags.html#flag:print_write_options) or \[`portray(true)`,`numbervars(true)`,`quoted(true)`\] Intended to print terms for debugging purposes.
+
+**[write/1](termrw.html#write/1)**  
+\[`numbervars(true)`\]
+
+**[write_canonical/1](termrw.html#write_canonical/1)**  
+\[`quoted(true)`,`quote_non_ascii(true)`, `pattern_syntax_solo(true)`,`ignore_ops(true)`, `brace_terms(true)`\] Intended to exchange terms with other processes, store them in files, etc. The format is unambiguous and can be parsed by any Prolog system. Singleton variables are printed as `_`. Other variables are printed as `A`...`Z`,`A1`... . Note that, volating the ISO standard, lists and `brace-terms` are written in their natural syntax.
+
+**[writeln/1](termrw.html#writeln/1)**  
+\[`numbervars(true)`,`nl(true)`\]
+
+**[writeq/1](termrw.html#writeq/1)**  
+\[`numbervars(true)`,`quoted(true)`\]
+
+This family of predicates is intended for writing *Prolog terms*. Use [format/1](format.html#format/1)-3 for writing text. The predicate print_term/2 prints general terms using a pretty layout. The prediates [portray_clause/1](listing.html#portray_clause/1)-3 pretty print terms that represent a clause.
+
+Valid options for [write_term/2](termrw.html#write_term/2) and [write_term/3](termrw.html#write_term/3) are:
 
 **attributes**(`Atom`)  
 Define how attributed variables (see [section 8.1](attvar.html#sec:8.1)) are written. The default is determined by the Prolog flag [write_attributes](flags.html#flag:write_attributes). Defined values are `ignore` (ignore the attribute), `dots` (write the attributes as `{...}`), `write` (simply hand the attributes recursively to [write_term/2](termrw.html#write_term/2)) and `portray` (hand the attributes to [attr_portray_hook/2](attvar.html#attr_portray_hook/2)).
@@ -15,7 +45,7 @@ Define how attributed variables (see [section 8.1](attvar.html#sec:8.1)) are wri
 Fulfills the same role as the [back_quotes](flags.html#flag:back_quotes) prolog flag. Notably, the value `string` causes string objects to be printed between back quotes and `symbol_char` causes the backquote to be printed unquoted. In all other cases the backquote is printed as a quoted atom. The default is derived from the Prolog flag using the value associated with the `module(Module)` option or the `user` module.
 
 **brace_terms**(`Bool`)  
-If `true` (default), write `{}(X)` as `{X}`. See also `dotlists` and `ignore_ops`.
+If `true` (default), write `{}(X)` as `{X}` and, likewise, a Unicode bracket-pair compound `'<open><close>'(X)` as `<open>X<close>` (see [section 2.15.1.9](syntax.html#sec:2.15.1.9)). See also `dotlists` and `ignore_ops`.
 
 **blobs**(`Atom`)  
 Define how non-text blobs are handled. By default, this is left to the write handler specified with the blob type. Using `portray`, [portray/1](termrw.html#portray/1) is called for each blob encountered. See [section 12.4.10](foreigninclude.html#sec:12.4.10).
@@ -121,6 +151,9 @@ If `true`, atoms and strings that need quotes will be quoted. The default is `fa
 **quote_non_ascii**(`Bool`)  
 Quote an atom that contains non-ASCII, i.e., larger than 127 code points. The Prolog standard only describes non-quoted atom syntax containing ASCII characters. While SWI-Prolog extends this to Unicode (see [section 2.15.1.9](syntax.html#sec:2.15.1.9)), transferring atoms holding non-ASCII text to other Prolog implementations may cause problems. This flag is used by [write_canonical/1](termrw.html#write_canonical/1).
 
+**pattern_syntax_solo**(`Bool`)  
+When `true`, quote a single-character atom whose code point is *not* in the immutable UAX #31 `Pattern_Syntax` set. Atoms whose only character is a punctuation or symbol outside that set (e.g., `'€'`, `'·'`, `'🎉'`) may be reclassified between Unicode versions; quoting them keeps written terms stable across upgrades. Default `false`; enabled by [write_canonical/1](termrw.html#write_canonical/1).
+
 **spacing**(`+Spacing`)  
 Determines whether and where extra white space is added to enhance readability. The default is `standard`, adding only space where needed for proper tokenization by [read_term/3](termrw.html#read_term/3). Currently, the only other value is `next_argument`, adding a space after a comma used to separate arguments in a term or list.
 
@@ -134,61 +167,12 @@ The implementation binds the variables from `List` to a term `'$VAR'`(`Name`). L
 
 Possible variable attributes (see [section 8.1](attvar.html#sec:8.1)) are ignored. In most cases one should use [copy_term/3](attvar.html#copy_term/3) to obtain a copy that is free of attributed variables and handle the associated constraints as appropriate for the use-case.
 
-\[ISO\]**write_term**(`+Stream, +Term, +Options`)  
-As [write_term/2](termrw.html#write_term/2), but output is sent to `Stream` rather than the current output.
+\[semidet\]**write_size**(`+Term, -Width, -Height, +Options`)  
+True when `Width` and `Height` describe the maximum line width and `Height` the number of lines for printing `Term` using `Options` using `write_term(Term, Options)`. The computed width respects Unicode *coombining* and *double width* characters. In addition to qvalid options for [write_term/2](termrw.html#write_term/2), it processes the options:
 
-\[semidet\]**write_length**(`+Term, -Length, +Options`)  
-True when `Length` is the number of characters emitted for `write_term(Term, Options)`. In addition to valid options for [write_term/2](termrw.html#write_term/2), it processes the option:
-
-**max_length**(`+MaxLength`)  
-If provided, fail if `Length` would be larger than `MaxLength`. The implementation ensures that the runtime is limited when computing the length of a huge term with a bounded maximum.
-
-\[ISO\]**write_canonical**(`+Term`)  
-Write `Term` on the current output stream using standard parenthesised prefix notation (i.e., ignoring operator declarations). Atoms that need quotes are quoted. Terms written with this predicate can always be read back, regardless of current operator declarations. Equivalent to [write_term/2](termrw.html#write_term/2) using the options `ignore_ops`, `quoted`, `quote_non_ascii`, `brace_terms(false)` and `numbervars` after [numbervars/4](manipterm.html#numbervars/4) using the `singletons` option.
-
-Note that due to the use of [numbervars/4](manipterm.html#numbervars/4), non-ground terms must be written using a *single* [write_canonical/1](termrw.html#write_canonical/1) call. This used to be the case anyhow, as garbage collection between multiple calls to one of the write predicates can change the `_`\<`NNN`\> identity of the variables.
-
-\[ISO\]**write_canonical**(`+Stream, +Term`)  
-Write `Term` in canonical form on `Stream`.
-
-\[ISO\]**write**(`+Term`)  
-Write `Term` to the current output, using brackets and operators where appropriate.
-
-\[ISO\]**write**(`+Stream, +Term`)  
-Write `Term` to `Stream`.
-
-\[ISO\]**writeq**(`+Term`)  
-Write `Term` to the current output, using brackets and operators where appropriate. Atoms that need quotes are quoted. Terms written with this predicate can be read back with [read/1](termrw.html#read/1) provided the currently active operator declarations are identical and Term. Equivalent to `write_term(Term, [quoted(true), numbervars(true)])`.
-
-\[ISO\]**writeq**(`+Stream, +Term`)  
-Write `Term` to `Stream`, inserting quotes.
-
-**writeln**(`+Term`)  
-Equivalent to `write(Term), nl.`. The output stream is locked, which implies no output from other threads can appear between the term and newline.
-
-**writeln**(`+Stream, +Term`)  
-Equivalent to `write(Stream, Term), nl(Stream).`. The output stream is locked, which implies no output from other threads can appear between the term and newline.
-
-**print**(`+Term`)  
-Print a term for debugging purposes. The predicate [print/1](termrw.html#print/1) acts as if defined as below.
-
-``` code
-print(Term) :-
-    current_prolog_flag(print_write_options, Options), !,
-    write_term(Term, Options).
-print(Term) :-
-    write_term(Term, [ portray(true),
-                       numbervars(true),
-                       quoted(true)
-                     ]).
-```
-
-The [print/1](termrw.html#print/1) predicate is used primarily through the `~p` escape sequence of [format/2](format.html#format/2), which is commonly used in the recipes used by [print_message/2](printmsg.html#print_message/2) to emit messages.
-
-The classical definition of this predicate is equivalent to the ISO predicate [write_term/2](termrw.html#write_term/2) using the options `portray(true)` and `numbervars(true)`. The `portray(true)` option allows the user to implement application-specific printing of terms printed during debugging to facilitate easy understanding of the output. See also [portray/1](termrw.html#portray/1) and `library(portray_text)`. SWI-Prolog adds `quoted(true)` to (1) facilitate the copying/pasting of terms that are not affected by [portray/1](termrw.html#portray/1) and to (2) allow numbers, atoms and strings to be more easily distinguished, e.g., `42`, `'42'` and `"42"`.
-
-**print**(`+Stream, +Term`)  
-Print `Term` to `Stream`.
+**max_width**(`+MaxWidth`)  
+**max_height**(`+MaxHeight`)  
+If provided, fail if `Width` or `Height` would be larger than the specified maximum. The implementation ensures that the runtime is limited when computing the size of a huge term with a bounded maximum.
 
 **portray**(`+Term`)  
 A dynamic predicate, which can be defined by the user to change the behaviour of [print/1](termrw.html#print/1) on (sub)terms. For each subterm encountered that is not a variable [print/1](termrw.html#print/1) first calls [portray/1](termrw.html#portray/1) using the term as argument. For lists, only the list as a whole is given to [portray/1](termrw.html#portray/1). If [portray/1](termrw.html#portray/1) succeeds [print/1](termrw.html#print/1) assumes the term has been written.
@@ -292,6 +276,23 @@ Unifies `Pos` with the starting position of the term read. `Pos` is of the same 
 
 **var_prefix**(`Bool`)  
 If `true`, demand variables to start with an underscore. See [section 2.15.1.8](syntax.html#sec:2.15.1.8).
+
+**unicode_atoms**(`Mode`)  
+Per-call atom-content policy that overrides the policy of the input stream and the Prolog flag [unicode_atoms](flags.html#flag:unicode_atoms). `Mode` is one of:
+
+**accept**  
+Pass unquoted-atom bytes through verbatim (byte-faithful). This is the default.
+
+**nfc**  
+Normalise the text of unquoted atoms (and unquoted functor names) to Unicode NFC before interning, so that two source forms that are canonically equivalent yield the same atom. Requires the kernel normalisation hook; if the hook is not yet registered when this mode is requested (via the option, [set_stream/2](IO.html#set_stream/2), the [open/4](IO.html#open/4) `unicode_atoms` option, or the [unicode_atoms](flags.html#flag:unicode_atoms) flag), `library(unicode)` is loaded automatically. If the library is unavailable the underlying *[use_module/1](import.html#use_module/1)* call propagates its `existence_error(source_sink, library(unicode))`.
+
+**error**  
+Raise `syntax_error(non_nfc_atom)` when an unquoted atom contains text that is not in NFC. Uses the kernel hook for an exact NFC test when `library(unicode)` is loaded; otherwise falls back to rejecting any code point with *wcwidth* less than 1 (combining marks, zero-width and non-printable characters), which is conservative but accurate enough for source-code review.
+
+**reject**  
+Raise `syntax_error(non_ascii_atom)` when an unquoted atom contains any non-ASCII code point. Independent of `library(unicode)`.
+
+Quoted atoms and string literals are always byte-faithful, regardless of the mode. This is the canonical description of the four values; the same vocabulary applies to the Prolog flag [unicode_atoms](flags.html#flag:unicode_atoms), [set_stream/2](IO.html#set_stream/2), the `unicode_atoms` option of [open/4](IO.html#open/4), and the `unicode_atoms` property of [stream_property/2](IO.html#stream_property/2).
 
 **variables**(`Vars`)  
 Unify `Vars` with a list of variables in the term. The variables appear in the order they have been read. See also [term_variables/2](manipterm.html#term_variables/2). (ISO).

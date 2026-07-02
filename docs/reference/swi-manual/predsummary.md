@@ -3265,9 +3265,9 @@ Write a term with quotes, ignore operators
 
 Write a term with quotes, ignore operators on a stream
 
-[write_length/3](termrw.html#write_length/3)
+[write_size/4](termrw.html#write_size/4)
 
-Determine \#characters to output a term
+Determine printed size for a term
 
 [write_term/2](termrw.html#write_term/2)
 

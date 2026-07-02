@@ -1,0 +1,142 @@
+[
+  {
+    "grid": [
+      [
+	{"across":1,"down":null,"letter":"C","number":1},
+	{"across":1,"down":null,"letter":"A","number":null},
+	{"across":1,"down":2,"letter":"T","number":2},
+	null,
+	null
+      ],
+      [
+	null,
+	null,
+	{"across":null,"down":2,"letter":"A","number":null},
+	null,
+	null
+      ],
+      [
+	null,
+	null,
+	{"across":3,"down":2,"letter":"R","number":3},
+	{"across":3,"down":null,"letter":"A","number":null},
+	{"across":3,"down":4,"letter":"W","number":4}
+      ],
+      [
+	null,
+	null,
+	null,
+	null,
+	{"across":null,"down":4,"letter":"E","number":null}
+      ],
+      [
+	null,
+	null,
+	null,
+	null,
+	{"across":null,"down":4,"letter":"D","number":null}
+      ]
+    ],
+    "gridLength":5,
+    "words": [
+      {
+	"answer":"CAT",
+	"cells": [ [0, 0 ],  [0, 1 ],  [0, 2 ] ],
+	"direction":"across",
+	"meta": {"clue":"feline","weirdKey": [1, 2, 3 ]},
+	"number":1
+      },
+      {
+	"answer":"TAR",
+	"cells": [ [0, 2 ],  [1, 2 ],  [2, 2 ] ],
+	"direction":"down",
+	"meta": {},
+	"number":2
+      },
+      {
+	"answer":"RAW",
+	"cells": [ [2, 2 ],  [2, 3 ],  [2, 4 ] ],
+	"direction":"across",
+	"meta": {},
+	"number":3
+      },
+      {
+	"answer":"WED",
+	"cells": [ [2, 4 ],  [3, 4 ],  [4, 4 ] ],
+	"direction":"down",
+	"meta": {},
+	"number":4
+      }
+    ]
+  },
+  {
+    "grid": [
+      [
+	{"across":null,"down":1,"letter":"C","number":1},
+	null,
+	null,
+	null,
+	null
+      ],
+      [
+	{"across":null,"down":1,"letter":"A","number":null},
+	null,
+	null,
+	null,
+	null
+      ],
+      [
+	{"across":2,"down":1,"letter":"T","number":2},
+	{"across":2,"down":null,"letter":"A","number":null},
+	{"across":2,"down":3,"letter":"R","number":3},
+	null,
+	null
+      ],
+      [
+	null,
+	null,
+	{"across":null,"down":3,"letter":"A","number":null},
+	null,
+	null
+      ],
+      [
+	null,
+	null,
+	{"across":4,"down":3,"letter":"W","number":4},
+	{"across":4,"down":null,"letter":"E","number":null},
+	{"across":4,"down":null,"letter":"D","number":null}
+      ]
+    ],
+    "gridLength":5,
+    "words": [
+      {
+	"answer":"CAT",
+	"cells": [ [0, 0 ],  [1, 0 ],  [2, 0 ] ],
+	"direction":"down",
+	"meta": {"clue":"feline","weirdKey": [1, 2, 3 ]},
+	"number":1
+      },
+      {
+	"answer":"TAR",
+	"cells": [ [2, 0 ],  [2, 1 ],  [2, 2 ] ],
+	"direction":"across",
+	"meta": {},
+	"number":2
+      },
+      {
+	"answer":"RAW",
+	"cells": [ [2, 2 ],  [3, 2 ],  [4, 2 ] ],
+	"direction":"down",
+	"meta": {},
+	"number":3
+      },
+      {
+	"answer":"WED",
+	"cells": [ [4, 2 ],  [4, 3 ],  [4, 4 ] ],
+	"direction":"across",
+	"meta": {},
+	"number":4
+      }
+    ]
+  }
+]

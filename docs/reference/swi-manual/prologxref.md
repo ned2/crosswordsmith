@@ -183,6 +183,7 @@ These predicates fail if `File` is not a module-file.
 
 |  |  |
 |----|----|
+| `File` | is a file speficiation for prolog_open_source/2 or a .qlf file name. Note this makes a stream a valid input. |
 | `Path` | is the canonical path to `File` |
 | `Module` | is the module defined in `Path` |
 | `Export` | is a list of predicate indicators. |

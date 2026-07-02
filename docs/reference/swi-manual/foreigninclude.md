@@ -626,6 +626,20 @@ Unify `t` with a textual representation of the C wide-character array `s`. The `
 `bool` **PL_unify_wchars_diff**(`term_t +t, term_t -tail, int type, size_t len, const pl_wchar_t *s`)  
 Difference list version of [PL_unify_wchars()](foreigninclude.html#PL_unify_wchars()), only supporting the types `PL_CODE_LIST` and `PL_CHAR_LIST`. It serves two purposes. It allows for returning very long lists from data read from a stream without the need for a resizing buffer in C. Also, the use of difference lists is often practical for further processing in Prolog. Examples can be found in `packages/clib/readutil.c` from the source distribution.
 
+`int` **PL_wcwidth**(`int chr`)  
+Display column width of a Unicode code point `chr`. Returns 0 for combining and other zero-width characters, 2 for East Asian Wide and Fullwidth characters, 1 for ordinary printable characters, and -1 for control characters and code points unknown to the implementation.
+
+The result is locale-independent and identical on every supported platform. Width data is sourced at table-build time from `EastAsianWidth.txt` (UAX #11) and the general-category property, and stored as two bits in each *uflags_map* entry alongside the syntax classification used by the parser; runtime lookups are a single byte fetch. The Unicode version that drives the table is reported by the [unicode_syntax_version](flags.html#flag:unicode_syntax_version) flag (see [section 2.15.1.9](syntax.html#sec:2.15.1.9)).
+
+The argument is a full 32-bit code point. Avoid casting to `wchar_t` before the call: `wchar_t` is 16-bit on Windows, and the cast silently drops non-BMP characters.
+
+`int` **PL_is_id_start**(`int chr`)  
+`int` **PL_is_id_continue**(`int chr`)  
+`int` **PL_is_uppercase**(`int chr`)  
+`int` **PL_is_decimal**(`int chr`)  
+`int` **PL_is_layout**(`int chr`)  
+Unicode classification predicates. Each returns non-zero iff the 32-bit code point `chr` carries the corresponding property as defined by the data files in `src/Unicode/` and consulted by the Prolog reader. Provided so foreign extensions and embedded toolkits (notably xpce) classify code points exactly as SWI-Prolog does, locale- independently. `id_start` and `id_continue` follow Prolog's identifier syntax (close to UAX #31 XID_Start / XID_Continue, adjusted for Prolog). `layout` matches the reader's whitespace set (white_space/1 in `src/Unicode/derived_core_properties.pl`).
+
 #### 12.4.4.5 Reading a list
 
 The functions from this section are intended to read a Prolog list from C. Suppose we expect a list of atoms; the code below will print the atoms, each on a line. Please note the following:
@@ -1540,8 +1554,10 @@ This section discusses the functions used to communicate about predicates. Thoug
 `predicate_t` **PL_pred**(`functor_t f, module_t m`)  
 Return a handle to a predicate for the specified name/arity in the given module. If the module argument `m` is `NULL`, the current context module is used. If the target predicate does not exist a handle to a new *undefined* predicate is returned. The predicate may fail, returning `(predicate_t)0` after setting a resource exception, if the target module has a limit on the `program_space`, see [set_module/1](manipmodule.html#set_module/1). Currently aborts the process with a *fatal error* when out of memory. Future versions may raise a resource exception and return `(predicate_t)0`.
 
-`predicate_t` **PL_predicate**(`const char *name, int arity, const char* module`)  
-Same as [PL_pred()](foreigninclude.html#PL_pred()), but provides a more convenient interface to the C programmer. If the module argument `module` is `NULL`, the current context module is used. The `predicate_t` handle may be stored as global data and reused for future queries^(229[PL_predicate()](foreigninclude.html#PL_predicate()) involves 5 hash lookups (two to get the atoms, one to get the module, one to get the functor and the final one to get the predicate associated with the functor in the module)) as illustrated below.
+`predicate_t` **PL_predicate**(`const char *name, int arity, const char *module`)  
+Same as [PL_pred()](foreigninclude.html#PL_pred()), but provides a more convenient interface to the C programmer. If the module argument `module` is `NULL`, the current context module is used. Both `name` and `module` are encoded in UTF-8. If either `name` or `module` is not valid UTF-8, the process is terminated using [PL_api_error()](foreigninclude.html#PL_api_error()).
+
+The `predicate_t` handle may be stored as global data and reused for future queries^(229[PL_predicate()](foreigninclude.html#PL_predicate()) involves 5 hash lookups (two to get the atoms, one to get the module, one to get the functor and the final one to get the predicate associated with the functor in the module)) as illustrated below.
 
 ``` code
 static predicate_t p = 0;

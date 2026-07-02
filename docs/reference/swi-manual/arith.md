@@ -11,7 +11,7 @@ The predicates in this section provide more logical operations between integers.
 `Low` and `High` are integers, `High`` ≥``Low`. If `Value` is an integer, `Low`` ≤``Value`` ≤``High`. When `Value` is a variable it is successively bound to all integers between `Low` and `High`. If `High` is `inf` or `infinite`^(122We prefer `infinite`, but some other Prolog systems already use `inf` for infinity; we accept both for the time being.) [between/3](arith.html#between/3) is true iff `Value`` ≥``Low`, a feature that is particularly interesting for generating integers from a certain value.
 
 **succ**(`?Int1, ?Int2`)  
-True if `Int2`` = ``Int1`` + 1` and `Int1`` ≥`. At least one of the arguments must be instantiated to a natural number. This predicate raises the domain error `not_less_than_zero` if called with a negative integer. E.g. `succ(X, 0)` fails silently and `succ(X, -1)` raises a domain error.^(123The behaviour to deal with natural numbers only was defined by Richard O'Keefe to support the common count-down-to-zero in a natural way. Up to 5.1.8, [succ/2](arith.html#succ/2) also accepted negative integers.)
+True if `Int2`` = ``Int1`` + 1` and `Int1`` ≥0`. At least one of the arguments must be instantiated to a natural number. This predicate raises the domain error `not_less_than_zero` if called with a negative integer. E.g. `succ(X, 0)` fails silently and `succ(X, -1)` raises a domain error.^(123The behaviour to deal with natural numbers only was defined by Richard O'Keefe to support the common count-down-to-zero in a natural way. Up to 5.1.8, [succ/2](arith.html#succ/2) also accepted negative integers.)
 
 **plus**(`?Int1, ?Int2, ?Int3`)  
 True if `Int3`` = ``Int1`` + ``Int2`. At least two of the three arguments must be instantiated to integers.
@@ -298,7 +298,7 @@ Evaluate to the smaller of `Expr1` and `Expr2` using exact comparison (see [cmpr
 \[deprecated\]**.**(`+Char,[]`)  
 A list of one element evaluates to the character code of this element.^(126The function is documented as `.``/2`. Using SWI-Prolog v7 and later the actual functor is `[|]``/2`.) This implies `"a"` evaluates to the character code of the letter‘a’(97) using the traditional mapping of double quoted string to a list of character codes. `Char` is either a valid code point (non-negative integer up to the Prolog flag [max_char_code](flags.html#flag:max_char_code)) or a one-character atom. Arithmetic evaluation also translates a string object (see [section 5.2](string.html#sec:5.2)) of one character length into the character code for that character. This implies that expression `"a"` works if the Prolog flag [double_quotes](flags.html#flag:double_quotes) is set to one of `codes`, `chars` or `string`.
 
-Getting access to character codes this way originates from DEC10 Prolog. ISO has the `0'` syntax and the predicate [char_code/2](manipatom.html#char_code/2). Future versions may drop support for `X is "a"`.
+Getting access to character codes this way originates from DEC10 Prolog. ISO has the `0'a` syntax and the predicate [char_code/2](manipatom.html#char_code/2). Future versions may drop support for `X is "a"`.
 
 **random**(`+IntExpr`)  
 Evaluate to a random integer `i` for which `0 ≤i < ``IntExpr`. The system has two implementations. If it is compiled with support for unbounded arithmetic (default) it uses the GMP library random functions. In this case, each thread keeps its own random state. The default algorithm is the *Mersenne Twister* algorithm. The seed is set when the first random number in a thread is generated. If available, it is set from `/dev/random`.^(127On Windows the state is initialised from **CryptGenRandom()**.) Otherwise it is set from the system clock. If unbounded arithmetic is not supported, random numbers are shared between threads and the seed is initialised from the clock when SWI-Prolog was started. The predicate [set_random/1](miscarith.html#set_random/1) can be used to control the random number generator.
@@ -306,7 +306,7 @@ Evaluate to a random integer `i` for which `0 ≤i < ``IntExpr`. The system has 
 **Warning!** Although properly seeded (if supported on the OS), the Mersenne Twister algorithm does *not* produce cryptographically secure random numbers. To generate cryptographically secure random numbers, use crypto_n_random_bytes/2 from library `library(crypto)` provided by the `ssl` package.
 
 **random_float**  
-Evaluate to a random float `I` for which `0.0 < i < 1.0`. This function shares the random state with [random/1](arith.html#f-random/1). All remarks with the function [random/1](arith.html#f-random/1) also apply for [random_float/0](arith.html#f-random_float/0). Note that both sides of the domain are *open*. This avoids evaluation errors on, e.g., [log/1](arith.html#f-log/1) or [//2](arith.html#f-//2) while no practical application can expect 0.0.^(128Richard O'Keefe said: “If you *are* generating IEEE doubles with the claimed uniformity, then 0 has a 1 in `2^53 = 1 in 9,007,199,254,740,992` chance of turning up. No program that expects \[0.0,1.0) is going to be surprised when 0.0 fails to turn up in a few millions of millions of trials, now is it? But a program that expects (0.0,1.0) could be devastated if 0.0 did turn up.’)
+Evaluate to a random float `I` for which `0.0 < i < 1.0`. This function shares the random state with [random/1](arith.html#f-random/1). All remarks with the function [random/1](arith.html#f-random/1) also apply for [random_float/0](arith.html#f-random_float/0). Note that both sides of the domain are *open*. This avoids evaluation errors on, e.g., [log/1](arith.html#f-log/1) or [//2](arith.html#f-//2) while no practical application can expect 0.0.^(128Richard O'Keefe said: “If you *are* generating IEEE doubles with the claimed uniformity, then 0 has a 1 in `2^53 = 1 in 9,007,199,254,740,992` chance of turning up. No program that expects \[0.0,1.0) is going to be surprised when 0.0 fails to turn up in a few millions of millions of trials, now is it? But a program that expects (0.0,1.0) could be devastated if 0.0 did turn up.”)
 
 \[ISO\]**round**(`+Expr`)  
 Evaluate `Expr` and round the result to the nearest integer. According to ISO, [round/1](arith.html#f-round/1) is defined as `floor(Expr+1/2)`, i.e., rounding *down*. This is an unconventional choice under which the relation `round(Expr) == -round(-Expr)` does not hold. SWI-Prolog rounds *outward*, e.g., `round(1.5) =:= 2` and `round(-1.5) =:= -2`.
@@ -369,7 +369,7 @@ Fractional part of a floating point number. Negative if `Expr` is negative, rati
 Integer part of floating point number. Negative if `Expr` is negative, `Expr` if `Expr` is integer.
 
 \[ISO\]**truncate**(`+Expr`)  
-Truncate `Expr` to an integer. If `Expr`` ≥` this is the same as `floor(Expr)`. For `Expr`` < 0` this is the same as `ceil(Expr)`. That is, [truncate/1](arith.html#f-truncate/1) rounds towards zero.
+Truncate `Expr` to an integer. If `Expr`` ≥0` this is the same as `floor(Expr)`. For `Expr`` < 0` this is the same as `ceil(Expr)`. That is, [truncate/1](arith.html#f-truncate/1) rounds towards zero.
 
 \[ISO\]**floor**(`+Expr`)  
 Evaluate `Expr` and return the largest integer smaller or equal to the result of the evaluation.
@@ -420,7 +420,7 @@ Bitwise negation. The returned value is the one's complement of `IntExpr`.
 `Result`` = arctan(``Expr``)`. `Result` is the angle in radians.
 
 \[ISO\]**atan2**(`+YExpr, +XExpr`)  
-`Result`` = arctan(``YExpr``/``XExpr``)`. `Result` is the angle in radians. The return value is in the range `[-π...π`. Used to convert between rectangular and polar coordinate system.
+`Result`` = arctan(``YExpr``/``XExpr``)`. `Result` is the angle in radians. The return value is in the range `[-π...π]`. Used to convert between rectangular and polar coordinate system.
 
 Note that the ISO Prolog standard demands `atan2(0.0,0.0)` to raise an evaluation error, whereas the C99 and POSIX standards demand this to evaluate to 0.0. SWI-Prolog follows C99 and POSIX.
 

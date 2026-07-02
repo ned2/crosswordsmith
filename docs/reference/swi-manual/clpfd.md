@@ -39,7 +39,7 @@ All example programs that appear in the CLP(FD) documentation assume that you ha
 
 Important concepts and principles of this library are illustrated by means of usage examples that are available in a public git repository: [**github.com/triska/clpfd**](https://github.com/triska/clpfd)
 
-If you are used to the complicated operational considerations that low-level arithmetic primitives necessitate, then moving to CLP(FD) constraints may, due to their power and convenience, at first feel to you excessive and almost like cheating. It *isn'*. Constraints are an integral part of all popular Prolog systems, and they are designed to help you eliminate and avoid the use of low-level and less general primitives by providing declarative alternatives that are meant to be used instead.
+If you are used to the complicated operational considerations that low-level arithmetic primitives necessitate, then moving to CLP(FD) constraints may, due to their power and convenience, at first feel to you excessive and almost like cheating. It *isn't*. Constraints are an integral part of all popular Prolog systems, and they are designed to help you eliminate and avoid the use of low-level and less general primitives by providing declarative alternatives that are meant to be used instead.
 
 When teaching Prolog, CLP(FD) constraints should be introduced *before* explaining low-level arithmetic predicates and their procedural idiosyncrasies. This is because constraints are easy to explain, understand and use due to their purely relational nature. In contrast, the modedness and directionality of low-level arithmetic primitives are impure limitations that are better deferred to more advanced lectures.
 
@@ -158,7 +158,7 @@ positive_integer(N) :-
 
 This illustrates why the performance of CLP(FD) constraints is almost always completely satisfactory when they are used in modes that can be handled by low-level arithmetic. To disable the automatic rewriting, set the Prolog flag **optimise_clpfd** to `false`.
 
-If you are used to the complicated operational considerations that low-level arithmetic primitives necessitate, then moving to CLP(FD) constraints may, due to their power and convenience, at first feel to you excessive and almost like cheating. It *isn'*. Constraints are an integral part of all popular Prolog systems, and they are designed to help you eliminate and avoid the use of low-level and less general primitives by providing declarative alternatives that are meant to be used instead.
+If you are used to the complicated operational considerations that low-level arithmetic primitives necessitate, then moving to CLP(FD) constraints may, due to their power and convenience, at first feel to you excessive and almost like cheating. It *isn't*. Constraints are an integral part of all popular Prolog systems, and they are designed to help you eliminate and avoid the use of low-level and less general primitives by providing declarative alternatives that are meant to be used instead.
 
 ### A.9.4 Example: Factorial relation
 
@@ -661,7 +661,7 @@ false.
 Like [all_distinct/1](clpfd.html#all_distinct/1), but with weaker propagation. Consider using [all_distinct/1](clpfd.html#all_distinct/1) instead, since [all_distinct/1](clpfd.html#all_distinct/1) is typically acceptably efficient and propagates much more strongly.
 
 **sum**(`+Vars, +Rel, ?Expr`)  
-The sum of elements of the list `Vars` is in relation `Rel` to `Expr`. `Rel` is one of \#=, \#`\`=, \#`<`, \#`>`, `#=<` or \#`>`=. For example:
+The sum of elements of the list `Vars` is in relation `Rel` to `Expr`. `Rel` is one of \#=, \#`\`=, \#\<, \#\>, `#=<` or \#\>=. For example:
 
 ``` code
 ?- [A,B,C] ins 0..sup, sum([A,B,C], #=, 100).
@@ -672,7 +672,7 @@ C in 0..100.
 ```
 
 **scalar_product**(`+Cs, +Vs, +Rel, ?Expr`)  
-True iff the scalar product of `Cs` and `Vs` is in relation `Rel` to `Expr`. `Cs` is a list of integers, `Vs` is a list of variables and integers. `Rel` is \#=, \#`\`=, \#`<`, \#`>`, `#=<` or \#`>`=.
+True iff the scalar product of `Cs` and `Vs` is in relation `Rel` to `Expr`. `Cs` is a list of integers, `Vs` is a list of variables and integers. `Rel` is \#=, \#`\`=, \#\<, \#\>, `#=<` or \#\>=.
 
 **lex_chain**(`+Lists`)  
 `Lists` are lexicographically non-decreasing.
@@ -712,7 +712,7 @@ Ps = [[1, 2, 0, 1], [2, 3, 4, 5], [3, 4, 8, 9]].
 ```
 
 **serialized**(`+Starts, +Durations`)  
-Describes a set of non-overlapping tasks. `Starts` = \[S_1,...,S_n\], is a list of variables or integers, `Durations` = \[D_1,...,D_n\] is a list of non-negative integers. Constrains `Starts` and `Durations` to denote a set of non-overlapping tasks, i.e.: S_i + D_i `=<` S_j or S_j + D_j `=<` S_i for all 1 `=<` i `<` j `=<` n. Example:
+Describes a set of non-overlapping tasks. `Starts` = \[S_1,...,S_n\], is a list of variables or integers, `Durations` = \[D_1,...,D_n\] is a list of non-negative integers. Constrains `Starts` and `Durations` to denote a set of non-overlapping tasks, i.e.: S_i + D_i `=<` S_j or S_j + D_j `=<` S_i for all 1 `=<` i \< j `=<` n. Example:
 
 ``` code
 ?- length(Vs, 3),
@@ -855,7 +855,7 @@ Ls = [1, 0, 1, 0, 1].
 ```
 
 **chain**(`+Zs, +Relation`)  
-`Zs` form a chain with respect to `Relation`. `Zs` is a list of finite domain variables that are a chain with respect to the partial order `Relation`, in the order they appear in the list. `Relation` must be \#=, \#=`<`, \#`>`=, `#<` or \#`>`. For example:
+`Zs` form a chain with respect to `Relation`. `Zs` is a list of finite domain variables that are a chain with respect to the partial order `Relation`, in the order they appear in the list. `Relation` must be \#=, \#=\<, \#\>=, `#<` or \#\>. For example:
 
 ``` code
 ?- chain([X,Y,Z], #>=).

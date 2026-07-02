@@ -75,6 +75,9 @@ Find objects matching `Text` and filter the results by `Type`. `Type` matching i
 **`Text`**  
 `Text` is broken into tokens. A topic matches if all tokens appear in the name or summary of the topic. Matching is case insensitive. Results are ordered depending on the quality of the match.
 
+\[nondet\]**help_apropos**(`+Query, -Obj, -Summary, -Score`)  
+Find matching documented objects in the help database. `Obj` is the formal object identifier, `Summary` its summary description and `Score` is a number indicating the quality of the match.
+
 \[semidet\]**help_text**(`+Predicate:term, -HelpText:string`)  
 When `Predicate` is a term of the form `Name/Arity` for which documentation exists, `HelpText` is the documentation in textual format (parsed from the HTML help).
 

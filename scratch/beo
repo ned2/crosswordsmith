@@ -1,0 +1,21 @@
+{
+  "grid": [
+    [
+      {"across":1,"down":null,"letter":"C","number":1},
+      {"across":1,"down":null,"letter":"A","number":null},
+      {"across":1,"down":null,"letter":"T","number":null}
+    ],
+    [null, null, null ],
+    [null, null, null ]
+  ],
+  "gridLength":3,
+  "words": [
+    {
+      "answer":"CAT",
+      "cells": [ [0, 0 ],  [0, 1 ],  [0, 2 ] ],
+      "direction":"across",
+      "meta": {},
+      "number":1
+    }
+  ]
+}

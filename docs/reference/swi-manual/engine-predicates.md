@@ -16,7 +16,7 @@ Set the stack limit for the engine. The default is inherited from the calling th
 The `Engine` argument of [engine_create/3](engine-predicates.html#engine_create/3) may be instantiated to an atom, creating an engine with the given alias.
 
 \[det\]**engine_destroy**(`+Engine`)  
-Destroy `Engine`.
+Destroy `Engine`. If the engine is still in use by another thread, this call blocks until the engine is free. Destroying the engine that is running this call raises a permission error.
 
 \[semidet\]**engine_next**(`+Engine, -Term`)  
 Ask the engine `Engine` to produce a next answer. On this first call on a specific engine, the `Goal` of the engine is started. If a previous call returned an answer through completion, this causes the engine to backtrack and finally, if the engine produces a previous result using [engine_yield/1](engine-predicates.html#engine_yield/1), execution proceeds after the [engine_yield/1](engine-predicates.html#engine_yield/1) call.

@@ -22,7 +22,7 @@ True if `String` matches the wildcard pattern `Pattern`. `Pattern` is very simil
 |----|----|
 | `?` | Matches one arbitrary character. |
 | `*` | Matches any number of arbitrary characters. |
-| `[ ...` | Matches one of the characters specified between the brackets. |
+| `[ ... ]` | Matches one of the characters specified between the brackets. |
 |  | `<``char1``>-<``char2``>` indicates a range. |
 | `{...}` | Matches any of the patterns of the comma-separated list between the braces. |
 

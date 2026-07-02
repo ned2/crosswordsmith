@@ -105,6 +105,8 @@
 | [check/0](check.html#check/0) | Run all consistency checks defined by checker/2. |
 | [checker/2](check.html#checker/2) | Register code validation routines. |
 | [list_autoload/0](check.html#list_autoload/0) | Report predicates that may be auto-loaded. |
+| [list_confusable_identifiers/0](check.html#list_confusable_identifiers/0) | Walk every clause in the modules selected by‘module_class\` (default‘\[user\]\`) and warn on atoms whose written form is a possible UTS \#39 spoof. |
+| [list_confusable_identifiers/1](check.html#list_confusable_identifiers/1) | Walk every clause in the modules selected by‘module_class\` (default‘\[user\]\`) and warn on atoms whose written form is a possible UTS \#39 spoof. |
 | [list_cross_module_calls/0](check.html#list_cross_module_calls/0) | List calls from one module to another using Module:Goal where the callee is not defined exported, public or multifile, i.e., where the callee should be considered \_private\_. |
 | [list_format_errors/0](check.html#list_format_errors/0) | List argument errors for format/2,3. |
 | [list_format_errors/1](check.html#list_format_errors/1) | List argument errors for format/2,3. |
@@ -364,16 +366,17 @@
 | [apropos/1](online-help.html#apropos/1) | Print objects from the manual whose name or summary match with Query. |
 | [help/0](online-help.html#help/0) | Show help for What. |
 | [help/1](online-help.html#help/1) | Show help for What. |
-| [help_text/2](online-help.html#help_text/2) | When =Predicate= is a term of the form =Name/Arity= for which documentation exists, =HelpText= is the documentation in textual format (parsed from the HTML help). |
+| [help_apropos/4](online-help.html#help_apropos/4) | Find matching documented objects in the help database. |
+| [help_text/2](online-help.html#help_text/2) | When Predicate is a term of the form‘Name/Arity\` for which documentation exists, HelpText is the documentation in textual format (parsed from the HTML help). |
 | [show_html_hook/1](online-help.html#show_html_hook/1) | Hook called to display the extracted HTML document. |
 
 ### F.2.21 library(gensym)
 
 |  |  |
 |----|----|
-| [gensym/2](gensym.html#gensym/2) | Generate `<`Base`>`1, `<`Base`>`2, etc atoms on each subsequent call. |
+| [gensym/2](gensym.html#gensym/2) | Generate \<Base\>1, \<Base\>2, etc atoms on each subsequent call. |
 | [reset_gensym/0](gensym.html#reset_gensym/0) | Reset gensym for all registered keys. |
-| [reset_gensym/1](gensym.html#reset_gensym/1) | Restart generation of identifiers from Base at `<`Base`>`1. |
+| [reset_gensym/1](gensym.html#reset_gensym/1) | Restart generation of identifiers from Base at \<Base\>1. |
 
 ### F.2.22 library(heaps)
 
@@ -551,6 +554,7 @@
 | [ord_intersection/3](ordsets.html#ord_intersection/3) | Intersection holds the common elements of Set1 and Set2. |
 | [ord_intersection/4](ordsets.html#ord_intersection/4) | Intersection and difference between two ordered sets. |
 | [ord_memberchk/2](ordsets.html#ord_memberchk/2) | True if Element is a member of OrdSet, compared using ==. |
+| [ord_range/4](ordsets.html#ord_range/4) | Retrieves a range of elements between‘Min\` and‘Max\` (inclusive) from a set using standard term comparison. |
 | [ord_selectchk/3](ordsets.html#ord_selectchk/3) | Selectchk/3, specialised for ordered sets. |
 | [ord_seteq/2](ordsets.html#ord_seteq/2) | True if Set1 and Set2 have the same elements. |
 | [ord_subset/2](ordsets.html#ord_subset/2) | Is true if all elements of Sub are in Super. |
@@ -767,6 +771,7 @@
 | [rb_update/4](rbtrees.html#rb_update/4) | Tree NewTree is tree Tree, but with value for Key associated with NewVal. |
 | [rb_update/5](rbtrees.html#rb_update/5) | Same as =`|`rb_update(Tree, Key, NewVal, NewTree)`|`= but also unifies OldVal with the value associated with Key in Tree. |
 | [rb_visit/2](rbtrees.html#rb_visit/2) | Pairs is an infix visit of tree Tree, where each element of Pairs is of the form Key-Value. |
+| [rb_visit_range/4](rbtrees.html#rb_visit_range/4) | Retrieves a range of pairs with keys between‘Min\` and‘Max\` (inclusive) from a Tree using standard term comparison. |
 
 ### F.2.48 library(readutil)
 

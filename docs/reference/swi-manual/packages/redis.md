@@ -7,7 +7,7 @@ E-mail: [jan@swi-prolog.org](mailto:jan@swi-prolog.org)
 
 Abstract
 
-This package provides the library `redis.pl` that implements a client for the \[redis\](https://redis.io/), *” An open source (BSD licensed), in-memory data structure store, used as a database, cache and message broker’*
+This package provides the library `redis.pl` that implements a client for the \[redis\](https://redis.io/), *” An open source (BSD licensed), in-memory data structure store, used as a database, cache and message broker”*
 
 # Table of Contents
 

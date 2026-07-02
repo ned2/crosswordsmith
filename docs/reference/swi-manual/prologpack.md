@@ -59,7 +59,7 @@ Install one or more packs from `SpecOrList`. `SpecOrList` is a single specificat
 
 Processes the options below. Default options as would be used by [pack_install/1](prologpack.html#pack_install/1) are used to complete the provided `Options`. Note that [pack_install/2](prologpack.html#pack_install/2) can be used through the SWI-Prolog command line app `pack` as below. Most of the options of this predicate are available as command line options.
 
-swipl pack install `<`name`>`
+swipl pack install \<name\>
 
 `Options`:
 

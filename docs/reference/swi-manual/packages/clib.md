@@ -45,29 +45,27 @@ On Windows systems, the `library(unix)` library can only be used if the whole SW
 
 [10 Password encryption library](#sec:10)
 
-[11 library(uuid): Universally Unique Identifier (UUID) Library](#sec:11)
+[11 SHA\* Secure Hash Algorithms](#sec:11)
 
-[12 SHA\* Secure Hash Algorithms](#sec:12)
+[11.1 License terms](#sec:11.1)
 
-[12.1 License terms](#sec:12.1)
+[12 library(md5): MD5 hashes](#sec:12)
 
-[13 library(md5): MD5 hashes](#sec:13)
+[13 library(hash_stream): Maintain a hash on a stream](#sec:13)
 
-[14 library(hash_stream): Maintain a hash on a stream](#sec:14)
+[14 Memory files](#sec:14)
 
-[15 Memory files](#sec:15)
+[15 library(time): Time and alarm library](#sec:15)
 
-[16 library(time): Time and alarm library](#sec:16)
+[16 library(unix): Unix specific operations](#sec:16)
 
-[17 library(unix): Unix specific operations](#sec:17)
+[17 Limiting process resources](#sec:17)
 
-[18 Limiting process resources](#sec:18)
+[18 library(udp_broadcast): A UDP broadcast proxy](#sec:18)
 
-[19 library(udp_broadcast): A UDP broadcast proxy](#sec:19)
+[18.1 Caveats](#sec:18.1)
 
-[19.1 Caveats](#sec:19.1)
-
-[20 library(prolog_stream): A stream with Prolog callbacks](#sec:20)
+[19 library(prolog_stream): A stream with Prolog callbacks](#sec:19)
 
 ## 1 Introduction
 
@@ -543,7 +541,7 @@ create_server(Port) :-
       <dispatch>
 ```
 
-There are various options for `<`dispatch`>`. The most commonly used option is to start a Prolog thread to handle the connection. Alternatively, input from multiple clients can be handled in a single thread by listening to these clients using wait_for_input/3. Finally, on Unix systems, we can use [fork/1](#fork/1) to handle the connection in a new process. Note that [fork/1](#fork/1) and threads do not cooperate well. Combinations can be realised but require good understanding of POSIX thread and fork-semantics.
+There are various options for \<dispatch\>. The most commonly used option is to start a Prolog thread to handle the connection. Alternatively, input from multiple clients can be handled in a single thread by listening to these clients using wait_for_input/3. Finally, on Unix systems, we can use [fork/1](#fork/1) to handle the connection in a new process. Note that [fork/1](#fork/1) and threads do not cooperate well. Combinations can be realised but require good understanding of POSIX thread and fork-semantics.
 
 Below is the typical example using a thread. Note the use of setup_call_cleanup/3 to guarantee that all resources are reclaimed, also in case of failure or exceptions.
 
@@ -1164,7 +1162,7 @@ The CGI standard is unclear about handling Unicode data. The above two declarati
 
 ## 10 Password encryption library
 
-The `library(crypt)` library defines [crypt/2](#crypt/2) for encrypting and testing passwords. The clib package also provides crytographic hashes as described in [section 12](#sec:12)
+The `library(crypt)` library defines [crypt/2](#crypt/2) for encrypting and testing passwords. The clib package also provides crytographic hashes as described in [section 11](#sec:11)
 
 **crypt**(`+Plain, ?Encrypted`)  
 This predicate can be used in three modes. To test whether a password matches an encrypted version thereof, simply run with both arguments fully instantiated. To generate a default encrypted version of `Plain`, run with unbound `Encrypted` and this argument is unified to a list of character codes holding an encrypted version.
@@ -1187,63 +1185,9 @@ $1$qdaDeDZn$ZUxSQEESEHIDCHPNc3fxZ1
 
 **NOTE**: [crypt/2](#crypt/2) provides an interface to the Unix password hashing API. Above we already introduced support for classical DES and MD5 hashes, both hashes that are considered *insecure* by today's standards.^(3*Insecure* means that the password can realistically be derived from the password hash using a brute-force attack. This implies that leaking the password database is an immediate security risk.) The **crypt()** API of modern Unix systems typically support more secure hashes. Using [crypt/2](#crypt/2) is suitable if compatibility with OS passwords is required. If strong hashes and platform independence are important to you, use crypto_password_hash/2 provided by library `library(crypto)` from the [ssl package](http://www.swi-prolog.org/pldoc/package/ssl.html).
 
-## 11 library(uuid): Universally Unique Identifier (UUID) Library
+## 11 SHA\* Secure Hash Algorithms
 
-See also  
-\- [http://www.ossp.org/pkg/lib/uuid/](http://www.ossp.org/pkg/lib/uuid/)  
-- [https://en.wikipedia.org/wiki/Universally_unique_identifier](https://en.wikipedia.org/wiki/Universally_unique_identifier)
-
-To be done  
-Compare UUIDs, extract time and version from UUIDs
-
-The library provides operations on UUIDs. Please consult other sources for understanding UUIDs and the implications of the different UUID versions. Some typical calls are given below:
-
-``` code
-?- uuid(X).
-X = 'ea6589fa-19dd-11e2-8a49-001d92e1879d'.
-
-?- uuid(X, [url('http://www.swi-prolog.org')]).
-X = '73a07870-6a90-3f2e-ae2b-ffa538dc7c2c'.
-```
-
-\[det\]**uuid**(`-UUID`)  
-`UUID` is an atom representing a new `UUID`. This is the same as calling `uuid(UUID, [])`. See [uuid/2](#uuid/2) for options.
-
-\[det\]**uuid**(`-UUID, +Options`)  
-Create a new `UUID` according to `Options`. The following options are defined:
-
-**version**(`+Versions`)  
-Integer in the range 1..5, which specifies the `UUID` version that is created. Default is 1.
-
-**dns**(`DNS`)  
-**url**(`URL`)  
-**oid**(`OID`)  
-**x500**(`X500`)  
-Provide additional context information for UUIDs using version 3 or 5. If there is no explicit version option, `UUID` version 3 is used.
-
-**format**(`+Format`)  
-Representation of the `UUID`. Default is `atom`, yielding atoms such as `8304efdd-bd6e-5b7c-a27f-83f3f05c64e0`. The alternative is `integer`, returning a large integer that represents the 128 bits of the `UUID`.
-
-If SWI-Prolog was not built with the OSSP `UUID` dependency library a simple Prolog alternative that only implements version 4 random UUIDs is provided. In this case the default version is 4 and the only admissible options are `version(4)` and `format(Format)`.
-
-**uuid_property**(`+UUID, ?Property`)  
-True when `UUID` is a property of the given `UUID`. Supported properties are:
-
-**version**(`V`)  
-Return the version of the `UUID` (1..5)
-
-**time**(`-Stamp`)  
-Time using SWI-Prolog's time stamp (float with seconds since January 1, 1970, UTC). Only for version 1 and 2 UUIDs
-
-To be done  
-Implement more properties.
-
-\[semidet\]**is_uuid**(`@UUID`)  
-True when `UUID` is a `UUID` represented as an atom. It merely validates that the length is 36 characters, there are `-` at the right place and all other characters are hexadecimal.
-
-## 12 SHA\* Secure Hash Algorithms
-
-The library `library(sha)` provides *Secure Hash Algorihms* approved by FIPS (*Federal Information Processing Standard*). Quoting [Wikipedia](http://en.wikipedia.org/wiki/SHA-1): *“The SHA (Secure Hash Algorithm) hash functions refer to five FIPS-approved algorithms for computing a condensed digital representation (known as a message digest) that is, to a high degree of probability, unique for a given input data sequence (the message). These algorithms are called‘secure’because (in the words of the standard), “for a given algorithm, it is computationally infeasible 1) to find a message that corresponds to a given message digest, or 2) to find two different messages that produce the same message digest. Any change to a message will, with a very high probability, result in a different message digest.’*
+The library `library(sha)` provides *Secure Hash Algorihms* approved by FIPS (*Federal Information Processing Standard*). Quoting [Wikipedia](http://en.wikipedia.org/wiki/SHA-1): *“The SHA (Secure Hash Algorithm) hash functions refer to five FIPS-approved algorithms for computing a condensed digital representation (known as a message digest) that is, to a high degree of probability, unique for a given input data sequence (the message). These algorithms are called‘secure’because (in the words of the standard), “for a given algorithm, it is computationally infeasible 1) to find a message that corresponds to a given message digest, or 2) to find two different messages that produce the same message digest. Any change to a message will, with a very high probability, result in a different message digest.”*
 
 The current library supports all 5 approved algorithms, both computing the hash-key from data and the *hash Message Authentication Code* (HMAC).
 
@@ -1261,7 +1205,7 @@ One of `sha1` (default), `sha224`, `sha256`, `sha384` or `sha512`
 This option defines the mapping from Prolog (Unicode) text to bytes on which the SHA algorithm is performed. It has two values. The defualt is `utf8`, which implies that Unicode text is encoded as UTF-8 bytes. This option can deal with any atom. The alternative is `octet`, which implies that the text is considered as a sequence of bytes. This is suitable for e.g., atoms that represent binary data. An error is raised if the text contains code-points outside the range 0..255.
 
 **hmac_sha**(`+Key, +Data, -HMAC, +Options`)  
-Quoting [Wikipedia](http://en.wikipedia.org/wiki/HMAC): *“A keyed-hash message authentication code, or HMAC, is a type of message authentication code (MAC) calculated using a cryptographic hash function in combination with a secret key. As with any MAC, it may be used to simultaneously verify both the data integrity and the authenticity of a message. Any iterative cryptographic hash function, such as MD5 or SHA-1, may be used in the calculation of an HMAC; the resulting MAC algorithm is termed HMAC-MD5 or HMAC-SHA-1 accordingly. The cryptographic strength of the HMAC depends upon the cryptographic strength of the underlying hash function, on the size and quality of the key and the size of the hash output length in bits.’*
+Quoting [Wikipedia](http://en.wikipedia.org/wiki/HMAC): *“A keyed-hash message authentication code, or HMAC, is a type of message authentication code (MAC) calculated using a cryptographic hash function in combination with a secret key. As with any MAC, it may be used to simultaneously verify both the data integrity and the authenticity of a message. Any iterative cryptographic hash function, such as MD5 or SHA-1, may be used in the calculation of an HMAC; the resulting MAC algorithm is termed HMAC-MD5 or HMAC-SHA-1 accordingly. The cryptographic strength of the HMAC depends upon the cryptographic strength of the underlying hash function, on the size and quality of the key and the size of the hash output length in bits.”*
 
 `Key` and `Data` are either an atom, packed string or list of character codes. `HMAC` is unified with a list of integers representing the authentication code. `Options` is the same as for [sha_hash/3](#sha_hash/3), but currently only `sha1` and `sha256` are supported.
 
@@ -1277,7 +1221,7 @@ Hash = [61, 128, 252, 38, 121, 69, 229, 85, 199|...],
 Hex = '3d80fc267945e555c730403bd0ab0716e2a68c68'.
 ```
 
-### 12.1 License terms
+### 11.1 License terms
 
 The underlying SHA-2 library is an unmodified copy created by Dr Brian Gladman, Worcester, UK. It is distributed under the license conditions below.
 
@@ -1289,7 +1233,7 @@ The free distribution and use of this software in both source and binary form is
 
 ALTERNATIVELY, provided that this notice is retained in full, this product may be distributed under the terms of the GNU General Public License (GPL), in which case the provisions of the GPL apply INSTEAD OF those given above.
 
-## 13 library(md5): MD5 hashes
+## 12 library(md5): MD5 hashes
 
 See also  
 `library(sha)`, `library(hash_stream)` and `library(crypto)`.
@@ -1307,7 +1251,7 @@ If `Data` is a sequence of character *codes*, this must be translated into a seq
 | `Data` | is either an atom, string, code-list or char-list. |
 | `Hash` | is an atom holding 32 characters, representing the hash in hexadecimal notation |
 
-## 14 library(hash_stream): Maintain a hash on a stream
+## 13 library(hash_stream): Maintain a hash on a stream
 
 See also  
 In addition to this hash library, SWI-Prolog provides `library(md5)`, `library(sha)` and hash functions through `library(crypto)`, part of the `ssl` package.
@@ -1359,7 +1303,7 @@ If `true` (default), closing the filter stream also closes the original (parent)
 \[det\]**stream_hash**(`+HashStream, -Digest:atom`)  
 Unify `Digest` with a hash for the bytes send to or read from `HashStream`. Note that the hash is computed on the stream buffers. If the stream is an output stream, it is first flushed and the `Digest` represents the hash at the current location. If the stream is an input stream the `Digest` represents the hash of the processed input including the already buffered data.
 
-## 15 Memory files
+## 14 Memory files
 
 The `library(memfile)` provides an alternative to temporary files, intended for temporary buffering of data. Memory files in general are faster than temporary files and do not suffer from security risks or naming conflicts associated with temporary-file management.
 
@@ -1424,7 +1368,7 @@ Return the content of the memory-file as a string in `String`, pretending the da
 **memory_file_line_position**(`+MF, ?Line, ?LinePos, ?Offset`)  
 True if the character offset `Offset` corresponds with the `LinePos` character on line `Line`. Lines are counted from one (1). Note that `LinePos` is *not* the *column* as each character counts for one, including backspace and tab.
 
-## 16 library(time): Time and alarm library
+## 15 library(time): Time and alarm library
 
 The `library(time)` provides timing and alarm functions. Alarms are thread-specific, i.e., creating an alarm causes the alarm goal to be called in the thread that created it. The predicate [current_alarm/4](#current_alarm/4) only reports alarms that are related to the calling thread. If a thread terminates, all remaining alarms are silently removed. Most applications use [call_with_time_limit/2](#call_with_time_limit/2).
 
@@ -1467,7 +1411,7 @@ Call `Goal`, while watching out for a (wall-time) limit. If this limit is exceed
 throws  
 `time_limit_exceeded` ([call_with_time_limit/2](#call_with_time_limit/2)) or `time_limit_exceeded(Context)` ([call_with_time_limit/3](#call_with_time_limit/3)).
 
-## 17 library(unix): Unix specific operations
+## 16 library(unix): Unix specific operations
 
 See also  
 `library(process)` provides a portable high level interface to create and manage processes.
@@ -1585,7 +1529,7 @@ Get the value of the dumpable flag.
 \[semidet\]**sysconf**(`+Conf`)  
 Access system configuration. See `sysconf(1)` for details. `Conf` is a term Config(Value), where Value is always an integer. Config is the `sysconf()` name after removing =\_SC\_= and conversion to lowercase. Currently support the following configuration info: `arg_max`, `child_max`, `clk_tck`, `open_max`, `pagesize`, `phys_pages`, `avphys_pages`, `nprocessors_conf` and `nprocessors_onln`. Note that not all values may be supported on all operating systems.
 
-## 18 Limiting process resources
+## 17 Limiting process resources
 
 The `library(rlimit)` library provides an interface to the POSIX **getrlimit()**/**setrlimit()** API that control the maximum resource-usage of a process or group of processes. This call is especially useful for servers such as CGI scripts and inetd-controlled servers to avoid an uncontrolled script claiming too much resources.
 
@@ -1618,7 +1562,7 @@ cpu_exceeded(_Sig) :-
         halt(1).
 ```
 
-## 19 library(udp_broadcast): A UDP broadcast proxy
+## 18 library(udp_broadcast): A UDP broadcast proxy
 
 author  
 Jeffrey Rosenwald (JeffRose@acm.org), Jan Wielemaker
@@ -1706,7 +1650,7 @@ Host A Process 2:
 
 All incomming trafic is handled by a single thread with the alias `udp_inbound_proxy`. This thread also performs the internal dispatching using broadcast/1 and broadcast_request/1. Future versions may provide for handling these requests in separate threads.
 
-### 19.1 Caveats
+### 18.1 Caveats
 
 While the implementation is mostly transparent, there are some important and subtle differences that must be taken into consideration:
 
@@ -1796,7 +1740,7 @@ join_request(Scope, Address, Reply) :-
 Reply = welcome.
 ```
 
-## 20 library(prolog_stream): A stream with Prolog callbacks
+## 19 library(prolog_stream): A stream with Prolog callbacks
 
 This library defines a Prolog stream that realises its low-level I/O with callbacks to Prolog. The library was developed to bind normal Prolog I/O to Pengines I/O. This type of I/O redirection is probably the primary use case.
 
@@ -1867,19 +1811,19 @@ Futher versions might require additional callbacks. As we demand all callbacks t
 [alarm_at/4](#alarm_at/4)  
 [atom_to_memory_file/2](#atom_to_memory_file/2)  
 atom_to_term/3  
-[15](#idx:atomtoterm3:17)
+[14](#idx:atomtoterm3:17)
 
 [call_with_time_limit/2](#call_with_time_limit/2)  
 [call_with_time_limit/3](#call_with_time_limit/3)  
 catch/3  
-[18](#idx:catch3:31)
+[17](#idx:catch3:31)
 
 [cgi_get_form/1](#cgi_get_form/1)  
 [9.1](#idx:cgigetform1:7)
 
 [chmod/2](#chmod/2)  
 close/1  
-[15](#idx:close1:20)
+[14](#idx:close1:20)
 
 [close_stream_pool/0](#close_stream_pool/0)  
 [7](#idx:closestreampool0:2)
@@ -1891,7 +1835,7 @@ close/1
 [10](#idx:crypt2:8) [10](#idx:crypt2:9) [10](#idx:crypt2:10)
 
 crypto_data_hash/3  
-[12](#idx:cryptodatahash3:14)
+[11](#idx:cryptodatahash3:14)
 
 crypto_password_hash/2  
 [10](#idx:cryptopasswordhash2:11)
@@ -1915,10 +1859,10 @@ format/2
 [9.1](#idx:format2:6)
 
 format/3  
-[15](#idx:format3:16)
+[14](#idx:format3:16)
 
 [free_memory_file/1](#free_memory_file/1)  
-[15](#idx:freememoryfile1:25)
+[14](#idx:freememoryfile1:25)
 
 [getegid/1](#getegid/1)  
 [geteuid/1](#geteuid/1)  
@@ -1929,7 +1873,7 @@ format/3
 [group_data/3](#group_data/3)  
 [group_info/2](#group_info/2)  
 [hash_atom/2](#hash_atom/2)  
-[12](#idx:hashatom2:12)
+[11](#idx:hashatom2:12)
 
 [hmac_sha/4](#hmac_sha/4)  
 [host_address/3](#host_address/3)  
@@ -1941,7 +1885,6 @@ format/3
 [iri_normalized/2](#iri_normalized/2)  
 [iri_normalized/3](#iri_normalized/3)  
 [is_process/1](#is_process/1)  
-[is_uuid/1](#is_uuid/1)  
 [kill/2](#kill/2)  
 [link_file/3](#link_file/3)  
 [make_directory_path/1](#make_directory_path/1)  
@@ -1957,20 +1900,20 @@ format/3
 [negotiate_socks_connection/2](#negotiate_socks_connection/2)  
 [new_memory_file/1](#new_memory_file/1)  
 on_signal/3  
-[18](#idx:onsignal3:32)
+[17](#idx:onsignal3:32)
 
 open/4  
-[15](#idx:open4:24)
+[14](#idx:open4:24)
 
 open_chars_stream/2  
-[15](#idx:opencharsstream2:26)
+[14](#idx:opencharsstream2:26)
 
 open_codes_stream/3  
-[15](#idx:opencodesstream3:15)
+[14](#idx:opencodesstream3:15)
 
 [open_hash_stream/3](#open_hash_stream/3)  
 [open_memory_file/3](#open_memory_file/3)  
-[15](#idx:openmemoryfile3:23)
+[14](#idx:openmemoryfile3:23)
 
 [open_memory_file/4](#open_memory_file/4)  
 [open_prolog_stream/4](#open_prolog_stream/4)  
@@ -1996,10 +1939,10 @@ open_codes_stream/3
 [rewrite_host/3](#rewrite_host/3)  
 [rlimit/3](#rlimit/3)  
 seek/4  
-[15](#idx:seek4:21)
+[14](#idx:seek4:21)
 
 set_stream_position/2  
-[15](#idx:setstreamposition2:22)
+[14](#idx:setstreamposition2:22)
 
 [set_time_file/3](#set_time_file/3)  
 [set_user_and_group/1](#set_user_and_group/1)  
@@ -2010,7 +1953,7 @@ set_stream_position/2
 [setgroups/1](#setgroups/1)  
 [setuid/1](#setuid/1)  
 [sha_hash/3](#sha_hash/3)  
-[12](#idx:shahash3:13)
+[11](#idx:shahash3:13)
 
 [size_memory_file/2](#size_memory_file/2)  
 [size_memory_file/3](#size_memory_file/3)  
@@ -2018,10 +1961,10 @@ set_stream_position/2
 [stream_hash/2](#stream_hash/2)  
 [stream_pool_main_loop/0](#stream_pool_main_loop/0)  
 sub_atom/5  
-[15](#idx:subatom5:29)
+[14](#idx:subatom5:29)
 
 sub_string/5  
-[15](#idx:substring5:28) [15](#idx:substring5:30)
+[14](#idx:substring5:28) [14](#idx:substring5:30)
 
 [sysconf/1](#sysconf/1)  
 [syslog/2](#syslog/2)  
@@ -2042,10 +1985,10 @@ sub_string/5
 [tcp_setopt/2](#tcp_setopt/2)  
 [tcp_socket/1](#tcp_socket/1)  
 term_string/2  
-[15](#idx:termstring2:19)
+[14](#idx:termstring2:19)
 
 term_to_atom/2  
-[15](#idx:termtoatom2:18)
+[14](#idx:termtoatom2:18)
 
 [try_proxy/4](#try_proxy/4)  
 [udp_broadcast_close/1](#udp_broadcast_close/1)  
@@ -2078,15 +2021,12 @@ term_to_atom/2
 [uri_resolve/3](#uri_resolve/3)  
 [user_data/3](#user_data/3)  
 [user_info/2](#user_info/2)  
-[uuid/1](#uuid/1)  
-[uuid/2](#uuid/2)  
-[uuid_property/2](#uuid_property/2)  
 [wait/2](#wait/2)  
 wait_for_input/3  
 [7](#idx:waitforinput3:1) [7](#idx:waitforinput3:4)
 
 writeq/1  
-[15](#idx:writeq1:27)
+[14](#idx:writeq1:27)
 
 [detach_IO/0](#detach_IO/0)  
 [detach_IO/1](#detach_IO/1)  

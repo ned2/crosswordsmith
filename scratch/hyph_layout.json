@@ -1,0 +1,97 @@
+{
+  "grid": [
+    [
+      {"across":1,"down":null,"letter":"W","number":1},
+      {"across":1,"down":null,"letter":"E","number":null},
+      {"across":1,"down":null,"letter":"L","number":null},
+      {"across":1,"down":null,"letter":"L","number":null},
+      {"across":1,"down":null,"letter":"-","number":null},
+      {"across":1,"down":2,"letter":"B","number":2},
+      {"across":1,"down":null,"letter":"E","number":null},
+      {"across":1,"down":null,"letter":"I","number":null},
+      {"across":1,"down":null,"letter":"N","number":null},
+      {"across":1,"down":null,"letter":"G","number":null}
+    ],
+    [
+      null,
+      null,
+      null,
+      null,
+      null,
+      {"across":null,"down":2,"letter":"E","number":null},
+      null,
+      null,
+      null,
+      null
+    ],
+    [
+      null,
+      null,
+      null,
+      null,
+      null,
+      {"across":null,"down":2,"letter":"L","number":null},
+      null,
+      null,
+      null,
+      null
+    ],
+    [
+      null,
+      null,
+      null,
+      null,
+      null,
+      {"across":null,"down":2,"letter":"O","number":null},
+      null,
+      null,
+      null,
+      null
+    ],
+    [
+      null,
+      null,
+      null,
+      null,
+      null,
+      {"across":null,"down":2,"letter":"W","number":null},
+      null,
+      null,
+      null,
+      null
+    ],
+    [null, null, null, null, null, null, null, null, null, null ],
+    [null, null, null, null, null, null, null, null, null, null ],
+    [null, null, null, null, null, null, null, null, null, null ],
+    [null, null, null, null, null, null, null, null, null, null ],
+    [null, null, null, null, null, null, null, null, null, null ]
+  ],
+  "gridLength":10,
+  "words": [
+    {
+      "answer":"WELL-BEING",
+      "cells": [
+	[0, 0 ],
+	[0, 1 ],
+	[0, 2 ],
+	[0, 3 ],
+	[0, 4 ],
+	[0, 5 ],
+	[0, 6 ],
+	[0, 7 ],
+	[0, 8 ],
+	[0, 9 ]
+      ],
+      "direction":"across",
+      "meta": {},
+      "number":1
+    },
+    {
+      "answer":"BELOW",
+      "cells": [ [0, 5 ],  [1, 5 ],  [2, 5 ],  [3, 5 ],  [4, 5 ] ],
+      "direction":"down",
+      "meta": {},
+      "number":2
+    }
+  ]
+}

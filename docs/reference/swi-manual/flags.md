@@ -8,7 +8,7 @@ The predicate [current_prolog_flag/2](flags.html#current_prolog_flag/2) defines 
 
 Flags marked *changeable* can be modified by the user using [set_prolog_flag/2](flags.html#set_prolog_flag/2). Flag values are typed. Flags marked as `bool` can have the values `true` or `false`. The predicate [create_prolog_flag/3](flags.html#create_prolog_flag/3) may be used to create flags that describe or control behaviour of libraries and applications. The library `library(settings)` provides an alternative interface for managing notably application parameters.
 
-Some Prolog flags are not defined in all versions, which is normally indicated in the documentation below as *“if present and true’*. A boolean Prolog flag is true iff the Prolog flag is present **and** the `Value` is the atom `true`. Tests for such flags should be written as below:
+Some Prolog flags are not defined in all versions, which is normally indicated in the documentation below as *“if present and true”* . A boolean Prolog flag is true iff the Prolog flag is present **and** the `Value` is the atom `true`. Tests for such flags should be written as below:
 
 ``` code
         (   current_prolog_flag(windows, true)
@@ -66,6 +66,9 @@ If running on Android, it indicates the compile-time API Level defined by the C 
 
 **answer_write_options**(`term`, changeable)  
 This flag is used by the interactive toplevel to print the value if *bindings* (answers). The flag value is passed to [write_term/2](termrw.html#write_term/2) when printing an answer queries. Default is `[quoted(true), portray(true), max_depth(10), attributes(portray)]`.
+
+**atom_normalize_hook**(`bool`)  
+`true` when a kernel atom-normalisation hook (registered by **PL_atom_normalize_hook()**, used by `library(unicode)`) is active. Used by the reader to decide between the precise and the *wcwidth* fallback NFC check. See [unicode_atoms](flags.html#flag:unicode_atoms).
 
 **apple**(`bool`)  
 If present and `true`, the operating system is MacOSX. Defined if the C compiler used to compile this version of SWI-Prolog defines `__APPLE__`. Note that the [unix](flags.html#flag:unix) is also defined for MacOSX.
@@ -327,7 +330,7 @@ Time [halt/1](toplevel.html#halt/1) waits for other threads to die gracefully. D
 If not zero, call prolog:heartbeat/0 every `N` inferences. `N` is rounded to a multiple of 16.
 
 **home**(`atom`)  
-SWI-Prolog's notion of the home directory. SWI-Prolog uses its home directory to find its startup file as `<``home``>/boot.prc` and to find its library as `<``home``>/library`. Some installations may put architecture independent files in a *shared home* and also define [shared_home](flags.html#flag:shared_home). System files can be found using [absolute_file_name/3](files.html#absolute_file_name/3) as `swi(file)`. See [file_search_path/2](consulting.html#file_search_path/2).
+SWI-Prolog's notion of the home directory. SWI-Prolog uses its home directory to find its startup file as `<``home``>/boot.prc` and to find its library as `<``home``>/library`. Some installations may put architecture independent files in a *shared home* and also define [shared_home](flags.html#flag:shared_home). System files can be found using [absolute_file_name/3](files.html#absolute_file_name/3) as `swi(file)`. See [file_search_path/2](consulting.html#file_search_path/2). See [section 12.6](findhome.html#sec:12.6) for how this location is determined and **--home** for setting or reporting it from the command line.
 
 **integer_rounding_function**(`down,toward_zero`)  
 ISO Prolog flag describing rounding by `//` and `rem` arithmetic functions. Value depends on the C compiler used.
@@ -372,7 +375,10 @@ The action taken when a table reaches the number of answers specified in [max_an
 ISO Prolog flag describing there is no maximum arity to compound terms.
 
 **max_char_code**(`integer`)  
-Highest (Unicode) code point that is supported. SWI-Prolog supports all Unicode code points from 0 (zero) up to and including the value of this flag. Currently `0xffff` on Windows (UCS-2) and `0x10ffff` on most other platforms.
+Highest (Unicode) code point that is supported. SWI-Prolog supports all Unicode code points from 0 (zero) up to and including the value of this flag. The value follows the Unicode standard and is currently `0x10ffff`.
+
+**unicode_syntax_version**(`atom`)  
+The Unicode version of the data used to build the SWI-Prolog source syntax classifier (e.g. `’17.0.0’`). This drives the identifier, layout, and solo classes described in [section 2.15.1.9](syntax.html#sec:2.15.1.9). See also unicode_version/1 in `library(unicode)`, which reports the (possibly different) version of the bundled *utf8proc* data used for normalization, grapheme segmentation, and unicode_property/2.
 
 **max_integer**(`integer`)  
 Maximum integer value if integers are *bounded*. See also the flag [bounded](flags.html#flag:bounded) and [section 4.27.2.1](arith.html#sec:4.27.2.1).
@@ -658,6 +664,13 @@ Available in SWI-Prolog version 7. If `true`,‘traditional’mode has been sel
 
 **tty_control**(`bool`, changeable)  
 Determines whether the terminal is switched to raw mode for [get_single_char/1](chario.html#get_single_char/1), which also reads the user actions for the trace. May be set. If this flag is `false` at startup, command line editing is disabled. See also the **--no-tty** command line option.
+
+**unicode_atoms**(`atom`, changeable)  
+Default atom-content policy seeded into newly opened text streams, overridable per stream via [set_stream/2](IO.html#set_stream/2) and the `unicode_atoms` option of [open/4](IO.html#open/4), and per call via the `unicode_atoms` option of [read_term/2](termrw.html#read_term/2),3 and read_clause/2,3. See [read_term/2](termrw.html#read_term/2),3 for the four values (`accept`, `nfc`, `error`, `reject`) and their effect. The default is `accept`.
+
+Setting this flag to `nfc` auto-loads `library(unicode)` if no kernel normalisation hook has been registered yet; if the library is unavailable the *[set_prolog_flag/2](flags.html#set_prolog_flag/2)* call propagates the `existence_error(source_sink, library(unicode))` raised by [use_module/1](import.html#use_module/1). Mode `error` does not require the hook: when [atom_normalize_hook](flags.html#flag:atom_normalize_hook) is `false` it falls back to a wcwidth-based check that treats any code point with *wcwidth* less than 1 (combining marks, zero-width and non-printable characters) as non-NFC, which can over-reject scripts such as Thai that use combining marks in NFC.
+
+Independently of this flag, the SWI-Prolog reader unconditionally rejects Unicode bidi-override and isolate code points (U+202A through U+202E and U+2066 through U+2069) when they appear as raw bytes in unquoted atoms, operators, variables, quoted atoms, strings, or comments. This mitigates the “Trojan source” attack (CVE-2021-42574). Programs that need such a code point in a literal atom or string must use the corresponding escape sequence (e.g. `\u202E`).
 
 **unix**(`bool`)  
 If present and `true`, the operating system is some version of Unix. Defined if the C compiler used to compile this version of SWI-Prolog either defines `__unix__` or `unix`. On other systems this flag is not available. See also [linux](flags.html#flag:linux), [apple](flags.html#flag:apple) and [windows](flags.html#flag:windows).

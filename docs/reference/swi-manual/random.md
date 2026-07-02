@@ -17,7 +17,7 @@ See also
 - In SWI-Prolog, [random/1](random.html#random/1) is implemented by the function random_float/0.
 
 \[semidet\]**random_between**(`+L:int, +U:int, -R:int`)  
-Binds `R` to a random integer in \[`L`,`U`\] (i.e., including both `L` and `U`). Fails silently if `U``<``L`.
+Binds `R` to a random integer in \[`L`,`U`\] (i.e., including both `L` and `U`). Fails silently if `U`\<`L`.
 
 \[det\]**random**(`+L:int, +U:int, -R:int`)  
 \[det\]**random**(`+L:float, +U:float, -R:float`)  

@@ -5,7 +5,7 @@ To be done
 \- Provide type safety while loading  
 - Thread safety must now be provided at the user-level. Can we provide generic thread safety? Basically, this means that we must wrap all exported predicates. That might better be done outside this library.  
 - Transaction management?  
-- Should assert\_`<`name`>` only assert if the database does not contain a variant?  
+- Should assert\_\<name\> only assert if the database does not contain a variant?  
 - Since we have [prolog_listen/2](prolog-event.html#prolog_listen/2), we could use direct [assert/1](db.html#assert/1) and [retract/1](db.html#retract/1) and use the system hooks to deal with the updates.
 
 This module provides simple persistent storage for one or more dynamic predicates. A database is always associated with a module. A module that wishes to maintain a database must declare the terms that can be placed in the database using the directive [persistent/1](persistency.html#persistent/1).

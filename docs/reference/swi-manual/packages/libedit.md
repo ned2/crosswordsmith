@@ -36,7 +36,7 @@ Signal used for making thread_signal/2 work while the thread is in a blocking sy
 
 \[det\]**el_wrap**(`+ProgName:atom, +In:stream, +Out:stream, +Error:stream`)  
 \[det\]**el_wrap**(`+ProgName:atom, +In:stream, +Out:stream, +Error:stream, +Options`)  
-Enable editline on the stream-triple `<``In`,`Out`,`Error``>`. From this moment on `In` is a handle to the command line editor. `Options`:
+Enable editline on the stream-triple \<`In`,`Out`,`Error`\>. From this moment on `In` is a handle to the command line editor. `Options`:
 
 **pipes**(`true`)  
 Windows only. Assume the I/O is using pipes rather than a console. This is used for the Epilog terminal.
@@ -97,7 +97,21 @@ Interface to `el_set()` and `el_wset()`. Currently provided values for `Action` 
 **wordchars**(`+Text`)  
 Set the characters considered part of a *word*. This feature depends on `el_wsey()` `EL_WORDCHARS`, which is only provided in some recent versions of `libedit`.
 
+**bracketed_paste**(`+Boolean`)  
+Enable or disable bracketed paste mode. When enabled, the terminal is asked to bracket pasted text with `ESC[200~` / `ESC[201~` before each prompt, which the default bindings route through bracketed_paste/3. Disabling sends the matching `ESC[?2004l` sequence immediately. enable_bracketed_paste/1 manages this based on the current editor; you normally do not need to set it directly.
+
 This predicate fails silently of `Action` is not implemented. Illegal input raises in an exception.
+
+\[semidet\]**el_get**(`+Input:stream, ?Property`)  
+Interface to `el_get()`. Currently supported `Property` terms:
+
+**editor**(`-Editor`)  
+`Editor` is unified with `emacs` or `vi`, reflecting the current keymap selected via [el_bind/2](#el_bind/2) with `-e` / `-v`.
+
+**bracketed_paste**(`-Boolean`)  
+Whether bracketed paste mode is currently enabled; see [el_set/2](#el_set/2).
+
+Any other `Property` raises a `domain_error(editline_property, _)`.
 
 \[det\]**el_line**(`+Input:stream, -Line`)  
 Fetch the currently buffered input line. `Line` is a term `line(Before, After)`, where `Before` is a string holding the text before the cursor and `After` is a string holding the text after the cursor.
@@ -177,6 +191,7 @@ Provide the plugable interface into the system command line management.
 [el_bind/2](#el_bind/2)  
 [el_cursor/2](#el_cursor/2)  
 [el_deletestr/2](#el_deletestr/2)  
+[el_get/2](#el_get/2)  
 [el_history/2](#el_history/2)  
 [el_history_events/2](#el_history_events/2)  
 [el_insertstr/2](#el_insertstr/2)  

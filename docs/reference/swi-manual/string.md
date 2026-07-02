@@ -104,7 +104,7 @@ True when the (Unicode) `String` is represented by `Bytes` in `Encoding`. If `St
 Converts `Text` to a string. `Text` is *anytext* excluding the number types. When running in **--traditional** mode, `'[]'` is ambiguous and interpreted as an empty string.
 
 **string_length**(`+String, -Length`)  
-Unify `Length` with the number of characters in `String`. This predicate is functionally equivalent to [atom_length/2](manipatom.html#atom_length/2) and also accepts *anytext* as its first argument. Numeric types are formatted into strings before the length of their string representation is determined.^(172This behavior should be considered deprecated) See also [write_length/3](termrw.html#write_length/3).
+Unify `Length` with the number of characters in `String`. This predicate is functionally equivalent to [atom_length/2](manipatom.html#atom_length/2) and also accepts *anytext* as its first argument. Numeric types are formatted into strings before the length of their string representation is determined.^(172This behavior should be considered deprecated) See also [write_size/4](termrw.html#write_size/4).
 
 **string_code**(`?Index, +String, ?Code`)  
 True when `Code` represents the character at the 1-based `Index` position in `String`. If `Index` is unbound the string is scanned from index 1. Raises a domain error if `Index` is negative. Fails silently if `Index` is zero or greater than the length of `String`. The mode `string_code(-,+,+)` is deterministic if the searched-for `Code` appears only once in `String`. See also [sub_string/5](string.html#sub_string/5).

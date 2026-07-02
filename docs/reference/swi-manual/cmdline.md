@@ -58,7 +58,7 @@ Note that many of the commandline options are reflected by a Prolog flag. We int
 Enable debugging on an interrupt signal (Control-C, `SIGINT`) immediately. Normally debugging on interrupt is enabled when entering the interactive toplevel. This flag can be used to start the debugger on an interrupt while executing goals from **-g** or [initialization/\[1,2\]](consulting.html#initialization/1). See also the Prolog flag [debug_on_interrupt](flags.html#flag:debug_on_interrupt).
 
 **--home\[=DIR\]**  
-Use `DIR` as home directory. See [section 12.6](findhome.html#sec:12.6) for details. If `DIR` is omitted, the found location is printed and the process exits. If the location cannot be found an error is printed and the process exits with status 1. If the home directory is set using this option, the environment variable `SWI_HOME_DIR` holding the specified directory is added to the process.
+With `DIR`, set SWI-Prolog's home directory to `DIR` and add the environment variable `SWI_HOME_DIR` holding `DIR` to the process. Without an argument, report the located home directory and exit; if the location cannot be found, print an error and exit with status 1. See [section 12.6](findhome.html#sec:12.6) for how the home directory is located and [home](flags.html#flag:home) for what SWI-Prolog uses it for.
 
 **--quiet**  
 Set the Prolog flag [verbose](flags.html#flag:verbose) to `silent`, suppressing informational and banner messages. Also available as **-q**.
@@ -114,7 +114,7 @@ Select a startup script from the SWI-Prolog home directory. The script file is n
 **-x** `bootfile`  
 Boot from `bootfile` instead of the system's default boot file. A boot file is a file resulting from a Prolog compilation using the **-b** or **-c** option or a program saved using [qsave_program/\[1,2\]](saved-states.html#qsave_program/1).
 
-**-p** `alias=path1[:path2 ...`  
+**-p** `alias=path1[:path2 ... ]`  
 Define a path alias for file_search_path. `alias` is the name of the alias, and arg path1 ... is a list of values for the alias. On Windows the list separator is `;`. On other systems it is `:`. A value is either a term of the form alias(value) or pathname. The computed aliases are added to [file_search_path/2](consulting.html#file_search_path/2) using [asserta/1](db.html#asserta/1), so they precede predefined values for the alias. See [file_search_path/2](consulting.html#file_search_path/2) for details on using this file location mechanism.
 
 **--traditional**  

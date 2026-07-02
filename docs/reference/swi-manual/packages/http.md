@@ -1127,7 +1127,7 @@ See also
 listen/2 for acting upon closed sessions
 
 \[det\]**http_session_cookie**(`-Cookie`)  
-Generate a random cookie that can be used by a browser to identify the current session. The cookie has the format XXXX-XXXX-XXXX-XXXX\[.`<`route`>`\], where XXXX are random hexadecimal numbers and \[.`<`route`>`\] is the optionally added routing information.
+Generate a random cookie that can be used by a browser to identify the current session. The cookie has the format XXXX-XXXX-XXXX-XXXX\[.\<route\>\], where XXXX are random hexadecimal numbers and \[.\<route\>\] is the optionally added routing information.
 
 \[semidet,multifile\]**hooked**  
 \[multifile\]**hook**(`+Goal`)  
@@ -1370,28 +1370,25 @@ Called if there is no immediately free worker to handle the incoming request. Th
 
 [Server-Sent Events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events) allows for setting up a simple event stream from the server to the client. It can serve roles similar to *long polling* and *web sockets*, enabling the server to notify its clients on some event. *Long polling* uses a normal HTTP (usually) GET request that blocks for a long time on the server. The server finishes the request when it wants to notify the client or after some time (e.g., a minute) to avoid a timeout on the client or some proxy. After receiving an event or timeout, the client repeats the request. *Web sockets* *upgrade* a the socket used for a normal HTTP request to create a bi-directional open communication channel that exchanges encapsulated messages in both directions. *Server-Sent Events* open a normal HTTP channel over which the server can sent simple text messages using a format similar to the HTTP header: a sequence of *Name: Value* lines followed by two newlines. Unlike long polling, the request does not complete after a message.
 
-Following the MDN documentation above, and SSE request can be served using the simple example below that generates an event, counting every minute. Note the handler declaration that processes the request on a new thread and disables timeout for this location. Note that this implementation uses a thread per client. This design limits the scalability.
+Following the MDN documentation above, an SSE request can be served using the simple example below, which generates an event counting every minute. The handler is declared to process the request on a new thread and to disable the request timeout, as the response is intended to live for as long as the client stays connected. Note that this design uses one thread per client and therefore does not scale well to large numbers of subscribers.
 
 ``` code
+:- use_module(library(http/sse)).
+
 :- http_handler(root(events), events,
                 [ spawn([]),
                   time_limit(infinite)
                 ]).
 
 events(_Request) :-
-    format('X-Accel-Buffering: no\r\n\c
-            Content-Type: text/event-stream\r\n\c
-            Cache-Control: no-cache\r\n\r\n'),
-
+    sse_open,
     between(1, infinite, Min),
-        format('event: minute~n'),
-        format('data: {"minute": ~d}~n~n', [Min]),
-        flush_output,
+        sse_send(_{event: minute, data: Min}),
         sleep(60),
         fail.
 ```
 
-Of course, rather than sleep/1 to decide when to fire the next event this thread typically has to wait for events in the application. This can be achieved using thread_wait/2 or message queues.
+The library `library(http/sse)` hides the wire format and the response headers needed to defeat HTTP intermediaries that buffer small responses (see sse_open/0 and sse_send/1). Of course, rather than sleep/1 to decide when to fire the next event this thread typically has to wait for events in the application. This can be achieved using thread_wait/2 or message queues.
 
 ### 3.10 Custom Error Pages
 
@@ -1448,7 +1445,7 @@ trusted_server('http://www.myopenid.com/server').
 
 By default, information who is logged on is maintained with the session using [http_session_assert/1](#http_session_assert/1) with the term `openid(Identity)`. The hooks login/logout/logged_in can be used to provide alternative administration of logged-in users (e.g., based on client-IP, using cookies, etc.).
 
-To create a **server**, you must do four things: bind the handlers [openid_server/2](#openid_server/2) and [openid_grant/1](#openid_grant/1) to HTTP locations, provide a user-page for registered users and define the `grant(Request, Options)` hook to verify your users. An example server is provided in in `<`plbase`>`/`doc/packages/examples/demo_openid.pl`
+To create a **server**, you must do four things: bind the handlers [openid_server/2](#openid_server/2) and [openid_grant/1](#openid_grant/1) to HTTP locations, provide a user-page for registered users and define the `grant(Request, Options)` hook to verify your users. An example server is provided in in \<plbase\>/`doc/packages/examples/demo_openid.pl`
 
 \[multifile\]**openid_hook**(`+Action`)  
 Call hook on the OpenID management library. Defined hooks are:
@@ -1899,7 +1896,7 @@ We recommend the use of thread pools. They allow registration of a set of thread
 #### 3.14.3 library(http/http_unix_daemon): Run SWI-Prolog HTTP server as a Unix system daemon
 
 See also  
-The file `<`swi-home`>`/doc/packages/examples/http/linux-init-script provides a /etc/init.d script for controlling a server as a normal Unix service.
+The file \<swi-home\>/doc/packages/examples/http/linux-init-script provides a /etc/init.d script for controlling a server as a normal Unix service.
 
 To be done  
 Cleanup issues wrt. loading and initialization of xpce.
@@ -2276,7 +2273,7 @@ Do not rotate if the log file is smaller than `Bytes`. The default is 1Mbytes.
 Number of rotated log files to keep (default 10)
 
 **compress_logs**(`+Format`)  
-Compress the log files to the given format.
+Compress the log files to the given format. Default `gzip` and this is currently the only supported compressor.
 
 **background**(`+Boolean`)  
 If `true`, rotate the log files in the background.
@@ -2787,7 +2784,7 @@ When calling html_print/\[1,2\] on `List`, `Length` characters will be produced.
 
 #### 3.21.2 Repositioning HTML for CSS and javascript links
 
-Modern HTML commonly uses CSS and Javascript. This requires `<`link`>` elements in the HTML `<`head`>` element or `<`script`>` elements in the `<`body`>`. Unfortunately this seriously harms re-using HTML DCG rules as components as each of these components may rely on their own style sheets or JavaScript code. We added a‘mailing’system to reposition and collect fragments of HTML. This is implemented by [html_post//2](#html_post//2), [html_receive//1](#html_receive//1) and [html_receive//2](#html_receive//2).
+Modern HTML commonly uses CSS and Javascript. This requires \<link\> elements in the HTML \<head\> element or \<script\> elements in the \<body\>. Unfortunately this seriously harms re-using HTML DCG rules as components as each of these components may rely on their own style sheets or JavaScript code. We added a‘mailing’system to reposition and collect fragments of HTML. This is implemented by [html_post//2](#html_post//2), [html_receive//1](#html_receive//1) and [html_receive//2](#html_receive//2).
 
 \[det\]**html_post**(`+Id, :HTML`)`//`  
 Reposition `HTML` to the receiving `Id`. The [html_post//2](#html_post//2) call processes `HTML` using [html//1](#html//1). Embedded `\`-commands are executed by mailman/1 from [print_html/1](#print_html/1) or [html_print_length/2](#html_print_length/2). These commands are called in the calling context of the [html_post//2](#html_post//2) call.
@@ -3015,7 +3012,7 @@ Emitted as Javascript `null`
 Produces a Javascript list, where each element is processed by this library.
 
 **`object(Attributes)`**  
-Where Attributes is a Key-Value list where each pair can be written as Key-Value, Key=Value or Key(Value), accommodating all common constructs for this used in Prolog.`<` \$ { K:V, ... } Same as `object(Attributes)`, providing a more JavaScript-like syntax. This may be useful if the object appears literally in the source-code, but is generally less friendly to produce as a result from a computation.
+Where Attributes is a Key-Value list where each pair can be written as Key-Value, Key=Value or Key(Value), accommodating all common constructs for this used in Prolog.\< \$ { K:V, ... } Same as `object(Attributes)`, providing a more JavaScript-like syntax. This may be useful if the object appears literally in the source-code, but is generally less friendly to produce as a result from a computation.
 
 **Dict**  
 Emit a dict as a JSON object using json_write_dict/3.

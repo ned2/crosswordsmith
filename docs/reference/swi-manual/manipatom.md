@@ -44,6 +44,8 @@ X = [h, e, l, l, o]
 \[ISO\]**char_code**(`?Atom, ?Code`)  
 Convert between a single *character* (an atom of length 1), and its *character code* (an integer denoting the corresponding character). The predicate alternatively accepts an SWI-Prolog string of length 1 at `Atom` place.
 
+Character codes accepted by [atom_codes/2](manipatom.html#atom_codes/2), [atom_chars/2](manipatom.html#atom_chars/2) and [char_code/2](manipatom.html#char_code/2) must be valid Unicode code points. Lone UTF-16 surrogate code points (`0xD800`...`0xDFFF`) are rejected with a `type_error(character_code, ``Code``)`. See [section 2.18](widechars.html#sec:2.18).
+
 \[ISO\]**number_chars**(`?Number, ?CharList`)  
 Similar to [atom_chars/2](manipatom.html#atom_chars/2), but converts between a number and its representation as a list of *characters* (atoms of length 1).
 
@@ -51,6 +53,8 @@ Similar to [atom_chars/2](manipatom.html#atom_chars/2), but converts between a n
 - Otherwise, if `Number` is indeed a number, `Number` is serialized and the result is unified with `CharList`.
 
 Following the ISO standard, the Prolog syntax for number allows for *leading* white space (including newlines) and does not allow for *trailing* white space.^(119ISO also allows for Prolog comments in leading white space. We--and most other implementations--believe this is incorrect. We also believe it would have been better not to allow for white space, or to allow for both leading and trailing white space.)
+
+Beyond ASCII, decimal digits in the input may come from any Unicode *decimal digit* block (general category `Nd`); see [section 2.15.1.9](syntax.html#sec:2.15.1.9). All digits in a single number must come from the *same* block --- for an integer, for the numerator and denominator of a rational, and for the mantissa and exponent of a floating-point number. The optional sign (`+`, `-`), the rational separator (`r` or `/`), the floating-point decimal point (`.`) and the floating-point exponent letter (`e`, `E`) are always ASCII; their non-ASCII look-alikes raise `syntax_error`.
 
 Prolog syntax-based conversion can also be achieved using [format/3](format.html#format/3) and [read_from_chars/2](charsio.html#read_from_chars/2).
 
@@ -109,7 +113,7 @@ L = [gnu, gnat]
 ```
 
 \[ISO\]**atom_length**(`+Atom, -Length`)  
-True if `Atom` is an atom of `Length` characters. The SWI-Prolog version accepts all atomic types, as well as code-lists and character-lists. New code should avoid this feature and use [write_length/3](termrw.html#write_length/3) to get the number of characters that would be written if the argument was handed to [write_term/3](termrw.html#write_term/3).
+True if `Atom` is an atom of `Length` characters. The SWI-Prolog version accepts all atomic types, as well as code-lists and character-lists. See also [write_size/4](termrw.html#write_size/4).
 
 \[deprecated\]**atom_prefix**(`+Atom, +Prefix`)  
 True if `Atom` starts with the characters from `Prefix`. Its behaviour is equivalent to `?- sub_atom(``Atom``, 0, _, _, ``Prefix``)`. Deprecated.

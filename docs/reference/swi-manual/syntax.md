@@ -178,28 +178,65 @@ Having only the underscore introduce a variable is particularly useful if code c
 
 The ISO standard specifies the Prolog syntax in ASCII characters. As SWI-Prolog supports Unicode in source files we must extend the syntax. This section describes the implication for the source files, while writing international source files is described in [section 3.1.3](projectfiles.html#sec:3.1.3).
 
-The SWI-Prolog Unicode character classification is currently based on version 14.0.0 of the Unicode standard. Please note that [char_type/2](chartype.html#char_type/2) and friends, intended to be used with all text except Prolog source code, is based on the C library locale-based classification routines.
+The SWI-Prolog Unicode character classification follows the Unicode release reported by the read-only Prolog flag [unicode_syntax_version](flags.html#flag:unicode_syntax_version). Note that [char_type/2](chartype.html#char_type/2) and friends, intended for processing arbitrary text rather than Prolog source code, are based on the C library locale-based classification routines, and that the predicates in `library(unicode)` report the version of the bundled *utf8proc* data, which may differ from the syntax classifier's version (see unicode_version/1).
 
 - *Quoted atoms and strings*  
   Any character of any script can be used in quoted atoms and strings. The escape sequences `\uXXXX` and `\UXXXXXXXX` (see [section 2.15.1.3](syntax.html#sec:2.15.1.3)) were introduced to specify Unicode code points in ASCII files.
 
 - *Atoms and Variables*  
-  We handle them in one item as they are closely related. The Unicode standard defines a syntax for identifiers in computer languages.^(33[http://www.unicode.org/reports/tr31/](http://www.unicode.org/reports/tr31/)) In this syntax identifiers start with `ID_Start` followed by a sequence of `ID_Continue` codes. Such sequences are handled as a single token in SWI-Prolog. The token is a *variable* iff it starts with an uppercase character or an underscore (`_`). Otherwise it is an atom. Note that many languages do not have the notion of character case. In such languages variables *must* be written as `_name`.
+  We handle them in one item as they are closely related. The Unicode standard defines a syntax for identifiers in computer languages.^(33[http://www.unicode.org/reports/tr31/](http://www.unicode.org/reports/tr31/)) SWI-Prolog uses the `XID_Start` and `XID_Continue` sets: identifiers start with an `XID_Start` code point followed by a sequence of `XID_Continue` code points. As a profile addition, the superscript digits (², ³, ¹, and ⁰--⁹, i.e. U+00B2, U+00B3, U+00B9, U+2070, U+2074..U+2079) and the subscript digits (₀--₉, U+2080..U+2089) are also accepted as `XID_Continue`, allowing variables such as X² and X₁. Such sequences are handled as a single token. The token is a *variable* iff it starts with an underscore (`_`) or with a code point in general category `Lu` (uppercase letter). Otherwise it is an atom. Note that titlecase letters (general category `Lt`, e.g. ǅ) start an atom, not a variable; this differs from earlier releases that used the broader derived `Uppercase` property. Many languages do not have the notion of character case; in such languages variables *must* be written as `_name`.
 
 - *Numbers*  
 
-  Decimal number characters (Nd) are accepted to form numbers, regardless of the Unicode block in which they appear. Currently this is supported for integers, rational numbers (see [section 2.15.1.6](syntax.html#sec:2.15.1.6)) and floating point numbers. In any number, *all* digits must come from the same block, i.e., if the nominator of a rational is uses Indian script, so must the denominator. All special characters such as the sign, rational separator, floating point `.`, and floating point exponent must use their usual ASCII character.
+  In source code ([read_term/2](termrw.html#read_term/2)), numeric literals use ASCII digits `0`--`9` only. Conversion via [atom_number/2](manipatom.html#atom_number/2), [number_codes/2](manipatom.html#number_codes/2), and [number_chars/2](manipatom.html#number_chars/2) additionally accepts any Unicode `Nd` block for integers, rational numbers (see [section 2.15.1.6](syntax.html#sec:2.15.1.6)) and floating point numbers; in a single number all digits must come from the same block, i.e., if the numerator of a rational uses Indian script the denominator must too. The sign, rational separator, floating point `.`, and floating point exponent are always ASCII.
 
 - *White space*  
-  All characters marked as separators (Z\*) in the Unicode tables are handled as layout characters.
+  The layout characters are exactly the Unicode `Pattern_White_Space` set defined by UAX #31: U+0009..U+000D, U+0020, U+0085, U+200E, U+200F, U+2028, and U+2029. NBSP (U+00A0) is deliberately excluded from `Pattern_White_Space`; appearing outside quoted material it raises a stray-character syntax error. Programs that paste from word processors will occasionally encounter NBSP in the wrong place, and reporting it explicitly is preferable to silently treating it as a separator.
 
-- *Control and unassigned characters*  
-  Control and unassigned (C\*) characters produce a syntax error if encountered outside quoted atoms/strings and outside comments. Quoted writing (e.g., [writeq/1](termrw.html#writeq/1)) of an atom or string that contains one of these characters causes the atom or string to be quoted and the control or unassigned characters to be written using an escape sequence. See [section 2.15.1.3](syntax.html#sec:2.15.1.3).
+- *Line termination*  
+  Seven of the Pattern_White_Space code points end a line: U+000A (LF), U+000B (VT), U+000C (FF), U+000D (CR), U+0085 (NEL), U+2028 (LINE SEPARATOR), and U+2029 (PARAGRAPH SEPARATOR). They terminate `%` line comments, drive the source-position line counter, and act as the *newline* for backslash-newline continuation inside quoted strings (`\<EOL>` followed by zero or more blanks is consumed). The same set is exposed to user code through `prolog_end_of_line` in [code_type/2](chartype.html#code_type/2) and [char_type/2](chartype.html#char_type/2); the unprefixed `end_of_line` stays restricted to the four ISO/POSIX control codes (LF, VT, FF, CR), and the eleven-member Pattern_White_Space set itself is `prolog_layout`.
+
+- *Stray characters in source text*  
+  At token-start position (where layout is allowed), a code point that is not in any of the recognised syntax classes --- layout (see above), decimal digit, identifier-start, identifier-continue, solo, bracket open or quote open --- raises `syntax_error(illegal_character)`. This includes the C0 and C1 control range, unassigned and noncharacter code points, surrogates, the `Zs` / `Zl` / `Zp` separator classes that are not in `Pattern_White_Space` (NBSP, OGHAM SPACE MARK, NARROW NO-BREAK SPACE, IDEOGRAPHIC SPACE, ...), `Cf` format characters that are not in `Pattern_White_Space` and not in `Other_ID_Continue` (SOFT HYPHEN, ZERO WIDTH SPACE, ...), enclosing combining marks (`Me`), and other-number characters (`No`, e.g. the vulgar fractions and Roman-numeral form U+00BC..U+00BE) that are not in the explicit super- or subscript-digit profile.
+
+  Non-spacing combining marks (`Mn`, `Mc`) are likewise rejected at token-start position --- they do not start an identifier --- but *are* in `XID_Continue` so they absorb into a preceding identifier (the sequence U+0061 followed by U+0300 COMBINING GRAVE reads as a single-token identifier two code points long).
+
+- *Inside quoted material*  
+  Inside single-quoted atoms (`'...'`), double-quoted strings (`"..."`), back-quoted text (`` `...` ``), Unicode quote pairs (see above), `%` comments, and `/* ... */` comments, *any* Unicode scalar value (U+0000 to U+10FFFF, excluding surrogates which UTF-8 cannot encode) is accepted verbatim. The escape sequences `\uXXXX` and `\UXXXXXXXX` ([section 2.15.1.3](syntax.html#sec:2.15.1.3)) are available for portability and explicit clarity, not as a gate. The single exception is the bidirectional override / isolate range (U+202A..U+202E and U+2066..U+2069), which is rejected as a Trojan-source defense (see [unicode_atoms](flags.html#flag:unicode_atoms)). Quoted writing (e.g. [writeq/1](termrw.html#writeq/1)) of an atom or string that contains a control or zero-width code point causes the atom or string to be quoted and the offending code points to be written using an escape sequence; see [section 2.15.1.3](syntax.html#sec:2.15.1.3).
 
 - *Other characters*  
-  The first 128 characters follow the ISO Prolog standard. Unicode symbol and punctuation characters (general category S\* and P\*) act as glueing symbol characters (i.e., just like `==`: an unquoted sequence of symbol characters are combined into an atom).
+  The first 128 characters follow the ISO Prolog standard. In particular, the ASCII symbol characters glue into compound atoms, giving the familiar operator tokens `==`, `=..`, `:-` and so on. Beyond ASCII, all Unicode symbol characters (general categories `Sm`, `Sc`, `Sk`, `So`) and the connector, dash, and other-punctuation classes (`Pc`, `Pd`, `Po`) are treated as *solo*: each forms an atom on its own and does not glue with adjacent symbols. This is a deliberate change from earlier releases, in which Unicode symbols glued into compound atoms in the same way as ASCII symbols; the change ensures that characters such as ≤, €, and · keep their per-character meaning. Operators built from Unicode symbols must be declared explicitly with [op/3](operators.html#op/3). Numeric characters of other type (general category `No`, e.g. fractions and circled digits) are not part of the identifier set; only the explicitly listed super- and subscript digits extend identifiers.
 
-  Other characters (this is mainly `No`: *a numeric character of other type*) are currently handled as‘solo’.
+- *Brackets (paired delimiters)*  
+  The opening / closing punctuation classes `Ps` and `Pe` form *bracket pairs*: an opening character followed by a *Prolog term* and the matching closing character reads as a unary compound whose functor is the two delimiter characters joined. This is the same shape as `{Term}` becoming `'{}'(Term)`, generalised to the full Unicode `Ps`/`Pe` set (64 pairs, sourced from Unicode `BidiMirroring.txt` filtered by general category). Operators inside brackets are honoured; nesting works as expected. Mismatched or stray closes raise `syntax_error`. The analogy with `{}` is complete: an empty pair, optionally containing only layout, reads as the two-character atom rather than a compound; that atom followed by `(` is a functor; and on output `'<open><close>'(X)` is written as `<open>X<close>` and the bare atom unquoted, both subject to the `brace_terms(true)` write option.
+
+- *Quotes (paired literal-text delimiters)*  
+  The initial / final quotation classes `Pi` and `Pf` form *quote pairs*: an opening character followed by literal text and the matching closing character reads as a unary compound whose functor is the two delimiter characters joined and whose argument is the contained text in the form selected by [double_quotes](flags.html#flag:double_quotes) (string by default; also atom, codes, or chars). The contained text is *not* parsed as a Prolog term; escape sequences (`\n`, `\uXXXX`, ...) are processed as in ASCII quoted strings. For example, with [double_quotes](flags.html#flag:double_quotes) set to `string`, the source text «hello, world» reads as a compound whose functor is the two-character atom «» and whose single argument is the string `"hello, world"`. The quote pairs come from `Pi`/`Pf` entries of `BidiMirroring.txt` (8 pairs) plus the standard left/right curly quote pairs U+2018/U+2019 and U+201C/U+201D, which are absent from `BidiMirroring.txt`. Mismatched closes and unmatched opens raise `syntax_error`.
+
+The features above let source text contain Unicode without escapes:
+
+``` code
+p(X⁰, X) :-                   % Superscript variable profile for
+    q(X⁰, X¹),                % threaded variables.
+    r(X¹, X).
+
+?- atom_number('१२३', N).     % Devanagari Nd via atom_number/2
+N = 123.
+
+?- atom_codes(≤, Cs).         % Unicode symbol stays solo
+Cs = [8804].
+
+?- term_string(T, "⟨a, b⟩"),  % bracket pair (Ps/Pe)
+   display(T).
+⟨⟩(','(a,b))
+T = ⟨a, b⟩.
+
+?- term_string(T, "⟨ ⟩").     % empty pair is the atom
+T = ⟨⟩.
+
+?- term_string(T, "«hello").  % quote pair (Pi/Pf)
+T = '«»'("hello").
+```
 
 #### 2.15.1.10 Singleton variable checking
 

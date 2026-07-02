@@ -225,7 +225,7 @@ In addition to the options above that directly map to PCRE flags the following o
   **term**  
   Parse the captured string as a Prolog term. This is notably practical if you capture a number.
 
-The `capture_type` specifies the default for this pattern. The interface supports a different type for each *named* group using the syntax‘(?`<`name_T`>`...)\`, where `T` is one of `S` (string), `A` (atom), `I` (integer), `F` (float), `N` (number), `T` (term) and `R` (range). In the current implementation `I`, `F` and `N` are synonyms for `T`. Future versions may act different if the parsed value is not of the requested numeric type.
+The `capture_type` specifies the default for this pattern. The interface supports a different type for each *named* group using the syntax‘(?\<name_T\>...)\`, where `T` is one of `S` (string), `A` (atom), `I` (integer), `F` (float), `N` (number), `T` (term) and `R` (range). In the current implementation `I`, `F` and `N` are synonyms for `T`. Future versions may act different if the parsed value is not of the requested numeric type.
 
 Note that [re_compile/3](#re_compile/3) does not support the `Pattern`/Flags form that is supported by [re_match/3](#re_match/3), [re_replace/4](#re_replace/4), etc.; the `Pattern` must be text and all compile options specified in `Options`.
 

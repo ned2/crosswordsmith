@@ -80,7 +80,7 @@ Prolog flag `double_quotes`.
 
 \[det\]**list_rationals**  
 \[det\]**list_rationals**(`+Options`)  
-List rational numbers that appear in clauses. This predicate is used to find portability issues for changing the Prolog flag `rational_syntax` to `natural`, creating rational numbers from `<`integer`>`/`<`nonneg`>`. `Options`:
+List rational numbers that appear in clauses. This predicate is used to find portability issues for changing the Prolog flag `rational_syntax` to `natural`, creating rational numbers from \<integer\>/\<nonneg\>. `Options`:
 
 **module_class**(`+Classes`)  
 Determines the modules classes processed. By default only user code is processed. See prolog_program_clause/2.
@@ -115,3 +115,13 @@ The predicate is dynamic, so you can disable checks with [retract/1](db.html#ret
 ``` code
 retract(check:checker(list_redefined,_)).
 ```
+
+\[det\]**list_confusable_identifiers**  
+\[det\]**list_confusable_identifiers**(`+Options`)  
+Walk every clause in the modules selected by `module_class` (default `[user]`) and warn on atoms whose written form is a possible UTS \#39 spoof. Two issues are reported:
+
+- an atom whose unicode_restriction_level/2 is not safe (worse than `single_script`), reported at the first source location where it occurs;
+
+- groups of distinct atoms with equal unicode_skeleton/2 — two identifiers in the same program that look the same.
+
+  Only atoms whose written form does not require quotes are considered (see’\$needs_quotes’/1). Loaded via the multifile check:checker/2 hook, so a plain [check/0](check.html#check/0) runs this check too.

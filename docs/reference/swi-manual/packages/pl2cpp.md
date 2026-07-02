@@ -112,21 +112,23 @@ This document describes version 2 of the C++ interface. Version 1 is considere
 
 [1.11.9 The class PlCompound](#sec:1.11.9)
 
-[1.11.10 The class PlTerm_tail](#sec:1.11.10)
+[1.11.10 The class PlFunctor](#sec:1.11.10)
 
-[1.11.11 The class PlTermv](#sec:1.11.11)
+[1.11.11 The class PlTerm_tail](#sec:1.11.11)
 
-[1.11.12 The class PlAtom - Supporting Prolog constants](#sec:1.11.12)
+[1.11.12 The class PlTermv](#sec:1.11.12)
 
-[1.11.12.1 Direct comparision to char \*](#sec:1.11.12.1)
+[1.11.13 The class PlAtom - Supporting Prolog constants](#sec:1.11.13)
 
-[1.11.12.2 Direct comparision to PlAtom](#sec:1.11.12.2)
+[1.11.13.1 Direct comparision to char \*](#sec:1.11.13.1)
 
-[1.11.12.3 Extraction of the atom and comparison to PlAtom](#sec:1.11.12.3)
+[1.11.13.2 Direct comparision to PlAtom](#sec:1.11.13.2)
 
-[1.11.12.4 Extraction of the atom and comparison to char \*](#sec:1.11.12.4)
+[1.11.13.3 Extraction of the atom and comparison to PlAtom](#sec:1.11.13.3)
 
-[1.11.13 Classes for the recorded database: PlRecord and PlRecordExternalCopy](#sec:1.11.13)
+[1.11.13.4 Extraction of the atom and comparison to char \*](#sec:1.11.13.4)
+
+[1.11.14 Classes for the recorded database: PlRecord and PlRecordExternalCopy](#sec:1.11.14)
 
 [1.12 The class PlRegister](#sec:1.12)
 
@@ -176,7 +178,7 @@ This document describes version 2 of the C++ interface. Version 1 is considere
 
 Version 1 is in `SWI-cpp.h`; version 2 is in `SWI-cpp2.h`, `SWI-cpp2.cpp`, `SWI-cpp2-plx.h`, and `SWI-cpp2-atommap.h`.
 
-The overall structure of the API has been retained - that is, it is a thin layer of lightweight classes on top of the interface provided by `SWI-Prolog.h`. Based on experience with the API, most of the conversion operators and some of the comparison operators have been removed or deprecated, and replaced by “getter” methods; the overloaded constructors have been replaced by subclasses for the various types. Some changes were also made to ensure that the `[]` operator for `PlTerm` and `PlTermv` doesn't cause unexpected implicit conversions.^(1If there is an implicit conversion operator from `PlTerm` to `term_t` and also to `char*`, then the `[]` operator is ambiguous if `f` is overloaded to accept a `term_t` or `char*` in the code `PlTerm t=...; f(t[0])`.)
+The overall structure of the API has been retained - that is, it is a thin layer of lightweight classes on top of the interface provided by `SWI-Prolog.h`. Based on experience with the API, most of the conversion operators and some of the comparison operators have been removed or deprecated, and replaced by “getter” methods; the overloaded constructors have been replaced by subclasses for the various types. Some changes were also made to ensure that the `[]` operator for `PlTerm` and `PlTermv` doesn't cause unexpected implicit conversions.^(1If there is an implicit conversion operator from `PlTerm` to `term_t` and also to `char*`, then the `[]` operator is ambiguous if `f` is overloaded to accept a `term_t` or `char*` in the code `PlTerm t= ... ; f(t[0])`.)
 
 Prolog errors are now converted to C++ exceptions (which contain the exception term rather being a subclass of `PlTerm` as in version 1), where they can be caught and thrown using the usual C++ mechanisms; and the subclasses that create exceptions have been changed to functions. In addition, an exception type `PlFail` has been added, together with `PlCheckFail`, to allow more compact code by “short circuit” return to Prolog on failure.
 
@@ -184,7 +186,7 @@ A convenience class for creating blobs has been added, so that an existing struc
 
 - `SWI-cpp2.cpp` has been added, containing the implementation of some functions. This is included by default from `SWI-cpp2.h` or can be compiled separately.
 - The constructor **PlTerm()** is restricted to a few unambiguous cases - instead, you should use the appropriate subclass constructors that specify the type (**PlTerm_var()**, **PlTerm_atom()**, etc.).
-- Wrapper functions have been provided for almost all the PL\_\*() functions in `SWI-Prolog.h`, and have the same names with the “PL” replaced by “Plx” .^(2 “Pl” is used throughout the `SWI-cpp2.h` interface, and the “x” is for “eXtended with eXception handling.’) Where appropriate, these check return codes and throw a C++ exception (created from the Prolog error). See [section 1.6.4](#sec:1.6.4). Many of these wrapper functions are also methods in the `PlAtom` and `PlTerm` classes, with the arguments changed from `atom_t` and `term_t` to `PlAtom` and `PlTerm` and in some cases `char*` and `wchar_t*` changed to `std::string` and `std::wstring`. These wrappers are available if you include `SWI-cpp2.h` (they are in a separate `SWI-cpp2-plx.h` file for ease of maintenance).
+- Wrapper functions have been provided for almost all the PL\_\*() functions in `SWI-Prolog.h`, and have the same names with the “PL” replaced by “Plx” .^(2 “Pl” is used throughout the `SWI-cpp2.h` interface, and the “x” is for “eXtended with eXception handling.”) Where appropriate, these check return codes and throw a C++ exception (created from the Prolog error). See [section 1.6.4](#sec:1.6.4). Many of these wrapper functions are also methods in the `PlAtom` and `PlTerm` classes, with the arguments changed from `atom_t` and `term_t` to `PlAtom` and `PlTerm` and in some cases `char*` and `wchar_t*` changed to `std::string` and `std::wstring`. These wrappers are available if you include `SWI-cpp2.h` (they are in a separate `SWI-cpp2-plx.h` file for ease of maintenance).
 - Instead of returning `false` from a foreign predicate to indicate failure, you can throw **PlFail()**. The convenience function [PlCheckFail(rc)](#PlCheckFail()) can be used to throw **PlFail()** if `false` is returned from a function in `SWI-Prolog.h`. If the wrapper functions or class methods are used, Prolog errors result in a C++ `PlException` exception.^(3If a “Plx\_” wrapper is used to call a `SWI-Prolog.h` function, a Prolog error will have already resulted in throwing `PlException`); [PlCheckFail(rc)](#PlCheckFail()) is used to additionally throw `PlFail`, similar to returning `false` from the top-level of a foreign predicate - Prolog will check for an error and call throw/1 if appropriate.
 - The `PlException` class is now a subclass of `std::exception` and encapsulates a Prolog error. Prolog errors are converted into `throw `**`PlException(...)`**. If the user code does not catch the `PlException`, the [PREDICATE()](#PREDICATE()) macro converts the error to a Prolog error upon return to the Prolog caller.
 - The C++ constructors, functions, and methods use the wrapper functions to throw a C++ exception on error (this C++ exception is converted to a Prolog exception when control returns to Prolog).
@@ -195,9 +197,9 @@ A convenience class for creating blobs has been added, so that an existing struc
 - Most constructors, methods, and functions that accept `char*` or `wchar_t*` arguments also accept `std::string` or `std::wstring` arguments. Where possible, encoding information can also be specified.
 - Type-checking methods have been added: [PlTerm::type()](#PlTerm::type()), [PlTerm::is_variable()](#PlTerm::is_variable()), [PlTerm::is_atom()](#PlTerm::is_atom()), etc.
 - `PlString` has been renamed to `PlTerm_string` to make it clear that it's a term that contains a Prolog string.
-- More `PL_...(term_t, ...)` methods have been added to `PlTerm`, and `PL_...(atom_t, ...)` methods have been added to `PlAtom`. Where appropriate, the arguments use `PlTerm`, `PlAtom`, etc. instead of `term_t`, `atom_t`, etc.
+- More `PL_ ... (term_t, ... )` methods have been added to `PlTerm`, and `PL_ ... (atom_t, ... )` methods have been added to `PlAtom`. Where appropriate, the arguments use `PlTerm`, `PlAtom`, etc. instead of `term_t`, `atom_t`, etc.
 - Most functions/methods that return an `int` for true/false now return a C++ `bool`.
-- The wrapped C types fields (`term_t`, `atom_t`, etc.) have been renamed from `handle`, `ref`, etc. to `C_`.^(5This is done by subclassing from `Wrapped<``term_t``>`, `Wrapped<``atom_t``>`, etc., which define the field `C_`, standard constructors, the methods [is_null()](#is_null()), [not_null()](#not_null()), [reset()](#reset()), reset(v), reset_wrapped(v), plus the constant `null`.) This value can be accessed by the **unwrap()** and **unwrap_as_ptr()** methods. There is also a “friend” function **PlUnwrapAsPtr()**.
+- The wrapped C types fields (`term_t`, `atom_t`, etc.) have been renamed from `handle`, `ref`, etc. to `C_`.^(5This is done by subclassing from `Wrapped<``term_t``>`, `Wrapped<``atom_t``>`, etc. defining the standard constructors, the methods [is_null()](#is_null()), [not_null()](#not_null()), [reset()](#reset()), reset(v), reset_wrapped(v), plus the constant `null`.) This C value can be accessed using the **unwrap()** and **unwrap_as_ptr()** methods. There is also a “friend” function **PlUnwrapAsPtr()** that also ensures the return value is set to `WrappedC< ... >.null` as appropriate.
 - A convenience function `PlControl::context_unique_ptr<``ContextType``>()` has been added, to simplify dynamic memory allocation in non-deterministic predicates.
 - A convenience function [PlRewindOnFail()](#PlRewindOnFail()) has been added, to simplify non-deterministic code that does backtracking by checking unification results.
 - `PlStringBuffers` provides a simpler interface for allocating strings on the stack than **PL_STRINGS_MARK()** and **PL_STRINGS_RELEASE()**. However, this is mostly not needed because most functions now use `std::string`: see [section 1.6.9.1](#sec:1.6.9.1).
@@ -312,7 +314,7 @@ PREDICATE(eq, 2)
 
 ## 1.6 Overview
 
-One useful area for exploiting C++ features is type-conversion. Prolog variables are dynamically typed and all information is passed around using the C-interface type `term_t`. In C++, `term_t` is embedded in the *lightweight* class `PlTerm`. Other lightweight classes, such as `PlAtom` for `atom_t` are also provided. Constructors and operator definitions provide flexible operations and integration with important C-types (`char*`, `wchar_t*`, `long` and `double`), plus the C++-types (`std::string`, `std::wstring`). (`char*` and `wchar_t*` are deprecated in the C++ API; `std::string` and `std::wstring` are safer and should be used instead.)
+One useful area for exploiting C++ features is type-conversion. Prolog variables are dynamically typed and all information is passed around using the C-interface type `term_t`. In C++, `term_t` is embedded in the *lightweight* class `PlTerm`. Other lightweight classes, such as `PlAtom` for `atom_t` are also provided (also `PlFunctor`, `PlModule`, `PlTerm`, `PlPredicate`, `PlRecord`, `PlControl`, `PlFrame`, `PlQuery`).^(7The template `WrappedC< ... >` is used for this.) Constructors and operator definitions provide flexible operations and integration with important C-types (`char*`, `wchar_t*`, `long` and `double`), plus the C++-types (`std::string`, `std::wstring`). (`char*` and `wchar_t*` are deprecated in the C++ API; `std::string` and `std::wstring` are safer and should be used instead.)
 
 Another useful area is in handling errors and cleanup. Prolog errors can be modeled using C++ exceptions; and C++'s destructors can be used to clean up error situations, to prevent memory and other resource leaks.
 
@@ -347,7 +349,7 @@ PlTerm_string str("a string");
 
 To help avoid programming errors, some of the classes do not have a default “empty” constructor. For example, if you with to create a `PlAtom` that is uninitialized, you must explicitly use [`PlAtom(PlAtom::null)`](#PlAtom()). This make some code a bit more cumbersome because you can't omit the default constructors in struct initalizers.
 
-Many of the classes have an [as_string()](#as_string()) method^(7This might be changed in future to **to_string()**, to be consistent with **`std::to_string()`**), which is useful for debugging.
+Many of the classes have an [as_string()](#as_string()) method^(8This might be changed in future to **to_string()**, to be consistent with **`std::to_string()`**), which is useful for debugging.
 
 The method names such as **as_int32_t()** were chosen itnstead of **to_int32_t()** because they imply that the representation is already an `int32_t`, and not that the value is converted to a `int32_t`. That is, if the value is a float, `int32_t` will fail with an error rather than (for example) truncating the floating point value to fit into a 32-bit integer.
 
@@ -403,7 +405,7 @@ Subclass of `PlTerm` with constructors for building compound terms. If there is 
 Vector of Prolog terms. See **PL_new_term_refs()**. The `[]` operator is overloaded to access elements in this vector. `PlTermv` is used to build complex terms and provide argument-lists to Prolog goals.
 
 **PlAtom**  
-Wraps `atom_t` in their internal Prolog representation for fast comparison. (For more details on `atom_t`, see [Interface Data Types](https://www.swi-prolog.org/pldoc/man?section=foreigntypes)). For more details of `PlAtom`, see [section 1.11.12.4](#sec:1.11.12.4).
+Wraps `atom_t` in their internal Prolog representation for fast comparison. (For more details on `atom_t`, see [Interface Data Types](https://www.swi-prolog.org/pldoc/man?section=foreigntypes)). For more details of `PlAtom`, see [section 1.11.13.4](#sec:1.11.13.4).
 
 **PlFunctor**  
 A wrapper for `functor_t`, which maps to the internal representation of a name/arity pair.
@@ -475,7 +477,7 @@ The wrapper classes, which subclass `WrappedC``<``...``>`, all define the follow
 - [`reset()`](#reset()) - set the wrapped value to `null`
 - `reset(new_value)` - set the wrapped value from the wrapped type (e.g., **PlTerm::reset(term_t new_value)**)
 - `reset_wrapped(new_value)` - set the wrapped value from the same type (e.g., **PlTerm::reset_wrapped(PlTerm new_value)**)
-- The `bool` operator is disabled - you should use [not_null()](#not_null()) instead.^(8The reason: a `bool` conversion causes ambiguity with [`PlAtom(PlTterm)`](#PlAtom()) and [`PlAtom(atom_t)`](#PlAtom()).)
+- The `bool` operator is disabled - you should use [not_null()](#not_null()) instead.^(9The reason: a `bool` conversion causes ambiguity with [`PlAtom(PlTterm)`](#PlAtom()) and [`PlAtom(atom_t)`](#PlAtom()).)
 
 The method **unwrap()** can be used to access the `C_` field, and can be used wherever a `atom_t` or `term_t` is used. For example, the **PL_scan_options()** example code can be written as follows. Note the use of `&callback.`**`unwrap()`** to pass a pointer to the wrapped `term_t` value.
 
@@ -559,7 +561,7 @@ Creates a term reference for an uninstantiated variable. Typically this term is 
 Creates a term reference from a C `term_t`. This is a lightweight class, so no code is generated.
 
 **PlTerm_integer :: PlTerm_integer**()  
-Subclass of `PlTerm` with constructors for building a term that contains a Prolog integer from a `long`.^(9**PL_put_integer()** takes a `long` argument.)
+Subclass of `PlTerm` with constructors for building a term that contains a Prolog integer from a `long`.^(10**PL_put_integer()** takes a `long` argument.)
 
 **PlTerm_int64 :: PlTerm_int64**()  
 Subclass of `PlTerm` with constructors for building a term that contains a Prolog integer from a `int64_t`.
@@ -1005,10 +1007,10 @@ Wrapper of **PL_get_float_ex()**, throwing an exception if the term isn't a floa
 (Deprecated: should use blob API). Wrapper of **PL_get_pointer_ex()**, throwing an exception if the term isn't a blob.
 
 `const std::string` **PlTerm::get_nchars**(`unsigned int flags`)  
-Calls **PL_get_nchars(..., flags)** and converts the result to a `std::string`. The flags `BUF_MALLOC`, `BUF_STACK`, and `BUF_ALLOW_STACK` are ignored and replaced by `BUF_DISCARDABLE`. The call to **PL_get_nchars()** is wrapped in a `PlStringBuffers` so that any generated string is freed when the result is returned by copying to a `std::string`.
+Calls **PL_get_nchars(... , flags)** and converts the result to a `std::string`. The flags `BUF_MALLOC`, `BUF_STACK`, and `BUF_ALLOW_STACK` are ignored and replaced by `BUF_DISCARDABLE`. The call to **PL_get_nchars()** is wrapped in a `PlStringBuffers` so that any generated string is freed when the result is returned by copying to a `std::string`.
 
 `const std::wstring` **PlTerm::get_wchars**(`unsigned int flags`)  
-Calls **PL_get_wchars(..., flags)** and converts the result to a `std::wstring`. The flags `BUF_MALLOC`, `BUF_STACK`, and `BUF_ALLOW_STACK` are ignored and replaced by `BUF_DISCARDABLE`.
+Calls **PL_get_wchars(... , flags)** and converts the result to a `std::wstring`. The flags `BUF_MALLOC`, `BUF_STACK`, and `BUF_ALLOW_STACK` are ignored and replaced by `BUF_DISCARDABLE`.
 
 `PlAtom` **PlTerm::as_atom**()  
 Wrapper of **PL_get_atom_ex()**, throwing an exception if the term is not an atom.
@@ -1043,20 +1045,20 @@ Wrapper of **PL_unify()**. Throws an exception on error and returns `false` if u
 `bool` **PlTerm::unify_atom**(`PlAtom a`)  
 Wrapper of **PL_unify_atom()**, throwing an exception on error.
 
-`bool` **PlTerm::unify_chars**(`int flags, size_t len, const char *s`)  
+`bool` **PlTerm::unify_chars**(`int flags, size_t len, const char *s, PlEncoding rep=ENC_INPUT`)  
+Wrapper of **PL_unify_chars()**, throwing an exception on error. `rep` is OR-ed into `flags` (see [section 1.8.2](#sec:1.8.2)).
+
+`bool` **PlTerm::unify_chars**(`int flags, const std::string& s, PlEncoding rep=ENC_INPUT`)  
 Wrapper of **PL_unify_chars()**, throwing an exception on error.
 
-`bool` **PlTerm::unify_chars**(`int flags, const std::string& s`)  
-Wrapper of **PL_unify_chars()**, throwing an exception on error.
-
-`bool` **PlTerm::unify_atom**(`const char* v`)  
-Wrapper of **PL_unify_atom_chars()**, throwing an exception on error.
+`bool` **PlTerm::unify_atom**(`const char* v, PlEncoding rep=ENC_INPUT`)  
+Wrapper of **PL_unify_chars()** with `PL_ATOM`, throwing an exception on error.
 
 `bool` **PlTerm::unify_atom**(`const wchar_t* v`)  
 Wrapper of **PL_unify_wchars()**, throwing an exception on error.
 
-`bool` **PlTerm::unify_atom**(`const std::string& v`)  
-Wrapper of **PL_unify_atom_nchars()**, throwing an exception on error.
+`bool` **PlTerm::unify_atom**(`const std::string& v, PlEncoding rep=ENC_INPUT`)  
+Wrapper of **PL_unify_chars()** with `PL_ATOM`, throwing an exception on error.
 
 `bool` **PlTerm::unify_atom**(`const std::wstring& v`)  
 Wrapper of **PL_unify_wchars()**, throwing an exception on error. cfunctionboolPlTerm::unify_integerbool v Wrapper of **PL_unify_int64()**, throwing an exception on error.
@@ -1097,8 +1099,8 @@ Wrapper of **PL_unify_uint64()**, throwing an exception on error.
 `bool` **PlTerm::unify_float**(`double v`)  
 Wrapper of **PL_unify_float()**, throwing an exception on error.
 
-`bool` **PlTerm::unify_string**(`const std::string& v`)  
-Wrapper of **PL_unify_string_nchars()**, throwing an exception on error.
+`bool` **PlTerm::unify_string**(`const std::string& v, PlEncoding rep=ENC_INPUT`)  
+Wrapper of **PL_unify_chars()** with `PL_STRING`, throwing an exception on error.
 
 `bool` **PlTerm::unify_string**(`const std::wstring& v`)  
 Wrapper of **PL_unify_wchars()**, throwing an exception on error.
@@ -1160,7 +1162,7 @@ Wrapper for **PL_call(unwrap())**; `module` defaults to “null” . Throws a C+
 
 Normally all term references in a *scope* are discarded together or all term references created after a specific one are reclaimed using **PlTerm::reset_term_refs()**. A `PlTermScoped` object is the same as a `PlTerm` object except that **PL_free_term_ref()** is called on its wrapped term when the object goes out of scope. This shrinks the current foreign frame if the term is the last one in the frame and otherwise it marks it for reuse.
 
-Here is an example, where `PlTermScoped` is inside a for-loop. If `PlTerm` were used instead, the stack would grow by the number of items in the array; `PlTermScoped` ensures that stack doesn't grow.^(10Assuming that **unify_atom_list()** is called from a predicate implementation, if `PlTerm` were used instead of `PlTermCopy`, all the created terms would be discarded when the Prolog stack frame is unwound; the use of `PlTermScoped` reuses the terms in that stack frame.) A slightly more effiicient way of preventing the Prolog stack from growing is to use [PlTerm::put_term()](#PlTerm::put_term()) to reuse a term reference; but that is more difficult to understand and also more error-prone.
+Here is an example, where `PlTermScoped` is inside a for-loop. If `PlTerm` were used instead, the stack would grow by the number of items in the array; `PlTermScoped` ensures that stack doesn't grow.^(11Assuming that **unify_atom_list()** is called from a predicate implementation, if `PlTerm` were used instead of `PlTermCopy`, all the created terms would be discarded when the Prolog stack frame is unwound; the use of `PlTermScoped` reuses the terms in that stack frame.) A slightly more effiicient way of preventing the Prolog stack from growing is to use [PlTerm::put_term()](#PlTerm::put_term()) to reuse a term reference; but that is more difficult to understand and also more error-prone.
 
 ``` code
 bool
@@ -1175,7 +1177,7 @@ unify_atom_list(const std::vector<std::string>& array, PlTerm list)
 }
 ```
 
-The design of `PlTermScoped` is modeled on `std::unique_ptr`^(11`unique_ptr` was originally called `scoped_ptr` in the Boost libraries, but the name was changed to contrast with `std::shared_ptr`, which is reference-counted.) and uses *move semantics* to ensure safety.^(12*Move semantics* are a relatively new feature in C++ and can be a bit difficult to understand. Roughly speaking, a *move* is a copies the object and then calls its destructor, so that any further use of the object is an error. If an object defines move methods or constructors, it can optimize this operation, and also can catch certain kinds of errors at compile time.)
+The design of `PlTermScoped` is modeled on `std::unique_ptr`^(12`unique_ptr` was originally called `scoped_ptr` in the Boost libraries, but the name was changed to contrast with `std::shared_ptr`, which is reference-counted.) and uses *move semantics* to ensure safety.^(13*Move semantics* are a relatively new feature in C++ and can be a bit difficult to understand. Roughly speaking, a *move* is a copies the object and then calls its destructor, so that any further use of the object is an error. If an object defines move methods or constructors, it can optimize this operation, and also can catch certain kinds of errors at compile time.)
 
 A `PlTermScoped` object can be created either with or without a wrapped term - the [PlTermScoped::reset()](#PlTermScoped::reset()) method sets (or nulls) the wrapped term. A `PlTermScoped` object cannot be copied or passed as a value to a function; the [PlTermScoped::release()](#PlTermScoped::release()) method returns the wrapped term and resets the `PlTermScoped` object so that any further use of the `PlTermScoped` object is an error.
 
@@ -1262,8 +1264,8 @@ The blob API for C++ is not completely general, but is designed to make common u
 - The blob is created by a predicate that makes the foreign object and stores it (or a pointer to it) within the blob - for example, making a connection to a database or compiling a regular expression into an internal form. This “create” predicate uses `std::unique_ptr` to manage the blob (that is, the blob is created using the **new** operator and is not created on the stack).
 - Optionally, there can be a predicate that deletes the foreign object, such as a file or database connection close.
 - The blob can be garbage collected, althought this might require calling the predicate that deletes the foreign object first. There is no provision for handling “weak references” (e.g., a separate lookup table or cache for the foreign objects).
-- The blob must have a default constructor that sets all the fields to appropriate initial values.^(13This is used by the **load()** callback; the default implementation for a C++ blob is to throw an error.)
-- The blob's constructor throws an exception and cleans up any resources if it cannot create the blob.^(14This is not a strong requirement, but the code is simpler if this style is used.)
+- The blob must have a default constructor that sets all the fields to appropriate initial values.^(14This is used by the **load()** callback; the default implementation for a C++ blob is to throw an error.)
+- The blob's constructor throws an exception and cleans up any resources if it cannot create the blob.^(15This is not a strong requirement, but the code is simpler if this style is used.)
 - The foreign object can be deleted when the blob is deleted. That is, the foreign object is created using the `new` operator and passes ownership to the blob. More complex behavior is possible, using **PlAtom::register_ref()** and **PlAtom::unregister_ref()**.
 - The blob's lifetime is controlled by Prolog and its destructor is invoked when the blob is garbage collected. Optionally, the predicate that deletes the foreign object deletes the foreign object and the Prolog garbage collector only frees the blob.
 
@@ -1279,11 +1281,11 @@ For the `PL_blob_t` structure, the C++ API provides the **PL_BLOB_DEFINITION(blo
 
 For the data, which is subclassed from `PlBlob`, the programmer defines the various fields, a constructor that initializes them, and a destructor. Optionally, override methods can be defined for one of more of the methods [PlBlob::compare_fields()](#PlBlob::compare_fields()), [PlBlob::write_fields()](#PlBlob::write_fields()), **PlBlob::save()**, **PlBlob::load()**, **PlBlob::pre_delete()**. More details on these are given later.
 
-There is a mismatch between how Prolog does memory management (and garbage collection) and how C++ does it. In particular, Prolog assumes that cleanup will be done in the **release()** callback function associated with the blob whereas C++ typically does cleanup in a destructor. The blob interface gets around this mismatch by providing a default **release()** callback that assumes that the blob was created using `PL_BLOB_NOCOPY` and manages memory using a `std::unique_ptr`.^(15This **release()** function has nothing to do with **std::unique_ptr::release()**.) More details on this are in [section 1.6.8.1](#sec:1.6.8.1).
+There is a mismatch between how Prolog does memory management (and garbage collection) and how C++ does it. In particular, Prolog assumes that cleanup will be done in the **release()** callback function associated with the blob whereas C++ typically does cleanup in a destructor. The blob interface gets around this mismatch by providing a default **release()** callback that assumes that the blob was created using `PL_BLOB_NOCOPY` and manages memory using a `std::unique_ptr`.^(16This **release()** function has nothing to do with **std::unique_ptr::release()**.) More details on this are in [section 1.6.8.1](#sec:1.6.8.1).
 
 The C blob interface has a flag that determines how memory is managed: `PL_BLOB_NOCOPY`. The **PL_BLOB_DEFINITION()** macro sets this, so Prolog will call the C++ destructor when the blob is garbage collected. (This call is done indirectly, using a callback that is registeered with Prolog.)
 
-The C++ API for blobs only supports blobs with `PL_BLOB_NOCOPY`.^(16The API can probably also support blobs with `PL_BLOB_UNIQUE`, but there seems to be little point in setting this flag for non-text blobs.)
+The C++ API for blobs only supports blobs with `PL_BLOB_NOCOPY`.^(17The API can probably also support blobs with `PL_BLOB_UNIQUE`, but there seems to be little point in setting this flag for non-text blobs.)
 
 #### 1.6.8.1 A review of C++ features used by the API
 
@@ -1297,7 +1299,7 @@ When a C++ object is created, its memory is allocated (either on the stack or on
 
 When the object is deleted (either by stack pop or the **delete** operator), the destructors are called in the reverse order.
 
-There are special forms of the constructor for copying, moving, and assigning. The “copy constructor” has a signature `Type(const Type&` and is used when an object is created by copying, for example by assignment or passing the object on the stack in a function call. The “move constructor” has the signature `Type(Type&&` and is equivalent to the copy constructor for the new object followed by the destructor for the old object. (Assignment is usually allowed to default but can also be specified).
+There are special forms of the constructor for copying, moving, and assigning. The “copy constructor” has a signature `Type(const Type&)` and is used when an object is created by copying, for example by assignment or passing the object on the stack in a function call. The “move constructor” has the signature `Type(Type&&)` and is equivalent to the copy constructor for the new object followed by the destructor for the old object. (Assignment is usually allowed to default but can also be specified).
 
 Currently, the copy and move constructors are not used, so it is best to explicitly mark them as not existing:
 
@@ -1308,11 +1310,11 @@ Type& operator =(const Type&) = delete;
 Type& operator =(Type&&) = delete;
 ```
 
-A constructor may throw an exception - good programming style is to not leave a “half constructed” object but to throw an exception. Destructors are not allowed to throw exceptions,^(17because the destructor might be invoked by another exception, and C++ has no mechanism for dealing with a second exception.) which complicates the API somewhat.
+A constructor may throw an exception - good programming style is to not leave a “half constructed” object but to throw an exception. Destructors are not allowed to throw exceptions,^(18because the destructor might be invoked by another exception, and C++ has no mechanism for dealing with a second exception.) which complicates the API somewhat.
 
 More details about constructors and destructors can be found in the FAQs for [constructors](https://isocpp.org/wiki/faq/ctors) and [destructors](https://isocpp.org/wiki/faq/dtors).
 
-Many classes or types have a constructor that simply assigns a default value (e.g., 0 for `int`) and the destructor does nothing. In particular, the destructor for a pointer does nothing, which can lead to memory leaks. To avoid memory leaks, the smart pointer `std::unique_ptr`^(18The name “unique” is to distinguish this from a “shared” pointer. A shared pointer can share ownership with multiple pointers and the pointed-to object is deleted only when all pointers to the object have been deleted. A unique pointer allows only a single pointer, so the pointed-to object is deleted when the unique pointer is deleted.) can be used, whose destructor deletes its managed object. Note that `std::unique_ptr` does not enforce single ownership; it merely makes single ownership easy to manage and it detects most common mistakes, for example by not having copy constructor or assignment operator.
+Many classes or types have a constructor that simply assigns a default value (e.g., 0 for `int`) and the destructor does nothing. In particular, the destructor for a pointer does nothing, which can lead to memory leaks. To avoid memory leaks, the smart pointer `std::unique_ptr`^(19The name “unique” is to distinguish this from a “shared” pointer. A shared pointer can share ownership with multiple pointers and the pointed-to object is deleted only when all pointers to the object have been deleted. A unique pointer allows only a single pointer, so the pointed-to object is deleted when the unique pointer is deleted.) can be used, whose destructor deletes its managed object. Note that `std::unique_ptr` does not enforce single ownership; it merely makes single ownership easy to manage and it detects most common mistakes, for example by not having copy constructor or assignment operator.
 
 For example, in the following, the implicit destructor for `p` does nothing, so there will be a memory leak when a `Ex1` object is deleted:
 
@@ -1361,7 +1363,7 @@ Ths could fixed by adding `delete data` before throwing the `runtime_error`; but
 
 ``` code
 MyData *foo(int some_value) {
-  std::unique_ptr<MyData> data(new MyData(...));
+  auto data = std::make_unique<MyData>(...);
   data->some_field = some_value;
   if (! data->validate() )
     throw std::runtime_error("Failed to validate data");
@@ -1369,17 +1371,17 @@ MyData *foo(int some_value) {
 }
 ```
 
-The destructor for `std::unique_ptr` will delete the data when it goes out of scope (in this case, by return or throw) unless the **std::unique_ptr::release()** method is called.^(19The call to `unique_ptr<``MYData``>::release` doesn't call the destructor; it can be called using **std::unique_ptr::get_deleter()**.)
+The destructor for `std::unique_ptr` will delete the data when it goes out of scope (in this case, by return or throw) unless the **std::unique_ptr::release()** method is called.^(20The call to `unique_ptr<``MYData``>::release` doesn't call the destructor; it can be called using **std::unique_ptr::get_deleter()**.)
 
 In the code above, the `throw` will cause the `unique_ptr`’s destructor to be called, which will free the data; but the data will not be freed in the `return` statement because of the **unique_ptr::release()**. Using this style, a pointer to data on the heap can be managed as easily as data on the stack. The current C++ API for blobs takes advantage of this - in particular, there are two methods for unifying a blob:
 
 - [PlTerm::unify_blob(const PlBlob\* blob)](#PlTerm::unify_blob()) - does no memory management
-- [PlTerm::unify_blob(std::unique_std\<`PlBlob`\>\* blob)](#PlTerm::unify_blob()) - if unification fails or raises an error, the memory is automatically freed; otherwise the memory's ownership is transferred to Prolog, which may garbage collect the blob by calling the blob's destructor. Note that this uses a pointer to the pointer, so that [PlTerm::unify_blob()](#PlTerm::unify_blob()) can modify it.
+- [PlTerm::unify_blob(std::unique_ptr\<`MyBlob`\>\* blob)](#PlTerm::unify_blob()) - a function template, where `MyBlob` must derive from `PlBlob`. If unification fails or raises an error, the memory is automatically freed; otherwise the memory's ownership is transferred to Prolog, which may garbage collect the blob by calling the blob's destructor. Note that this uses a pointer to the pointer, so that [PlTerm::unify_blob()](#PlTerm::unify_blob()) can modify it.
 
 `unique_ptr` allows specifying the delete function. For example, the following can be used to manage memory created with **PL_malloc()**:
 
 ``` code
-  std::unique_ptr<void, decltype(&PL_free)> ptr(PL_malloc(...), &PL_free);
+  std::unique_ptr<void, decltype(&PL_free)> ptr(PL_malloc(\ldots), &PL_free);
 ```
 
 or, when memory is allocated within a PL\_\*() function (in this case, using the Plx\_\*() wrapper for **PL_get_nchars()**):
@@ -1391,15 +1393,16 @@ or, when memory is allocated within a PL\_\*() function (in this case, using the
   std::unique_ptr<char, decltype(&PL_free)> _str(str, &PL_free);
 ```
 
-The current C++ API assumes that the C++ blob is allocated on the heap. If the programmer wishes to use the stack, they can use `std::unique_ptr` to automatically delete the object if an error is thrown - [PlTerm::unify_blob(std::unique_ptr\<`PlBlob`\>\*)](#PlTerm::unify_blob()) prevents the automatic deletion if unification succeeds.
+The current C++ API assumes that the C++ blob is allocated on the heap. If the programmer wishes to use the stack, they can use `std::unique_ptr` to automatically delete the object if an error is thrown - [PlTerm::unify_blob(std::unique_ptr\<`MyBlob`\>\*)](#PlTerm::unify_blob()) prevents automatic deletion if unification succeeds (where `MyBlob` derives from `PlBlob`).
 
 A `unique_ptr` needs a bit of care when it is passed as an argument. The **unique_ptr::get()** method can be used to get the “raw” pointer; the **delete** must not be used with this pointer. Or, the **unique_ptr::release()** method can be used to transfer ownership without calling the object's destructor.
 
 Using **unique_ptr::release()** is a bit incovenient, so instead the `unique_ptr` can be passed as a pointer (or a reference). This does not create a new scope, so the pointer must be assigned to a local variable. For example, the code for **unify_blob()** is something like:
 
 ``` code
-bool PlTerm::unify_blob(std::unique_ptr<PlBlob>* b) const
-{ std::unique_ptr<PlBlob> blob(std::move(*b));
+template<typename MyBlob>
+bool PlTerm::unify_blob(std::unique_ptr<MyBlob>* b) const
+{ std::unique_ptr<MyBlob> blob(std::move(*b));
   if ( !unify_blob(blob.get()) )
     return false;
   (void)blob.release();
@@ -1426,7 +1429,7 @@ If the call to [PlTerm::unify_blob()](#PlTerm::unify_blob()) fails or throws an 
 
 #### 1.6.8.2 How to define a blob using C++
 
-TL;DR: Use **PL_BLOB_DEFINITION()** to define the blob with the flag `PL_BLOB_NOCOPY` and the default `PlBlob` wrappers; define your struct as a subclass of `PlBlob` with no copy constructor, move constructor, or assignment operator; create a blob using `std::unique_ptr<``PlBlob``>(new ...)`, call [PlTerm::unify_blob()](#PlTerm::unify_blob()). Optionally, define one or more of: **compare_fields()**, **write_fields()**, **save()**, **load()** methods (these are described after the sample code).
+TL;DR: Use **PL_BLOB_DEFINITION()** to define the blob with the flag `PL_BLOB_NOCOPY` and the default `PlBlob` wrappers; define your struct as a subclass of `PlBlob` with no copy constructor, move constructor, or assignment operator; create a blob using `std::make_unique<``MyBlob``>( ... )`, call [PlTerm::unify_blob()](#PlTerm::unify_blob()). Optionally, define one or more of: **compare_fields()**, **write_fields()**, **save()**, **load()** methods (these are described after the sample code).
 
 #### 1.6.8.3 The life of a PlBlob
 
@@ -1437,7 +1440,7 @@ A blob is typically created by calling a predicate that does the following:
 - Creates the blob using
 
   ``` code
-  auto ref = std::unique_ptr<PlBlob>(new MyBlob>(...))}
+  auto ref = std::make_unique<MyBlob>(...);
         
   ```
 
@@ -1455,16 +1458,7 @@ A blob is typically created by calling a predicate that does the following:
         
   ```
 
-  If unification fails or throws an exception, the object is automatically freed and its destructor is called.
-
-  If **make_unique()** was used to create the pointer, you need to call [PlTerm::unify_blob()](#PlTerm::unify_blob()) as follows, because C++'s type inferencing can't figure out that this is a covariant type:
-
-  ``` code
-  std::unique_ptr<PlBlob> refb(ref.release());
-  // refb now "owns" the ptr - from here on, ref == nullptr
-  return A2.unify_blob(&refb);
-        
-  ```
+  If unification fails or throws an exception, the object is automatically freed and its destructor is called. [PlTerm::unify_blob()](#PlTerm::unify_blob()) is a function template, so passing a `std::unique_ptr<``MyBlob``>*` works directly; no upcast to `std::unique_ptr<``PlBlob``>*` is needed.
 
   If unification succeeds, Prolog calls:
 
@@ -1598,7 +1592,7 @@ PREDICATE(create_my_blob, 2)
   // deleted if an error happens - the auto-deletion is disabled by
   // ref.release() inside unify_blob() before returning success.
 
-  auto ref = std::unique_ptr<PlBlob>(new MyBlob(A1.as_atom().as_string()));
+  auto ref = std::make_unique<MyBlob>(A1.as_atom().as_string());
   return A2.unify_blob(&ref);
 }
 
@@ -1626,7 +1620,7 @@ PREDICATE(portray_my_blob, 2)
 
 #### 1.6.8.6 Discussion of the sample PlBlob code
 
-- **PL_BLOB_DEFINITION(MyBlob, "my_blob")** creates a `PL_blob_t` structure with the wrapper functions and flags set to `PL_BLOB_NOCOPY`. It should be declared outside the `PlBlob` class and should not be marked `const` - otherwise, a runtime error can occur.^(20The cause of the runtime error is not clear, but possibly has to do with the order of initializing globals, which is unspecified for C++.)
+- **PL_BLOB_DEFINITION(MyBlob, "my_blob")** creates a `PL_blob_t` structure with the wrapper functions and flags set to `PL_BLOB_NOCOPY`. It should be declared outside the `PlBlob` class and should not be marked `const` - otherwise, a runtime error can occur.^(21The cause of the runtime error is not clear, but possibly has to do with the order of initializing globals, which is unspecified for C++.)
 - The `MyBlob` struct is a subclass of `PlBlob`. See below for a discussion of the default behaviors.
   - `MyBlob` contains a pointer to a `MyConnection` object and keeps a copy of the connection's name. The `MyConnection` object is handled by a `std::unique_ptr` smart pointer, so that it is automatically freed when the `MyBlob` object is freed.
 
@@ -1646,7 +1640,7 @@ PREDICATE(portray_my_blob, 2)
 
   - The destructor **MyBlob()** is called when the blob is released by the garbage collector and in turn calls the **MyBlob::close()**, throwing away the result. If there is an error, a message is printed because there is no other way report the error. For this reason, it is preferred that the program explicitly calls the close_my_blob/1 predicate, which can raise an error. One way of doing this is by using the at_halt/1 hook.
 
-  - The **MyBlob::close()** method is called by either the destructor or by the close_my_blob/1 predicate. Because it can be called by the garbage collector, which does not provide the usual environment and which may also be in a different thread, the only Prolog function that can be called is **PlAtom::unregister_ref()**; and the **MyBlob::close()** method must not throw an exception.^(21It isn't enough to just catch exceptions; for example, if the code throws **`PlUnknownError("...")`**, that will try to create a Prolog term, which will crash because the environment for creating terms is not available.) Because there is no mechanism for reporting an error, the destructor prints a message on failure (calling **PL_warning()** would cause a crash).
+  - The **MyBlob::close()** method is called by either the destructor or by the close_my_blob/1 predicate. Because it can be called by the garbage collector, which does not provide the usual environment and which may also be in a different thread, the only Prolog function that can be called is **PlAtom::unregister_ref()**; and the **MyBlob::close()** method must not throw an exception.^(22It isn't enough to just catch exceptions; for example, if the code throws **`PlUnknownError(" ... ")`**, that will try to create a Prolog term, which will crash because the environment for creating terms is not available.) Because there is no mechanism for reporting an error, the destructor prints a message on failure (calling **PL_warning()** would cause a crash).
 
     **PlBlob::close()** calls **MyConnection::close()** and then frees the object. Error handling is left to the caller because of the possibility that this is called in the context of garbage collection. It is not necessary to free the `MyConnection` object here - if it is not freed, the `std::unique_ptr<``MyConnection``>`’s destructor would free it.
 
@@ -1662,22 +1656,13 @@ PREDICATE(portray_my_blob, 2)
 
     If anything in [PlBlob::write_fields()](#PlBlob::write_fields()) throws a C++ exception, it will be caught by the calling PlBlobV\<`PlBlob`\>::[write()](#write()) and handled appropriately.
 
-  - **PlBlob::save()** and **PlBlob::load()** are not defined, so the defaults are used - they throw an error on an attempt to save the blob (e.g., by using qsave_program/\[1,2\]).^(22The C API defaults would save the internal form of the blob, which is probably not what you want, so the C++ API throws an error as its default.)
+  - **PlBlob::save()** and **PlBlob::load()** are not defined, so the defaults are used - they throw an error on an attempt to save the blob (e.g., by using qsave_program/\[1,2\]).^(23The C API defaults would save the internal form of the blob, which is probably not what you want, so the C++ API throws an error as its default.)
 - create_my_blob/2 predicate:
-  - `std::unique_ptr<``PlBlob``>()` creates a MyBlob that is deleted when it goes out of scope. If an exception occurs between the creation of the blob or if the call to **unify_blob()** fails, the pointer will be automatically freed (and the `MyBlob` destructor will be called).
+  - `std::make_unique<``MyBlob``>()` creates a MyBlob that is deleted when it goes out of scope. If an exception occurs between the creation of the blob or if the call to **unify_blob()** fails, the pointer will be automatically freed (and the `MyBlob` destructor will be called).
 
-    [PlTerm::unify_blob()](#PlTerm::unify_blob()) is called with a pointer to a `std::unique_ptr`, which takes ownership of the object by calling std::unique_ptr\<`PlBlob`\>::**release()** and passes the pointer to Prolog, which then owns it. This also sets `ref` to `nullptr`, so any attempt to use `ref` after a call to [PlTerm::unify_blob()](#PlTerm::unify_blob()) will be an error.
+    [PlTerm::unify_blob()](#PlTerm::unify_blob()) is a function template; it is called with a pointer to a `std::unique_ptr<``MyBlob``>`, takes ownership of the object by calling **std::unique_ptr::release()** and passes the pointer to Prolog, which then owns it. This also sets `ref` to `nullptr`, so any attempt to use `ref` after a call to [PlTerm::unify_blob()](#PlTerm::unify_blob()) will be an error.
 
-    If you wish to create a `MyBlob` object instead of a `PlBlob` object, a slightly different form is used:
-
-    ``` code
-    auto ref = std::make_unique<MyBlob>(...);
-      ...
-    std::unique_ptr<PlBlob> refb(ref.release());
-    PlCheckFail(A2.unify_blob(&refb));
-    return true;
-          
-    ```
+    `std::make_unique<``MyBlob``>( ... )` can also be used to create `ref`; it can be passed to [PlTerm::unify_blob()](#PlTerm::unify_blob()) directly.
 - close_my_blob/1 predicate:
   - The argument is turned into a `MyBlob` pointer using the PlBlobV\<`MyBlob`\>::**cast_ex()** function, which will throw a `type_error` if the argument isn't a blob of the expected type.
   - The **MyBlob::close()** method is called - if it fails, a Prolog error is thrown.
@@ -1794,7 +1779,7 @@ struct MyFileBlob : public PlBlob
 };
 
 PREDICATE(my_file_open, 4)
-{ auto ref = std::unique_ptr<PlBlob>(new MyFileBlob(A2, A3, A4));
+{ auto ref = std::make_unique<MyFileBlob>(A2, A3, A4);
   return A1.unify_blob(&ref);
 }
 
@@ -1833,9 +1818,9 @@ The C++ API remains a work in progress.
 
 SWI-Prolog string handling has evolved over time. The functions that create atoms or strings using `char*` or `wchar_t*` are “old school” ; similarly with functions that get the string as `char*` or `wchar_t*`. The PL_get,unify,put\_\[nw\]**chars()** family is more friendly when it comes to different input, output, encoding and exception handling.
 
-Roughly, the modern API is **PL_get_nchars()**, **PL_unify_chars()** and **PL_put_chars()** on terms. There is only half of the API for atoms as **PL_new_atom_mbchars()** and **PL_atom_mbchars()**, which take an encoding, length and `char*`.
+Roughly, the modern API is **PL_get_nchars()**, **PL_unify_chars()** and **PL_put_chars()** on terms, and **PL_new_atom_mbchars()** and **PL_atom_mbchars()** for atoms, all of which take an encoding, length and `char*`. The C++ API routes its `std::string` and `char*` text through these, selected by a `PlEncoding` argument (see [section 1.8.2](#sec:1.8.2)).
 
-For return values, `char*` is dangerous because it can point to local or stack memory. For this reason, wherever possible, the C++ API returns a `std::string`, which contains a copy of the string. This can be slightly less efficient that returning a `char*`, but it avoids some subtle and pervasive bugs that even address sanitizers can't detect.^(23If we wish to minimize the overhead of passing strings, this can be done by passing in a pointer to a string rather than returning a string value; but this is more cumbersome and modern compilers can often optimize the code to avoid copying the return value.)
+For return values, `char*` is dangerous because it can point to local or stack memory. For this reason, wherever possible, the C++ API returns a `std::string`, which contains a copy of the string. This can be slightly less efficient that returning a `char*`, but it avoids some subtle and pervasive bugs that even address sanitizers can't detect.^(24If we wish to minimize the overhead of passing strings, this can be done by passing in a pointer to a string rather than returning a string value; but this is more cumbersome and modern compilers can often optimize the code to avoid copying the return value.)
 
 Some functions require allocating string space using **PL_STRINGS_MARK()**. The `PlStringBuffers` class provides a *RAII* wrapper that ensures the matching **PL_STRINGS_RELEASE()** is done. The `PlAtom` or `PlTerm` member functions that need the string buffer use `PlStringBuffers`, and then copy the resulting string to a `std::string` value.
 
@@ -1932,7 +1917,7 @@ If you don't use these, and want to throw an exception if there's an error, the 
 
 #### 1.6.9.3 Object handles
 
-Many of the “opaque object handles” , such as `atom_t`, `term_t`, and `functor_t` are integers.^(24Typically `uintptr_t` values, which the C standard defines as “an unsigned integer type with the property that any valid pointer to void can be converted to this type, then converted back to pointer to void, and the result will compare equal to the original pointer.’) As such, there is no compile-time detection of passing the wrong handle to a function.
+Many of the “opaque object handles” , such as `atom_t`, `term_t`, and `functor_t` are integers.^(25Typically `uintptr_t` values, which the C standard defines as “an unsigned integer type with the property that any valid pointer to void can be converted to this type, then converted back to pointer to void, and the result will compare equal to the original pointer.”) As such, there is no compile-time detection of passing the wrong handle to a function.
 
 This leads to a problem with classes such as `PlTerm` - C++ overloading cannot be used to distinguish, for example, creating a term from an atom versus creating a term from an integer. There are a number of possible solutions, including:
 
@@ -1967,7 +1952,7 @@ PREDICATE(hello, 1)
 }
 ```
 
-The arguments to [PREDICATE()](#PREDICATE()) are the name and arity of the predicate. The macros A\<`n`\> provide access to the predicate arguments by position and are of the type `PlTerm`. The C or C++ string for a `PlTerm` can be extracted using [as_string()](#as_string()), or [as_wstring()](#as_wstring()) methods;^(25The C-string values can be extracted from `std::string` by using **c_str()**, but you must be careful to not return a pointer to a local/stack value, so this isn't recommende.) and similar access methods provide an easy type-conversion for most Prolog data-types, using the output of write/1 otherwise:
+The arguments to [PREDICATE()](#PREDICATE()) are the name and arity of the predicate. The macros A\<`n`\> provide access to the predicate arguments by position and are of the type `PlTerm`. The C or C++ string for a `PlTerm` can be extracted using [as_string()](#as_string()), or [as_wstring()](#as_wstring()) methods;^(26The C-string values can be extracted from `std::string` by using **c_str()**, but you must be careful to not return a pointer to a local/stack value, so this isn't recommende.) and similar access methods provide an easy type-conversion for most Prolog data-types, using the output of write/1 otherwise:
 
 ``` code
 ?- hello(world).
@@ -2025,7 +2010,7 @@ X = 3.
 
 This example is a bit harder. The predicate average/3 is defined to take the template average(+Var, :Goal, -Average) , where `Goal` binds `Var` and will unify `Average` with average of the (integer) results.
 
-`PlQuery` takes the name of a predicate and the goal-argument vector as arguments. From this information it deduces the arity and glocates the predicate. The method [PlQuery::next_solution()](#PlQuery::next_solution()) yields `true` if there was a solution and `false` otherwise (other values are possible if the flag `PL_Q_EXT_STATUS` was specified in the constructor. If the goal yields a Prolog exception, you can handle this and convert the Prolog exception to a C++ exception using‘PlWrap\<`int`\>(...)\`. A return to Prolog does an implicit “cut” (**PL_cut_query()**); this can also be done explicitly by the [PlQuery::cut()](#PlQuery::cut()) method.
+`PlQuery` takes the name of a predicate and the goal-argument vector as arguments. From this information it deduces the arity and glocates the predicate. The method [PlQuery::next_solution()](#PlQuery::next_solution()) yields `true` if there was a solution and `false` otherwise (other values are possible if the flag `PL_Q_EXT_STATUS` was specified in the constructor. If the goal yields a Prolog exception, you can handle this and convert the Prolog exception to a C++ exception using‘PlWrap\<`int`\>( ... )\`. A return to Prolog does an implicit “cut” (**PL_cut_query()**); this can also be done explicitly by the [PlQuery::cut()](#PlQuery::cut()) method.
 
 ``` code
 PREDICATE(average, 3) /* average(+Templ, :Goal, -Average) */
@@ -2130,7 +2115,24 @@ The version API often used `char*` for both setting and setting string values. T
 
 C++ has default conversion operators from `char*` to `std::string`, so some of the API support only `std::string`, even though this can cause a small inefficiency. If this proves to be a problem, additional overloaded functions and methods can be provided in future (note that some compilers have optimizations that reduce the overheads of using `std::string`); but for performance-critical code, the C functions can still be used.
 
-There still remains the problems of Unicode and encodings. `std::wstring` is one way of dealing with this. And for interfaces that use `std::string`, an encoding can be specified.^(26As of 2023-04, this had only been partially implemented). Some of the details for this - such as the default encoding - may change slightly in the future.
+Unicode and encodings are handled as follows. `std::wstring` and `wchar_t*` carry full Unicode and need no encoding. For interfaces that use `std::string` or `char*` the byte encoding is given by an optional `PlEncoding` argument:
+
+``` code
+typedef enum class PlEncoding
+{ Latin1 = REP_ISO_LATIN_1,
+  UTF8   = REP_UTF8,
+  Locale = REP_MB,
+  RepFn  = REP_FN
+} PlEncoding;
+static constexpr PlEncoding ENC_INPUT  = PlEncoding::Latin1;
+static constexpr PlEncoding ENC_OUTPUT = PlEncoding::Locale;
+```
+
+Methods that *construct* Prolog text from `std::string` or `char*` (the `PlAtom`, `PlTerm_atom`, `PlTerm_string` and `PlCompound` constructors and the `PlTerm::unify_*()` methods) default to `ENC_INPUT` (`PlEncoding::Latin1`), which is byte-compatible with the pre-encoding API. Methods that *return* text ([`PlTerm::as_string()`](#PlTerm::as_string()), **`PlAtom::as_string()`**) default to `ENC_OUTPUT` (`PlEncoding::Locale`). Pass `PlEncoding::UTF8` explicitly when the `char*` or `std::string` holds UTF-8.
+
+Identifiers that are normally program constants rather than data derived from arbitrarily encoded external input --- the names passed to `PlModule` and `PlPredicate` --- are hard-wired to UTF-8, matching the **PL_predicate()** C API, and therefore take no `PlEncoding` argument.
+
+The earlier argument order [`PlAtom(PlEncoding, len, s)`](#PlAtom()) and [`PlAtom(PlEncoding, std::string&)`](#PlAtom()) is `[[deprecated]]` in favour of the trailing-`PlEncoding` forms.
 
 ## 1.9 Porting from version 1 to version 2
 
@@ -2249,7 +2251,7 @@ Converts the Prolog argument using **PL_get_chars()** using the flags `CVT_ALL|C
 **PlTerm ::operator void \***(`void`)  
 Extracts pointer value from a term. The term should have been created by **PlTerm::PlTerm(void\*)**.
 
-In addition, the Prolog type (`PL_VARIABLE`, `PL_ATOM`, ... `PL_DICT`) can be determined using the **type()** method. There are also boolean methods that check the type:
+In addition, the Prolog type (`PL_VARIABLE`, `PL_ATOM`, ... , `PL_DICT`) can be determined using the **type()** method. There are also boolean methods that check the type:
 
 `int` **PlTerm::type**()  
 See **PL_term_type()**
@@ -2321,8 +2323,8 @@ See also [section 1.13.1](#sec:1.13.1).
 `bool` **PlTerm::unify_pointer**(`void *`)  
 `bool` **PlTerm::unify_nil**()  
 `bool` **PlTerm::unify_blob**(`PlBlob* blob`)  
-`bool` **PlTerm::unify_blob**(`std::unique_ptr<``PlBlob``>* blob`)  
-Does a call to **PL_unify_blob()** and, if successful, calls std::unique_ptr\<`PlBlob`\>::**release()** to pass ownership to the Prolog blob; on failure or error, deletes the pointer (ad calls its destructor). After either success and failure, `*blob==nullptr`.
+`bool` **PlTerm::unify_blob**(`std::unique_ptr<``MyBlob``>* blob`)  
+A function template, where `MyBlob` must derive from `PlBlob`. Does a call to **PL_unify_blob()** and, if successful, calls **std::unique_ptr::release()** to pass ownership to the Prolog blob; on failure or error, deletes the pointer (and calls its destructor). After either success or failure, `*blob==nullptr`.
 
 `bool` **PlTerm::unify_blob**(`void *blob, size_t len, PL_blob_t *type`)  
 `bool` **PlTerm::unify_chars**(`int flags, size_t len, const char *s`)  
@@ -2360,12 +2362,12 @@ Of course, in a real program, the failure of **gethostname(buf)**sizeof buf shou
 ### 1.11.3 Comparison
 
 `int` **PlTerm::compare**(`const PlTerm &t2`)  
-`bool` **PlTerm::operator ==**(`const PlTerm &`)  
-`bool` **PlTerm::operator !=**(`const PlTerm &`)  
-`bool` **PlTerm::operator `<`**(`const PlTerm &`)  
-`bool` **PlTerm::operator `>`**(`const PlTerm &`)  
-`bool` **PlTerm::operator `<=`**(`const PlTerm &`)  
-`bool` **PlTerm::operator `>=`**(`const PlTerm &`)  
+`bool` **PlTerm::operator ==**(`const PlTerm &t`)  
+`bool` **PlTerm::operator !=**(`const PlTerm &t`)  
+`bool` **PlTerm::operator `<`**(`const PlTerm &t`)  
+`bool` **PlTerm::operator `>`**(`const PlTerm &t`)  
+`bool` **PlTerm::operator `<=`**(`const PlTerm &t`)  
+`bool` **PlTerm::operator `>=`**(`const PlTerm &t`)  
 Compare the instance with `t` and return the result according to the Prolog defined *standard order of terms*.
 
 `bool` **PlTerm::operator ==**(`long num`)  
@@ -2382,7 +2384,7 @@ Convert `PlTerm` to a `long` and perform standard C-comparison between the two l
 `bool` **PlTerm::operator ==**(`std::string`)  
 Yields `true` if the `PlTerm` is an atom or string representing the same text as the argument, `false` if the conversion was successful, but the strings are not equal and an `type_error` exception if the conversion failed.
 
-Below are some typical examples. See [section 1.11.12.2](#sec:1.11.12.2) for direct manipulation of atoms in their internal representation.
+Below are some typical examples. See [section 1.11.13.2](#sec:1.11.13.2) for direct manipulation of atoms in their internal representation.
 
 |  |  |
 |----|----|
@@ -2431,13 +2433,13 @@ Returns the arity of the compound term. Raises a `type_error` if the argument is
 `int` **PlTerm::type**()  
 Yields the actual type of the term as **PL_term_type()**. Return values are `PL_VARIABLE`, `PL_FLOAT`, `PL_INTEGER`, `PL_ATOM`, `PL_STRING` or `PL_TERM`
 
-`std::string` **as_string**(`PlEncoding enc=EncLocale`)  
+`std::string` **as_string**(`PlEncoding enc=ENC_OUTPUT`)  
 Returns the string representation of the atom. See **PlAtom::as_string()** for an explanation of the encodings and caveats about **std::string::c_str()**.
 
-`std::string` **atomic_as_string**(`PlEncoding enc=EncLocale`)  
+`std::string` **atomic_as_string**(`PlEncoding enc=ENC_OUTPUT`)  
 As [PlTerm::as_string()](#PlTerm::as_string()), but throws an exception if the term isn't atomic (see atomic/1).
 
-`std::string` **atom_or_string_as_string**(`PlEncoding enc=EncLocale`)  
+`std::string` **atom_or_string_as_string**(`PlEncoding enc=ENC_OUTPUT`)  
 As [PlTerm::as_string()](#PlTerm::as_string()), but throws an exception if the term isn't an atom or a string.
 
 To avoid very confusing combinations of constructors and therefore possible undesirable effects a number of subclasses of `PlTerm` have been defined that provide constructors for creating special Prolog terms. These subclasses are defined below.
@@ -2447,11 +2449,13 @@ To avoid very confusing combinations of constructors and therefore possible unde
 A SWI-Prolog string represents a byte-string on the global stack. Its lifetime is the same as for compound terms and other data living on the global stack. Strings are not only a compound representation of text that is garbage-collected, but as they can contain 0-bytes, they can be used to contain arbitrary C-data structures. However, it is generally preferred to use blobs for storing arbitrary C-data structures (see also **`PlTerm_pointer(void *ptr)`**).
 
 **PlTerm_string :: PlTerm_string**(`const wchar_t *text`)  
-**PlTerm_string :: PlTerm_string**(`const char *text`)  
-Create a SWI-Prolog string object from a 0-terminated C-string. The `text` is copied.
+**PlTerm_string :: PlTerm_string**(`const char *text, PlEncoding rep=ENC_INPUT`)  
+Create a SWI-Prolog string object from a 0-terminated C-string. The `text` is copied. `rep` gives the byte encoding (see [section 1.8.2](#sec:1.8.2)).
 
 **PlTerm_string :: PlTerm_string**(`const wchar_t *text, size_t len`)  
-**PlTerm_string :: PlTerm_string**(`const char *text, size_t len`)  
+**PlTerm_string :: PlTerm_string**(`const char *text, size_t len, PlEncoding rep=ENC_INPUT`)  
+**PlTerm_string :: PlTerm_string**(`const std::string& text, PlEncoding rep=ENC_INPUT`)  
+**PlTerm_string :: PlTerm_string**(`const std::wstring& text`)  
 Create a SWI-Prolog string object from a C-string with specified length. The `text` may contain 0-characters and is copied.
 
 ### 1.11.7 The class PlCodeList
@@ -2473,20 +2477,40 @@ Create a Prolog list of one-character atoms from a 0-terminated C-string.
 The `PlCompound` class is a convenience class for creating a term from a string; it is similar to (=..)/2
 
 **PlCompound :: PlCompound**(`const wchar_t *text`)  
-**PlCompound :: PlCompound**(`const char *text`)  
+**PlCompound :: PlCompound**(`const char *text, PlEncoding enc=ENC_INPUT`)  
 **PlCompound :: PlCompound**(`const std::wstring& text`)  
-**PlCompound :: PlCompound**(`const std::string& text`)  
-PlEncoding enc=ENC_INPUT Create a term by parsing (as read/1) the `text`. If the `text` is not valid Prolog syntax, a `syntax_error` exception is raised. Otherwise a new term-reference holding the parsed text is created.
+**PlCompound :: PlCompound**(`const std::string& text, PlEncoding enc=ENC_INPUT`)  
+Create a term by parsing (as read/1) the `text`. If the `text` is not valid Prolog syntax, a `syntax_error` exception is raised. Otherwise a new term-reference holding the parsed text is created. For the `char*` and `std::string` forms `enc` gives the byte encoding (see [section 1.8.2](#sec:1.8.2)).
 
 **PlCompound :: PlCompound**(`const wchar_t *functor, PlTermv args`)  
 **PlCompound :: PlCompound**(`const char *functor, PlTermv args`)  
-Create a compound term with the given name from the given vector of arguments. See `PlTermv` for details. The example below creates the Prolog term `hello(world)`.
+**PlCompound :: PlCompound**(`const std::string& functor, PlTermv args`)  
+Create a compound term with the given name from the given vector of arguments. See `PlTermv` for details. The `functor` name is a program object and is interpreted as UTF-8, consistent with `PlFunctor` (see [section 1.11.10](#sec:1.11.10)); unlike the text-parsing constructors above it takes no `PlEncoding` argument. The example below creates the Prolog term `hello(world)`.
 
 ``` code
 PlCompound("hello", PlTermv(PlAtom("world")))
 ```
 
-### 1.11.10 The class PlTerm_tail
+### 1.11.10 The class PlFunctor
+
+`PlFunctor` wraps `functor_t`, the internal representation of a `name`/`arity` pair. A functor name is a program object rather than arbitrarily encoded external data and is therefore hard-wired to UTF-8, consistent with `PlModule` and `PlPredicate` (and the **PL_predicate()** C API); these constructors take no `PlEncoding` argument.
+
+**PlFunctor :: PlFunctor**(`functor_t handle`)  
+Create from a C-interface functor handle (`functor_t`). Used internally and for integration with the C-interface.
+
+**PlFunctor :: PlFunctor**(`const char *name, size_t arity`)  
+**PlFunctor :: PlFunctor**(`const std::string& name, size_t arity`)  
+**PlFunctor :: PlFunctor**(`const std::wstring& name, size_t arity`)  
+Create a functor from `name` and `arity`. The `char*` and `std::string` `name` is interpreted as UTF-8. See **PL_new_functor()** and **PL_new_atom_mbchars()**.
+
+**PlFunctor :: PlFunctor**(`PlAtom name, size_t arity`)  
+Create a functor from an existing `PlAtom` and `arity`. See **PL_new_functor()**.
+
+`bool` **is_null**()  
+`bool` **not_null**()  
+Test whether the wrapped `functor_t` handle is null.
+
+### 1.11.11 The class PlTerm_tail
 
 The class `PlTerm_tail`^(27This was named `PlTail` in version 1 of the API.) is both for analysing and constructing lists. It is called `PlTerm_tail` as enumeration-steps make the term-reference follow the “tail” of the list.
 
@@ -2530,7 +2554,7 @@ main(int argc, char *argv[])
 `int` **PlTerm_tail::close**()  
 Unifies the term with `[]` and returns the result of the unification.
 
-`int` **PlTerm_tail::next**(`PlTerm &`)  
+`int` **PlTerm_tail::next**(`PlTerm &t`)  
 Bind `t` to the next element of the list `PlTerm_tail` and advance `PlTerm_tail`. Returns `true` on success and `false` if `PlTerm_tail` represents the empty list. If `PlTerm_tail` is neither a list nor the empty list, a `type_error` is thrown. The example below prints the elements of a list.
 
 ``` code
@@ -2545,7 +2569,7 @@ PREDICATE(write_list, 1)
 }
 ```
 
-### 1.11.11 The class PlTermv
+### 1.11.12 The class PlTermv
 
 The class `PlTermv` represents an array of term-references. This type is used to pass the arguments to a foreign defined predicate, construct compound terms (see **PlTerm::PlTerm(const char \*name)**PlTermv arguments ), and to create queries (see `PlQuery`).
 
@@ -2581,13 +2605,13 @@ If the vector has to contain more than 5 elements, the following construction sh
 
 *Important*: be sure that all the arguments are of type `PlTerm` - **`PlTermv(i)`** is not the same as **`PlTermv(PlTerm_integer(i))`**, and will result in a runtime error.
 
-### 1.11.12 The class PlAtom - Supporting Prolog constants
+### 1.11.13 The class PlAtom - Supporting Prolog constants
 
 Both for quick comparison as for quick building of lists of atoms, it is desirable to provide access to Prolog's atom-table, mapping handles to unique string-constants. If the handles of two atoms are different it is guaranteed they represent different text strings.
 
 Suppose we want to test whether a term represents a certain atom, this interface presents a large number of alternatives:
 
-#### 1.11.12.1 Direct comparision to char \*
+#### 1.11.13.1 Direct comparision to char \*
 
 Example:
 
@@ -2600,7 +2624,7 @@ PREDICATE(test, 1)
 
 This writes easily and is the preferred method is performance is not critical and only a few comparisons have to be made. It validates `A1` to be a term-reference representing text (atom, string, integer or float) extracts the represented text and uses **strcmp()** to match the strings.
 
-#### 1.11.12.2 Direct comparision to PlAtom
+#### 1.11.13.2 Direct comparision to PlAtom
 
 Example:
 
@@ -2615,7 +2639,7 @@ PREDICATE(test, 1)
 
 This case raises a `type_error` if `A1` is not an atom. Otherwise it extacts the atom-handle and compares it to the atom-handle of the global `PlAtom` object. This approach is faster and provides more strict type-checking.
 
-#### 1.11.12.3 Extraction of the atom and comparison to PlAtom
+#### 1.11.13.3 Extraction of the atom and comparison to PlAtom
 
 Example:
 
@@ -2630,9 +2654,9 @@ PREDICATE(test, 1)
 }
 ```
 
-This approach is basically the same as [section 1.11.12.2](#sec:1.11.12.2), but in nested if-then-else the extraction of the atom from the term is done only once.
+This approach is basically the same as [section 1.11.13.2](#sec:1.11.13.2), but in nested if-then-else the extraction of the atom from the term is done only once.
 
-#### 1.11.12.4 Extraction of the atom and comparison to char \*
+#### 1.11.13.4 Extraction of the atom and comparison to char \*
 
 Example:
 
@@ -2650,13 +2674,14 @@ This approach extracts the atom once and for each test extracts the represented 
 **PlAtom :: PlAtom**(`atom_t handle`)  
 Create from C-interface atom handle (`atom_t`). Used internally and for integration with the C-interface.
 
-**PlAtom :: PlAtom**(`const char_t *text`)  
-**PlAtom :: PlAtom**(`const wchar *text`)  
-**PlAtom :: PlAtom**(`const std::string& text`)  
+**PlAtom :: PlAtom**(`const char *text, PlEncoding rep=ENC_INPUT`)  
+**PlAtom :: PlAtom**(`size_t len, const char *s, PlEncoding rep=ENC_INPUT`)  
+**PlAtom :: PlAtom**(`const wchar_t *text`)  
+**PlAtom :: PlAtom**(`const std::string& text, PlEncoding rep=ENC_INPUT`)  
 **PlAtom :: PlAtom**(`const std::wstring& text`)  
-Create an atom from a string. The `text` is copied if a new atom is created. See **PL_new_atom()**, **PL_new_atom_wchars()**, **PL_new_atom_nchars()**, **PL_new_atom_wchars()**.
+Create an atom from a string. The `text` is copied if a new atom is created. For the `char*` and `std::string` forms `rep` gives the byte encoding (see [section 1.8.2](#sec:1.8.2)); it defaults to `ENC_INPUT`. See **PL_new_atom_mbchars()** and **PL_new_atom_wchars()**. The constructors [`PlAtom(PlEncoding, len, s)`](#PlAtom()) and [`PlAtom(PlEncoding, std::string&)`](#PlAtom()) are `[[deprecated]]` in favour of the trailing-`PlEncoding` forms above.
 
-**PlAtom :: PlAtom**(`const PlTerm &`)  
+**PlAtom :: PlAtom**(`const PlTerm &t`)  
 If `t` represents an atom, the new instance represents this atom. Otherwise a `type_error` is thrown.
 
 `int` **PlAtom::operator ==**(`const wchar_t *text`)  
@@ -2665,14 +2690,14 @@ If `t` represents an atom, the new instance represents this atom. Otherwise a `t
 `int` **PlAtom::operator ==**(`const std::wstring& text`)  
 Yields `true` if the atom represents `text`, `false` otherwise. Performs a **strcmp()** or similar for this.
 
-`int` **PlAtom::operator ==**(`const PlAtom &`)  
+`int` **PlAtom::operator ==**(`const PlAtom &a`)  
 Compares the two atom-handles, returning `true` or `false`. Because atoms are unique, there is no need to use **strcmp()** for this.
 
 `int` **PlAtom::operator !=**(`const wchar_t *text`)  
 `int` **PlAtom::operator !=**(`const char *text`)  
 `int` **PlAtom::operator !=**(`const std::string& text`)  
 `int` **PlAtom::operator !=**(`const std::wstring& text`)  
-`int` **PlAtom::operator !=**(`const PlAtom &`)  
+`int` **PlAtom::operator !=**(`const PlAtom &a`)  
 The inverse of the `==` operator.
 
 `bool` **is_valid**()  
@@ -2681,12 +2706,14 @@ Verifies that the handle is valid. This can be used after calling a function tha
 `void` **reset**()  
 Sets the handle to an invalid valid - a subsequent call to [is_null()](#is_null()) will return `true`.
 
-`const std::string` **as_string**(`PlEncoding enc=EncLocale`)  
-Returns the string representation of the atom.^(28If you wish to return a `char*` from a function, you should not do `return t.`[`as_string()`](#as_string())`.`**`c_str()`** because that will return a pointer into the stack (Gnu C++ or Clang options `-Wreturn-stack-address` or `-Wreturn-local-addr`) can *sometimes* catch this, as can the runtime address sanitizer when run with `detect_stack_use_after_return=1`.) This does not quote or escape any characters that would need to be escaped if the atom were to be input to the Prolog parser. The possible values for `enc` are:
+`const std::string` **as_string**(`PlEncoding enc=ENC_OUTPUT`)  
+Returns the string representation of the atom.^(28If you wish to return a `char*` from a function, you should not do `return t.`[`as_string()`](#as_string())`.`**`c_str()`** because that will return a pointer into the stack (Gnu C++ or Clang options `-Wreturn-stack-address` or `-Wreturn-local-addr`) can *sometimes* catch this, as can the runtime address sanitizer when run with `detect_stack_use_after_return=1`.) This does not quote or escape any characters that would need to be escaped if the atom were to be input to the Prolog parser. The possible values for `enc` are (see [section 1.8.2](#sec:1.8.2)):
 
-- `EncLatin1` - throws an exception if cannot be represented in ASCII.
-- `EncUTF8`
-- `EncLocale` - uses the locale to determine the representation.
+- `PlEncoding::Latin1` - throws an exception if the text cannot be represented in ISO Latin-1.
+- `PlEncoding::UTF8` - UTF-8.
+- `PlEncoding::Locale` - uses the locale to determine the representation.
+
+The constants `ENC_INPUT` (`PlEncoding::Latin1`) and `ENC_OUTPUT` (`PlEncoding::Locale`) name the defaults used for constructing and returning text respectively.
 
 `const std:wstring` **as_wstring**()  
 Returns the string representation of the atom. This does not quote or escape any characters that would need to be escaped if the atom were to be input to the Prolog parser.
@@ -2700,7 +2727,7 @@ See **PL_unregister_atom()**.
 `void*` **blob_data**(`size_t *len, struct PL_blob_t **type`)  
 See **PL_blob_data()**.
 
-### 1.11.13 Classes for the recorded database: PlRecord and PlRecordExternalCopy
+### 1.11.14 Classes for the recorded database: PlRecord and PlRecordExternalCopy
 
 The [recorded database](https://www.swi-prolog.org/pldoc/man?section=foreign-recorded) is has two wrappers, for supporting the *internal records* and *external records*.
 
@@ -2767,7 +2794,7 @@ This class encapsulates **PL_register_foreign()**. It is defined as a class rath
 **PlRegister :: PlRegister**(`const char *module, const char *name, int arity, foreign_t (f)(term_t t0, int a, control_t ctx)`)  
 Register `f` as a the implementation of the foreign predicate \<`name`\>/\<`arity`\>. This interface uses the `PL_FA_VARARGS` calling convention, where the argument list of the predicate is passed using an array of `term_t` objects as returned by **PL_new_term_refs()**. This interface poses no limits on the arity of the predicate and is faster, especially for a large number of arguments.
 
-**PlRegister :: PlRegister**(`const char *module, const char *name, foreign_t (*f)(PlTerm a0, ...`)  
+**PlRegister :: PlRegister**(`const char *module, const char *name, foreign_t (*f)(PlTerm a0, ... )`)  
 Registers functions for use with the traditional calling conventional, where each positional argument to the predicate is passed as an argument to the function `f`. This can be used to define functions as predicates similar to what is used in the C-interface:
 
 ``` code
@@ -3199,7 +3226,7 @@ Note that everything under `PlException` can contain a Prolog term; if the [what
 
 Currently defined methods are:
 
-**PlException :: PlException**(`const PlTerm &`)  
+**PlException :: PlException**(`const PlTerm &t`)  
 Create an exception from a general Prolog term. This provides the interface for throwing any Prolog terms as an exception. This constructor is protected; instead you should use `PlExceptionFromTerm` or `PlExceptionFromQid`.
 
 `char*` **what**()  
@@ -3231,7 +3258,7 @@ Creates an ISO standard Prolog error term expressing the `expected` type and `ac
 
 #### 1.15.1.3 The function PlDomainError
 
-A *domain error* expresses that a term satisfies the basic Prolog type expected, but is unacceptable to the restricted domain expected by some operation. For example, the standard Prolog open/3 call expect an `io_mode` (read, write, append, ...). If an integer is provided, this is a *type error*, if an atom other than one of the defined io-modes is provided it is a *domain error*.
+A *domain error* expresses that a term satisfies the basic Prolog type expected, but is unacceptable to the restricted domain expected by some operation. For example, the standard Prolog open/3 call expect an `io_mode` (read, write, append, ... ). If an integer is provided, this is a *type error*, if an atom other than one of the defined io-modes is provided it is a *domain error*.
 
 **PlDomainError :: PlDomainError**(`const std::string& expected, const PlTerm &actual`)  
 Creates an ISO standard Prolog error term expressing a the `expected` domain and the `actual` term found.
@@ -3251,7 +3278,7 @@ Simple constructure using the main constructor with the specified argument for `
 **~ PlEngine**()  
 Calls **PL_cleanup()** to destroy all data created by the Prolog engine.
 
-[Section 1.11.10](#sec:1.11.10) has a simple example using this class.
+[Section 1.11.11](#sec:1.11.11) has a simple example using this class.
 
 ## 1.17 Considerations
 
@@ -3351,7 +3378,7 @@ The current interface can be entirely defined in the `.h` file using inlined cod
 
 Also, changes to the header file have no consequences to binary compatibility with the SWI-Prolog kernel. This makes it possible to have different versions of the header file with few compatibility consequences.
 
-As of 2023-04, some details remain to be decided, mostly to do with encodings. A few methods have a `PlEncoding` optional parameter (e.g., [PlTerm::as_string()](#PlTerm::as_string())), but this hasn't yet been extended to all methods that take or return a string. Also, the details of how the default encoding is set have not yet been decided.
+The methods that take or return a `std::string` or `char*` accept an optional `PlEncoding` argument, with the default encoding policy described in [section 1.8.2](#sec:1.8.2). Names passed to `PlModule` and `PlPredicate` are hard-wired to UTF-8.
 
 As of 2023-04, the various error convenience classes do not fully match what the equivalent C functions do. That is, `throw `**`PlInstantiationError(A1)`** does not result in the same context and traceback information that would happen from **`Plx_instantiation_error(A1. unwrap())`**`; throw `**`PlFail()`**. See [section 1.17.2](#sec:1.17.2).
 
@@ -3419,7 +3446,7 @@ create_my_blob/2
 [data()](#data())  
 [duplicate()](#duplicate())  
 entry/1  
-[1.11.10](#idx:entry1:41)
+[1.11.11](#idx:entry1:41)
 
 eq1/1  
 [1.3](#idx:eq11:8)

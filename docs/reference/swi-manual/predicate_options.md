@@ -38,7 +38,7 @@ Whether we see options as arguments or locally scoped environment variables, the
 
 #### A.39.3.1 Options as types
 
-An obvious approach to deal with options is to define the different possible option values as a type and type the argument that processes the option as list(`<`option_type`>`), as illustrated below. Considering options as types fully covers the case where we consider options as additional parameters.
+An obvious approach to deal with options is to define the different possible option values as a type and type the argument that processes the option as list(\<option_type\>), as illustrated below. Considering options as types fully covers the case where we consider options as additional parameters.
 
 ``` code
 :- type open_option ---> type(stream_type) |

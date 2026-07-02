@@ -163,7 +163,7 @@ The `library(semweb/rdf11)` provides a new interface to the SWI-Prolog RDF datab
 
 \[nondet\]**rdf**(`?S, ?P, ?O`)  
 \[nondet\]**rdf**(`?S, ?P, ?O, ?G`)  
-True if an RDF triple `<``S`,`P`,`O``>` exists, optionally in the graph `G`. The object `O` is either a resource (atom) or one of the terms listed below. The described types apply for the case where `O` is unbound. If `O` is instantiated it is converted according to the rules described with [rdf_assert/3](#rdf_assert/3).
+True if an RDF triple \<`S`,`P`,`O`\> exists, optionally in the graph `G`. The object `O` is either a resource (atom) or one of the terms listed below. The described types apply for the case where `O` is unbound. If `O` is instantiated it is converted according to the rules described with [rdf_assert/3](#rdf_assert/3).
 
 Triples consist of the following three terms:
 
@@ -386,9 +386,9 @@ True when `Lexical` is the lexical form for the literal `Literal`. `Lexical` is 
 \[det\]**rdf_compare**(`-Diff, +Left, +Right`)  
 True if the RDF terms `Left` and `Right` are ordered according to the comparison operator `Diff`. The ordering is defines as:
 
-- Literal `<` BNode `<` IRI
+- Literal \< BNode \< IRI
 - For literals
-  - Numeric `<` non-numeric
+  - Numeric \< non-numeric
   - Numeric literals are ordered by value. If both are equal, floats are ordered before integers.
   - Other data types are ordered lexicographically.
 - BNodes and IRIs are ordered lexicographically.
@@ -951,7 +951,7 @@ Literal values are ordered and indexed using a *skip list*. The aim of this inde
 
 As string literal matching is most frequently used for searching purposes, the match is executed case-insensitive and after removal of diacritics. Case matching and diacritics removal is based on Unicode character properties and independent from the current locale. Case conversion is based on the‘simple uppercase mapping’defined by Unicode and diacritic removal on the‘decomposition type’. The approach is lightweight, but somewhat simpleminded for some languages. The tables are generated for Unicode characters up to 0x7fff. For more information, please check the source-code of the mapping-table generator `unicode_map.pl` available in the sources of this package.
 
-Currently the total order of literals is first based on the type of literal using the ordering *numeric `<` string `<` term* Numeric values (integer and float) are ordered by value, integers precede floats if they represent the same value. Strings are sorted alphabetically after case-mapping and diacritic removal as described above. If they match equal, uppercase precedes lowercase and diacritics are ordered on their unicode value. If they still compare equal literals without any qualifier precedes literals with a type qualifier which precedes literals with a language qualifier. Same qualifiers (both type or both language) are sorted alphabetically.
+Currently the total order of literals is first based on the type of literal using the ordering *numeric \< string \< term* Numeric values (integer and float) are ordered by value, integers precede floats if they represent the same value. Strings are sorted alphabetically after case-mapping and diacritic removal as described above. If they match equal, uppercase precedes lowercase and diacritics are ordered on their unicode value. If they still compare equal literals without any qualifier precedes literals with a type qualifier which precedes literals with a language qualifier. Same qualifiers (both type or both language) are sorted alphabetically.
 
 The ordered tree is used for indexed execution of `literal(prefix(Prefix), Literal)` as well as `literal(like(Like), Literal)` if *Like* does not start with a‘\*’. Note that results of queries that use the tree index are returned in alphabetical order.
 
@@ -1405,11 +1405,11 @@ True if `Protocol` is a URL protocol recognised by [rdf_load/2](#rdf_load/2).
 
 ### 4.2 library(semweb/rdf_zlib_plugin): Reading compressed RDF
 
-This module uses the `library(zlib)` library to load compressed files on the fly. The extension of the file must be `.gz`. The file format is deduced by the extension after stripping the `.gz` extension. E.g. `rdf_load('file.rdf.gz’`.
+This module uses the `library(zlib)` library to load compressed files on the fly. The extension of the file must be `.gz`. The file format is deduced by the extension after stripping the `.gz` extension. E.g. `rdf_load('file.rdf.gz’)`.
 
 ### 4.3 library(semweb/rdf_http_plugin): Reading RDF from a HTTP server
 
-This module allows for `rdf_load('http://...’`. It exploits the library `library(http/http_open.pl)`. The format of the URL is determined from the mime-type returned by the server if this is one of `text/rdf+xml`, `application/x-turtle` or `application/turtle`. As RDF mime-types are not yet widely supported, the plugin uses the extension of the URL if the claimed mime-type is not one of the above. In addition, it recognises `text/html` and `application/xhtml+xml`, scanning the XML content for embedded RDF.
+This module allows for `rdf_load('http://...’)`. It exploits the library `library(http/http_open.pl)`. The format of the URL is determined from the mime-type returned by the server if this is one of `text/rdf+xml`, `application/x-turtle` or `application/turtle`. As RDF mime-types are not yet widely supported, the plugin uses the extension of the URL if the claimed mime-type is not one of the above. In addition, it recognises `text/html` and `application/xhtml+xml`, scanning the XML content for embedded RDF.
 
 ### 4.4 library(semweb/rdf_cache): Cache RDF triples
 
@@ -1675,10 +1675,10 @@ rdf(Subject, Predicate, Object [, Graph])
 The representation is consistent with the SWI-Prolog RDF/XML and ntriples parsers. Provided options are:
 
 **base_uri**(`+BaseURI`)  
-Initial base URI. Defaults to file://`<`file`>` for loading files.
+Initial base URI. Defaults to file://\<file\> for loading files.
 
 **anon_prefix**(`+Prefix`)  
-Blank nodes are generated as `<``Prefix``>`1, `<``Prefix``>`2, etc. If `Prefix` is not an atom blank nodes are generated as `node(1)`, `node(2)`, ...
+Blank nodes are generated as \<`Prefix`\>1, \<`Prefix`\>2, etc. If `Prefix` is not an atom blank nodes are generated as `node(1)`, `node(2)`, ...
 
 **format**(`+Format`)  
 One of `auto` (default), `turtle` or `trig`. The auto mode switches to TriG format of there is a `{` before the first triple. Finally, of the format is explicitly stated as `turtle` and the file appears to be a TriG file, a warning is printed and the data is loaded while ignoring the graphs.
@@ -1691,6 +1691,7 @@ Return encountered prefix declarations as a list of Alias-URI
 
 **namespaces**(`-Pairs`)  
 Same as `prefixes(Pairs)`. Compatibility to [rdf_load/2](#rdf_load/2).
+
 **base_used**(`-Base`)  
 `Base` URI used for processing the data. Unified to `[]` if there is no base-uri.
 
@@ -1736,6 +1737,34 @@ Write a URI as `<...>`
 
 \[multifile\]rdf_db:**rdf_load_stream**(`+Format, +Stream, :Options`)  
 (Turtle clauses)
+
+\[det\]**rdf_save_ntriples**(`+Spec, :Options`)  
+Save RDF using ntriples format. The ntriples format is a subset of Turtle, writing each triple fully qualified on its own line.
+
+\[det\]**rdf_save_canonical_trig**(`+Spec, :Options`)  
+Save triples in a canonical format. See [rdf_save_canonical_turtle/2](#rdf_save_canonical_turtle/2) for details.
+
+\[det\]**rdf_save_trig**(`+Spec, :Options`)  
+Save multiple RDF graphs into a TriG file. `Options` are the same as for [rdf_save_turtle/2](#rdf_save_turtle/2). [rdf_save_trig/2](#rdf_save_trig/2) ignores the `graph(+Graph)` option and instead processes one additional option:
+
+**graphs**(`+ListOfGraphs`)  
+List of graphs to save. When omitted, all graphs in the RDF store are stored in the TriG file.
+
+\[det\]**rdf_save_canonical_turtle**(`+Spec, :Options`)  
+Save triples in a canonical format. This is the same as [rdf_save_turtle/2](#rdf_save_turtle/2), but using different defaults. In particular:
+
+- `encoding(utf8)`,
+- `indent(0)`,
+- `tab_distance(0)`,
+- `subject_white_lines(1)`,
+- `align_prefixes(false)`,
+- `user_prefixes(false)`
+- `comment(false)`,
+- `group(false)`,
+- `single_line_bnodes(true)`
+
+To be done  
+Work in progress. Notably blank-node handling is incomplete.
 
 \[det\]**rdf_save_turtle**(`+Out, :Options`)  
 Save an RDF graph as Turtle. `Options` processed are:
@@ -1811,34 +1840,6 @@ triple_in(RDF, S,P,O,_G) :-
 |----|----|
 | `Out` | is one of `stream(Stream)`, a stream handle, a file-URL or an atom that denotes a filename. |
 
-\[det\]**rdf_save_ntriples**(`+Spec, :Options`)  
-Save RDF using ntriples format. The ntriples format is a subset of Turtle, writing each triple fully qualified on its own line.
-
-\[det\]**rdf_save_canonical_trig**(`+Spec, :Options`)  
-Save triples in a canonical format. See [rdf_save_canonical_turtle/2](#rdf_save_canonical_turtle/2) for details.
-
-\[det\]**rdf_save_trig**(`+Spec, :Options`)  
-Save multiple RDF graphs into a TriG file. `Options` are the same as for [rdf_save_turtle/2](#rdf_save_turtle/2). [rdf_save_trig/2](#rdf_save_trig/2) ignores the `graph(+Graph)` option and instead processes one additional option:
-
-**graphs**(`+ListOfGraphs`)  
-List of graphs to save. When omitted, all graphs in the RDF store are stored in the TriG file.
-
-\[det\]**rdf_save_canonical_turtle**(`+Spec, :Options`)  
-Save triples in a canonical format. This is the same as [rdf_save_turtle/2](#rdf_save_turtle/2), but using different defaults. In particular:
-
-- `encoding(utf8)`,
-- `indent(0)`,
-- `tab_distance(0)`,
-- `subject_white_lines(1)`,
-- `align_prefixes(false)`,
-- `user_prefixes(false)`
-- `comment(false)`,
-- `group(false)`,
-- `single_line_bnodes(true)`
-
-To be done  
-Work in progress. Notably blank-node handling is incomplete.
-
 ## 6 library(semweb/rdf_ntriples): Process files in the RDF N-Triples format
 
 See also  
@@ -1885,7 +1886,7 @@ True when `Triples`/`Quads` is a list of triples/quads from `Input`. `Options`:
 Prefix nodeIDs with this atom. If `AtomOrNode` is the term `node(_)`, bnodes are returned as `node(Id)`.
 
 **base_uri**(`+Atom`)  
-Defines the default anon_prefix as \_`:<`baseuri`>`\_
+Defines the default anon_prefix as \_`:<`baseuri\>\_
 
 **on_error**(`Action`)  
 One of `warning` (default) or `error`

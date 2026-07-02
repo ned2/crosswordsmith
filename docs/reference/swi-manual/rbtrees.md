@@ -88,6 +88,9 @@ Delete the largest element from the tree `Tree`, returning the key `Key`, the va
 \[det\]**rb_visit**(`+Tree, -Pairs`)  
 `Pairs` is an infix visit of tree `Tree`, where each element of `Pairs` is of the form Key-Value.
 
+\[det\]**rb_visit_range**(`+Tree, +Min, +Max, -Pairs`)  
+Retrieves a range of pairs with keys between `Min` and `Max` (inclusive) from a `Tree` using standard term comparison.
+
 \[semidet\]**rb_map**(`+Tree, :G, -NewTree`)  
 For all nodes Key in the tree `Tree`, if the value associated with key Key is Val0 in tree `Tree`, and if `call(G,Val0,ValF)` holds, then the value associated with Key in `NewTree` is ValF. Fails if `call(G,Val0,ValF)` is not satisfiable for all Val0. If `G` is non-deterministic, [rb_map/3](rbtrees.html#rb_map/3) will backtrack over all possible values from `call(G,Val0,ValF)`. You should not depend on the order of tree traversal (currently: key order).
 

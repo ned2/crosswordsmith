@@ -69,6 +69,9 @@ Some Prolog implementations also provide ord_member/2, with the same semantics a
 author  
 Richard O'Keefe
 
+\[det\]**ord_range**(`+Set, +Min, +Max, -Range`)  
+Retrieves a range of elements between `Min` and `Max` (inclusive) from a set using standard term comparison.
+
 \[semidet\]**ord_subset**(`+Sub, +Super`)  
 Is true if all elements of `Sub` are in `Super`
 

@@ -1,4 +1,4 @@
-#!/usr/bin/swipl
+#!/usr/bin/env swipl
 
 :- set_prolog_flag(verbose, silent).
 

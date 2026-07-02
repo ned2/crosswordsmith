@@ -82,11 +82,11 @@ Most of these types are defined by an arity-1 built-in predicate of the same nam
 > | list | A (non-open) list; see [is_list/1](builtinlist.html#is_list/1) |
 > | `list(Type)` | Proper list with elements of `Type` |
 > | list_or_partial_list | A list or an open list (ending in a variable); see is_list_or_partial_list/1 |
-> | negative_integer | Integer `<` 0 |
+> | negative_integer | Integer \< 0 |
 > | nonneg | Integer `>=` 0 |
 > | `oneof(L)` | Ground term that is member of L |
 > | pair | Key-Value pair. Same as `compound(any-any)` |
-> | positive_integer | Integer `>` 0 |
+> | positive_integer | Integer \> 0 |
 > | proper_list | Same as list |
 > | stream | A stream name or valid stream handle; see [is_stream/1](IO.html#is_stream/1) |
 > | symbol | Same as `atom` |

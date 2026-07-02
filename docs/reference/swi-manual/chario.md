@@ -28,7 +28,7 @@ Write a character to the current output, obeying the encoding defined for the cu
 Write a character to `Stream`, obeying the encoding defined for `Stream`. Note that this may raise an exception if the encoding of `Stream` cannot represent `Char`.
 
 \[ISO\]**put_code**(`+Code`)  
-Similar to [put_char/1](chario.html#put_char/1), but using a *character code*. `Code` is a non-negative integer. Note that this may raise an exception if the encoding of the output stream cannot represent `Code`.
+Similar to [put_char/1](chario.html#put_char/1), but using a *character code*. `Code` must be a valid Unicode code point; lone UTF-16 surrogates (`0xD800`...`0xDFFF`) are rejected, see [section 2.18](widechars.html#sec:2.18). Note that this may also raise an exception if the encoding of the output stream cannot represent `Code`.
 
 \[ISO\]**put_code**(`+Stream, +Code`)  
 Same as [put_code/1](chario.html#put_code/1) but directing `Code` to `Stream`.

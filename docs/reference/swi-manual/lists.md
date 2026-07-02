@@ -224,7 +224,7 @@ See also
 [min_member/2](lists.html#min_member/2).
 
 \[semidet\]**numlist**(`+Low, +High, -List`)  
-`List` is a list \[`Low`, `Low`+1, ... `High`\]. Fails if `High` `<` `Low`.
+`List` is a list \[`Low`, `Low`+1, ... `High`\]. Fails if `High` \< `Low`.
 
 Errors  
 \- `type_error(integer, Low)`  

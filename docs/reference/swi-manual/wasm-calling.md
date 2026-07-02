@@ -171,17 +171,17 @@ Translate the Prolog atom `null`.
 **Array**  
 Translate to a Prolog list.
 
-**Objects holding the key `$`:`Type`**  
+**Objects holding the key `$t`:`Type`**  
 Such objects are converted depending on the value for this key. The interface defines classes to simplify creating such objects.
 
 **s**  
 Represent a Prolog string. The key `v` holds the text. May be created using `new Prolog.string(text)`. May be created using `new Prolog.`**`String(text)`**.
 
 **r**  
-Represent a Prolog *rational number*. The keys `n` and `d` represent the *numerator* and *denominator*. For example, to represent `1r3`, use {`$`:"r", `n`:1, `d`:3}. May be created using `new Prolog.Rational(n, d)`, where `n` and `d` can be JavaScript numbers or big integers.
+Represent a Prolog *rational number*. The keys `n` and `d` represent the *numerator* and *denominator*. For example, to represent `1r3`, use {`$t`:"r", `n`:1, `d`:3}. May be created using `new Prolog.Rational(n, d)`, where `n` and `d` can be JavaScript numbers or big integers.
 
 **t**  
-Represent a Prolog *compound term*. The object should hold exactly one key whose value is an array that holds the argument values. For example a term `point(1,2)` is constructed using {`$`:"t", `point`:\[1,2\]}. May be created using `new Prolog.Compound(functor, args)`
+Represent a Prolog *compound term*. The object should hold exactly one key whose value is an array that holds the argument values. For example a term `point(1,2)` is constructed using {`$t`:"t", `point`:\[1,2\]}. May be created using `new Prolog.Compound(functor, args)`
 
 **v**  
 Represent a variable. If the key `v` is present this identifies the variable. Two variables processed in the same translation with the same identifier represent the same Prolog variable. If the `v` key is omitted the variable will be unique. May be created using `new Prolog.Var(id)`.

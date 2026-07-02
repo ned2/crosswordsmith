@@ -65,8 +65,8 @@ A *Boolean expression* is one of:
 > | *Expr* `=\=` *Expr* | disequality (same as \#)             |
 > | *Expr* `=<` *Expr*  | less or equal (implication)          |
 > | *Expr* `>=` *Expr*  | greater or equal                     |
-> | *Expr* `<` *Expr*   | less than                            |
-> | *Expr* `>` *Expr*   | greater than                         |
+> | *Expr* \< *Expr*    | less than                            |
+> | *Expr* \> *Expr*    | greater than                         |
 > | `card(Is,Exprs)`    | cardinality constraint (*see below*) |
 > | `+(Exprs)`          | n-fold disjunction (*see below*)     |
 > | `*(Exprs)`          | n-fold conjunction (*see below*)     |

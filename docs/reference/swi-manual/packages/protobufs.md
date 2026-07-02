@@ -1016,7 +1016,7 @@ bug
 The protobuf specification states that the wire-stream can have the fields in any order and that unknown fields are to be ignored. This implementation assumes that the fields are in the exact order of the definition and match exactly. If you use [protobuf_parse_from_codes/3](#protobuf_parse_from_codes/3), you can avoid this problem.o
 
 \[semidet\]**protobuf_field_is_map**(`+MessageType, +FieldName`)  
-Succeeds if `MessageType`’s `FieldName` is defined as a map`<`...`>` in the .proto file.
+Succeeds if `MessageType`’s `FieldName` is defined as a map\<...\> in the .proto file.
 
 \[det\]**protobuf_map_pairs**(`+ProtobufTermList:list, ?DictTag:atom, ?Pairs`)  
 Convert between a list of protobuf map entries (in the form `DictTag{key:Key, value:Value}` and a key-value list as described in `library(pairs)`. At least one of `ProtobufTermList` and `Pairs` must be instantiated; `DictTag` can be uninstantiated. If `ProtobufTermList` is from a term created by [protobuf_parse_from_codes/3](#protobuf_parse_from_codes/3), the ordering of the items is undefined; you can order them by using keysort/2 (or by a predicate such as dict_pairs/3, list_to_assoc/2, or list_to_rbtree/2.

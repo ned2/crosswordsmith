@@ -98,7 +98,7 @@ Structured comments come in two flavours, the line-comment (%) based one, seen m
 
 The `/*`...`*/` style comment starts with `/**`\<`white`\>. The type and mode declarations start at the first non-blank line and are ended by a blank line.
 
-The `%`-style line comments start with `%!`\<`white`\> or, for compatibility reasons, with `%%`\<`white`\>.^(2The `%%` leader was considered to give too many false positives on arbitrary source code. It is still accepted, but invalid comments are silently ignored, while invalid comments that start with `%` result in a warning.) The type and mode declaration is ended by the first line that starts with a single %. E.g., the following two fragments are identical wrt. PlDoc. Skipping blank-lines in `/**` comments allows to start the comment on the second line.
+The `%`-style line comments start with `%!`\<`white`\> or, for compatibility reasons, with `%%`\<`white`\>.^(2The `%%` leader was considered to give too many false positives on arbitrary source code. It is still accepted, but invalid comments are silently ignored, while invalid comments that start with `%!` result in a warning.) The type and mode declaration is ended by the first line that starts with a single %. E.g., the following two fragments are identical wrt. PlDoc. Skipping blank-lines in `/**` comments allows to start the comment on the second line.
 
 ``` code
 %!      predicate(-Arg:type) is nondet
@@ -356,7 +356,7 @@ PlDoc accepts both the original PlDoc and markdown conventions for rulers. A PlD
 ```
 
 **Line breaks**  
-A line break may be added by *ending* the physical line with the HTML linebreak, `<br>` or `<br/>`.^(5The markdown conventions are (original) two spaces at the of the physical line and (GitHub) a physical line break. Neither fit well with source code. Doxygen supports restricted HTML and allows for `<brÿ`.)
+A line break may be added by *ending* the physical line with the HTML linebreak, `<br>` or `<br/>`.^(5The markdown conventions are (original) two spaces at the of the physical line and (GitHub) a physical line break. Neither fit well with source code. Doxygen supports restricted HTML and allows for `<br>`.)
 
 ### 7.2 Text markup: fonts and links
 

@@ -110,7 +110,7 @@ unify_with_occurs_check(X,X) :- acyclic_term(X).
 ```
 
 `+Term1` **=@=** `+Term2`  
-True if `Term1` is a *variant* of (or *structurally equivalent* to) `Term2`. Testing for a variant is weaker than equivalence ([==/2](compare.html#==/2)), but stronger than unification ([=/2](compare.html#=/2)). Two terms `A` and `B` are variants iff there exists a renaming of the variables in `A` that makes `A` equivalent (==) to `B` and vice versa.^(69Row 7 and 8 of this table may come as a surprise, but row 8 is satisfied by (left-to-right) `A→`, `B→` and (right-to-left) `C→`, `A→`. If the same variable appears in different locations in the left and right term, the variant relation can be broken by consistent binding of both terms. E.g., after binding the first argument in row 8 to a value, both terms are no longer variant.) Examples:
+True if `Term1` is a *variant* of (or *structurally equivalent* to) `Term2`. Testing for a variant is weaker than equivalence ([==/2](compare.html#==/2)), but stronger than unification ([=/2](compare.html#=/2)). Two terms `A` and `B` are variants iff there exists a renaming of the variables in `A` that makes `A` equivalent (==) to `B` and vice versa.^(69Row 7 and 8 of this table may come as a surprise, but row 8 is satisfied by (left-to-right) `A→C`, `B→A` and (right-to-left) `C→A`, `A→B`. If the same variable appears in different locations in the left and right term, the variant relation can be broken by consistent binding of both terms. E.g., after binding the first argument in row 8 to a value, both terms are no longer variant.) Examples:
 
 > |     |                     |       |
 > |----:|:-------------------:|:-----:|

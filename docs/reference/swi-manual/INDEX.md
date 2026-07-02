@@ -1,11 +1,19 @@
 # SWI-Prolog reference manual - topic index
 
-Version **10.0.2** (matches the installed `swipl`). Generated from
-`/usr/lib/swi-prolog/doc/{Manual,packages}/*.html` by `docs/reference/build-swi-manual.sh`.
+Version **10.1.10** (matches the installed `swipl`). Generated from
+`/home/ned/opt/swipl-devel/lib/swipl/doc/{Manual,packages}/*.html` by `docs/reference/build-swi-manual.sh`.
 Grep across this directory to find a predicate; open a topic file to read it.
 
 ## Core manual
 - [32bits.md](32bits.md) - 2.20 SWI-Prolog and 32-bit machines
+- [Bibliography.md](Bibliography.md) - G Bibliography
+- [Contents.md](Contents.md) - Table of Contents
+- [DCG.md](DCG.md) - 4.13 DCG Grammar rules
+- [DDE.md](DDE.md) - 4.44 Windows DDE interface
+- [DocIndex.md](DocIndex.md) - Index
+- [IDE.md](IDE.md) - 3 Initialising and Managing a Prolog Project
+- [IO.md](IO.md) - 4.17 Input and output
+- [WFS.md](WFS.md) - 7.6 Well Founded Semantics
 - [abi-versions.md](abi-versions.md) - 2.21 Binary compatibility
 - [acknowledge.md](acknowledge.md) - 1.6 Acknowledgements
 - [aggregate.md](aggregate.md) - A.1 library(aggregate): Aggregation operators on backtrackable predicates
@@ -19,17 +27,16 @@ Grep across this directory to find a predicate; open a topic file to read it.
 - [attvar.md](attvar.md) - 8.1 Attributed variables
 - [autoload.md](autoload.md) - 2.14 Automatic loading of libraries
 - [basics.md](basics.md) - A.12 library(dcg/basics): Various general DCG utilities
-- [Bibliography.md](Bibliography.md) - G Bibliography
 - [bidicts.md](bidicts.md) - 5.4 Dicts: structures with named arguments
 - [breakpoint.md](breakpoint.md) - B.5 Breakpoint and watchpoint handling
 - [broadcast.md](broadcast.md) - A.5 library(broadcast): Broadcast and receive event notifications
-- [builtinlist.md](builtinlist.md) - 4.29 Built-in list operations
-- [builtin.md](builtin.md) - 4 Built-in Predicates
 - [builtin-statistics.md](builtin-statistics.md) - 4.41 Obtaining Runtime Statistics
+- [builtin.md](builtin.md) - 4 Built-in Predicates
+- [builtinlist.md](builtinlist.md) - 4.29 Built-in list operations
 - [charconv.md](charconv.md) - 4.26 Character Conversion
 - [chario.md](chario.md) - 4.19 Primitive character I/O
-- [charsio.md](charsio.md) - A.6 library(charsio): I/O on Lists of Character Codes
 - [chars.md](chars.md) - 4.2 Character representation
+- [charsio.md](charsio.md) - A.6 library(charsio): I/O on Lists of Character Codes
 - [chartype.md](chartype.md) - 4.24 Character properties
 - [check.md](check.md) - A.7 library(check): Consistency checking
 - [chr-compatibility.md](chr-compatibility.md) - 9.6 CHR compatibility
@@ -37,18 +44,17 @@ Grep across this directory to find a predicate; open a topic file to read it.
 - [chr-examples.md](chr-examples.md) - 9.5 CHR Examples
 - [chr-guidelines.md](chr-guidelines.md) - 9.7 CHR Programming Tips and Tricks
 - [chr-intro.md](chr-intro.md) - 9.1 Introduction to CHR
-- [chr.md](chr.md) - 9 CHR: Constraint Handling Rules
 - [chr-syntaxandsemantics.md](chr-syntaxandsemantics.md) - 9.2 CHR Syntax and Semantics
 - [chr-warnings-and-errors.md](chr-warnings-and-errors.md) - 9.8 CHR Compiler Errors and Warnings
+- [chr.md](chr.md) - 9 CHR: Constraint Handling Rules
+- [clp.md](clp.md) - 8 Constraint Logic Programming
 - [clpb.md](clpb.md) - A.8 library(clpb): CLP(B): Constraint Logic Programming over Boolean Variables
 - [clpfd.md](clpfd.md) - A.9 library(clpfd): CLP(FD): Constraint Logic Programming over Finite Domains
-- [clp.md](clp.md) - 8 Constraint Logic Programming
 - [clpqr.md](clpqr.md) - A.10 library(clpqr): Constraint Logic Programming over Rationals and Reals
 - [cmdline.md](cmdline.md) - 2.4 Command line options
 - [compare.md](compare.md) - 4.6 Comparison and Unification of Terms
 - [compilation.md](compilation.md) - 2.11 Loading and running projects
 - [consulting.md](consulting.md) - 4.3 Loading Prolog source files
-- [Contents.md](Contents.md) - Table of Contents
 - [contrib.md](contrib.md) - E.1 Contributing to the SWI-Prolog project
 - [control.md](control.md) - 4.7 Control Predicates
 - [coroutining.md](coroutining.md) - 8.2 Coroutining
@@ -56,22 +62,19 @@ Grep across this directory to find a predicate; open a topic file to read it.
 - [ctxmodule.md](ctxmodule.md) - 6.14 Transparent predicates: definition and context module
 - [cyclic.md](cyclic.md) - 2.16 Rational trees (cyclic terms)
 - [db.md](db.md) - 4.14 Database
-- [DCG.md](DCG.md) - 4.13 DCG Grammar rules
-- [DDE.md](DDE.md) - 4.44 Windows DDE interface
 - [debug-deployed-systems.md](debug-deployed-systems.md) - 14.5 Debugging and updating deployed systems
 - [debug-determinism.md](debug-determinism.md) - 4.40 Debugging and declaring determinism
-- [debugger.md](debugger.md) - 4.39 Debugging and Tracing Programs
 - [debug.md](debug.md) - A.14 library(debug): Print debug messages and test assertions
+- [debugger.md](debugger.md) - 4.39 Debugging and Tracing Programs
 - [debugoverview.md](debugoverview.md) - 2.10 Overview of the Debugger
 - [defmodule.md](defmodule.md) - 6.2 Defining a Module
 - [delcont.md](delcont.md) - 4.9 Delimited continuations
 - [deployment-options.md](deployment-options.md) - 14.1 Deployment options
-- [dialect.md](dialect.md) - C Compatibility with other Prolog dialects
 - [dialect-notes.md](dialect-notes.md) - C.2 Notes on specific dialects
+- [dialect.md](dialect.md) - C Compatibility with other Prolog dialects
 - [dicts.md](dicts.md) - A.15 library(dicts): Dict utilities
-- [DocIndex.md](DocIndex.md) - Index
-- [dynamic.md](dynamic.md) - 4.15 Declaring predicate properties
 - [dynamic-modules.md](dynamic-modules.md) - 6.13 Dynamic Modules
+- [dynamic.md](dynamic.md) - 4.15 Declaring predicate properties
 - [edit.md](edit.md) - 4.4 Editor Interface
 - [editreload.md](editreload.md) - 3.3 The test-edit-reload cycle
 - [engine-examples.md](engine-examples.md) - 11.1 Examples using engines
@@ -81,26 +84,26 @@ Grep across this directory to find a predicate; open a topic file to read it.
 - [error.md](error.md) - A.16 library(error): Error generating support
 - [examineprog.md](examineprog.md) - 4.16 Examining the program
 - [excepthook.md](excepthook.md) - B.6 Adding context to errors: prolog_exception_hook
-- [exception3.md](exception3.md) - B.7 Hooks using the exception predicate
 - [exception.md](exception.md) - 4.10 Exception handling
+- [exception3.md](exception3.md) - B.7 Hooks using the exception predicate
 - [exceptions.md](exceptions.md) - A.17 library(exceptions): Exception classification
-- [extensions.md](extensions.md) - 5 SWI-Prolog extensions
 - [ext-integration.md](ext-integration.md) - 5.5 Integration of strings and dicts in the libraries
 - [ext-issues.md](ext-issues.md) - 5.7 Remaining issues
 - [ext-lists.md](ext-lists.md) - 5.1 Lists are special
 - [ext-syntax.md](ext-syntax.md) - 5.3 Syntax changes since SWI-Prolog 7
+- [extensions.md](extensions.md) - 5 SWI-Prolog extensions
 - [fastrw.md](fastrw.md) - A.18 library(fastrw): Fast reading and writing of terms
 - [files.md](files.md) - 4.36 File System Interaction
 - [findappfile.md](findappfile.md) - 14.7 Finding Application files
 - [findhome.md](findhome.md) - 12.6 The Prolog‘home’directory
 - [flags.md](flags.md) - 2.12 Environment Control (Prolog flags)
 - [forall2.md](forall2.md) - 4.31 Forall
+- [foreign-streams.md](foreign-streams.md) - 12.9 Foreign access to Prolog IO streams
+- [foreign.md](foreign.md) - 12 Foreign Language Interface
 - [foreigninclude.md](foreigninclude.md) - 12.4 The Foreign Include File
 - [foreignlink.md](foreignlink.md) - 12.2 Linking Foreign Modules
-- [foreign.md](foreign.md) - 12 Foreign Language Interface
 - [foreignnotes.md](foreignnotes.md) - 12.8 Notes on Using Foreign Code
 - [foreignoverview.md](foreignoverview.md) - 12.1 Overview of the Interface
-- [foreign-streams.md](foreign-streams.md) - 12.9 Foreign access to Prolog IO streams
 - [foreignthread.md](foreignthread.md) - 10.6 Multithreaded mixed C and Prolog applications
 - [foreigntypes.md](foreigntypes.md) - 12.3 Interface Data Types
 - [foreignxmp.md](foreignxmp.md) - 12.7 Example of Using the Foreign Interface
@@ -116,21 +119,19 @@ Grep across this directory to find a predicate; open a topic file to read it.
 - [highorder.md](highorder.md) - A.13 library(dcg/high_order): High order grammar operations
 - [history.md](history.md) - 2.8 Command line history
 - [hooks.md](hooks.md) - 2.13 An overview of hook predicates
-- [IDE.md](IDE.md) - 3 Initialising and Managing a Prolog Project
 - [idepreds.md](idepreds.md) - 3.8 Accessing the IDE from your program
 - [idesummary.md](idesummary.md) - 3.9 Summary of the IDE
 - [implhistory.md](implhistory.md) - 1.5 Implementation history
 - [import.md](import.md) - 6.3 Importing Predicates into a Module
 - [importmodule.md](importmodule.md) - 6.10 Dynamic importing using import modules
 - [increval.md](increval.md) - A.21 library(increval): Incremental dynamic predicate modification
-- [index.md](index.md) - SWI-Prolog 10.0.2 Reference Manual
+- [index.md](index.md) - SWI-Prolog 10.1.10 Reference Manual
 - [initfile.md](initfile.md) - 2.2 The user's initialisation file
 - [initgoal.md](initgoal.md) - 2.3 Initialisation files and goals
 - [intercept.md](intercept.md) - A.22 library(intercept): Intercept and signal interface
 - [interrupt.md](interrupt.md) - B.4 Simulating a debugger interrupt
 - [intlibs.md](intlibs.md) - B.9 Hooks for integrating libraries
 - [intro.md](intro.md) - 1 Introduction
-- [IO.md](IO.md) - 4.17 Input and output
 - [iostream.md](iostream.md) - A.23 library(iostream): Utilities to deal with streams
 - [jitindex.md](jitindex.md) - 2.17 Just-in-time clause indexing
 - [libpl.md](libpl.md) - A The SWI-Prolog library
@@ -156,8 +157,8 @@ Grep across this directory to find a predicate; open a topic file to read it.
 - [modulecompat.md](modulecompat.md) - 6.16 Compatibility of the Module System
 - [moduleop.md](moduleop.md) - 6.9 Operators and modules
 - [modules.md](modules.md) - 6 Modules
-- [mtoplevel.md](mtoplevel.md) - 6.7 Interacting with modules from the top level
 - [mt-xpce.md](mt-xpce.md) - 10.7 Multithreading and the XPCE graphics system
+- [mtoplevel.md](mtoplevel.md) - 6.7 Interacting with modules from the top level
 - [navigator.md](navigator.md) - 3.6 The Prolog Navigator
 - [nb_set.md](nb_set.md) - A.28 library(nb_set): Non-backtrackable set
 - [occurs.md](occurs.md) - A.31 library(occurs): Finding and counting sub-terms
@@ -173,8 +174,8 @@ Grep across this directory to find a predicate; open a topic file to read it.
 - [pack-attach.md](pack-attach.md) - 15.2 Built-in predicates for attaching packs
 - [pack-devel.md](pack-devel.md) - 15.5 Developing a pack
 - [pack-install.md](pack-install.md) - 15.1 Installing packs
-- [packs.md](packs.md) - 15 Packs: community add-ons
 - [pack-structure.md](pack-structure.md) - 15.4 Structure of a pack
+- [packs.md](packs.md) - 15 Packs: community add-ons
 - [pairs.md](pairs.md) - A.35 library(pairs): Operations on key-value lists
 - [pceemacs.md](pceemacs.md) - 3.4 Using the PceEmacs built-in editor
 - [persistency.md](persistency.md) - A.36 library(persistency): Provide persistent dynamic predicates
@@ -190,9 +191,9 @@ Grep across this directory to find a predicate; open a topic file to read it.
 - [profile.md](profile.md) - 4.42 Execution profiling
 - [program-resources.md](program-resources.md) - 14.4 Using program resources
 - [projectfiles.md](projectfiles.md) - 3.1 The project source files
+- [prolog-event.md](prolog-event.md) - B.8 Prolog events
 - [prologcoverage.md](prologcoverage.md) - A.40 library(prolog_coverage): Coverage analysis tool
 - [prologdebug.md](prologdebug.md) - A.41 library(prolog_debug): User level debugging tools
-- [prolog-event.md](prolog-event.md) - B.8 Prolog events
 - [prologjiti.md](prologjiti.md) - A.42 library(prolog_jiti): Just In Time Indexing (JITI) utilities
 - [prologpack.md](prologpack.md) - 15.3 library(prolog_pack): A package manager for Prolog
 - [prologtrace.md](prologtrace.md) - A.43 library(prolog_trace): Print access to predicates
@@ -235,7 +236,6 @@ Grep across this directory to find a predicate; open a topic file to read it.
 - [tabling-about.md](tabling-about.md) - 7.13 About the tabling implementation
 - [tabling-constraints.md](tabling-constraints.md) - 7.10 Tabling and constraints
 - [tabling-incremental.md](tabling-incremental.md) - 7.7 Incremental tabling
-- [tabling.md](tabling.md) - 7 Tabled execution (SLG resolution)
 - [tabling-memoize.md](tabling-memoize.md) - 7.1 Example 1: using tabling for memoizing
 - [tabling-mode-directed.md](tabling-mode-directed.md) - 7.3 Answer subsumption or mode directed tabling
 - [tabling-monotonic.md](tabling-monotonic.md) - 7.8 Monotonic tabling
@@ -244,13 +244,14 @@ Grep across this directory to find a predicate; open a topic file to read it.
 - [tabling-restraints.md](tabling-restraints.md) - 7.11 Tabling restraints: bounded rationality and tripwires
 - [tabling-shared.md](tabling-shared.md) - 7.9 Shared tabling
 - [tabling-subsumptive.md](tabling-subsumptive.md) - 7.5 Variant and subsumptive tabling
+- [tabling.md](tabling.md) - 7 Tabled execution (SLG resolution)
 - [termrw.md](termrw.md) - 4.20 Term reading and writing
 - [terms.md](terms.md) - A.60 library(terms): Term manipulation
 - [theme.md](theme.md) - 2.5 UI Themes
 - [thmonitor.md](thmonitor.md) - 10.2 Monitoring threads
+- [thread.md](thread.md) - A.61 library(thread): High level thread primitives
 - [threadcom.md](threadcom.md) - 10.3 Thread communication
 - [threadcreate.md](threadcreate.md) - 10.1 Creating and destroying Prolog threads
-- [thread.md](thread.md) - A.61 library(thread): High level thread primitives
 - [threadpool.md](threadpool.md) - A.62 library(thread_pool): Resource bounded thread management
 - [threads.md](threads.md) - 10 Multithreaded applications
 - [threadsync.md](threadsync.md) - 10.4 Thread synchronisation
@@ -269,7 +270,6 @@ Grep across this directory to find a predicate; open a topic file to read it.
 - [wasm-js-call.md](wasm-js-call.md) - 13.3 Accessing JavaScript from Prolog
 - [wasm-loading.md](wasm-loading.md) - 13.1 Loading and initializing Prolog
 - [wasm-version.md](wasm-version.md) - 13 Using SWI-Prolog in your browser (WASM)
-- [WFS.md](WFS.md) - 7.6 Well Founded Semantics
 - [whymodules.md](whymodules.md) - 6.1 Why Use Modules?
 - [widechars.md](widechars.md) - 2.18 Wide character support
 - [writef.md](writef.md) - A.29 library(writef): Old-style formatted write
@@ -279,18 +279,15 @@ Grep across this directory to find a predicate; open a topic file to read it.
 
 ## Packages
 - [packages/archive.md](packages/archive.md) - SWI-Prolog binding to libarchive
-- [packages/bdb4pl.md](packages/bdb4pl.md) - SWI-Prolog BerkeleyDB interface
 - [packages/clib.md](packages/clib.md) - SWI-Prolog C-library
 - [packages/cql.md](packages/cql.md) - Constraint Query Language A high level interface to SQL databases
 - [packages/http.md](packages/http.md) - SWI-Prolog HTTP support
 - [packages/index.md](packages/index.md) - SWI-Prolog packages
 - [packages/janus.md](packages/janus.md) - SWI-Prolog Python interface
-- [packages/jpl.md](packages/jpl.md) - JPL: A bidirectional Prolog/Java interface
 - [packages/json.md](packages/json.md) - SWI-Prolog JSON library
 - [packages/libedit.md](packages/libedit.md) - SWI-Prolog binding to BSD libedit
 - [packages/mqi.md](packages/mqi.md) - mqi -- Python and Other Programming Languge Integration for SWI Prolog
 - [packages/nlp.md](packages/nlp.md) - SWI-Prolog Natural Language Processing Primitives
-- [packages/odbc.md](packages/odbc.md) - SWI-Prolog ODBC Interface
 - [packages/paxos.md](packages/paxos.md) - Paxos -- a SWI-Prolog replicating key-value store
 - [packages/pcre.md](packages/pcre.md) - SWI-Prolog Regular Expression library
 - [packages/pengines.md](packages/pengines.md) - Pengines: Web Logic Programming Made Easy

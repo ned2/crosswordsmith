@@ -14,7 +14,7 @@ The `library(option)` provides some utilities for processing option lists. Optio
 
 SWI-Prolog *dicts* provide a convenient and efficient alternative to option lists. For this reason, both built-in predicates and predicates that use this library support dicts transparantly.
 
-Processing option lists inside time-critical code (loops) can cause serious overhead. The above mentioned *dicts* is the preferred mitigation. A more portable alternative is to define a record using `library(record)` and initialise this using make\_`<`record[\>/2](arith.html#%3E/2). In addition to providing good performance, this also provides type-checking and central declaration of defaults.
+Processing option lists inside time-critical code (loops) can cause serious overhead. The above mentioned *dicts* is the preferred mitigation. A more portable alternative is to define a record using `library(record)` and initialise this using make\_\<record[\>/2](arith.html#%3E/2). In addition to providing good performance, this also provides type-checking and central declaration of defaults.
 
 Options typically have exactly one argument. The library does support options with 0 or more than one argument with the following restrictions:
 

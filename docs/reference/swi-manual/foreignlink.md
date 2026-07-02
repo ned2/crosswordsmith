@@ -100,17 +100,32 @@ Installation function to use. Default is `default(install)`, which derives the f
 
 |  |  |
 |----|----|
-| `FileSpec` | is a specification for [absolute_file_name/3](files.html#absolute_file_name/3). If searching the file fails, the plain name is passed to the OS to try the default method of the OS for locating foreign objects. The default definition of [file_search_path/2](consulting.html#file_search_path/2) searches `<`prolog home`>`/lib/`<`arch`>` on Unix and `<`prolog home`>`/bin on Windows. |
+| `FileSpec` | is a specification for [absolute_file_name/3](files.html#absolute_file_name/3). If searching the file fails, the plain name is passed to the OS to try the default method of the OS for locating foreign objects. The default definition of [file_search_path/2](consulting.html#file_search_path/2) searches \<prolog home\>/lib/\<arch\> on Unix and \<prolog home\>/bin on Windows. |
 
 See also  
 [use_foreign_library/1](foreignlink.html#use_foreign_library/1),2 are intended for use in directives.
 
 \[det\]**unload_foreign_library**(`+FileSpec`)  
 \[det\]**unload_foreign_library**(`+FileSpec, +Exit:atom`)  
-Unload a *shared object* or *DLL*. After calling the `Exit` function, the shared object is removed from the process. The default exit function is composed from =uninstall\_=, followed by the file base-name.
+Unload a *shared object* or *DLL*. After calling the `Exit` function, the shared object is removed from the process. The default exit function is composed from `uninstall_`, followed by the file base-name.
 
 **current_foreign_library**(`?File, ?Public`)  
 Query currently loaded shared libraries.
+
+\[nondet\]**foreign_library_property**(`?File, ?Property`)  
+True when `Property` is a property of the foreign library `File`. Currently defined properties are:
+
+**module**(`Module`)  
+`Module` context into which the library was loaded
+
+**entry**(`Entry`)  
+Name of the *install* function used.
+
+**absolute_file_name**(`Path`)  
+Absolute file name for `File` when known.
+
+**predicate**(`Pred`)  
+Predicate registered by calling the entry function.
 
 **reload_foreign_libraries**  
 Reload all foreign libraries loaded (after restore of a state created using [qsave_program/2](saved-states.html#qsave_program/2).

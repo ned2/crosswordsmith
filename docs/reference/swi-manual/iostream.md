@@ -40,7 +40,7 @@ Explicitly open the file `Path`. `Path` can be an `Path`(File) term as accepted 
 **string**(`String`)  
 Open a Prolog string, atom, list of characters or codes as an *input* stream.
 
-The typical usage scenario is given in the code below, where `<`process`>` processes the input.
+The typical usage scenario is given in the code below, where \<process\> processes the input.
 
 ``` code
 setup_call_cleanup(

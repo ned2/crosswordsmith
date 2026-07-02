@@ -42,20 +42,20 @@ embedding in a web page, where the clues/solved words are links).
 
 ## Requirements
 
-[SWI-Prolog](https://www.swi-prolog.org/). The solver core is plain
+[SWI-Prolog](https://www.swi-prolog.org/) 10.1.x. The solver core is plain
 Prolog, but the input and output paths are SWI-specific: clue metadata and
 the JSON output both use SWI dicts and `library(http/json)`, so porting to
-another Prolog would mean replacing those. It is developed and tested
-against SWI and has been confirmed to run on SWI-Prolog 9.2.x (the version
-in the Ubuntu repositories) and 10.0.x (from the `ppa:swi-prolog/stable`
-PPA).
+another Prolog would mean replacing those. It is developed and tested against
+the SWI development release currently on `PATH` as `swipl` (10.1.10 at the time
+of writing).
 
 
 ## Usage
 
-`crosswordsmith` is an executable SWI-Prolog script (note the `#!` shebang). A
-bare invocation prints usage and exits non-zero; every capability is a verb. If
-you do not have execute permission set, run it as `swipl crosswordsmith <args…>`.
+`crosswordsmith` is an executable SWI-Prolog script (note the `#!/usr/bin/env
+swipl` shebang, so it follows your `PATH`). A bare invocation prints usage and
+exits non-zero; every capability is a verb. If you do not have execute permission
+set, run it as `swipl crosswordsmith <args…>`.
 
     $ ./crosswordsmith arrange --input <file> [options]
 

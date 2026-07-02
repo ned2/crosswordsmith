@@ -267,9 +267,7 @@ assign_words(Strategy, Words, PlacedWords, GridLen, Start, Dir, GIn, GOut, Place
     % according to the strategy; it is the only thing the strategies vary.
     select_word(Strategy, Words, PlacedWords, GridLen, Start, Dir, GIn, Entry, RemWords),
     Entry = [Word|_],   % the solver uses only the answer; metadata is ignored
-    atom_chars(Word, Letters),
-    delete(Letters, ' ', Letters1),
-    delete(Letters1, '-', Letters2),
+    entry_letters(Entry, Letters2),
     length(Letters2, WLen),
     % on first pass, Start and Dir will be grounded with the start values
     % then afterwards will be unground, with find_intersecting_word grounding them
@@ -335,9 +333,7 @@ positive_key(Count-_) :- Count > 0.
 % after) are left untouched.
 mrv_count(Cap, PlacedWords, GridLen, Start, Dir, GIn, Entry, Count) :-
     Entry = [Word|_],
-    atom_chars(Word, Letters),
-    delete(Letters, ' ', Letters1),
-    delete(Letters1, '-', Letters2),
+    entry_letters(Entry, Letters2),
     length(Letters2, WLen),
     aggregate_all(count,
             capped(Cap,
@@ -381,14 +377,7 @@ assign_words_inc(Words, PlacedWords, StateIn, GridLen, Start, Dir, GIn, GOut, Ou
     select_inc(Words, PlacedWords, StateIn, GridLen, Start, Dir, GIn,
                Entry, RemWords, StateOut),
     Entry = [Word|_],
-    % Keep this normalization INLINE - do NOT fold it into entry_letters/2.
-    % Substituting the predicate call here (this is the hot mrv_inc search loop)
-    % regresses stack use on deep searches: the toc_demo@25 --size-mode max fill
-    % overflows even an 8Gb stack. entry_letters/2 is fine on the cache path
-    % (select_inc/inc_count) but not in this recursive clause. (audit P8, rejected)
-    atom_chars(Word, Letters),
-    delete(Letters, ' ', Letters1),
-    delete(Letters1, '-', Letters2),
+    entry_letters(Entry, Letters2),
     length(Letters2, WLen),
     find_intersecting_word(Letters2, WLen, PlacedWords, GridLen, Start, Dir),
     assign_word(Word, Letters2, WLen, Start, Dir, GridLen, PlacedWords, GIn, Placed, G1),

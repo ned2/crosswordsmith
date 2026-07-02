@@ -873,7 +873,7 @@ xpath(DOM, //tr, TR),
 xpath(TR,  /td(last), TD)
 ```
 
-Match each `href` attribute in an `<`a`>` element
+Match each `href` attribute in an \<a\> element
 
 ``` code
 xpath(DOM, //a(@href), HREF)
@@ -1001,7 +1001,7 @@ Especially when generating XML rather than HTML, this is such an obvious thing t
 
 Having decided that the input should be well formed, that means **NO NEW SYNTAX**
 
-None of the weird and horrible `<`% ... %`>` or whatever not-quite-XML stuff you see in other template systems, making checking so very hard (and therefore, making errors so distressingly common).
+None of the weird and horrible \<% ... %\> or whatever not-quite-XML stuff you see in other template systems, making checking so very hard (and therefore, making errors so distressingly common).
 
 That in turns means that PWP "markup" must be based on special elements or special attributes. The fact that an XML parser must allow undeclared attributes on any element even when validating, but must not allow undeclared elements, suggests doing this through attributes. In particular, one should be able to take an existing DTD, such as an XHTML DTD, and just use that without modification. So the design reduces to
 

@@ -11,7 +11,7 @@ These predicates were introduced in the context of the [SWISH](http://swish.swi-
 
 However, the predicates from this library can also be used to stay longer within the clean paradigm where non-deterministic predicates are composed from simpler non-deterministic predicates by means of conjunction and disjunction. While evaluating a conjunction, we might want to eliminate duplicates of the first part of the conjunction. Below we give both the classical solution for solving variations of (`a(X)`, `b(X)`) and the ones using this library side-by-side.
 
-- Avoid duplicates of earlier steps `<`br`>`
+- Avoid duplicates of earlier steps \<br\>
 
   ``` code
     setof(X, a(X), Xs),               distinct(a(X)),
@@ -21,7 +21,7 @@ However, the predicates from this library can also be used to stay longer within
 
   Note that the [distinct/1](solutionsequences.html#distinct/1) based solution returns the first result of `distinct(a(X))` immediately after a/1 produces a result, while the [setof/3](allsolutions.html#setof/3) based solution will first compute all results of a/1.
 
-- Only try `b(X)` only for the top-10 `a(X)` `<`br`>`
+- Only try `b(X)` only for the top-10 `a(X)` \<br\>
 
   ``` code
     setof(X, a(X), Xs),               limit(10, order_by([desc(X)], a(X))),
@@ -58,7 +58,7 @@ Limit the number of solutions. True if `Goal` is true, returning at most `Count`
 
 |  |  |
 |----|----|
-| `Count` | is either `infinite`, making this predicate equivalent to [call/1](metacall.html#call/1) or an integer. If *`Count` `<` 1* this predicate fails immediately. |
+| `Count` | is either `infinite`, making this predicate equivalent to [call/1](metacall.html#call/1) or an integer. If *`Count` \< 1* this predicate fails immediately. |
 
 **offset**(`+Count, :Goal`)  
 Ignore the first `Count` solutions. True if `Goal` is true and produces more than `Count` solutions. This predicate computes and ignores the first `Count` solutions.

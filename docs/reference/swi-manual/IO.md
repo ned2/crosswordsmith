@@ -110,6 +110,9 @@ Using type `text` (default), Prolog will write a text file in an operating syste
 **wait**(`Bool`)  
 This option can be combined with the `lock` option. If `false` (default `true`), the open call returns immediately with an exception if the file is locked. The exception has the format `permission_error(lock, source_sink, SrcDest)`.
 
+**unicode_atoms**(`Mode`)  
+Set the per-stream atom-content policy used by the term reader on this stream. See [read_term/2](termrw.html#read_term/2),3 for the meaning of each value (`accept`, `nfc`, `error`, `reject`).
+
 \[ISO\]**open**(`+SrcDest, +Mode, --Stream`)  
 Equivalent to [open/4](IO.html#open/4) with an empty option list.
 
@@ -208,6 +211,9 @@ Unify `Type` with `text` or `binary`.
 **tty**(`Bool`)  
 This property is reported with `Bool` equal to `true` if the stream is associated with a terminal. See also [set_stream/2](IO.html#set_stream/2).
 
+**unicode_atoms**(`Mode`)  
+`Mode` is the per-stream atom-content policy in effect for the term reader: one of `accept`, `nfc`, `error` or `reject`. See [read_term/2](termrw.html#read_term/2),3 for the meaning of each value.
+
 **write_errors**(`Atom`)  
 `Atom` is one of `error` (default) or `ignore`. The latter is intended to deal with service processes for which the standard output handles are not connected to valid streams. In these cases write errors may be ignored on `user_error`.
 
@@ -289,6 +295,9 @@ Change the behaviour when writing characters to the stream that cannot be repres
 
 **tty**(`Bool`)  
 Modify whether Prolog thinks there is a terminal (i.e. human interaction) connected to this stream. On Unix systems the initial value comes from **isatty()**. On Windows, the initial user streams are supposed to be associated to a terminal. See also [stream_property/2](IO.html#stream_property/2).
+
+**unicode_atoms**(`Mode`)  
+Set the per-stream atom-content policy used by the term reader. `Mode` is one of `accept`, `nfc`, `error` or `reject`; see [read_term/2](termrw.html#read_term/2),3 for the meaning of each value. The Prolog flag [unicode_atoms](flags.html#flag:unicode_atoms) provides the default seeded into newly opened streams.
 
 **set_prolog_IO**(`+In, +Out, +Error`)  
 Prepare the given streams for interactive behaviour normally associated to the terminal. `In` becomes the `user_input` and `current_input` of the calling thread. `Out` becomes `user_output` and `current_output`. If `Error` equals `Out` an unbuffered stream is associated to the same destination and linked to `user_error`. Otherwise `Error` is used for `user_error`. Output buffering for `Out` is set to `line` and buffering on `Error` is disabled. See also [prolog/0](toplevel.html#prolog/0) and [set_stream/2](IO.html#set_stream/2). The *clib* package provides the library `library(prolog_server)`, creating a TCP/IP server for creating an interactive session to Prolog.
