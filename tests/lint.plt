@@ -35,7 +35,7 @@ grid_rule_sev(Report, Rule, Sev) :-
 % A canonical words[] entry parses to a placed word: [r,c] cells -> 1-based
 % numbers, direction -> atom, len from the cell count.
 test(lint_loads_canonical_word) :-
-    lint_dict_layout(
+    crosswordsmith_lint:lint_dict_layout(
         _{gridLength:5, words:[
             _{number:1, direction:"across", answer:"CAT", cells:[[0,0],[0,1],[0,2]]}]},
         5, [W]),
@@ -43,7 +43,7 @@ test(lint_loads_canonical_word) :-
     get_dict(cells, W, [1,2,3]), get_dict(len, W, 3), get_dict(num, W, 1).
 
 test(lint_layout_no_grid_length_throws, [throws(error(lint_no_grid_length, _))]) :-
-    lint_dict_layout(_{words:[]}, _, _).
+    crosswordsmith_lint:lint_dict_layout(_{words:[]}, _, _).
 
 % --- report shape (AC-LINT-1) ------------------------------------------------
 
@@ -149,9 +149,9 @@ test(lint_known_profiles) :-
 % The primary-sourced table: none in a 3, one in 4-5, two in 6-7, three in 8,
 % a third (floor L/3) in 9+.
 test(barred_band_table) :-
-    barred_max_unch(3, 0), barred_max_unch(4, 1), barred_max_unch(5, 1),
-    barred_max_unch(6, 2), barred_max_unch(7, 2), barred_max_unch(8, 3),
-    barred_max_unch(9, 3), barred_max_unch(12, 4).
+    crosswordsmith_lint:barred_max_unch(3, 0), crosswordsmith_lint:barred_max_unch(4, 1), crosswordsmith_lint:barred_max_unch(5, 1),
+    crosswordsmith_lint:barred_max_unch(6, 2), crosswordsmith_lint:barred_max_unch(7, 2), crosswordsmith_lint:barred_max_unch(8, 3),
+    crosswordsmith_lint:barred_max_unch(9, 3), crosswordsmith_lint:barred_max_unch(12, 4).
 
 % A 5-letter entry checked at only 1 cell has 4 unches > the max of 1 -> FAIL.
 % (P4: eval_word_rule/5 now takes the word's precomputed checked bitmap; build it
@@ -161,7 +161,7 @@ test(barred_band_fails_underchecked_five) :-
     D = word{answer:'XYZ',   dir:down,   cells:[3,20,37],   len:3, num:2},
     layout_dir_cells([W, D], DirCells),
     word_checked_bitmap(W, DirCells, Bits),
-    eval_word_rule(checked_band, fail, W, Bits, result(checked_band, Sev, _)),
+    crosswordsmith_lint:eval_word_rule(checked_band, fail, W, Bits, result(checked_band, Sev, _)),
     Sev == fail.
 
 % A fully-checked entry has 0 unches, within any band -> PASS.
@@ -170,7 +170,7 @@ test(barred_band_passes_fully_checked) :-
     layout_dir_cells(M, DirCells),
     once(( member(W, M),
            word_checked_bitmap(W, DirCells, Bits),
-           eval_word_rule(checked_band, fail, W, Bits, result(checked_band, pass, _)) )).
+           crosswordsmith_lint:eval_word_rule(checked_band, fail, W, Bits, result(checked_band, pass, _)) )).
 
 % The profile applies the band per word and RELAXES symmetry to advisory (WARN).
 test(barred_profile_applies_band_relaxed_symmetry) :-

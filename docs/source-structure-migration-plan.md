@@ -348,16 +348,17 @@ Zero project dependencies; the safest first target.
 Before stockgrid, which calls `lint_run/5`. Lint's metrics/core calls resolve
 via `user` inheritance until 4.5/4.7.
 
-- [ ] Add `:- module(crosswordsmith_lint, [...]).`.
-- [ ] Export:
-  - [ ] `lint_solve/4` (driver)
-  - [ ] `lint_run/5` (stockgrid)
-  - [ ] `lint_known_profile/1` (driver)
-  - [ ] `lint_load/3` (deliberate API; today only tests use it)
-- [ ] Qualify `lint.plt` internals (`lint_dict_layout/3`, `barred_max_unch/2`,
-      `eval_word_rule/5`) and update `stockgrid.plt`/`fill.plt` cross-calls to
-      import or qualify `lint_run/5`/`lint_load/3`.
-- [ ] Run `make test`.
+- [x] Add `:- module(crosswordsmith_lint, [...]).`.
+- [x] Export:
+  - [x] `lint_solve/4` (driver)
+  - [x] `lint_run/5` (stockgrid)
+  - [x] `lint_known_profile/1` (driver)
+  - [x] `lint_load/3` (deliberate API; today only tests use it)
+- [x] Qualify `lint.plt` internals (`lint_dict_layout/3`, `barred_max_unch/2`,
+      `eval_word_rule/5`); `stockgrid.plt`/`fill.plt` cross-calls to
+      `lint_run/5`/`lint_load/3` need no change — they are exported and land
+      in `user` via `load.pl`'s `use_module`, where the `.plt` suites live.
+- [x] Run `make test`.
 
 ### 4.3 `crosswordsmith_stockgrid`
 

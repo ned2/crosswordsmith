@@ -24,7 +24,7 @@
 % land in `user`, where the not-yet-module-ized plain files still resolve them
 % (Phase-4 bridge; see the migration plan).
 :- ensure_loaded(crosswordsmith(arrange)).
-:- ensure_loaded(crosswordsmith(lint)).
+:- use_module(crosswordsmith(lint)).
 :- use_module(crosswordsmith(export)).
 :- ensure_loaded(crosswordsmith(stockgrid)).
 :- ensure_loaded(crosswordsmith(fill)).
