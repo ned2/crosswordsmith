@@ -419,27 +419,33 @@ via `user` inheritance until 4.5/4.7.
 
 ### 4.6 `crosswordsmith_arrange`
 
-- [ ] Add `:- module(crosswordsmith_arrange, [...]).`.
-- [ ] Export CLI-facing predicates:
-  - [ ] `arrange_solve/4`
-  - [ ] `arrange_fragment_solve/5`
-  - [ ] `arrange_candidates_solve/5`
-  - [ ] `arrange_enumerate_solve/2`
-  - [ ] `load_fragment/3` (driver and fill)
-  - [ ] `reconcile_fragment_size/3` (driver — missing from the earlier draft)
-  - [ ] `set_check_target/1` (new home; see next item)
-- [ ] Move `set_check_target/1` from the `crosswordsmith` driver into this
+- [x] Add `:- module(crosswordsmith_arrange, [...]).`.
+- [x] Export CLI-facing predicates:
+  - [x] `arrange_solve/4`
+  - [x] `arrange_fragment_solve/5`
+  - [x] `arrange_candidates_solve/5`
+  - [x] `arrange_enumerate_solve/2`
+  - [x] `load_fragment/3` (driver and fill)
+  - [x] `reconcile_fragment_size/3` (driver — missing from the earlier draft)
+  - [x] `set_check_target/1` (new home; see next item)
+- [x] Move `set_check_target/1` from the `crosswordsmith` driver into this
       module; keep `:- dynamic check_target_override/1` module-private. The
-      driver calls the exported setter; `arrange.plt` drops its
-      `user:check_target_override/1` asserts in favour of the setter (or
-      qualified asserts).
-- [ ] Import `crosswordsmith_metrics` and (once 4.7 lands) core explicitly;
-      until 4.7, core predicates resolve via `user` inheritance.
-- [ ] White-box test helpers (`arrange_best_layout/5,6`, `emit_arrange/4`,
+      driver validates the flag (`validate_check_target/1`, keeping
+      `cli_error` in the CLI) and calls the exported setter; `arrange.plt`
+      dropped its `user:check_target_override/1` asserts in favour of the
+      setter.
+- [x] Import `crosswordsmith_metrics` and (once 4.7 lands) core explicitly;
+      until 4.7, core predicates resolve via `user` inheritance. (The
+      arrange→core sibling chain-load is REMOVED here, not in Phase 5: from a
+      module file it would compile core into the arrange module. `load.pl`
+      loads core (plain, into `user`) before arrange instead.)
+- [x] White-box test helpers (`arrange_best_layout/5,6`, `emit_arrange/4`,
       `fragment_dict_words/3`, `construct_one/7`, ...) are **not** exported —
-      qualify in `arrange.plt` (per Resolved Decision 3).
-- [ ] Update CLI/`fill`/tests.
-- [ ] Run `make test`.
+      qualified in `arrange.plt` (19 predicates). Gotcha found: a qualified
+      goal inside a yall lambda must be parenthesized (`(:)/2` is priority
+      600, above `(>>)/2`'s 400).
+- [x] Update CLI/`fill`/tests.
+- [x] Run `make test`.
 
 ### 4.7 `crosswordsmith_core`
 

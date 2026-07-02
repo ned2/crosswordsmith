@@ -5,17 +5,28 @@
 % docs/design-spec.md §7.
 %
 % This file deliberately does NOT define `main`/initialization, so it can be
-% consulted by a harness without side effects. It consults core.pl (which
-% in turn loads metrics.pl), reusing the legality core, the MRV-inc branch step,
-% and the existing checking metrics verbatim. (The Phase-1.5 `gate_*`
-% measurement harness that lived here was removed once the gate's descope
-% decision was recorded in the implementation plan.)
+% loaded by a harness without side effects. It reuses core.pl's legality core
+% and MRV-inc branch step (resolved via `user` inheritance until core is
+% module-ized, Phase 4.7 — load.pl loads core before this file) and the
+% checking metrics (imported from crosswordsmith_metrics below). (The
+% Phase-1.5 `gate_*` measurement harness that lived here was removed once the
+% gate's descope decision was recorded in the implementation plan.)
+%
+% Exports: the four *_solve CLI seams, the fragment API the driver and fill
+% share (load_fragment/3, reconcile_fragment_size/3), and set_check_target/1
+% (the only sanctioned writer of the module-private check_target_override/1
+% dynamic). White-box test helpers are NOT exported — arrange.plt reaches
+% them as crosswordsmith_arrange:Pred(...).
 
-% Transitional sibling chain-load; Phase 4 of the source-structure migration
-% replaces it with explicit module imports.
-:- prolog_load_context(directory, Dir),
-   directory_file_path(Dir, 'core.pl', CoreFile),
-   ensure_loaded(CoreFile).
+:- module(crosswordsmith_arrange,
+          [ arrange_solve/4,
+            arrange_fragment_solve/5,
+            arrange_candidates_solve/5,
+            arrange_enumerate_solve/2,
+            load_fragment/3,
+            reconcile_fragment_size/3,
+            set_check_target/1
+          ]).
 
 :- use_module(library(apply)).
 :- use_module(library(aggregate)).
@@ -23,6 +34,17 @@
 % and the greedy constructor's seed selection); imported explicitly (not via
 % autoload) to survive a qsave_program(..., [autoload(false)]) (P11).
 :- use_module(library(pairs)).
+
+% The shared metric layer: optimizer signals (word_checked_count/3,
+% placed_bbox/4, word_cells/5), the answer footprint (word_letters/3), and
+% cell_rc/4 for the constructor's bbox-growth scoring.
+:- use_module(crosswordsmith(metrics),
+              [ word_checked_count/3,
+                word_letters/3,
+                placed_bbox/4,
+                word_cells/5,
+                cell_rc/4
+              ]).
 
 
 % ---------------------------------------------------------------------------
@@ -38,14 +60,26 @@ arrange_weights(5, 1).
 % check_target_override/1 (absent => the default). min/2 means N only ever
 % LOWERS the target - an N above ceil(L/2) is a no-op - matching the spec intent
 % ("lowering target below ceil(L/2) where half is unreachable").
-% Invariant: at most ONE check_target_override/1 fact. The CLI's set_check_target/1
-% always retractall's before assertz, so check_target/2's `->` (which commits to
-% the first solution) reads the single current override. Do not assertz a second
-% without retracting (P17).
+% Invariant: at most ONE check_target_override/1 fact. set_check_target/1 (the
+% exported setter - the ONLY sanctioned writer; the dynamic itself is
+% module-private) always retractall's before assertz, so check_target/2's `->`
+% (which commits to the first solution) reads the single current override. Do
+% not assertz a second without retracting (P17).
 :- dynamic check_target_override/1.
 check_target(L, T) :-
     T0 is (L + 1) // 2,
     ( check_target_override(K) -> T is min(T0, K) ; T = T0 ).
+
+% set_check_target(N): install the global --check-target ceiling (spec §7.2
+% reachability escape hatch). -1 (the CLI's "not given" sentinel) clears any
+% override; N>=1 lowers each word's target to min(ceil(L/2), N). Argument
+% validation (and the CLI error message) stays with the driver; this setter
+% fails on anything else rather than half-updating the state.
+set_check_target(-1) :- !, retractall(check_target_override(_)).
+set_check_target(N) :-
+    integer(N), N >= 1,
+    retractall(check_target_override(_)),
+    assertz(check_target_override(N)).
 
 % Per-word integer reward contribution:
 %   WCap * min(checked, target) + WTail * checked

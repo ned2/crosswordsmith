@@ -148,6 +148,7 @@ arrange_dispatch(Opts) :-
     memberchk(enumerate(Enum), Opts),
     memberchk(out(OutFile), Opts),
     memberchk(check_target(CT), Opts),
+    validate_check_target(CT),
     set_check_target(CT),
     load_clues(InputFile, Words),
     arrange_action(Enum, K, FragFile, Words, SizeOpt, Drop, Mode, OutFile).
@@ -165,14 +166,13 @@ drop_contract(Opts, Drop) :-
     ).
 
 % --check-target: a global ceiling on the per-word checking target (design-spec
-% §7.2 reachability escape hatch). -1 (the "not given" sentinel) clears any
-% override; N>=1 lowers each word's target to min(ceil(L/2), N). Set once here,
-% read by arrange.pl's check_target/2 via check_target_override/1.
-set_check_target(-1) :- !, retractall(check_target_override(_)).
-set_check_target(N) :- integer(N), N >= 1, !,
-    retractall(check_target_override(_)),
-    assertz(check_target_override(N)).
-set_check_target(N) :- cli_error('--check-target must be a positive integer (got ~w)'-[N]).
+% §7.2 reachability escape hatch). The CLI only validates the flag; the state
+% lives in crosswordsmith_arrange, behind its exported set_check_target/1
+% (-1 = the "not given" sentinel, clears any override; N>=1 lowers each word's
+% target to min(ceil(L/2), N)).
+validate_check_target(-1) :- !.
+validate_check_target(N) :- integer(N), N >= 1, !.
+validate_check_target(N) :- cli_error('--check-target must be a positive integer (got ~w)'-[N]).
 
 % Resolve the size flag: -1 sentinel means "not given". For a fragment the
 % fragment's gridLength provides N; otherwise default to 15.

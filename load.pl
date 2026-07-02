@@ -16,18 +16,18 @@
    ;   assertz(user:file_search_path(crosswordsmith, LibDir))
    ).
 
-% Known-good load order (the driver's historical order): arrange chain-loads
-% core.pl (which chain-loads metrics.pl); lint must precede stockgrid
-% (stockgrid calls lint_run/5); fill last (uses stockgrid + arrange + metrics).
-% lint/export/stockgrid/fill perform no project loads of their own.
-% Module-ized files are use_module'd from this (user) context so their exports
-% land in `user`, where the not-yet-module-ized plain files still resolve them
-% (Phase-4 bridge; see the migration plan).
-% metrics first: its exports must be in `user` before the still-plain arrange
-% and core compile their calls to them (core's chain-load of metrics then
-% no-ops).
+% Known-good load order. Module files are use_module'd from this (user)
+% context so their exports land in `user`; the still-plain core.pl resolves
+% them there, and the modules' own calls to core predicates resolve via
+% inheritance from `user` (Phase-4 bridge; see the migration plan).
+% Constraints: metrics before core (core's transitional chain-load of
+% metrics.pl then no-ops); core (plain, into `user`) before the arrange
+% module, which relies on `user` inheritance for core's predicates until
+% Phase 4.7; lint before stockgrid (stockgrid imports lint_run/5); fill last
+% (imports stockgrid, metrics).
 :- use_module(crosswordsmith(metrics)).
-:- ensure_loaded(crosswordsmith(arrange)).
+:- ensure_loaded(crosswordsmith(core)).
+:- use_module(crosswordsmith(arrange)).
 :- use_module(crosswordsmith(lint)).
 :- use_module(crosswordsmith(export)).
 :- use_module(crosswordsmith(stockgrid)).
