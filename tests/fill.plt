@@ -1,20 +1,22 @@
 % tests/fill.plt - plunit suite for fill.pl (grid-first auto-fill, §8.4).
 %
-% Assumes core.pl, metrics.pl, lint.pl, stockgrid.pl, arrange.pl and
-% fill.pl are consulted by the runner before this file. Covers slot derivation
-% + the SHARED cell-variable invariant (the crossing constraint), the fill
-% search (AC-FILL-1), seeds (AC-FILL-2), determinism (AC-FILL-3), and the
-% no-fill report. The byte-exact fill is pinned by tests/golden/fill_3.json.
+% Assumes the project is loaded (via load.pl) by the runner before this file.
+% fill exports only fill_solve/4, so these white-box tests reach its internals
+% as crosswordsmith_fill:Pred(...) (migration plan, Resolved Decision 3).
+% Covers slot derivation + the SHARED cell-variable invariant (the crossing
+% constraint), the fill search (AC-FILL-1), seeds (AC-FILL-2), determinism
+% (AC-FILL-3), and the no-fill report. The byte-exact fill is pinned by
+% tests/golden/fill_3.json.
 
 :- use_module(library(plunit)).
 
 % Run a fill and return the across/down answer lists (deterministic).
 do_fill(GridFile, SeedFile, DictFile, Across, Down) :-
-    fill_grid(GridFile, _Size, Slots, _CellVar),
-    ( SeedFile == none -> SeededKeys = [] ; apply_seeds(SeedFile, Slots, SeededKeys) ),
-    exclude(seeded_slot(SeededKeys), Slots, SearchSlots),
-    load_dict(DictFile, DictByLen, Index),
-    fill_attempt(SearchSlots, Slots, DictByLen, Index, filled, Numbered, _),
+    crosswordsmith_fill:fill_grid(GridFile, _Size, Slots, _CellVar),
+    ( SeedFile == none -> SeededKeys = [] ; crosswordsmith_fill:apply_seeds(SeedFile, Slots, SeededKeys) ),
+    exclude(crosswordsmith_fill:seeded_slot(SeededKeys), Slots, SearchSlots),
+    crosswordsmith_fill:load_dict(DictFile, DictByLen, Index),
+    crosswordsmith_fill:fill_attempt(SearchSlots, Slots, DictByLen, Index, filled, Numbered, _),
     findall(A, ( member(W, Numbered), get_dict(dir, W, across), get_dict(answer, W, A) ), Across),
     findall(A, ( member(W, Numbered), get_dict(dir, W, down),   get_dict(answer, W, A) ), Down).
 
@@ -24,14 +26,14 @@ do_fill(GridFile, SeedFile, DictFile, Across, Down) :-
 % --- slots + the shared-variable invariant (the crossing constraint) ---------
 % The 3x3 has 3 across + 3 down slots.
 test(fill_derives_slots) :-
-    fill_grid('fixtures/fill_grid_3.json', 3, Slots, _),
+    crosswordsmith_fill:fill_grid('fixtures/fill_grid_3.json', 3, Slots, _),
     length(Slots, 6).
 
 % REGRESSION: a crossing cell's variable must be SHARED between its across and
 % down slot (cell 1 starts both row-0-across and col-0-down). A findall-copied
 % or yall-lambda-copied template breaks this and the fill is inconsistent.
 test(fill_crossing_cells_are_shared) :-
-    fill_grid('fixtures/fill_grid_3.json', 3, Slots, _),
+    crosswordsmith_fill:fill_grid('fixtures/fill_grid_3.json', 3, Slots, _),
     once(( member(slot(1, across, [1,2,3], [A1|_]), Slots) )),
     once(( member(slot(1, down,   [1,4,7], [D1|_]), Slots) )),
     A1 == D1.
@@ -47,9 +49,9 @@ test(fill_produces_consistent_square) :-
 % No dictionary word of the slot length -> infeasible (reported, not silent).
 test(fill_infeasible_when_no_matching_words) :-
     tmp_file_stream(text, F, S), write(S, "FOUR\nFIVE\n"), close(S),   % 4-letter only
-    fill_grid('fixtures/fill_grid_3.json', _, Slots, _),
-    load_dict(F, DictByLen, Index),
-    fill_attempt(Slots, Slots, DictByLen, Index, Outcome, _, _),
+    crosswordsmith_fill:fill_grid('fixtures/fill_grid_3.json', _, Slots, _),
+    crosswordsmith_fill:load_dict(F, DictByLen, Index),
+    crosswordsmith_fill:fill_attempt(Slots, Slots, DictByLen, Index, Outcome, _, _),
     delete_file(F),
     Outcome == infeasible.
 
@@ -61,7 +63,7 @@ test(fill_infeasible_when_no_matching_words) :-
 % than be masked as infeasibility. The old broad catch/3 returned `infeasible`.
 test(fill_propagates_genuine_error,
      [throws(error(type_error(btree, _), _))]) :-
-    fill_attempt([slot(a, across, 3, [_,_,_])], [slot(a, across, 3, [_,_,_])],
+    crosswordsmith_fill:fill_attempt([slot(a, across, 3, [_,_,_])], [slot(a, across, 3, [_,_,_])],
                  [], not_an_assoc, 1_000_000, _Outcome, _Numbered, _InputWords).
 
 % --- seeds (AC-FILL-2) -------------------------------------------------------
@@ -80,11 +82,11 @@ test(fill_respects_seed) :-
 test(fill_seed_need_not_be_in_dict) :-
     tmp_file_stream(text, F, S),
     write(S, "ORE\nWED\nCOW\nARE\nTED\n"), close(S),   % the sample wordlist minus CAT
-    fill_grid('fixtures/fill_grid_3.json', _Size, Slots, _),
-    foldl(apply_seed(Slots), [frag('CAT', across, 1, [1, 2, 3])], [], SeededKeys),
-    exclude(seeded_slot(SeededKeys), Slots, SearchSlots),
-    load_dict(F, DictByLen, Index),
-    fill_attempt(SearchSlots, Slots, DictByLen, Index, Outcome, Numbered, _),
+    crosswordsmith_fill:fill_grid('fixtures/fill_grid_3.json', _Size, Slots, _),
+    foldl(crosswordsmith_fill:apply_seed(Slots), [frag('CAT', across, 1, [1, 2, 3])], [], SeededKeys),
+    exclude(crosswordsmith_fill:seeded_slot(SeededKeys), Slots, SearchSlots),
+    crosswordsmith_fill:load_dict(F, DictByLen, Index),
+    crosswordsmith_fill:fill_attempt(SearchSlots, Slots, DictByLen, Index, Outcome, Numbered, _),
     delete_file(F),
     Outcome == filled,
     findall(A, ( member(W, Numbered), get_dict(dir, W, across), get_dict(answer, W, A) ), Across),
@@ -92,7 +94,7 @@ test(fill_seed_need_not_be_in_dict) :-
 
 % A seed whose answer matches no slot of the grid is rejected.
 test(fill_seed_no_slot_throws, [throws(error(fill_seed_no_slot('CAT'), _))]) :-
-    fill_grid('fixtures/fill_grid_3.json', _, Slots, _),
+    crosswordsmith_fill:fill_grid('fixtures/fill_grid_3.json', _, Slots, _),
     % CAT down at col 0 cells [1,4,7] is a real slot; ask for it as a 2-cell
     % run that no slot has -> no match.
     apply_seeds_frags(Slots, [frag('CAT', across, 2, [2, 3])]).
@@ -101,9 +103,9 @@ test(fill_seed_no_slot_throws, [throws(error(fill_seed_no_slot('CAT'), _))]) :-
 % to complete the search yields Outcome==not_proven - distinct from infeasible
 % (a genuinely 0-candidate slot) and from filled.
 test(fill_budget_exhausted_not_proven) :-
-    fill_grid('fixtures/fill_grid_3.json', _Size, Slots, _),
-    load_dict('fixtures/wordlist_sample.txt', DictByLen, Index),
-    fill_attempt(Slots, Slots, DictByLen, Index, 100, Outcome, Numbered, _),
+    crosswordsmith_fill:fill_grid('fixtures/fill_grid_3.json', _Size, Slots, _),
+    crosswordsmith_fill:load_dict('fixtures/wordlist_sample.txt', DictByLen, Index),
+    crosswordsmith_fill:fill_attempt(Slots, Slots, DictByLen, Index, 100, Outcome, Numbered, _),
     Outcome == not_proven,
     Numbered == [].
 
@@ -124,10 +126,10 @@ test(fill_revalidates_under_lint) :-
 % the down slot (the minimum) must be chosen.
 test(select_mrv_recovers_correct_direction_on_tie) :-
     tmp_file_stream(text, F, S), write(S, "CAT\nCOW\nCUB\nDOG\n"), close(S),
-    load_dict(F, DictByLen, Index), delete_file(F),
+    crosswordsmith_fill:load_dict(F, DictByLen, Index), delete_file(F),
     Across = slot(1, across, [1, 2, 3], ['C', _, _]),       % C__ -> CAT/COW/CUB (3)
     Down   = slot(1, down,   [1, 4, 7], ['C', 'A', 'T']),   % CAT (1, the minimum)
-    select_mrv([Across, Down], DictByLen, Index, Best, _Rest, Cands),
+    crosswordsmith_fill:select_mrv([Across, Down], DictByLen, Index, Best, _Rest, Cands),
     Best = slot(1, down, _, _),
     Cands == [['C', 'A', 'T']].
 
@@ -138,10 +140,10 @@ test(select_mrv_recovers_correct_direction_on_tie) :-
 % is possible - that is exactly what once/1 removes.
 test(select_mrv_leaves_no_choicepoint) :-
     tmp_file_stream(text, F, S), write(S, "CAT\nCOW\nCUB\nDOG\n"), close(S),
-    load_dict(F, DictByLen, Index), delete_file(F),
+    crosswordsmith_fill:load_dict(F, DictByLen, Index), delete_file(F),
     Across = slot(1, across, [1, 2, 3], ['C', _, _]),
     Down   = slot(1, down,   [1, 4, 7], ['C', 'A', 'T']),
-    select_mrv([Down, Across], DictByLen, Index, Best, _Rest, _Cands),
+    crosswordsmith_fill:select_mrv([Down, Across], DictByLen, Index, Best, _Rest, _Cands),
     Best = slot(1, down, _, _),
     deterministic(Det),
     Det == true.
@@ -151,16 +153,16 @@ test(select_mrv_leaves_no_choicepoint) :-
 % idx (some cells bound). select_mrv orders slots by these counts, so if the two
 % ever diverged the MRV choice would silently differ from the true candidate set.
 test(candidate_count_matches_candidates) :-
-    load_dict('fixtures/wordlist_sample.txt', DictByLen, Index),
+    crosswordsmith_fill:load_dict('fixtures/wordlist_sample.txt', DictByLen, Index),
     % all-unbound (`all` branch): count == number of length-3 words materialized
     length(Free, 3),
-    candidates(Free, DictByLen, Index, CAll), length(CAll, NAll),
-    candidate_count(Free, DictByLen, Index, NAll),
+    crosswordsmith_fill:candidates(Free, DictByLen, Index, CAll), length(CAll, NAll),
+    crosswordsmith_fill:candidate_count(Free, DictByLen, Index, NAll),
     NAll > 0,
     % one cell bound to 'C' (idx branch): only CAT, COW match
     Bound = ['C', _, _],
-    candidates(Bound, DictByLen, Index, CB), length(CB, NB),
-    candidate_count(Bound, DictByLen, Index, NB),
+    crosswordsmith_fill:candidates(Bound, DictByLen, Index, CB), length(CB, NB),
+    crosswordsmith_fill:candidate_count(Bound, DictByLen, Index, NB),
     NB =:= 2.
 
 % --- determinism (AC-FILL-3) -------------------------------------------------
@@ -173,4 +175,4 @@ test(fill_deterministic) :-
 
 % Helper: apply a list of frag/4 seeds directly (mirrors apply_seeds/3 minus the
 % file read), for the no-slot test; the seeded-key accumulator is discarded.
-apply_seeds_frags(Slots, Frags) :- foldl(apply_seed(Slots), Frags, [], _).
+apply_seeds_frags(Slots, Frags) :- foldl(crosswordsmith_fill:apply_seed(Slots), Frags, [], _).

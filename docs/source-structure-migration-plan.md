@@ -378,17 +378,18 @@ via `user` inheritance until 4.5/4.7.
 
 ### 4.4 `crosswordsmith_fill`
 
-- [ ] Add `:- module(crosswordsmith_fill, [...]).`.
-- [ ] Export:
-  - [ ] `fill_solve/4` — nothing else; every other fill predicate is internal.
-- [ ] Import `crosswordsmith_stockgrid` explicitly. Arrange's
+- [x] Add `:- module(crosswordsmith_fill, [...]).`.
+- [x] Export:
+  - [x] `fill_solve/4` — nothing else; every other fill predicate is internal.
+- [x] Import `crosswordsmith_stockgrid` explicitly. Arrange's
       `load_fragment/3`, metrics' `word_letters/3`, and core's
       `assign_clue_numbers/2`/`emit_json/3` resolve via `user` inheritance
       until 4.5–4.7.
-- [ ] Qualify `fill.plt` internals (`fill_grid/4`, `apply_seed/3`,
+- [x] Qualify `fill.plt` internals (`fill_grid/4`, `apply_seed/3`,
       `seeded_slot/2`, `load_dict/3`, `fill_attempt/7,8`, `select_mrv/6`,
-      `candidate_count/4`, `candidates/4`, ...).
-- [ ] Run `make test`.
+      `candidate_count/4`, `candidates/4`, `apply_seeds/3` — including the
+      `exclude`/`foldl` closures, which take module-qualified goals).
+- [x] Run `make test`.
 
 ### 4.5 `crosswordsmith_metrics`
 

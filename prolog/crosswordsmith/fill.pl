@@ -3,14 +3,23 @@
 % stock-grid mask), derive its slots, and fill every slot with a dictionary word
 % subject to crossing constraints, with the user's words pinned as seeds (the
 % §6.6 fragment primitive). Output is the canonical layout, so it composes with
-% lint/export. Consult AFTER core.pl, metrics.pl, lint.pl, stockgrid.pl and
-% arrange.pl (it reuses load_fragment/3).
+% lint/export.
 %
 % The grid model: each white cell is one logical VARIABLE, shared between its
 % across and down slot. Assigning a word to a slot unifies the slot's variable
 % list with the word's letters; crossings are then consistent by construction
 % (the shared variable), and dead-ends backtrack. MRV ordering (fewest matching
 % candidates first) + a node/inference budget make it deterministic and bounded.
+%
+% Exports: fill_solve/4 (the CLI seam) — nothing else; every other predicate
+% is internal (tests reach them as crosswordsmith_fill:Pred(...)). Arrange's
+% load_fragment/3, metrics' word_letters/3 and core's
+% assign_clue_numbers/2 / emit_json/3 resolve via `user` inheritance until
+% Phases 4.5–4.7.
+
+:- module(crosswordsmith_fill,
+          [ fill_solve/4
+          ]).
 
 :- use_module(library(http/json)).
 :- use_module(library(apply)).
@@ -18,6 +27,10 @@
 :- use_module(library(ordsets)).
 :- use_module(library(assoc)).
 :- use_module(library(pairs)).
+
+% Slot derivation from a stock-grid mask.
+:- use_module(crosswordsmith(stockgrid),
+              [stockgrid_load/2, mask_white_cells/3, grid_run/4]).
 
 fill_budget(800_000_000).   % inference budget (determinism via INV-2, bounded)
 
