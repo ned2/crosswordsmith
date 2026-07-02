@@ -20,8 +20,11 @@
 % core.pl (which chain-loads metrics.pl); lint must precede stockgrid
 % (stockgrid calls lint_run/5); fill last (uses stockgrid + arrange + metrics).
 % lint/export/stockgrid/fill perform no project loads of their own.
+% Module-ized files are use_module'd from this (user) context so their exports
+% land in `user`, where the not-yet-module-ized plain files still resolve them
+% (Phase-4 bridge; see the migration plan).
 :- ensure_loaded(crosswordsmith(arrange)).
 :- ensure_loaded(crosswordsmith(lint)).
-:- ensure_loaded(crosswordsmith(export)).
+:- use_module(crosswordsmith(export)).
 :- ensure_loaded(crosswordsmith(stockgrid)).
 :- ensure_loaded(crosswordsmith(fill)).

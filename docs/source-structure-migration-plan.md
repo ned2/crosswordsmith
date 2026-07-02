@@ -333,15 +333,15 @@ predicates are never exported — tests qualify.
 
 Zero project dependencies; the safest first target.
 
-- [ ] Add `:- module(crosswordsmith_export, [...]).`.
-- [ ] Export (driver uses `export_solve/2`; the rest are deliberate library
+- [x] Add `:- module(crosswordsmith_export, [...]).`.
+- [x] Export (driver uses `export_solve/2`; the rest are deliberate library
       API, currently test-covered):
-  - [ ] `export_solve/2`
-  - [ ] `layout_to_ipuz/2`
-  - [ ] `layout_to_exolve/2`
-  - [ ] `answer_enumeration/2`
-- [ ] Qualify `export.plt` internals (`export_load/2`).
-- [ ] Run `make test`.
+  - [x] `export_solve/2`
+  - [x] `layout_to_ipuz/2`
+  - [x] `layout_to_exolve/2`
+  - [x] `answer_enumeration/2`
+- [x] Qualify `export.plt` internals (`export_load/2`).
+- [x] Run `make test`.
 
 ### 4.2 `crosswordsmith_lint`
 

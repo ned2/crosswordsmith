@@ -8,7 +8,18 @@
 %
 % Enumerations are derived from the answer's spaces/hyphens (§6.3); clue text
 % rides in meta.clue. Nothing is invented (AC-EXP-3): a missing clue is empty.
-% Consult AFTER core.pl (it only needs JSON + lists).
+% Zero project dependencies (it only needs JSON + lists).
+%
+% Exports: export_solve/2 is the CLI seam; the layout_to_*/2 transforms and
+% answer_enumeration/2 are deliberate library API. Everything else is
+% internal — tests reach internals as crosswordsmith_export:Pred(...).
+
+:- module(crosswordsmith_export,
+          [ export_solve/2,
+            layout_to_ipuz/2,
+            layout_to_exolve/2,
+            answer_enumeration/2
+          ]).
 
 :- use_module(library(http/json)).
 :- use_module(library(apply)).

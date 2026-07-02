@@ -91,8 +91,10 @@ test(exolve_structure) :-
     memberchk('exolve-end', Lines).
 
 % --- validation --------------------------------------------------------------
+% export_load/2 is module-internal (not exported); white-box tests reach it
+% via module qualification (migration plan, Resolved Decision 3).
 test(export_rejects_non_layout, [throws(error(export_invalid_layout, _))]) :-
     tmp_file_stream(text, F, S), write(S, '{"foo": 1}'), close(S),
-    call_cleanup(export_load(F, _), delete_file(F)).
+    call_cleanup(crosswordsmith_export:export_load(F, _), delete_file(F)).
 
 :- end_tests(export).
