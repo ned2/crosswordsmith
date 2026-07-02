@@ -224,13 +224,15 @@ state *before* the code moves.
 Goal: move source files under `prolog/crosswordsmith/` without changing
 predicate visibility, module semantics, CLI behaviour, or emitted output.
 
-- [ ] Add root `load.pl`.
-  - [ ] Define the `crosswordsmith` file-search alias rooted at
+- [x] Add root `load.pl`.
+  - [x] Define the `crosswordsmith` file-search alias rooted at
         `prolog/crosswordsmith/`, relative to `load.pl`'s own directory
-        (`prolog_load_context/2`), so it is cwd-independent.
-  - [ ] Load implementation files in the driver's current known-good order:
+        (`prolog_load_context/2`), so it is cwd-independent. (Landed pointing
+        at the repo root in the no-moves commit; repointed at
+        `prolog/crosswordsmith/` in the move commit.)
+  - [x] Load implementation files in the driver's current known-good order:
         arrange (chain-loads core → quality), lint, export, stockgrid, fill.
-  - [ ] Keep the loader side-effect free (no initialization directives, no
+  - [x] Keep the loader side-effect free (no initialization directives, no
         flag changes beyond what the files themselves do) so consulting it
         from the test harness and benchmarks is safe.
 - [ ] Create `prolog/crosswordsmith/`.
