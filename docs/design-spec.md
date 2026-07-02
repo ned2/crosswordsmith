@@ -101,7 +101,6 @@ The discipline: **one substrate, two solver tops.**
 - `prolog/crosswordsmith/arrange.pl` (`crosswordsmith_arrange`) — Flavour-A engine, **including the greedy constructor** (moved from `quality.pl`): its only consumer is arrange, and its project dependencies are core's search primitives, not the metrics.
 - Flavour-B modules — `prolog/crosswordsmith/{lint,export,stockgrid,fill}.pl` (`crosswordsmith_lint`/`_export`/`_stockgrid`/`_fill`).
 - Root `load.pl` — search-path alias + single owner of load order; the CLI driver, tests, and benchmarks load the project through it.
-- Root `crossword.pl` — message-only migration shim (prints the "did you mean `arrange`?" hint per §5.3, exits non-zero); it does not load the library.
 - `quality.pl` — retired by the rename to `metrics.pl` (the stale `--quality`-era name goes away; the metric layer itself stays).
 
 **Cross-cutting invariants (apply to all components):**
@@ -147,12 +146,12 @@ The current interface — `./crossword.pl --input F [--strategy S] [--shuffle] [
 - old `--all` (enumerate) ≡ `arrange --enumerate`
 - The required `GridLen` positional becomes `--size N` (resolving the current wart where `GridLen` is required but silently ignored under `--quality`).
 - `--shuffle` / `solve_shuffled` is **removed** (conflicts with INV-2 determinism).
-- Old-style invocations produce a helpful "did you mean `arrange`?" error.
+- Old-style invocations are not specially handled: they fall through to the standard unknown-verb usage error (the dedicated "did you mean `arrange`?" migration hint has been retired now that there are no pre-migration consumers).
 - README, `run_tests.sh`, and golden fixtures are updated in the same pass.
 
 **AC-CLI-1** Bare `crosswordsmith` prints usage and exits non-zero.
 **AC-CLI-2** Each documented verb/flag combination behaves as specified or errors with a usage hint; no undocumented flag exists.
-**AC-CLI-3** Every old-style invocation maps to a documented `arrange` equivalent or yields the migration hint; no silent behavioural change.
+**AC-CLI-3** No old-style invocation silently succeeds: a numeric-first or flags-first invocation errors with the standard usage hint and a non-zero exit; no silent behavioural change. (The §5.3 table documents the one-time mapping to `arrange` equivalents.)
 
 ---
 

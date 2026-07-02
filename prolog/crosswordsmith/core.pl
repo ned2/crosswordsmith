@@ -1,8 +1,7 @@
 % core.pl - the shared substrate: grid model, free-canvas legality core, clue
 % numbering, JSON emit, input loading (design-spec §4/§6). Formerly the root
-% crossword.pl; the CLI lives in the `crosswordsmith` script, and the root
-% crossword.pl is now only a migration-message shim. This file carries NO
-% initialization directive and no shebang, so loading it (via load.pl or
+% crossword.pl; the CLI lives in the `crosswordsmith` script. This file carries
+% NO initialization directive and no shebang, so loading it (via load.pl or
 % directly) is side-effect free and its predicates are unit-testable in
 % isolation.
 %

@@ -47,7 +47,6 @@ cli([arrange|Args]) :- !, arrange_cli(Args).
 cli([lint|Args])    :- !, lint_cli(Args).
 cli([export|Args])  :- !, export_cli(Args).
 cli([fill|Args])    :- !, fill_cli(Args).
-cli([First|_])  :- old_style_arg(First), !, migration_hint.  % AC-CLI-3
 cli([Verb|_]) :-
     format(user_error, "crosswordsmith: unknown verb `~w`~n~n", [Verb]),
     usage(user_error), fail.
@@ -62,22 +61,6 @@ verb(arrange). verb(lint). verb(export). verb(fill).
 % (AC-CLI-2: no undocumented flag exists) - R9.
 negation_flag(Args, Bad) :-
     member(Bad, Args), atom(Bad), atom_concat('--no-', _, Bad), !.
-
-% A first token that looks like an old-style invocation (a grid-length number,
-% or any flag where a verb was expected) -> the migration hint.
-old_style_arg(A) :- atom_number(A, _), !.
-old_style_arg(A) :- atom_concat('-', _, A).
-
-migration_hint :-
-    format(user_error,
-"crosswordsmith: the interface is subcommand-based; there is no bare/flags-first form.~n\c
-Did you mean `crosswordsmith arrange`?  Migration from the old crossword.pl CLI:~n\c
-  old: --input F <N> <loc>   ->  crosswordsmith arrange --strict --size-mode fixed --size <N> --input F~n\c
-  old: --input F --quality   ->  crosswordsmith arrange --best-effort --size-mode max --input F~n\c
-  old: --input F --all <N>   ->  crosswordsmith arrange --enumerate --size <N> --input F~n\c
-(--shuffle is removed: output is deterministic.)~n",
-           []),
-    fail.
 
 usage(S) :-
     format(S,

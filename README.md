@@ -31,10 +31,8 @@ lint-validated blocked templates feeds `lint` and `fill`. The core is portable
 Prolog; the clue-input and JSON paths use SWI-specific features (see
 Requirements).
 
-The former `./crossword.pl …` interface has been replaced; the implementation
-now lives under `prolog/crosswordsmith/` and the root `crossword.pl` is only a
-migration-message shim (see
-[Migration](#migration-from-the-old-crosswordpl-cli)).
+The implementation lives under `prolog/crosswordsmith/`, driven by the
+`crosswordsmith` CLI.
 
 Words — and optional per-word metadata (a clue, a link, anything) — are supplied
 to `arrange` as a JSON file or a Prolog `clues/1` fixture. The bundled
@@ -122,22 +120,6 @@ file is written.
 > many are the same physical layout reached by placing words in a different
 > order, so the count is large and the search can be slow. Use it on small
 > grids / small clue sets.
-
-### Migration from the old `crossword.pl` CLI
-
-The previous `./crossword.pl --input F <N> <loc>` interface is replaced by the
-`crosswordsmith` subcommands — a one-time breaking change:
-
-| old | new |
-| --- | --- |
-| `crossword.pl --input F <N> <loc>` | `crosswordsmith arrange --strict --size-mode fixed --size <N> --input F` |
-| `crossword.pl --input F --quality` | `crosswordsmith arrange --best-effort --size-mode max --input F` |
-| `crossword.pl --input F --all <N>` | `crosswordsmith arrange --enumerate --size <N> --input F` |
-
-`--shuffle` is removed (output is now deterministic). `--strategy`/`--start_loc`
-are gone (the engine uses the production strategy internally and sweeps start
-corners itself). Running `./crossword.pl` directly — or `crosswordsmith` with
-old-style arguments — prints this mapping.
 
 ### `lint` — validate a layout against a profile
 
@@ -314,7 +296,6 @@ benchmarks go through it):
 | `prolog/crosswordsmith/fill.pl` | **Flavour B** — grid-first auto-fill: each white cell a shared logical variable, MRV backtracking over an in-memory dictionary index, seeds pinned. |
 | `load.pl` | loads the implementation in the known-good order; defines the `crosswordsmith` file-search alias. |
 | `crosswordsmith` | the CLI: verb dispatch (`arrange`/`lint`/`export`/`fill`). |
-| `crossword.pl` | migration-message shim for the old CLI (prints the mapping below, exits non-zero). |
 
 The rest of this section describes the shared substrate and the `arrange`
 engine; the `lint`/`export`/`fill` sections above describe their own behaviour.

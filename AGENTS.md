@@ -32,9 +32,7 @@ the README.
   tests call module internals as `Module:Pred(...)` — never add an export
   for a test.
 - `prolog/crosswordsmith/core.pl` is the shared substrate (grid model,
-  free-canvas legality core, clue numbering, emit, input). The root
-  `crossword.pl` is only a migration shim: a bare or old-style
-  `./crossword.pl ...` invocation prints a migration hint and exits non-zero.
+  free-canvas legality core, clue numbering, emit, input).
 - The engines are `arrange.pl` (Flavour A, including the greedy constructor)
   and `fill.pl` / `lint.pl` / `export.pl` / `stockgrid.pl` (Flavour B);
   `metrics.pl` holds the shared metric predicates (all under
