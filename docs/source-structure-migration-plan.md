@@ -453,28 +453,43 @@ The largest export surface; last so every consumer's needs are already
 explicit. The list below is the verified union of all consumers (metrics,
 arrange, stockgrid, fill, driver, benchmarks):
 
-- [ ] Add `:- module(crosswordsmith_core, [...]).`.
-- [ ] Export:
-  - [ ] I/O + emit: `with_output/2`, `load_clues/2`, `emit_json/3`
-  - [ ] Clue numbering + layout build: `assign_clue_numbers/2`,
+- [x] Add `:- module(crosswordsmith_core, [...]).`.
+- [x] Export:
+  - [x] I/O + emit: `with_output/2`, `load_clues/2`, `emit_json/3`
+  - [x] Clue numbering + layout build: `assign_clue_numbers/2`,
         `build_grid_rows/3`, `build_words/4`, `answer_meta_assoc/2`
-  - [ ] Grid geometry: `cell_coord/3`, `init_grid/2`, `start_loc/4`,
+  - [x] Grid geometry: `cell_coord/3`, `init_grid/2`, `start_loc/4`,
         `start_locs/1`, `next_cell/4`, `fits_on_grid/4`
-  - [ ] Search primitives: `assign_word/10`, `find_intersecting_word/6`,
+  - [x] Search primitives: `assign_word/10`, `find_intersecting_word/6`,
         `assign_words_inc/9`, `find_crossword/6`, `all_crossword/5`
-  - [ ] Strategy registry: `default_strategy/1`, `valid_strategy/1`,
+  - [x] Strategy primitives: `default_strategy/1`, `valid_strategy/1`,
         `require_strategy/1`
-  - [ ] Utilities: `remove_x/3`, `shares_letter/2`, `check_unique_answers/1`
-- [ ] Keep the `:- meta_predicate` declarations (`with_output/2`, `capped/2`)
+  - [x] Utilities: `remove_x/3`, `shares_letter/2`, `check_unique_answers/1`
+  - [x] **Four additions found at module-ization** (the verified map missed
+        closure references and latent paths): `add_word_cells/3` (arrange's
+        cropped emit reuses it via a `foldl` closure — name-only references
+        evade call-site greps); `emit_arrange/4` exported from *arrange* (the
+        `fill_solve(..., max)` emit path delegates to it — latent, the CLI
+        driver currently always passes `fixed`, surfaced by
+        `list_undefined`); `valid_loc/1` (run_benchmarks validates
+        `--start-loc` with it); `strategies/1` (run_matrix's all-strategies
+        default). All are real cross-module/benchmark consumers, so they
+        belong on export lists per the policy.
+- [x] Keep the `:- meta_predicate` declarations (`with_output/2`, `capped/2`)
       with the code.
-- [ ] Update all module imports (metrics, arrange, stockgrid, fill) and the
-      driver; switch benchmarks to `use_module(crosswordsmith(core))` if the
-      lean load is wanted, else leave them on `load.pl`.
-- [ ] Qualify `crossword.plt` internals (`swap_dir/2`, `calc_num/5`,
+- [x] Update all module imports (metrics, arrange, stockgrid, fill) and the
+      driver; benchmarks left on `load.pl` (the lean core-only load remains
+      available later). Core's transitional chain-load of metrics.pl is
+      removed here (from a module context it would import into the wrong
+      module); `load.pl` `use_module`s every module in dependency order.
+- [x] Qualify `crossword.plt` internals (`swap_dir/2`, `calc_num/5`,
       `calc_start/5`, `prev_cell/4`, `is_start_cell/3`, `is_end_cell/3`,
-      `doc_to_words/2`, `read_clues_json/2`, `valid_loc/1`, ...).
-- [ ] Run `make test`.
-- [ ] Run `make fuzz` as an additional determinism check.
+      `doc_to_words/2`, `read_clues_json/2`, the legacy `crossword/3` and
+      `find_crossword/5`, ...).
+- [x] Run `make test`.
+- [x] Run `make fuzz` as an additional determinism check.
+- [x] Extra gate: `list_undefined` (library(check)) is clean over the full
+      load — no cross-module reference resolves to a missing predicate.
 
 ## Phase 5: Cleanup + Documentation
 

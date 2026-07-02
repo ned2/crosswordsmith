@@ -37,6 +37,9 @@
 % lint_run/5: the blocked-uk template validation.
 :- use_module(crosswordsmith(lint), [lint_run/5]).
 
+% assign_clue_numbers/2: number the derived lights for validation/reporting.
+:- use_module(crosswordsmith(core), [assign_clue_numbers/2]).
+
 
 % --- load + parse the mask ---------------------------------------------------
 stockgrid_load(File, grid(Name, Size, Mask)) :-

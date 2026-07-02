@@ -12,9 +12,9 @@
 % candidates first) + a node/inference budget make it deterministic and bounded.
 %
 % Exports: fill_solve/4 (the CLI seam) — nothing else; every other predicate
-% is internal (tests reach them as crosswordsmith_fill:Pred(...)). Arrange's
-% load_fragment/3 and core's assign_clue_numbers/2 / emit_json/3 resolve via
-% `user` inheritance until Phases 4.6–4.7.
+% is internal (tests reach them as crosswordsmith_fill:Pred(...)). All
+% project dependencies are explicit imports below (stockgrid, metrics,
+% arrange, core).
 
 :- module(crosswordsmith_fill,
           [ fill_solve/4
@@ -33,6 +33,13 @@
 
 % word_letters/3: the separator-stripped placement footprint of a seed answer.
 :- use_module(crosswordsmith(metrics), [word_letters/3]).
+
+% load_fragment/3: seeds arrive in the §6.6 fragment format. emit_arrange/4:
+% emit_fill's `max` mode delegates the cropped emit to arrange.
+:- use_module(crosswordsmith(arrange), [load_fragment/3, emit_arrange/4]).
+
+% Numbering + the canonical JSON emit for the filled layout.
+:- use_module(crosswordsmith(core), [assign_clue_numbers/2, emit_json/3]).
 
 fill_budget(800_000_000).   % inference budget (determinism via INV-2, bounded)
 

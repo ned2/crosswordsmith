@@ -2,11 +2,53 @@
 % numbering, JSON emit, input loading (design-spec §4/§6). Formerly the root
 % crossword.pl; the CLI lives in the `crosswordsmith` script, and the root
 % crossword.pl is now only a migration-message shim. This file carries NO
-% initialization directive and no shebang, so consulting it (via load.pl or
+% initialization directive and no shebang, so loading it (via load.pl or
 % directly) is side-effect free and its predicates are unit-testable in
 % isolation.
 %
+% The export list is the verified union of every consumer's needs (metrics,
+% arrange, stockgrid, fill, the CLI driver, the benchmarks — see the
+% migration plan §4.7). Internals (incl. the legacy crossword/3,4 top-level,
+% a benchmark-only research surface) are reached by tests as
+% crosswordsmith_core:Pred(...).
+%
 % Copyright (C) 2011  Ned Letcher - nedned.net
+
+:- module(crosswordsmith_core,
+          [ % I/O + emit
+            with_output/2,
+            load_clues/2,
+            emit_json/3,
+            % clue numbering + layout build
+            assign_clue_numbers/2,
+            build_grid_rows/3,
+            build_words/4,
+            answer_meta_assoc/2,
+            add_word_cells/3,
+            % grid geometry
+            cell_coord/3,
+            init_grid/2,
+            start_loc/4,
+            start_locs/1,
+            valid_loc/1,
+            next_cell/4,
+            fits_on_grid/4,
+            % search primitives
+            assign_word/10,
+            find_intersecting_word/6,
+            assign_words_inc/9,
+            find_crossword/6,
+            all_crossword/5,
+            % strategy registry
+            strategies/1,
+            default_strategy/1,
+            valid_strategy/1,
+            require_strategy/1,
+            % utilities
+            remove_x/3,
+            shares_letter/2,
+            check_unique_answers/1
+          ]).
 
 
 % The program uses two simple data structures. The first is a list of
@@ -27,17 +69,6 @@
 
 % aggregate_all/3, used to count solutions in all_crossword/5.
 :- use_module(library(aggregate)).
-
-% The shared metric predicates + the greedy constructor (metrics.pl). Loaded
-% from the same directory as this file so it resolves regardless of the
-% working directory. ensure_loaded avoids a double-load when a harness
-% consults both files. (Transitional sibling chain-load; Phase 4 of the
-% source-structure migration replaces it with explicit module imports.)
-:- prolog_load_context(directory, Dir),
-   directory_file_path(Dir, 'metrics.pl', MetricsFile),
-   ensure_loaded(MetricsFile).
-
-
 
 % program predicates.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

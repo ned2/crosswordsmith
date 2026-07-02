@@ -16,17 +16,13 @@
    ;   assertz(user:file_search_path(crosswordsmith, LibDir))
    ).
 
-% Known-good load order. Module files are use_module'd from this (user)
-% context so their exports land in `user`; the still-plain core.pl resolves
-% them there, and the modules' own calls to core predicates resolve via
-% inheritance from `user` (Phase-4 bridge; see the migration plan).
-% Constraints: metrics before core (core's transitional chain-load of
-% metrics.pl then no-ops); core (plain, into `user`) before the arrange
-% module, which relies on `user` inheritance for core's predicates until
-% Phase 4.7; lint before stockgrid (stockgrid imports lint_run/5); fill last
-% (imports stockgrid, metrics).
+% Every implementation file is a module with explicit imports, so inter-file
+% dependencies no longer ride on this order — use_module'ing the top-level
+% modules here (a) pulls in the whole dependency closure and (b) lands every
+% export in `user`, where the CLI driver, the .plt suites, and the benchmark
+% harnesses (all compiled into `user`) resolve them unqualified.
+:- use_module(crosswordsmith(core)).
 :- use_module(crosswordsmith(metrics)).
-:- ensure_loaded(crosswordsmith(core)).
 :- use_module(crosswordsmith(arrange)).
 :- use_module(crosswordsmith(lint)).
 :- use_module(crosswordsmith(export)).

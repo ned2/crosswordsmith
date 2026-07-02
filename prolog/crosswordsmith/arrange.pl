@@ -6,11 +6,10 @@
 %
 % This file deliberately does NOT define `main`/initialization, so it can be
 % loaded by a harness without side effects. It reuses core.pl's legality core
-% and MRV-inc branch step (resolved via `user` inheritance until core is
-% module-ized, Phase 4.7 — load.pl loads core before this file) and the
-% checking metrics (imported from crosswordsmith_metrics below). (The
-% Phase-1.5 `gate_*` measurement harness that lived here was removed once the
-% gate's descope decision was recorded in the implementation plan.)
+% and MRV-inc branch step and the checking metrics — both explicit imports
+% below (crosswordsmith_core, crosswordsmith_metrics). (The Phase-1.5
+% `gate_*` measurement harness that lived here was removed once the gate's
+% descope decision was recorded in the implementation plan.)
 %
 % Exports: the four *_solve CLI seams, the fragment API the driver and fill
 % share (load_fragment/3, reconcile_fragment_size/3), and set_check_target/1
@@ -25,7 +24,9 @@
             arrange_enumerate_solve/2,
             load_fragment/3,
             reconcile_fragment_size/3,
-            set_check_target/1
+            set_check_target/1,
+            % fill's emit_fill(max) delegates its cropped emit here
+            emit_arrange/4
           ]).
 
 :- use_module(library(apply)).
@@ -44,6 +45,31 @@
                 placed_bbox/4,
                 word_cells/5,
                 cell_rc/4
+              ]).
+
+% The shared substrate: legality core + MRV-inc branch step, layout build +
+% numbering, geometry, and the strategy registry.
+:- use_module(crosswordsmith(core),
+              [ assign_clue_numbers/2,
+                build_grid_rows/3,
+                build_words/4,
+                answer_meta_assoc/2,
+                add_word_cells/3,
+                cell_coord/3,
+                init_grid/2,
+                start_loc/4,
+                start_locs/1,
+                next_cell/4,
+                fits_on_grid/4,
+                assign_word/10,
+                find_intersecting_word/6,
+                assign_words_inc/9,
+                find_crossword/6,
+                all_crossword/5,
+                default_strategy/1,
+                remove_x/3,
+                shares_letter/2,
+                check_unique_answers/1
               ]).
 
 

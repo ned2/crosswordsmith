@@ -23,8 +23,8 @@ bundled_words(Words) :-
 
 :- begin_tests(geometry).
 
-test(swap_dir_across) :- swap_dir(across, down).
-test(swap_dir_down)   :- swap_dir(down, across).
+test(swap_dir_across) :- crosswordsmith_core:swap_dir(across, down).
+test(swap_dir_down)   :- crosswordsmith_core:swap_dir(down, across).
 
 % A word fits across only if there is room to its right in the row.
 test(fits_across_full_row)      :- fits_on_grid(across, 1, 17, 17).
@@ -42,32 +42,32 @@ test(fits_down_too_long, [fail]) :- fits_on_grid(down, 1, 18, 17).
 % calc_num and calc_start are inverses: given a word starting at WStart,
 % the letter at position P has cell number N; calc_start must recover
 % WStart from N and P.
-test(calc_num_across, [true(N =:= 7)])  :- calc_num(across, 17, 3, 5, N).
-test(calc_num_down,   [true(N =:= 35)]) :- calc_num(down, 17, 3, 1, N).
+test(calc_num_across, [true(N =:= 7)])  :- crosswordsmith_core:calc_num(across, 17, 3, 5, N).
+test(calc_num_down,   [true(N =:= 35)]) :- crosswordsmith_core:calc_num(down, 17, 3, 1, N).
 test(calc_roundtrip_across, [true(S =:= 5)]) :-
-    calc_num(across, 17, 3, 5, N), calc_start(across, 17, 3, N, S).
+    crosswordsmith_core:calc_num(across, 17, 3, 5, N), crosswordsmith_core:calc_start(across, 17, 3, N, S).
 test(calc_roundtrip_down, [true(S =:= 1)]) :-
-    calc_num(down, 17, 4, 1, N), calc_start(down, 17, 4, N, S).
+    crosswordsmith_core:calc_num(down, 17, 4, 1, N), crosswordsmith_core:calc_start(down, 17, 4, N, S).
 
 test(next_cell_across, [true(C =:= 6)])  :- next_cell(across, 5, 17, C).
 test(next_cell_down,   [true(C =:= 22)]) :- next_cell(down, 5, 17, C).
-test(prev_cell_across, [true(C =:= 4)])  :- prev_cell(across, 5, 17, C).
-test(prev_cell_down,   [true(C =:= 5)])  :- prev_cell(down, 22, 17, C).
+test(prev_cell_across, [true(C =:= 4)])  :- crosswordsmith_core:prev_cell(across, 5, 17, C).
+test(prev_cell_down,   [true(C =:= 5)])  :- crosswordsmith_core:prev_cell(down, 22, 17, C).
 
 % First column starts across rows; first row starts down columns.
-test(is_start_across)            :- is_start_cell(across, 18, 17).   % col 1, row 2
-test(is_start_across_no, [fail]) :- is_start_cell(across, 19, 17).
-test(is_start_down)              :- is_start_cell(down, 5, 17).      % row 1
-test(is_start_down_no, [fail])   :- is_start_cell(down, 18, 17).
-test(is_end_across)              :- is_end_cell(across, 17, 17).     % last col
-test(is_end_down)                :- is_end_cell(down, 289, 17).      % last row
-% P1 regression (is_end_cell(down) off-by-one): on a 5x5 the bottom row is
+test(is_start_across)            :- crosswordsmith_core:is_start_cell(across, 18, 17).   % col 1, row 2
+test(is_start_across_no, [fail]) :- crosswordsmith_core:is_start_cell(across, 19, 17).
+test(is_start_down)              :- crosswordsmith_core:is_start_cell(down, 5, 17).      % row 1
+test(is_start_down_no, [fail])   :- crosswordsmith_core:is_start_cell(down, 18, 17).
+test(is_end_across)              :- crosswordsmith_core:is_end_cell(across, 17, 17).     % last col
+test(is_end_down)                :- crosswordsmith_core:is_end_cell(down, 289, 17).      % last row
+% P1 regression (crosswordsmith_core:is_end_cell(down) off-by-one): on a 5x5 the bottom row is
 % cells 21..25 and cell 20 is the LAST cell of row 4 - cell 25 lies directly
 % below it - so cell 20 is NOT a down end cell. The old `>=` (Num >= 20)
 % misclassified it as one; the fix is `>` (Num > 20).
-test(is_end_down_penultimate_row_not_end, [fail]) :- is_end_cell(down, 20, 5).
-test(is_end_down_bottom_row_start) :- is_end_cell(down, 21, 5).
-test(is_end_down_bottom_row_end)   :- is_end_cell(down, 25, 5).
+test(is_end_down_penultimate_row_not_end, [fail]) :- crosswordsmith_core:is_end_cell(down, 20, 5).
+test(is_end_down_bottom_row_start) :- crosswordsmith_core:is_end_cell(down, 21, 5).
+test(is_end_down_bottom_row_end)   :- crosswordsmith_core:is_end_cell(down, 25, 5).
 
 % The four named start locations resolve to the expected cell + direction.
 test(start_topleft_across, [true(N-D == 1-across)])  :- start_loc(topleft_across, 17, N, D).
@@ -118,7 +118,7 @@ test(answer_meta_assoc_join) :-
 % (nondet: find_crossword backtracks over many solutions; we assert one exists.)
 test(places_two_crossing_words, [nondet]) :-
     Words = [['OMEGA POINT', _{}], ['GNOSTIC GOSPELS', _{}]],
-    find_crossword(17, Words, topleft_across, _Grid, Placed),
+    crosswordsmith_core:find_crossword(17, Words, topleft_across, _Grid, Placed),
     length(Placed, 2),
     % the first word is laid across starting at cell 1
     member(PW, Placed), get_dict(dir, PW, across), get_dict(start, PW, 1).
@@ -126,20 +126,20 @@ test(places_two_crossing_words, [nondet]) :-
 % The full bundled clue set has a solution on a 17x17 grid.
 test(bundled_clues_solve_at_17, [nondet]) :-
     bundled_words(Words),
-    find_crossword(17, Words, topleft_across, _Grid, Placed),
+    crosswordsmith_core:find_crossword(17, Words, topleft_across, _Grid, Placed),
     length(Placed, 6).
 
 % A grid that is too small for the words has no solution.
 test(too_small_grid_fails, [fail]) :-
     bundled_words(Words),
-    find_crossword(3, Words, topleft_across, _Grid, _Placed).
+    crosswordsmith_core:find_crossword(3, Words, topleft_across, _Grid, _Placed).
 
 % End-to-end: the top-level crossword/3 emits one JSON object describing the
 % solution. Parse it and assert the expected shape. Output is captured both to
 % keep logs clean and to inspect it.
 test(full_pipeline_emits_json) :-
     bundled_words(Words),
-    with_output_to(string(S), crossword(17, Words, topleft_across)),
+    with_output_to(string(S), crosswordsmith_core:crossword(17, Words, topleft_across)),
     atom_json_dict(S, Dict, []),
     get_dict(gridLength, Dict, 17),
     get_dict(grid, Dict, Grid), length(Grid, 17),
@@ -150,7 +150,7 @@ test(full_pipeline_emits_json) :-
 % Row 0, col 3 is where OMEGA POINT (across 1) and GNOSTIC GOSPELS (down 2) cross.
 test(crossing_cell_has_both_directions) :-
     bundled_words(Words),
-    with_output_to(string(S), crossword(17, Words, topleft_across)),
+    with_output_to(string(S), crosswordsmith_core:crossword(17, Words, topleft_across)),
     atom_json_dict(S, Dict, []),
     get_dict(grid, Dict, Grid),
     nth0(0, Grid, Row0),
@@ -161,7 +161,7 @@ test(crossing_cell_has_both_directions) :-
 % Per-word metadata is rejoined verbatim under `meta`.
 test(word_metadata_under_meta) :-
     bundled_words(Words),
-    with_output_to(string(S), crossword(17, Words, topleft_across)),
+    with_output_to(string(S), crosswordsmith_core:crossword(17, Words, topleft_across)),
     atom_json_dict(S, Dict, []),
     get_dict(words, Dict, WordObjs),
     once(( member(W, WordObjs), get_dict(answer, W, "OMEGA POINT") )),
@@ -171,7 +171,7 @@ test(word_metadata_under_meta) :-
 
 % The emit-time join requires unique answers; a duplicate is rejected up front.
 test(duplicate_answer_rejected, [throws(error(duplicate_answer('CAT'), _))]) :-
-    crossword(5, [['CAT', _{}], ['CAT', _{}]], topleft_across).
+    crosswordsmith_core:crossword(5, [['CAT', _{}], ['CAT', _{}]], topleft_across).
 
 % Regression for I5: a word must stay a MAXIMAL run. Placing DFEEE across over
 % an already-placed DFEE (same start cell) would make DFEE a "word inside a
@@ -193,7 +193,7 @@ test(allows_separated_collinear_word, [nondet]) :-
 % down word ending at cell 20 sits directly above cell 25; if cell 25 already
 % holds a letter, placing that down word would splice a 4th cell onto its run -
 % the forbidden collinear "word inside a word" merge (core.pl, no_word_merge).
-% The old is_end_cell(down) `>=` classified cell 20 as a bottom-row end and so
+% The old crosswordsmith_core:is_end_cell(down) `>=` classified cell 20 as a bottom-row end and so
 % SKIPPED the below-must-be-empty check, wrongly allowing the placement.
 test(rejects_down_word_ending_above_filled_cell, [fail]) :-
     init_grid(5, G0),
@@ -207,7 +207,7 @@ test(rejects_down_word_ending_above_filled_cell, [fail]) :-
 % solutions, and do so deterministically (aggregate_all runs the search once).
 test(all_crossword_counts_all_solutions, [true(Num =:= Expected)]) :-
     Words = [['OMEGA POINT', _{}], ['GNOSTIC GOSPELS', _{}]],
-    findall(G, find_crossword(baseline, 17, Words, topleft_across, G, _), Sols),
+    findall(G, crosswordsmith_core:find_crossword(baseline, 17, Words, topleft_across, G, _), Sols),
     length(Sols, Expected),
     all_crossword(baseline, 17, Words, topleft_across, Num).
 
@@ -270,7 +270,7 @@ reduce_word(W, _{answer:A, meta:M}) :-
 
 % The fixture loads to the internal Words form: atom answers, dict metadata.
 test(json_loads_to_words) :-
-    read_clues_json('tests/clues.json', Words),
+    crosswordsmith_core:read_clues_json('tests/clues.json', Words),
     length(Words, 6),
     once((member([Answer, Meta], Words), Answer == 'OMEGA POINT')),
     atom(Answer),
@@ -281,7 +281,7 @@ test(json_loads_to_words) :-
 
 % An omitted `meta` key and an explicit empty `{}` both yield an empty dict.
 test(json_absent_meta_is_empty_dict) :-
-    read_clues_json('tests/clues.json', Words),
+    crosswordsmith_core:read_clues_json('tests/clues.json', Words),
     once((member([A1, M1], Words), A1 == 'GNOSTIC GOSPELS')),  % no meta key
     once((member([A2, M2], Words), A2 == 'BIAS')),             % meta: {}
     dict_pairs(M1, _, []),
@@ -289,8 +289,8 @@ test(json_absent_meta_is_empty_dict) :-
 
 % The JSON-loaded words drive the existing pipeline to a valid JSON solution.
 test(json_pipeline_emits_json) :-
-    read_clues_json('tests/clues.json', Words),
-    with_output_to(string(S), crossword(17, Words, topleft_across)),
+    crosswordsmith_core:read_clues_json('tests/clues.json', Words),
+    with_output_to(string(S), crosswordsmith_core:crossword(17, Words, topleft_across)),
     atom_json_dict(S, Dict, []),
     get_dict(gridLength, Dict, 17),
     get_dict(grid, Dict, Grid), length(Grid, 17),
@@ -299,19 +299,19 @@ test(json_pipeline_emits_json) :-
 
 % Schema violations throw error/2 terms (rendered by error_message//1).
 test(json_no_clues_array_throws, [throws(error(json_no_clues_array, _))]) :-
-    doc_to_words(_{version: 1}, _).            % no `clues` key
+    crosswordsmith_core:doc_to_words(_{version: 1}, _).            % no `clues` key
 
 test(json_clues_not_list_throws, [throws(error(json_no_clues_array, _))]) :-
-    doc_to_words(_{clues: "nope"}, _).         % `clues` not an array
+    crosswordsmith_core:doc_to_words(_{clues: "nope"}, _).         % `clues` not an array
 
 test(json_missing_answer_throws, [throws(error(json_invalid_answer(_), _))]) :-
-    doc_to_words(_{clues: [_{meta: _{}}]}, _). % entry with no `answer`
+    crosswordsmith_core:doc_to_words(_{clues: [_{meta: _{}}]}, _). % entry with no `answer`
 
 test(json_non_string_answer_throws, [throws(error(json_invalid_answer(_), _))]) :-
-    doc_to_words(_{clues: [_{answer: 42}]}, _).% numeric answer (would coerce)
+    crosswordsmith_core:doc_to_words(_{clues: [_{answer: 42}]}, _).% numeric answer (would coerce)
 
 test(json_non_object_meta_throws, [throws(error(json_invalid_meta('FLOW'), _))]) :-
-    doc_to_words(_{clues: [_{answer: "FLOW", meta: "no"}]}, _).
+    crosswordsmith_core:doc_to_words(_{clues: [_{answer: "FLOW", meta: "no"}]}, _).
 
 % Malformed JSON and a missing file surface as standard ISO errors.
 test(json_malformed_throws, [throws(_)]) :-
@@ -320,21 +320,21 @@ test(json_malformed_throws, [throws(_)]) :-
                        close(S)).
 
 test(json_missing_file_throws, [throws(error(existence_error(source_sink, _), _))]) :-
-    read_clues_json('tests/no_such_file.json', _).
+    crosswordsmith_core:read_clues_json('tests/no_such_file.json', _).
 
 % Symmetry (G5): reduce the emitted output to {answer, meta} entries and
 % confirm they round-trip as valid input — they load and re-solve, the answer
 % set is preserved, and metadata survives. (Asserted as validity, not a byte
 % diff: solver layout depends on input order, which the reduction reshuffles.)
 test(json_output_reduces_to_valid_input) :-
-    read_clues_json('tests/clues.json', Words),
-    with_output_to(string(S1), crossword(17, Words, topleft_across)),
+    crosswordsmith_core:read_clues_json('tests/clues.json', Words),
+    with_output_to(string(S1), crosswordsmith_core:crossword(17, Words, topleft_across)),
     atom_json_dict(S1, Dict, []),
     get_dict(words, Dict, WordObjs),
     maplist(reduce_word, WordObjs, ReducedClues),
-    doc_to_words(_{clues: ReducedClues}, Words2),
+    crosswordsmith_core:doc_to_words(_{clues: ReducedClues}, Words2),
     % the reduced output is itself valid input: it re-solves and re-emits JSON
-    with_output_to(string(S2), crossword(17, Words2, topleft_across)),
+    with_output_to(string(S2), crosswordsmith_core:crossword(17, Words2, topleft_across)),
     atom_json_dict(S2, Dict2, []),
     get_dict(words, Dict2, WordObjs2), length(WordObjs2, 6),
     % the answer set survives the round trip (atoms on both sides)
@@ -373,8 +373,8 @@ test(load_clues_rejects_unsupported_extension,
     load_clues('tests/clues.txt', _).
 
 % valid_loc/1 accepts the four named start locations and nothing else.
-test(valid_loc_accepts_known) :- valid_loc(topleft_across).
-test(valid_loc_rejects_unknown, [fail]) :- valid_loc(nowhere).
+test(valid_loc_accepts_known) :- crosswordsmith_core:valid_loc(topleft_across).
+test(valid_loc_rejects_unknown, [fail]) :- crosswordsmith_core:valid_loc(nowhere).
 
 % with_output('', Goal) writes straight to the current output (stdout path).
 test(with_output_stdout_passthrough) :-
@@ -384,10 +384,10 @@ test(with_output_stdout_passthrough) :-
 % with_output(File, Goal) sends Goal's output to File, byte-for-byte the same
 % as the stdout path would produce.
 test(with_output_file_matches_stdout) :-
-    read_clues_json('tests/clues.json', Words),
-    with_output_to(string(StdoutText), crossword(17, Words, topleft_across)),
+    crosswordsmith_core:read_clues_json('tests/clues.json', Words),
+    with_output_to(string(StdoutText), crosswordsmith_core:crossword(17, Words, topleft_across)),
     tmp_file_stream(text, Tmp, S0), close(S0),
-    with_output(Tmp, crossword(17, Words, topleft_across)),
+    with_output(Tmp, crosswordsmith_core:crossword(17, Words, topleft_across)),
     setup_call_cleanup(open(Tmp, read, S), read_string(S, _, FileText), close(S)),
     delete_file(Tmp),
     FileText == StdoutText,
@@ -397,10 +397,10 @@ test(with_output_file_matches_stdout) :-
 % On a goal that fails (grid too small for a layout), no file is written, so a
 % failed run never leaves an empty output file behind.
 test(with_output_no_file_on_failure) :-
-    read_clues_json('tests/clues.json', Words),
+    crosswordsmith_core:read_clues_json('tests/clues.json', Words),
     tmp_file_stream(text, Tmp, S0), close(S0),
     delete_file(Tmp),                           % ensure it is absent
-    \+ with_output(Tmp, crossword(3, Words, topleft_across)),
+    \+ with_output(Tmp, crosswordsmith_core:crossword(3, Words, topleft_across)),
     \+ exists_file(Tmp).
 
 :- end_tests(cli).

@@ -43,6 +43,10 @@
 % (P11).
 :- use_module(library(pairs)).
 
+% next_cell/4 (word_cells/5's stepper) — metrics' ONLY core dependency,
+% confirmed at the Phase-3 constructor extraction.
+:- use_module(crosswordsmith(core), [next_cell/4]).
+
 % --- shared answer/footprint helpers ----------------------------------------
 
 % The "placement footprint" of an answer: its letters with word separators
