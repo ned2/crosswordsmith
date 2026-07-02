@@ -123,6 +123,9 @@ Post-remediation suite: **179 plunit + 8 goldens + 3 CLI exit-code checks** (`ma
 
 The new `arrange` engine grew on top of the old machinery's primitives and orphaned its drivers. Tracking the cleanup so it doesn't just accrete:
 
+- **Planned:** migrate source structure toward an SWI-Prolog `prolog/` library
+  layout, then introduce modules and explicit exports from leaves inward. Tracked
+  in [`source-structure-migration-plan.md`](./source-structure-migration-plan.md).
 - **Done:** removed the dead Phase-1.5 `gate_*` measurement harness + the orphaned `arrange_*_run` convenience runners (the `crosswordsmith` CLI is the entry point); `arrange.pl` 903 → 729 lines. The CLI fragment path now checks input uniqueness like the other modes.
 - **Done (lint phase, opening move):** **deleted the dead `--quality` engine** from `quality.pl` (`quality_solve`/`quality_layout`/`grid_candidates`/`layout_score`/`quality_weights`/the floor subsystem) + its 9 tests; `quality.pl` 318 → 213 lines, re-framed as "shared metrics + the greedy density constructor." The lint-rule metrics (`word_meets_half`/`word_max_unch_run`/`checked_cells`/`dir_cells`/`word_checked_count`) now live in a file with no dead weight, ready for `lint` to consume.
 - **Pending tidy-up (cosmetic, deferred):** physically relocate those shared metric predicates from `quality.pl` into `crossword.pl` proper (spec §4's stated module layout). Pure relocation, no behaviour change — low value vs. churn, so deferred; functionally `quality.pl` is already the shared metric layer.
