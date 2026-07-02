@@ -290,17 +290,27 @@ Goal: pure code motion while everything is still module-free, so the metrics
 module is honestly named and constructor internals never cross a module
 boundary.
 
-- [ ] Move `seed_candidates/2`, `greedy_construct/6`, `greedy_loop/6` and their
-      private helpers from `metrics.pl` into `arrange.pl`.
-- [ ] Re-verify the metrics→core dependency split: the constructor takes
+- [x] Move `seed_candidates/2`, `greedy_construct/6`, `greedy_loop/6` and their
+      private helpers from `metrics.pl` into `arrange.pl`. (Helpers moved:
+      `neg_answer_len/2`, `seed_word/7`, `apply_move/6`, `next_move/5`,
+      `best_move/2`, `word_best_placement/8`, `placement_key/8`,
+      `crossing_count/6`+`cc_/7`, `bbox_growth/4`, `extend_cell/4`.
+      `word_letters/3` and `word_cells/5` stay in metrics — they have direct
+      arrange/fill consumers and are on the 4.5 export list.)
+- [x] Re-verify the metrics→core dependency split: the constructor takes
       `init_grid/2`, `start_loc/4`, `remove_x/3`, `fits_on_grid/4`,
       `assign_word/10`, `find_intersecting_word/6` with it; `metrics.pl`
       should retain little beyond `next_cell/4` from core (confirm at
-      extraction).
-- [ ] Update `tests/crossword.plt`'s quality block: `seed_candidates/2` tests
-      now target arrange.
-- [ ] Run `make test`.
-- [ ] Confirm no golden output changes.
+      extraction). **Confirmed at extraction (2026-07-02): metrics retains
+      exactly `next_cell/4` from core (via `word_cells/5`), nothing else.
+      One new arrange→metrics edge: the moved `extend_cell/4` calls
+      `cell_rc/4`, which stays in metrics and is already on the 4.5 export
+      list — so 4.6's import of metrics must include `cell_rc/4`.**
+- [x] Update `tests/crossword.plt`'s quality block: `seed_candidates/2` tests
+      now target arrange (test moved to `arrange.plt`; `word_letters/3` test
+      stays with metrics).
+- [x] Run `make test`.
+- [x] Confirm no golden output changes.
 
 ## Phase 4: Introduce Modules From Leaves Inward
 

@@ -406,14 +406,13 @@ test(with_output_no_file_on_failure) :-
 :- end_tests(cli).
 
 
-% Shared layout metrics + greedy constructor (metrics.pl)
+% Shared layout metrics (metrics.pl)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% metrics.pl is loaded alongside core.pl (via its ensure_loaded). After the
-% Phase-7 cutover it holds only the shared metric predicates (consumed by
-% arrange.pl as optimizer signals and by lint as validators) and the greedy
-% density constructor (arrange's best-effort/candidates path; its termination on
-% real metadata-carrying input is exercised by the arrange tests). These tests
-% pin the metrics + seed selection.
+% metrics.pl is loaded alongside core.pl (via its ensure_loaded). It holds the
+% shared metric predicates (consumed by arrange.pl as optimizer signals and by
+% lint as validators); the greedy density constructor moved to arrange.pl in
+% Phase 3 of the source-structure migration, so its tests (seed selection) now
+% live in arrange.plt. These tests pin the metrics.
 
 :- begin_tests(quality).
 
@@ -488,19 +487,12 @@ test(word_checked_bitmap_canonical_and_derived) :-
     % identical to the single-direction (W, Placed) forms used by arrange:
     word_checked_count(Wa, Placed, 2), word_max_unch_run(Wd1, Placed, 2).
 
-% --- helpers (word_letters / seed selection) ---------------------------------
+% --- helpers (word_letters) ---------------------------------------------------
 
 % word_letters/3 yields the space-stripped char list and its length.
 test(word_letters_strips_spaces) :-
     word_letters(['NEW YORK', _{}], Letters, WLen),
     Letters == ['N','E','W','Y','O','R','K'],
     WLen =:= 7.
-
-% seed_candidates/2 returns the longest words first (restart diversity). With
-% fewer words than the cap K, all are returned, longest-first.
-test(seed_candidates_longest_first) :-
-    seed_candidates([['AAAA',_{}],['BB',_{}],['CCC',_{}]], Seeds),
-    Seeds = [[S1|_], [S2|_], [S3|_]],
-    S1 == 'AAAA', S2 == 'CCC', S3 == 'BB'.
 
 :- end_tests(quality).

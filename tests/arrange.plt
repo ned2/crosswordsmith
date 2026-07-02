@@ -436,4 +436,13 @@ test(enumerate_matches_all_crossword) :-
     N1 =:= N2,
     N1 > 0.
 
+% --- greedy constructor (moved here from metrics.pl in Phase 3) ---------------
+
+% seed_candidates/2 returns the longest words first (restart diversity). With
+% fewer words than the cap K, all are returned, longest-first.
+test(seed_candidates_longest_first) :-
+    seed_candidates([['AAAA',_{}],['BB',_{}],['CCC',_{}]], Seeds),
+    Seeds = [[S1|_], [S2|_], [S3|_]],
+    S1 == 'AAAA', S2 == 'CCC', S3 == 'BB'.
+
 :- end_tests(arrange).

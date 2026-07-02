@@ -303,8 +303,8 @@ loads it all in the right order (the CLI, tests, and benchmarks go through it):
 | file | role |
 | --- | --- |
 | `prolog/crosswordsmith/core.pl` | **shared substrate** — grid model, the free-canvas legality core, clue numbering, JSON emit + input loading. |
-| `prolog/crosswordsmith/metrics.pl` | shared **metric predicates** (checked cells, unchecked runs, bbox, crossings) + the greedy density constructor that `arrange` reuses. |
-| `prolog/crosswordsmith/arrange.pl` | **Flavour A** — the deterministic MRV-first layout engine: construct + rescore + emit, with fragment seeding and diverse candidates. |
+| `prolog/crosswordsmith/metrics.pl` | shared **metric predicates** (checked cells, unchecked runs, bbox) consumed by `arrange` as optimizer signals and by `lint` as validators. |
+| `prolog/crosswordsmith/arrange.pl` | **Flavour A** — the deterministic MRV-first layout engine: construct + rescore + emit, with fragment seeding, diverse candidates, and the greedy density constructor. |
 | `prolog/crosswordsmith/lint.pl` | **Flavour B** — the profile-driven grid validator (consumes the canonical layout, reuses the metric predicates). |
 | `prolog/crosswordsmith/export.pl` | **Flavour B** — ipuz v2 / Exolve transforms of the canonical layout. |
 | `prolog/crosswordsmith/stockgrid.pl` + `grids/` | **Flavour B** — the bundled stock-grid library: black-square masks, slots derived on load, each validated by `lint --profile blocked-uk`. |

@@ -31,9 +31,10 @@ the README.
   free-canvas legality core, clue numbering, emit, input). The root
   `crossword.pl` is only a migration shim: a bare or old-style
   `./crossword.pl ...` invocation prints a migration hint and exits non-zero.
-- The engines are `arrange.pl` (Flavour A) and `fill.pl` / `lint.pl` /
-  `export.pl` / `stockgrid.pl` (Flavour B); `metrics.pl` holds the shared metric
-  predicates + the greedy constructor (all under `prolog/crosswordsmith/`).
+- The engines are `arrange.pl` (Flavour A, including the greedy constructor)
+  and `fill.pl` / `lint.pl` / `export.pl` / `stockgrid.pl` (Flavour B);
+  `metrics.pl` holds the shared metric predicates (all under
+  `prolog/crosswordsmith/`).
 - `fixtures/bundled_17_clues.pl` is the bundled clue dataset used by examples,
   benchmarks, and the golden regression.
 - `tests/*.plt` hold the plunit coverage (one suite per module); the

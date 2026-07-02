@@ -127,11 +127,14 @@ The new `arrange` engine grew on top of the old machinery's primitives and orpha
   library layout, then introduce modules and explicit exports from leaves
   inward. Tracked in
   [`source-structure-migration-plan.md`](./source-structure-migration-plan.md).
-  Landed 2026-07-02: Phase 0 (spec §4 alignment) and Phase 1 (implementation
+  Landed 2026-07-02: Phase 0 (spec §4 alignment); Phase 1 (implementation
   files moved to `prolog/crosswordsmith/`, `crossword.pl` split into
   `core.pl` + a root message-only shim that loads nothing, root `load.pl` as
   the single owner of load order — driver/tests/benchmarks all load through
-  it).
+  it); Phase 2 (`quality.pl` renamed to `metrics.pl`); Phase 3 (the greedy
+  constructor moved from `metrics.pl` into `arrange.pl`; metrics now retains
+  exactly `next_cell/4` from core, and lint's metrics-only boundary is
+  intact).
 - **Done:** removed the dead Phase-1.5 `gate_*` measurement harness + the orphaned `arrange_*_run` convenience runners (the `crosswordsmith` CLI is the entry point); `arrange.pl` 903 → 729 lines. The CLI fragment path now checks input uniqueness like the other modes.
 - **Done (lint phase, opening move):** **deleted the dead `--quality` engine** from `quality.pl` (`quality_solve`/`quality_layout`/`grid_candidates`/`layout_score`/`quality_weights`/the floor subsystem) + its 9 tests; `quality.pl` 318 → 213 lines, re-framed as "shared metrics + the greedy density constructor." The lint-rule metrics (`word_meets_half`/`word_max_unch_run`/`checked_cells`/`dir_cells`/`word_checked_count`) now live in a file with no dead weight, ready for `lint` to consume.
 - **Superseded (2026-07-02):** the deferred "relocate the shared metric predicates from `quality.pl` into `crossword.pl`" tidy-up is dropped — spec §4 now keeps metrics as a separate module (`prolog/crosswordsmith/metrics.pl`), preserving lint's metrics-only dependency boundary. Instead, `quality.pl` is renamed to `metrics.pl` and sheds the greedy constructor to `arrange.pl`: [`source-structure-migration-plan.md`](./source-structure-migration-plan.md) Phases 2–3.
