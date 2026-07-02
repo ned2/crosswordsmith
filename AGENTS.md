@@ -24,9 +24,13 @@ the README.
 
 - The implementation is a SWI-Prolog crossword layout-and-fill toolkit.
 - `crosswordsmith` is the CLI entry point (verbs: `arrange`, `lint`, `export`,
-  `fill`). The implementation lives under `prolog/crosswordsmith/`; root
-  `load.pl` loads it in the known-good order (the CLI, tests, and benchmarks
-  all go through it) and defines the `crosswordsmith` file-search alias.
+  `fill`). The implementation lives under `prolog/crosswordsmith/`, one module
+  per file (`crosswordsmith_core` etc.) with explicit export lists; root
+  `load.pl` loads all seven modules (the CLI, tests, and benchmarks all go
+  through it) and defines the `crosswordsmith` file-search alias.
+- Export lists carry only the real inter-module/CLI/benchmark API. White-box
+  tests call module internals as `Module:Pred(...)` — never add an export
+  for a test.
 - `prolog/crosswordsmith/core.pl` is the shared substrate (grid model,
   free-canvas legality core, clue numbering, emit, input). The root
   `crossword.pl` is only a migration shim: a bare or old-style

@@ -123,18 +123,22 @@ Post-remediation suite: **179 plunit + 8 goldens + 3 CLI exit-code checks** (`ma
 
 The new `arrange` engine grew on top of the old machinery's primitives and orphaned its drivers. Tracking the cleanup so it doesn't just accrete:
 
-- **In progress:** migrate source structure toward an SWI-Prolog `prolog/`
-  library layout, then introduce modules and explicit exports from leaves
-  inward. Tracked in
-  [`source-structure-migration-plan.md`](./source-structure-migration-plan.md).
-  Landed 2026-07-02: Phase 0 (spec §4 alignment); Phase 1 (implementation
-  files moved to `prolog/crosswordsmith/`, `crossword.pl` split into
-  `core.pl` + a root message-only shim that loads nothing, root `load.pl` as
-  the single owner of load order — driver/tests/benchmarks all load through
-  it); Phase 2 (`quality.pl` renamed to `metrics.pl`); Phase 3 (the greedy
-  constructor moved from `metrics.pl` into `arrange.pl`; metrics now retains
-  exactly `next_cell/4` from core, and lint's metrics-only boundary is
-  intact).
+- **Done (2026-07-03):** source-structure + module migration, per
+  [`source-structure-migration-plan.md`](./source-structure-migration-plan.md)
+  (all phases complete; per-phase record + deviations in the plan's
+  checklists). End state: implementation under `prolog/crosswordsmith/`, one
+  module per file (`crosswordsmith_{core,metrics,arrange,lint,export,
+  stockgrid,fill}`) with explicit export lists; root `load.pl` (alias + the
+  seven `use_module`s) is the single loader for driver/tests/benchmarks;
+  root `crossword.pl` is a message-only shim that loads nothing; `quality.pl`
+  retired by rename to `metrics.pl`, the greedy constructor now lives in
+  `arrange.pl`, and lint's metrics-only dependency boundary is enforced by
+  imports. White-box tests reach internals as `Module:Pred(...)`; exports
+  carry only the real inter-module/CLI/benchmark API. Notable deviations
+  from the plan's verified map, found at module-ization: four extra exports
+  with real consumers (`add_word_cells/3`, `emit_arrange/4`, `valid_loc/1`,
+  `strategies/1` — closure references and latent paths that call-site greps
+  missed; `list_undefined` is the gate that catches them).
 - **Done:** removed the dead Phase-1.5 `gate_*` measurement harness + the orphaned `arrange_*_run` convenience runners (the `crosswordsmith` CLI is the entry point); `arrange.pl` 903 → 729 lines. The CLI fragment path now checks input uniqueness like the other modes.
 - **Done (lint phase, opening move):** **deleted the dead `--quality` engine** from `quality.pl` (`quality_solve`/`quality_layout`/`grid_candidates`/`layout_score`/`quality_weights`/the floor subsystem) + its 9 tests; `quality.pl` 318 → 213 lines, re-framed as "shared metrics + the greedy density constructor." The lint-rule metrics (`word_meets_half`/`word_max_unch_run`/`checked_cells`/`dir_cells`/`word_checked_count`) now live in a file with no dead weight, ready for `lint` to consume.
 - **Superseded (2026-07-02):** the deferred "relocate the shared metric predicates from `quality.pl` into `crossword.pl`" tidy-up is dropped — spec §4 now keeps metrics as a separate module (`prolog/crosswordsmith/metrics.pl`), preserving lint's metrics-only dependency boundary. Instead, `quality.pl` is renamed to `metrics.pl` and sheds the greedy constructor to `arrange.pl`: [`source-structure-migration-plan.md`](./source-structure-migration-plan.md) Phases 2–3.

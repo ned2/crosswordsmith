@@ -5,11 +5,11 @@
 %
 % Pure measurement over a placed layout (dir_cells, checked_cells,
 % word_checked_count, word_meets_half, word_max_unch_run, placed_bbox,
-% word_cells, ...), consulted AFTER core.pl (next_cell/4 is the only core
-% predicate used, by word_cells/5). Consumed by arrange.pl as optimizer
-% signals and by `lint` as validators. Per spec §4 these stay a separate
-% module — lint depends only on the JSON contract plus this metric layer,
-% never on the solver substrate.
+% word_cells, ...); next_cell/4 is the only core predicate used (imported
+% below, by word_cells/5). Consumed by arrange.pl as optimizer signals and by
+% `lint` as validators. Per spec §4 these stay a separate module — lint
+% depends only on the JSON contract plus this metric layer, never on the
+% solver substrate.
 %
 % The former `--quality` CLI engine (quality_solve / quality_layout /
 % grid_candidates + the floor subsystem) was retired at the Phase-7 CLI cutover

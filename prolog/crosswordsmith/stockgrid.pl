@@ -16,9 +16,8 @@
 % feed `lint` profiles and `fill`. There is no CLI verb.
 %
 % Exports: fill uses stockgrid_load/2, mask_white_cells/3 and grid_run/4; the
-% validate/report trio is deliberate library API. Core's
-% assign_clue_numbers/2 resolves via `user` inheritance until Phase 4.7.
-% Internals are reached by tests as crosswordsmith_stockgrid:Pred(...).
+% validate/report trio is deliberate library API. Internals are reached by
+% tests as crosswordsmith_stockgrid:Pred(...).
 
 :- module(crosswordsmith_stockgrid,
           [ stockgrid_load/2,

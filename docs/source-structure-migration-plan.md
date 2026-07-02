@@ -1,6 +1,13 @@
 # Source Structure + Module Migration Plan
 
-Status: planned. Stress-tested against the codebase on 2026-07-02: full
+Status: **done (2026-07-03)** — all phases landed, one commit per boundary,
+every gate green (`make test`, `make fuzz`, goldens byte-identical, root shim
+contract, `list_undefined` clean). Deviations from the verified map are
+recorded inline in the phase checklists (notably: four export additions with
+real consumers that call-site greps missed — closure references and latent
+paths).
+
+Originally stress-tested against the codebase on 2026-07-02: full
 cross-file coupling map, white-box test audit, docs audit, and SWI-Prolog
 10.1.10 mechanism checks. The dependency map and export lists below are
 verified against actual clause heads and call sites, not aspirational.
@@ -493,20 +500,25 @@ arrange, stockgrid, fill, driver, benchmarks):
 
 ## Phase 5: Cleanup + Documentation
 
-- [ ] Remove the temporary intra-package `ensure_loaded` chain-loads and any
+- [x] Remove the temporary intra-package `ensure_loaded` chain-loads and any
       remaining `use_module`-into-`user` compatibility loads in `load.pl`
       (its job shrinks to alias + `use_module` of the top-level modules).
-- [ ] Remove comments that describe "consult AFTER" ordering once imports make
+      (The chain-loads were already removed at their module-ization steps —
+      arrange's in 4.6, core's in 4.7 — because a chain-load from a module
+      context compiles the target into the wrong module. `load.pl`'s seven
+      `use_module`s stay: they are what lands the exports in `user` for the
+      driver, the `.plt` suites, and the benchmarks.)
+- [x] Remove comments that describe "consult AFTER" ordering once imports make
       the dependency graph explicit.
-- [ ] Update `README.md` project-shape section.
-- [ ] Update `AGENTS.md` source map (again, if 4.x changed anything beyond
+- [x] Update `README.md` project-shape section.
+- [x] Update `AGENTS.md` source map (again, if 4.x changed anything beyond
       Phase 1's update; `CONTEXT.md` follows via symlink).
-- [ ] Confirm `docs/design-spec.md` §4 matches the landed reality (Phase 0
+- [x] Confirm `docs/design-spec.md` §4 matches the landed reality (Phase 0
       wrote the intent; this confirms it).
-- [ ] Update `docs/STATUS.md` and this checklist in the same commits as work
+- [x] Update `docs/STATUS.md` and this checklist in the same commits as work
       lands.
-- [ ] Run `make test`.
-- [ ] Run `make fuzz`.
+- [x] Run `make test`.
+- [x] Run `make fuzz`.
 
 ## Suggested Commit Boundaries
 

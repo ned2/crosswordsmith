@@ -297,8 +297,11 @@ rationale; `tests/clues.json` is a worked example.
 One shared substrate, two solver tops, with the Flavour-B tools as
 transformations/validators over the canonical JSON:
 
-The implementation lives under `prolog/crosswordsmith/`; the root `load.pl`
-loads it all in the right order (the CLI, tests, and benchmarks go through it):
+The implementation lives under `prolog/crosswordsmith/`, one SWI-Prolog module
+per file (`crosswordsmith_core`, `crosswordsmith_metrics`, ... — a
+`crosswordsmith_` prefix because module names share a flat namespace) with
+explicit export lists; the root `load.pl` loads it all (the CLI, tests, and
+benchmarks go through it):
 
 | file | role |
 | --- | --- |
