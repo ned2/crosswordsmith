@@ -94,11 +94,15 @@ The discipline: **one substrate, two solver tops.**
 | **Placement engine** | ✗ | unified B&B optimizer (new) | grid-first + dictionary fill (new, separate) |
 | Legality core (`adj_is_free`, `no_word_merge`, `check_prev/next_cell`) | ✗ | free-canvas (blocked) | template-slot / barred |
 
-**Module layout (target):**
-- `crossword.pl` — shared primitives (grid model, legality core for the free-canvas case, clue numbering, emit, input). Metric helpers `crossing_count`/`placed_bbox`/`word_meets_half` lifted here from `quality.pl` so both engines call them.
-- `arrange.pl` — Flavour-A engine (consults `crossword.pl`).
-- Flavour-B modules (`lint.pl`, `export.pl`, `stockgrid.pl` built; `fill.pl` deferred) — added as those components are built.
-- `quality.pl` — legacy; retired at the Phase-7 CLI cutover (§7), superseded by `arrange`.
+**Module layout (target):** an SWI-Prolog library layout under `prolog/crosswordsmith/`, one module per file (flat-namespace module names prefixed `crosswordsmith_*`), with explicit export lists. Migration is staged in [`source-structure-migration-plan.md`](source-structure-migration-plan.md).
+
+- `prolog/crosswordsmith/core.pl` (`crosswordsmith_core`) — shared substrate: input, grid model, legality core for the free-canvas case, clue numbering, emit.
+- `prolog/crosswordsmith/metrics.pl` (`crosswordsmith_metrics`) — the shared metric predicates (`crossing_count`/`placed_bbox`/`word_meets_half`, checked-cell/unch-run helpers); today's `quality.pl` renamed, minus the greedy constructor. Metrics remain a **separate module** — they are *not* lifted into core (supersedes earlier language here): `lint` depends only on the JSON contract plus metrics, never on the solver substrate, and that boundary is deliberate and preserved.
+- `prolog/crosswordsmith/arrange.pl` (`crosswordsmith_arrange`) — Flavour-A engine, **including the greedy constructor** (moved from `quality.pl`): its only consumer is arrange, and its project dependencies are core's search primitives, not the metrics.
+- Flavour-B modules — `prolog/crosswordsmith/{lint,export,stockgrid,fill}.pl` (`crosswordsmith_lint`/`_export`/`_stockgrid`/`_fill`).
+- Root `load.pl` — search-path alias + single owner of load order; the CLI driver, tests, and benchmarks load the project through it.
+- Root `crossword.pl` — message-only migration shim (prints the "did you mean `arrange`?" hint per §5.3, exits non-zero); it does not load the library.
+- `quality.pl` — retired by the rename to `metrics.pl` (the stale `--quality`-era name goes away; the metric layer itself stays).
 
 **Cross-cutting invariants (apply to all components):**
 - **INV-1 — Metadata-agnostic engine.** Clue text, annotations, cluing scores, review flags ride in an opaque `meta` object joined to the answer at emit time. They MUST NOT be threaded through placement or clue-numbering. The JSON contract changes only by *additive* keys. (Principle #2.)

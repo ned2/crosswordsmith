@@ -210,13 +210,14 @@ layout is pack-*shaped* but this is not a pack; no `pack.pl` is planned.
 The spec is normative (spec-driven development); it must describe this end
 state *before* the code moves.
 
-- [ ] Amend `docs/design-spec.md` §4 "Module layout (target)": replace the
+- [x] Amend `docs/design-spec.md` §4 "Module layout (target)": replace the
       "metric helpers lifted into `crossword.pl` / `quality.pl` retired"
       language with the `prolog/crosswordsmith/{core,metrics,arrange,lint,
       export,stockgrid,fill}` module layout, the constructor-lives-in-arrange
       decision, and the lint-depends-only-on-metrics boundary.
-- [ ] Update `docs/STATUS.md` line ~131 (the deferred metric-relocation tidy-up)
-      to point at this plan's Phases 2–3 instead.
+- [x] Update `docs/STATUS.md` line ~131 (the deferred metric-relocation tidy-up)
+      to point at this plan's Phases 2–3 instead (also aligned the §6.4
+      metric-predicates row, which carried the same superseded language).
 
 ## Phase 1: Layout Migration Only
 
