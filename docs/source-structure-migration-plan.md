@@ -277,12 +277,12 @@ predicate visibility, module semantics, CLI behaviour, or emitted output.
 Goal: remove the stale file name after relocation, before module exports make
 the name more permanent.
 
-- [ ] Rename `prolog/crosswordsmith/quality.pl` to
+- [x] Rename `prolog/crosswordsmith/quality.pl` to
       `prolog/crosswordsmith/metrics.pl`.
-- [ ] Update the `core.pl` chain-load and comments.
-- [ ] Update docs that describe `quality.pl` as the current shared metric layer.
-- [ ] Run `make test`.
-- [ ] Confirm no golden output changes.
+- [x] Update the `core.pl` chain-load and comments.
+- [x] Update docs that describe `quality.pl` as the current shared metric layer.
+- [x] Run `make test`.
+- [x] Confirm no golden output changes.
 
 ## Phase 3: Extract The Greedy Constructor Into `arrange.pl`
 

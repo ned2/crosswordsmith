@@ -17,7 +17,7 @@
    ).
 
 % Known-good load order (the driver's historical order): arrange chain-loads
-% core.pl (which chain-loads quality.pl); lint must precede stockgrid
+% core.pl (which chain-loads metrics.pl); lint must precede stockgrid
 % (stockgrid calls lint_run/5); fill last (uses stockgrid + arrange + metrics).
 % lint/export/stockgrid/fill perform no project loads of their own.
 :- ensure_loaded(crosswordsmith(arrange)).

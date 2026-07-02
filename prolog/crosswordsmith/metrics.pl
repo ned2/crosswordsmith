@@ -1,6 +1,8 @@
-% quality.pl - shared layout metrics + the Flavour-A greedy density constructor.
+% metrics.pl - shared layout metrics + the Flavour-A greedy density
+% constructor. (Formerly quality.pl; renamed in Phase 2 of the
+% source-structure migration. The constructor moves to arrange.pl in Phase 3.)
 %
-% Two things live here, both consulted AFTER crossword.pl (whose legality core
+% Two things live here, both consulted AFTER core.pl (whose legality core
 % they reuse: init_grid, start_loc, find_intersecting_word, assign_word incl. the
 % I5 no_word_merge, fits_on_grid, next_cell):
 %
@@ -8,8 +10,9 @@
 %      (dir_cells, checked_cells, word_checked_count, word_meets_half,
 %      word_max_unch_run, crossing_count, placed_bbox, word_cells, ...). Consumed
 %      by arrange.pl as optimizer signals and by `lint` as validators
-%      (design-spec §6.4). (Lifting them into crossword.pl proper is a pending
-%      tidy-up; functionally they are already the shared metric layer.)
+%      (design-spec §6.4). Per spec §4 these stay a separate module — lint
+%      depends only on the JSON contract plus this metric layer, never on the
+%      solver substrate.
 %
 %   2. The greedy density CONSTRUCTOR (greedy_construct/greedy_loop/next_move/
 %      word_best_placement) - arrange.pl's best-effort and candidates path:
@@ -89,7 +92,7 @@ apply_move(move(Entry, NewPW, NewGrid), Remaining, Placed, GridLen, FinalPlaced,
     % re-offer the just-placed word forever. Key the removal on the ground
     % answer atom instead (answers are unique, check_unique_answers/1); selectchk
     % keeps the original, uncopied tail. (Same term-copy footgun the MRV path
-    % avoids via map_list_to_pairs - see crossword.pl select_inc.)
+    % avoids via map_list_to_pairs - see core.pl select_inc.)
     Entry = [Answer|_],
     selectchk([Answer|_], Remaining, Remaining1),
     greedy_loop(Remaining1, [NewPW|Placed], GridLen, NewGrid, FinalPlaced, Dropped).

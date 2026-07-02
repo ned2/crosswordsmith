@@ -1,7 +1,7 @@
 % tests/stockgrid.plt - plunit suite for stockgrid.pl (bundled stock-grid
 % library, §8.3; schema fixed by DP-1 / OD-5).
 %
-% Assumes crossword.pl, quality.pl, lint.pl and stockgrid.pl are consulted by
+% Assumes core.pl, metrics.pl, lint.pl and stockgrid.pl are consulted by
 % the runner before this file. Covers the mask loader, light derivation, the
 % legality validator (which reuses lint blocked-uk), and - the load-bearing
 % regression - that every bundled grid validates as legal.

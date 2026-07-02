@@ -1,6 +1,6 @@
-% tests/crossword.plt - plunit test suite for crossword.pl
+% tests/crossword.plt - plunit test suite for the shared substrate (core.pl, formerly crossword.pl)
 %
-% These tests assume crossword.pl has already been consulted into the
+% These tests assume core.pl has already been consulted into the
 % `user` module (the runner, tests/run_tests.pl, does this before loading
 % this file). Run them via:
 %
@@ -192,7 +192,7 @@ test(allows_separated_collinear_word, [nondet]) :-
 % "cell directly below must be empty" guard (check_next_cell/4). On a 5x5, a
 % down word ending at cell 20 sits directly above cell 25; if cell 25 already
 % holds a letter, placing that down word would splice a 4th cell onto its run -
-% the forbidden collinear "word inside a word" merge (crossword.pl:491-506).
+% the forbidden collinear "word inside a word" merge (core.pl, no_word_merge).
 % The old is_end_cell(down) `>=` classified cell 20 as a bottom-row end and so
 % SKIPPED the below-must-be-empty check, wrongly allowing the placement.
 test(rejects_down_word_ending_above_filled_cell, [fail]) :-
@@ -406,9 +406,9 @@ test(with_output_no_file_on_failure) :-
 :- end_tests(cli).
 
 
-% Shared layout metrics + greedy constructor (quality.pl)
+% Shared layout metrics + greedy constructor (metrics.pl)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% quality.pl is loaded alongside crossword.pl (via its ensure_loaded). After the
+% metrics.pl is loaded alongside core.pl (via its ensure_loaded). After the
 % Phase-7 cutover it holds only the shared metric predicates (consumed by
 % arrange.pl as optimizer signals and by lint as validators) and the greedy
 % density constructor (arrange's best-effort/candidates path; its termination on

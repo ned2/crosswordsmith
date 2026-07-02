@@ -3,7 +3,7 @@
 % stock-grid mask), derive its slots, and fill every slot with a dictionary word
 % subject to crossing constraints, with the user's words pinned as seeds (the
 % §6.6 fragment primitive). Output is the canonical layout, so it composes with
-% lint/export. Consult AFTER crossword.pl, quality.pl, lint.pl, stockgrid.pl and
+% lint/export. Consult AFTER core.pl, metrics.pl, lint.pl, stockgrid.pl and
 % arrange.pl (it reuses load_fragment/3).
 %
 % The grid model: each white cell is one logical VARIABLE, shared between its

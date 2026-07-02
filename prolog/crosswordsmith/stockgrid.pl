@@ -12,7 +12,7 @@
 %
 % Slots (lights) are DERIVED on load - not stored - by run-scanning the mask,
 % then validated by `lint --profile blocked-uk` (the metric predicates as
-% template validators). Consult AFTER crossword.pl, quality.pl and lint.pl.
+% template validators). Consult AFTER core.pl, metrics.pl and lint.pl.
 % This is a library (loader + validator); stock grids feed `lint` profiles and,
 % later, `fill`. There is no CLI verb.
 

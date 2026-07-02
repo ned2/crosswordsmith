@@ -1,6 +1,6 @@
 % tests/fill.plt - plunit suite for fill.pl (grid-first auto-fill, §8.4).
 %
-% Assumes crossword.pl, quality.pl, lint.pl, stockgrid.pl, arrange.pl and
+% Assumes core.pl, metrics.pl, lint.pl, stockgrid.pl, arrange.pl and
 % fill.pl are consulted by the runner before this file. Covers slot derivation
 % + the SHARED cell-variable invariant (the crossing constraint), the fill
 % search (AC-FILL-1), seeds (AC-FILL-2), determinism (AC-FILL-3), and the

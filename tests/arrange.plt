@@ -1,6 +1,6 @@
 % tests/arrange.plt - plunit test suite for arrange.pl (Flavour-A engine).
 %
-% Assumes crossword.pl and arrange.pl have been consulted into `user` by the
+% Assumes core.pl and arrange.pl have been consulted into `user` by the
 % runner (tests/run_tests.pl) before this file is loaded. Run via:
 %
 %     ./run_tests.sh        (or)        make test

@@ -4,7 +4,7 @@
 %
 % This file deliberately does NOT define `main`/initialization, so it can be
 % consulted by a harness without side effects. It consults core.pl (which
-% in turn loads quality.pl), reusing the legality core, the MRV-inc branch step,
+% in turn loads metrics.pl), reusing the legality core, the MRV-inc branch step,
 % and the existing checking metrics verbatim. (The Phase-1.5 `gate_*`
 % measurement harness that lived here was removed once the gate's descope
 % decision was recorded in the implementation plan.)
@@ -27,7 +27,7 @@
 arrange_weights(5, 1).
 
 % Per-word checking target: ceil(L/2) by default (== word_meets_half/2's
-% threshold in quality.pl; L is the placed dict's `len`). The §7.2 reachability
+% threshold in metrics.pl; L is the placed dict's `len`). The §7.2 reachability
 % escape hatch `--check-target N` lowers the ceiling to min(ceil(L/2), N) via
 % check_target_override/1 (absent => the default). min/2 means N only ever
 % LOWERS the target - an N above ceil(L/2) is a no-op - matching the spec intent
@@ -43,7 +43,7 @@ check_target(L, T) :-
 
 % Per-word integer reward contribution:
 %   WCap * min(checked, target) + WTail * checked
-% checked(w) is reused from quality.pl's word_checked_count/3 (W's cells that
+% checked(w) is reused from metrics.pl's word_checked_count/3 (W's cells that
 % are also covered by a perpendicular placed word).
 word_reward(WCap, WTail, PW, Placed, R) :-
     get_dict(len, PW, L),
@@ -205,7 +205,7 @@ word_shares_letter(Entry, Words) :-
 
 
 % --- Phase 4: best-effort (drop) via the greedy constructor ----------------
-% Per the Phase-1.5 result, best-effort is served by quality.pl's greedy
+% Per the Phase-1.5 result, best-effort is served by metrics.pl's greedy
 % constructor (which drops words it cannot place), NOT a drop-branch on the
 % strict DFS. Construct over the seed x start-corner sweep on the given grid,
 % rescore, and pick lexicographically: most words placed, then highest reward.
@@ -329,7 +329,7 @@ arrange_solve(Words, GridLen, best_effort, SizeMode) :-
 %   AC-EMIT-2 emit -> re-ingest as fragment -> identical layout (an emitted
 %             layout IS already a valid fragment).
 %   AC-FRAG-3 pinned words sit at exactly their fragment positions.
-% Everything here reuses crossword.pl's legality core (assign_word and the
+% Everything here reuses core.pl's legality core (assign_word and the
 % adjacency/merge/prev-cell checks it calls), geometry (cell_coord, word_cells,
 % fits_on_grid) and the MRV-inc remainder search; nothing is re-derived.
 % ===========================================================================
@@ -766,7 +766,7 @@ fewer >=tau-distinct layouts exist~n",
 % --- enumerate (count all feasible full placements) ------------------------
 % The `--enumerate` engine seam (design-spec §7.1, AC-ARR-8): the exhaustive
 % count of every feasible full placement on an N x N grid, over all four start
-% corners. Reuses crossword.pl's all_crossword/5 with the production default
+% corners. Reuses core.pl's all_crossword/5 with the production default
 % strategy, so the count matches the old `--all` exactly (strategies only
 % reorder the same search tree). The branch step / legality core are untouched.
 arrange_enumerate(Words, GridLen, Num) :-

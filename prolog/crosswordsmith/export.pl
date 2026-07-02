@@ -8,7 +8,7 @@
 %
 % Enumerations are derived from the answer's spaces/hyphens (§6.3); clue text
 % rides in meta.clue. Nothing is invented (AC-EXP-3): a missing clue is empty.
-% Consult AFTER crossword.pl (it only needs JSON + lists).
+% Consult AFTER core.pl (it only needs JSON + lists).
 
 :- use_module(library(http/json)).
 :- use_module(library(apply)).

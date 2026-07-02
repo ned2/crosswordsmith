@@ -1,9 +1,9 @@
 % lint.pl - Flavour-B grid validator (design-spec §8.1). Consumes a canonical
 % layout (what `arrange` emits) and reports PASS / WARN / FAIL per rule, per
 % word, plus a summary verdict, under a named profile. It needs no engine: it
-% reuses crossword.pl's geometry/JSON and quality.pl's shared metric predicates
+% reuses core.pl's geometry/JSON and metrics.pl's shared metric predicates
 % (word_checked_bitmap, layout_dir_cells, word_checked_count, dir_cells, ...).
-% Consult AFTER crossword.pl (and quality.pl).
+% Consult AFTER core.pl (and metrics.pl).
 
 :- use_module(library(http/json)).
 :- use_module(library(apply)).
@@ -150,7 +150,7 @@ upcase_sev(fail, 'FAIL').
 % Each yields result(Rule, pass|Sev, Detail) - Detail null on PASS.
 % Sev is the configured violation severity; Bits is the word's precomputed
 % checked bitmap (word_rule_results/4). checked-count and max-unchecked-run come
-% from the shared bitmap primitives (quality.pl); the two bit-pattern rules read
+% from the shared bitmap primitives (metrics.pl); the two bit-pattern rules read
 % Bits directly.
 eval_word_rule(min_length, CS, W, _Bits, result(min_length, Sev, Detail)) :-
     get_dict(len, W, L),
@@ -196,7 +196,7 @@ barred_max_unch(7, 2) :- !.
 barred_max_unch(8, 3) :- !.
 barred_max_unch(L, M) :- L >= 9, M is L // 3.
 
-% Bit-pattern rule helpers over a word's checked bitmap (quality.pl builds it).
+% Bit-pattern rule helpers over a word's checked bitmap (metrics.pl builds it).
 double_unch_end(Bits, start) :- Bits = [0, 0|_], !.
 double_unch_end(Bits, end)   :- reverse(Bits, [0, 0|_]).
 

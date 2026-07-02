@@ -28,14 +28,14 @@
 % aggregate_all/3, used to count solutions in all_crossword/5.
 :- use_module(library(aggregate)).
 
-% The shared metric predicates + the greedy constructor (quality.pl). Loaded
+% The shared metric predicates + the greedy constructor (metrics.pl). Loaded
 % from the same directory as this file so it resolves regardless of the
 % working directory. ensure_loaded avoids a double-load when a harness
 % consults both files. (Transitional sibling chain-load; Phase 4 of the
 % source-structure migration replaces it with explicit module imports.)
 :- prolog_load_context(directory, Dir),
-   directory_file_path(Dir, 'quality.pl', QualityFile),
-   ensure_loaded(QualityFile).
+   directory_file_path(Dir, 'metrics.pl', MetricsFile),
+   ensure_loaded(MetricsFile).
 
 
 

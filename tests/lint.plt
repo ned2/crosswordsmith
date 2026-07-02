@@ -1,6 +1,6 @@
 % tests/lint.plt - plunit suite for lint.pl (Flavour-B grid validator, §8.1).
 %
-% Assumes crossword.pl, quality.pl (via crossword.pl) and lint.pl are consulted
+% Assumes core.pl, metrics.pl (via core.pl) and lint.pl are consulted
 % by the runner (tests/run_tests.pl) before this file. Run via `make test`.
 %
 % Covers the loader, the rule evaluators, the per-profile rule/severity sets

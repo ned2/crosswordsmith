@@ -1,6 +1,6 @@
 % tests/export.plt - plunit suite for export.pl (Flavour-B interchange, §8.2).
 %
-% Assumes crossword.pl and export.pl are consulted by the runner before this
+% Assumes core.pl and export.pl are consulted by the runner before this
 % file. Covers the enumeration deriver (AC-ENUM-1), the ipuz v2 transform
 % (AC-EXP-1 structure) and the Exolve transform (AC-EXP-2 structure), plus the
 % preservation of clue text + enumerations (AC-EXP-3). True third-party
