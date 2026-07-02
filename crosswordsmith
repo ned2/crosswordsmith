@@ -4,30 +4,20 @@
 
 % crosswordsmith - the command-line interface (design-spec §5). One verb per
 % capability; a bare invocation prints usage and exits non-zero. The engine
-% lives in arrange.pl (which consults crossword.pl + quality.pl); this file is
-% only argv plumbing + dispatch, so end-to-end behaviour is covered by the
-% golden-output regression (run_tests.sh) rather than by consulting this file
-% into the unit-test harness.
+% lives in prolog/crosswordsmith/ (loaded via load.pl); this file is only argv
+% plumbing + dispatch, so end-to-end behaviour is covered by the golden-output
+% regression (run_tests.sh) rather than by consulting this file into the
+% unit-test harness.
 %
-% NB: the `:- initialization(main, main)` directive is at the FOOT of this file,
-% AFTER ensure_loaded below, so that THIS main wins the main-initialization
-% registration over crossword.pl's migration shim (last registration wins).
+% NB: the `:- initialization(main, main)` directive is at the FOOT of this
+% file, AFTER the project load below, so THIS main wins the
+% main-initialization registration (last registration wins).
 
+% Load the whole implementation via load.pl (the single owner of load order),
+% resolved relative to this script so it works from any cwd.
 :- prolog_load_context(directory, Dir),
-   directory_file_path(Dir, 'arrange.pl', ArrangeFile),
-   ensure_loaded(ArrangeFile).
-:- prolog_load_context(directory, Dir),
-   directory_file_path(Dir, 'lint.pl', LintFile),
-   ensure_loaded(LintFile).
-:- prolog_load_context(directory, Dir),
-   directory_file_path(Dir, 'export.pl', ExportFile),
-   ensure_loaded(ExportFile).
-:- prolog_load_context(directory, Dir),
-   directory_file_path(Dir, 'stockgrid.pl', StockgridFile),
-   ensure_loaded(StockgridFile).
-:- prolog_load_context(directory, Dir),
-   directory_file_path(Dir, 'fill.pl', FillFile),
-   ensure_loaded(FillFile).
+   directory_file_path(Dir, 'load.pl', LoadFile),
+   ensure_loaded(LoadFile).
 
 % Remember the script directory so the default fill dictionary resolves no
 % matter the working directory.

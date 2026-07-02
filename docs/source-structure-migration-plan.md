@@ -235,42 +235,42 @@ predicate visibility, module semantics, CLI behaviour, or emitted output.
   - [x] Keep the loader side-effect free (no initialization directives, no
         flag changes beyond what the files themselves do) so consulting it
         from the test harness and benchmarks is safe.
-- [ ] Create `prolog/crosswordsmith/`.
-- [ ] Move active implementation files into `prolog/crosswordsmith/`.
-  - [ ] Move `arrange.pl`.
-  - [ ] Move `quality.pl` without renaming yet.
-  - [ ] Move `lint.pl`.
-  - [ ] Move `export.pl`.
-  - [ ] Move `stockgrid.pl`.
-  - [ ] Move `fill.pl`.
-  - [ ] Move the implementation portion of `crossword.pl` (~875 of 886 lines)
+- [x] Create `prolog/crosswordsmith/`.
+- [x] Move active implementation files into `prolog/crosswordsmith/`.
+  - [x] Move `arrange.pl`.
+  - [x] Move `quality.pl` without renaming yet.
+  - [x] Move `lint.pl`.
+  - [x] Move `export.pl`.
+  - [x] Move `stockgrid.pl`.
+  - [x] Move `fill.pl`.
+  - [x] Move the implementation portion of `crossword.pl` (~875 of 886 lines)
         into `prolog/crosswordsmith/core.pl`. `core.pl` gets **no**
         `initialization` directive and no shebang.
-  - [ ] Keep the intra-package sibling chain-loads during the transition
+  - [x] Keep the intra-package sibling chain-loads during the transition
         (`arrange.pl` `ensure_loaded`s `core.pl`; `core.pl` `ensure_loaded`s
         `quality.pl` — same `prolog_load_context` idiom, paths unchanged since
         the files move together), so individual files stay consultable.
-- [ ] Reduce root `crossword.pl` to the message-only shim: shebang,
+- [x] Reduce root `crossword.pl` to the message-only shim: shebang,
       `:- initialization(legacy_main, main)`, `legacy_main/0` migration
       message, `halt(1)`. It does **not** load the library.
-- [ ] Update `crosswordsmith` to load `load.pl` (resolved relative to the
+- [x] Update `crosswordsmith` to load `load.pl` (resolved relative to the
       script directory) instead of the five sibling files. Keep the
       `script_directory/1` assert and the foot-of-file
       `:- initialization(main, main)`.
-- [ ] Update `tests/run_tests.pl`: replace the six implementation consults
+- [x] Update `tests/run_tests.pl`: replace the six implementation consults
       with `consult('load.pl')`; keep the six `.plt` consults unchanged.
-- [ ] Update benchmark harnesses (`run_benchmarks.pl`, `run_matrix.pl`,
+- [x] Update benchmark harnesses (`run_benchmarks.pl`, `run_matrix.pl`,
       `start_sensitivity.pl`) to load `load.pl` via their existing
       repo-root-relative resolution, replacing their direct `crossword.pl`
       consults. (Heavier load than they need; acceptable and temporary until
       they can `use_module(crosswordsmith(core))` after Phase 4.7.)
-- [ ] Update documentation references that assume implementation files live at
+- [x] Update documentation references that assume implementation files live at
       repo root: `README.md` source-map table (~lines 300–307), `AGENTS.md`
       "Project Shape" (~lines 25–34; `CONTEXT.md` is a symlink to it).
-- [ ] Run `make test`.
-- [ ] Run `make fuzz` — path resolution and the `--out` contract are exactly
+- [x] Run `make test`.
+- [x] Run `make fuzz` — path resolution and the `--out` contract are exactly
       what this phase touches.
-- [ ] Confirm no golden output changes.
+- [x] Confirm no golden output changes.
 
 ## Phase 2: Rename `quality.pl` To `metrics.pl`
 

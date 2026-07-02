@@ -24,12 +24,16 @@ the README.
 
 - The implementation is a SWI-Prolog crossword layout-and-fill toolkit.
 - `crosswordsmith` is the CLI entry point (verbs: `arrange`, `lint`, `export`,
-  `fill`). `crossword.pl` is now a shared-substrate *library* (grid model,
-  free-canvas legality core, clue numbering, emit, input), not the CLI; a bare
-  or old-style `./crossword.pl ...` invocation only prints a migration hint.
+  `fill`). The implementation lives under `prolog/crosswordsmith/`; root
+  `load.pl` loads it in the known-good order (the CLI, tests, and benchmarks
+  all go through it) and defines the `crosswordsmith` file-search alias.
+- `prolog/crosswordsmith/core.pl` is the shared substrate (grid model,
+  free-canvas legality core, clue numbering, emit, input). The root
+  `crossword.pl` is only a migration shim: a bare or old-style
+  `./crossword.pl ...` invocation prints a migration hint and exits non-zero.
 - The engines are `arrange.pl` (Flavour A) and `fill.pl` / `lint.pl` /
   `export.pl` / `stockgrid.pl` (Flavour B); `quality.pl` holds the shared metric
-  predicates + the greedy constructor.
+  predicates + the greedy constructor (all under `prolog/crosswordsmith/`).
 - `fixtures/bundled_17_clues.pl` is the bundled clue dataset used by examples,
   benchmarks, and the golden regression.
 - `tests/*.plt` hold the plunit coverage (one suite per module); the

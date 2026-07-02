@@ -16,8 +16,8 @@
                         access(read)
                       ]),
    asserta(repo_root(RepoRoot)),
-   directory_file_path(RepoRoot, 'crossword.pl', Crossword),
-   consult(Crossword).
+   directory_file_path(RepoRoot, 'load.pl', Load),
+   consult(Load).
 
 :- initialization(benchmark_main, main).
 
@@ -89,7 +89,7 @@ validate_options(Opts, Positional, Config) :-
                strategy: Strategy}.
 
 % '' means "use the production default"; otherwise validate against the
-% strategies crossword.pl defines.
+% strategies the solver core (prolog/crosswordsmith/core.pl) defines.
 resolve_strategy('', Strategy) :-
     !,
     default_strategy(Strategy).

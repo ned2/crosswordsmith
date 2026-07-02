@@ -47,7 +47,7 @@ Reachability calibration (`--check-target`, ε, τ) is a **required pre-weightin
 | Metric predicates (§6.4) | legacy | Live in `quality.pl` (shared metric layer); per spec §4 they stay a separate module — target `prolog/crosswordsmith/metrics.pl` via [`source-structure-migration-plan.md`](./source-structure-migration-plan.md) Phases 2–3, not lifted into `crossword.pl`. |
 | Emit / canonical JSON (§6.5) | legacy | Stable sorted-key JSON exists; confirm round-trip AC-EMIT-1/2. |
 | Fragment-grid primitive (§6.6) | **done** (words-only v1) | Realized in arrange Phase 5 (`arrange.pl`): emit-schema parse + reconcile + pin-via-legality-core + remainder search. AC-FRAG-1/2/3 + AC-EMIT-2 pass; AC-FRAG-4 (thin form) deferred. |
-| CLI contract + migration (§5) | **done** (`arrange` verb) | `crosswordsmith` script: subcommand dispatch, bare→usage, old-style→migration hint, `arrange` flags incl. `--enumerate`/`--candidates`/`--fragment`; `crossword.pl` is now a library + migration shim; `--shuffle`/`--strategy` removed. AC-CLI-1/2/3, AC-ARR-6/8. `lint`/`export`/`fill` verbs recognised but report not-built/deferred. |
+| CLI contract + migration (§5) | **done** (`arrange` verb) | `crosswordsmith` script: subcommand dispatch, bare→usage, old-style→migration hint, `arrange` flags incl. `--enumerate`/`--candidates`/`--fragment`; the substrate is a library (`prolog/crosswordsmith/core.pl`) and root `crossword.pl` a message-only migration shim; `--shuffle`/`--strategy` removed. AC-CLI-1/2/3, AC-ARR-6/8. `lint`/`export`/`fill` verbs recognised but report not-built/deferred. |
 
 ---
 
@@ -123,9 +123,15 @@ Post-remediation suite: **179 plunit + 8 goldens + 3 CLI exit-code checks** (`ma
 
 The new `arrange` engine grew on top of the old machinery's primitives and orphaned its drivers. Tracking the cleanup so it doesn't just accrete:
 
-- **Planned:** migrate source structure toward an SWI-Prolog `prolog/` library
-  layout, then introduce modules and explicit exports from leaves inward. Tracked
-  in [`source-structure-migration-plan.md`](./source-structure-migration-plan.md).
+- **In progress:** migrate source structure toward an SWI-Prolog `prolog/`
+  library layout, then introduce modules and explicit exports from leaves
+  inward. Tracked in
+  [`source-structure-migration-plan.md`](./source-structure-migration-plan.md).
+  Landed 2026-07-02: Phase 0 (spec §4 alignment) and Phase 1 (implementation
+  files moved to `prolog/crosswordsmith/`, `crossword.pl` split into
+  `core.pl` + a root message-only shim that loads nothing, root `load.pl` as
+  the single owner of load order — driver/tests/benchmarks all load through
+  it).
 - **Done:** removed the dead Phase-1.5 `gate_*` measurement harness + the orphaned `arrange_*_run` convenience runners (the `crosswordsmith` CLI is the entry point); `arrange.pl` 903 → 729 lines. The CLI fragment path now checks input uniqueness like the other modes.
 - **Done (lint phase, opening move):** **deleted the dead `--quality` engine** from `quality.pl` (`quality_solve`/`quality_layout`/`grid_candidates`/`layout_score`/`quality_weights`/the floor subsystem) + its 9 tests; `quality.pl` 318 → 213 lines, re-framed as "shared metrics + the greedy density constructor." The lint-rule metrics (`word_meets_half`/`word_max_unch_run`/`checked_cells`/`dir_cells`/`word_checked_count`) now live in a file with no dead weight, ready for `lint` to consume.
 - **Superseded (2026-07-02):** the deferred "relocate the shared metric predicates from `quality.pl` into `crossword.pl`" tidy-up is dropped — spec §4 now keeps metrics as a separate module (`prolog/crosswordsmith/metrics.pl`), preserving lint's metrics-only dependency boundary. Instead, `quality.pl` is renamed to `metrics.pl` and sheds the greedy constructor to `arrange.pl`: [`source-structure-migration-plan.md`](./source-structure-migration-plan.md) Phases 2–3.

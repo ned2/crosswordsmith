@@ -6,19 +6,18 @@
 % deliberately side-effect free beyond loading: no initialization directives
 % and no flag changes, so consulting it from any harness is safe.
 %
-% The `crosswordsmith` file-search alias resolves relative to this file's own
-% directory (prolog_load_context/2), so loads are cwd-independent. It currently
-% points at the repository root; the source-structure migration
-% (docs/source-structure-migration-plan.md Phase 1) repoints it at
-% prolog/crosswordsmith/ when the implementation files move there.
+% The `crosswordsmith` file-search alias points at prolog/crosswordsmith/,
+% resolved relative to this file's own directory (prolog_load_context/2), so
+% loads are cwd-independent.
 :- prolog_load_context(directory, Dir),
-   (   user:file_search_path(crosswordsmith, Dir)
+   directory_file_path(Dir, 'prolog/crosswordsmith', LibDir),
+   (   user:file_search_path(crosswordsmith, LibDir)
    ->  true
-   ;   assertz(user:file_search_path(crosswordsmith, Dir))
+   ;   assertz(user:file_search_path(crosswordsmith, LibDir))
    ).
 
 % Known-good load order (the driver's historical order): arrange chain-loads
-% crossword.pl (which chain-loads quality.pl); lint must precede stockgrid
+% core.pl (which chain-loads quality.pl); lint must precede stockgrid
 % (stockgrid calls lint_run/5); fill last (uses stockgrid + arrange + metrics).
 % lint/export/stockgrid/fill perform no project loads of their own.
 :- ensure_loaded(crosswordsmith(arrange)).

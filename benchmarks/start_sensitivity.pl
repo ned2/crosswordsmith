@@ -22,8 +22,8 @@
    absolute_file_name('..', RepoRoot,
                       [ relative_to(BenchDir), file_type(directory), access(read) ]),
    asserta(repo_root(RepoRoot)),
-   directory_file_path(RepoRoot, 'crossword.pl', Crossword),
-   consult(Crossword),
+   directory_file_path(RepoRoot, 'load.pl', Load),
+   consult(Load),
    directory_file_path(RepoRoot, 'benchmarks/fixtures.pl', Manifest),
    consult(Manifest).
 

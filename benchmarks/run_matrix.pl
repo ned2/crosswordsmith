@@ -27,8 +27,8 @@
    absolute_file_name('..', RepoRoot,
                       [ relative_to(BenchDir), file_type(directory), access(read) ]),
    asserta(repo_root(RepoRoot)),
-   directory_file_path(RepoRoot, 'crossword.pl', Crossword),
-   consult(Crossword),
+   directory_file_path(RepoRoot, 'load.pl', Load),
+   consult(Load),
    directory_file_path(RepoRoot, 'benchmarks/fixtures.pl', Manifest),
    consult(Manifest).
 
@@ -43,7 +43,7 @@ main :-
            forall(bench_fixture(Rel, Grid, Start, Iters, Warmup),
                   run_cell(Strategy, Rel, Grid, Start, Iters, Warmup))).
 
-% Strategies from argv (already atoms), else every strategy crossword.pl
+% Strategies from argv (already atoms), else every strategy the solver core
 % defines. Each named strategy is validated; an unknown one throws.
 chosen_strategies([], Strategies) :-
     !,

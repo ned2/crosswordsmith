@@ -31,8 +31,10 @@ lint-validated blocked templates feeds `lint` and `fill`. The core is portable
 Prolog; the clue-input and JSON paths use SWI-specific features (see
 Requirements).
 
-The former `./crossword.pl …` interface has been replaced; `crossword.pl` is now
-an internal library (see [Migration](#migration-from-the-old-crosswordpl-cli)).
+The former `./crossword.pl …` interface has been replaced; the implementation
+now lives under `prolog/crosswordsmith/` and the root `crossword.pl` is only a
+migration-message shim (see
+[Migration](#migration-from-the-old-crosswordpl-cli)).
 
 Words — and optional per-word metadata (a clue, a link, anything) — are supplied
 to `arrange` as a JSON file or a Prolog `clues/1` fixture. The bundled
@@ -295,16 +297,21 @@ rationale; `tests/clues.json` is a worked example.
 One shared substrate, two solver tops, with the Flavour-B tools as
 transformations/validators over the canonical JSON:
 
+The implementation lives under `prolog/crosswordsmith/`; the root `load.pl`
+loads it all in the right order (the CLI, tests, and benchmarks go through it):
+
 | file | role |
 | --- | --- |
-| `crossword.pl` | **shared substrate** — grid model, the free-canvas legality core, clue numbering, JSON emit + input loading. Now a library (no CLI). |
-| `quality.pl` | shared **metric predicates** (checked cells, unchecked runs, bbox, crossings) + the greedy density constructor that `arrange` reuses. |
-| `arrange.pl` | **Flavour A** — the deterministic MRV-first layout engine: construct + rescore + emit, with fragment seeding and diverse candidates. |
-| `lint.pl` | **Flavour B** — the profile-driven grid validator (consumes the canonical layout, reuses the metric predicates). |
-| `export.pl` | **Flavour B** — ipuz v2 / Exolve transforms of the canonical layout. |
-| `stockgrid.pl` + `grids/` | **Flavour B** — the bundled stock-grid library: black-square masks, slots derived on load, each validated by `lint --profile blocked-uk`. |
-| `fill.pl` | **Flavour B** — grid-first auto-fill: each white cell a shared logical variable, MRV backtracking over an in-memory dictionary index, seeds pinned. |
-| `crosswordsmith` | the CLI: verb dispatch (`arrange`/`lint`/`export`/`fill`) + the migration shim. |
+| `prolog/crosswordsmith/core.pl` | **shared substrate** — grid model, the free-canvas legality core, clue numbering, JSON emit + input loading. |
+| `prolog/crosswordsmith/quality.pl` | shared **metric predicates** (checked cells, unchecked runs, bbox, crossings) + the greedy density constructor that `arrange` reuses. |
+| `prolog/crosswordsmith/arrange.pl` | **Flavour A** — the deterministic MRV-first layout engine: construct + rescore + emit, with fragment seeding and diverse candidates. |
+| `prolog/crosswordsmith/lint.pl` | **Flavour B** — the profile-driven grid validator (consumes the canonical layout, reuses the metric predicates). |
+| `prolog/crosswordsmith/export.pl` | **Flavour B** — ipuz v2 / Exolve transforms of the canonical layout. |
+| `prolog/crosswordsmith/stockgrid.pl` + `grids/` | **Flavour B** — the bundled stock-grid library: black-square masks, slots derived on load, each validated by `lint --profile blocked-uk`. |
+| `prolog/crosswordsmith/fill.pl` | **Flavour B** — grid-first auto-fill: each white cell a shared logical variable, MRV backtracking over an in-memory dictionary index, seeds pinned. |
+| `load.pl` | loads the implementation in the known-good order; defines the `crosswordsmith` file-search alias. |
+| `crosswordsmith` | the CLI: verb dispatch (`arrange`/`lint`/`export`/`fill`). |
+| `crossword.pl` | migration-message shim for the old CLI (prints the mapping below, exits non-zero). |
 
 The rest of this section describes the shared substrate and the `arrange`
 engine; the `lint`/`export`/`fill` sections above describe their own behaviour.
@@ -312,7 +319,7 @@ engine; the `lint`/`export`/`fill` sections above describe their own behaviour.
 ### Data structures
 
 The substrate uses two structures (see the comments at the top of
-`crossword.pl`):
+`prolog/crosswordsmith/core.pl`):
 
 1. **The grid** — an association list (`library(assoc)`) keyed by cell
    number. Cells are numbered `1 .. grid_length²` in row-major order
@@ -358,7 +365,8 @@ The driver is `assign_words/8`. It is a greedy, backtracking placement:
    list. When the pool is empty, every word has been placed and the
    layout succeeds.
 
-This describes the shared **legality core** (`crossword.pl`), which `arrange`
+This describes the shared **legality core** (`prolog/crosswordsmith/core.pl`),
+which `arrange`
 reuses. `arrange` drives it with a deterministic most-constrained-first
 (MRV) ordering, constructs over the four start corners, rescores each complete
 layout by a capped interlock objective, and emits the best — so the output is

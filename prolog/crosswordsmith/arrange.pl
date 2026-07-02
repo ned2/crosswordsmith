@@ -3,15 +3,17 @@
 % See docs/arrange-implementation-plan.md and docs/design-spec.md §7.
 %
 % This file deliberately does NOT define `main`/initialization, so it can be
-% consulted by a harness without side effects. It consults crossword.pl (which
+% consulted by a harness without side effects. It consults core.pl (which
 % in turn loads quality.pl), reusing the legality core, the MRV-inc branch step,
 % and the existing checking metrics verbatim. (The Phase-1.5 `gate_*`
 % measurement harness that lived here was removed once the gate's descope
 % decision was recorded in the implementation plan.)
 
+% Transitional sibling chain-load; Phase 4 of the source-structure migration
+% replaces it with explicit module imports.
 :- prolog_load_context(directory, Dir),
-   directory_file_path(Dir, 'crossword.pl', CrosswordFile),
-   ensure_loaded(CrosswordFile).
+   directory_file_path(Dir, 'core.pl', CoreFile),
+   ensure_loaded(CoreFile).
 
 :- use_module(library(apply)).
 :- use_module(library(aggregate)).

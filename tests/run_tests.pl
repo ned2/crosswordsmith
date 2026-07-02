@@ -1,26 +1,19 @@
-% tests/run_tests.pl - plunit test runner for crossword.pl
+% tests/run_tests.pl - plunit test runner for the crosswordsmith library.
 %
-% Loads the code under test and the test suite, runs all plunit tests, and
-% exits with a non-zero code if any test fails or times out. Intended to be
-% invoked from the repository root (run_tests.sh / make test handle this):
+% Loads the code under test (via load.pl, the single owner of load order) and
+% the test suite, runs all plunit tests, and exits with a non-zero code if any
+% test fails or times out. Intended to be invoked from the repository root
+% (run_tests.sh / make test handle this):
 %
 %     swipl -q tests/run_tests.pl
-%
-% Using initialization(main, main) means consulting crossword.pl below does
-% NOT trigger its own main/0 (see the comment at the top of crossword.pl).
 
 :- use_module(library(plunit)).
-% Named run_suite rather than main to avoid clashing with crossword.pl's
-% own main/0 when we consult it below.
+% Named run_suite rather than main so it can never clash with a main/0 in
+% anything we consult below.
 :- initialization(run_suite, main).
 
 run_suite :-
-    consult('crossword.pl'),
-    consult('arrange.pl'),             % Flavour-A engine (consults crossword.pl; no-op reload)
-    consult('lint.pl'),                % Flavour-B validator (uses crossword.pl + quality.pl metrics)
-    consult('export.pl'),              % Flavour-B interchange (ipuz v2 / Exolve)
-    consult('stockgrid.pl'),           % Flavour-B stock-grid library (uses lint blocked-uk to validate)
-    consult('fill.pl'),                % Flavour-B auto-fill (uses stockgrid slots + arrange load_fragment)
+    consult('load.pl'),                % the whole implementation, known-good order
     consult('tests/crossword.plt'),
     consult('tests/arrange.plt'),
     consult('tests/lint.plt'),
