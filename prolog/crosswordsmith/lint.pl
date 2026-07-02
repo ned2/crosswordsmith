@@ -1,11 +1,8 @@
 % lint.pl - Flavour-B grid validator (design-spec §8.1). Consumes a canonical
 % layout (what `arrange` emits) and reports PASS / WARN / FAIL per rule, per
 % word, plus a summary verdict, under a named profile. It needs no engine: its
-% only project dependency is metrics.pl's shared metric predicates
-% (word_checked_bitmap, layout_dir_cells, word_checked_count, dir_cells, ...),
-% resolved via `user` inheritance until metrics is module-ized (Phase 4.5) —
-% deliberately NOT the solver substrate. Load after metrics (load.pl owns the
-% order).
+% only project dependency is crosswordsmith_metrics (imported below) —
+% deliberately NOT the solver substrate (spec §4 boundary).
 %
 % Exports: lint_solve/4 (CLI seam), lint_run/5 (stockgrid's validator),
 % lint_known_profile/1 (CLI validation), lint_load/3 (deliberate API).
@@ -22,6 +19,16 @@
 :- use_module(library(apply)).
 :- use_module(library(aggregate)).
 :- use_module(library(ordsets)).
+
+% The shared metric layer — lint's ONLY project dependency (spec §4 boundary).
+:- use_module(crosswordsmith(metrics),
+              [ layout_dir_cells/2,
+                word_checked_bitmap/3,
+                bits_checked_count/2,
+                bits_max_unch_run/2,
+                word_half_threshold/2,
+                cell_rc/4
+              ]).
 
 
 % --- profiles: EXACTLY the rule/severity set each one applies (AC-LINT-4) ----

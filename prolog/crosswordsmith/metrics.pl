@@ -14,6 +14,27 @@
 % The former `--quality` CLI engine (quality_solve / quality_layout /
 % grid_candidates + the floor subsystem) was retired at the Phase-7 CLI cutover
 % (design-spec §4); arrange.pl supersedes it.
+%
+% Exports: only the predicates with real cross-module consumers (lint,
+% arrange, fill — see the migration plan §4.5). checked_cells/2,
+% word_meets_half/2, word_max_unch_run/3 and dir_cells/3 are test-only and
+% deliberately NOT exported — tests reach them as
+% crosswordsmith_metrics:Pred(...).
+
+:- module(crosswordsmith_metrics,
+          [ % lint's validator primitives
+            layout_dir_cells/2,
+            word_checked_bitmap/3,
+            bits_checked_count/2,
+            bits_max_unch_run/2,
+            word_half_threshold/2,
+            cell_rc/4,
+            % arrange's optimizer signals (word_letters/3 also: fill)
+            word_checked_count/3,
+            word_letters/3,
+            placed_bbox/4,
+            word_cells/5
+          ]).
 
 :- use_module(library(ordsets)).
 :- use_module(library(apply)).

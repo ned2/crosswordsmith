@@ -13,9 +13,8 @@
 %
 % Exports: fill_solve/4 (the CLI seam) — nothing else; every other predicate
 % is internal (tests reach them as crosswordsmith_fill:Pred(...)). Arrange's
-% load_fragment/3, metrics' word_letters/3 and core's
-% assign_clue_numbers/2 / emit_json/3 resolve via `user` inheritance until
-% Phases 4.5–4.7.
+% load_fragment/3 and core's assign_clue_numbers/2 / emit_json/3 resolve via
+% `user` inheritance until Phases 4.6–4.7.
 
 :- module(crosswordsmith_fill,
           [ fill_solve/4
@@ -31,6 +30,9 @@
 % Slot derivation from a stock-grid mask.
 :- use_module(crosswordsmith(stockgrid),
               [stockgrid_load/2, mask_white_cells/3, grid_run/4]).
+
+% word_letters/3: the separator-stripped placement footprint of a seed answer.
+:- use_module(crosswordsmith(metrics), [word_letters/3]).
 
 fill_budget(800_000_000).   % inference budget (determinism via INV-2, bounded)
 

@@ -23,6 +23,10 @@
 % Module-ized files are use_module'd from this (user) context so their exports
 % land in `user`, where the not-yet-module-ized plain files still resolve them
 % (Phase-4 bridge; see the migration plan).
+% metrics first: its exports must be in `user` before the still-plain arrange
+% and core compile their calls to them (core's chain-load of metrics then
+% no-ops).
+:- use_module(crosswordsmith(metrics)).
 :- ensure_loaded(crosswordsmith(arrange)).
 :- use_module(crosswordsmith(lint)).
 :- use_module(crosswordsmith(export)).

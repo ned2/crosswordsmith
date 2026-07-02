@@ -433,13 +433,13 @@ sample_cross([Wa, Wd1, Wd2]) :-
 % dir_cells/3 collects, per direction, the sorted ordset of covered cells.
 test(dir_cells_partition_by_direction) :-
     sample_cross(Placed),
-    dir_cells(Placed, across, AcrossCells), AcrossCells == [1,2,3],
-    dir_cells(Placed, down,   DownCells),   DownCells   == [1,3,18,20,35,37].
+    crosswordsmith_metrics:dir_cells(Placed, across, AcrossCells), AcrossCells == [1,2,3],
+    crosswordsmith_metrics:dir_cells(Placed, down,   DownCells),   DownCells   == [1,3,18,20,35,37].
 
 % checked_cells/2 = cells in BOTH an across and a down word (the two crossings).
 test(checked_cells_counts_crossings, [true(N =:= 2)]) :-
     sample_cross(Placed),
-    checked_cells(Placed, N).
+    crosswordsmith_metrics:checked_cells(Placed, N).
 
 % --- per-word metrics (the lint-rule primitives) -----------------------------
 
@@ -454,8 +454,8 @@ test(word_checked_count_per_word) :-
 test(word_meets_half_needs_half_its_cells_checked) :-
     sample_cross(Placed),
     Placed = [Wa, Wd1, _],
-    word_meets_half(Wa, Placed),          % 2 >= ceil(3/2)=2
-    \+ word_meets_half(Wd1, Placed).      % 1  < 2
+    crosswordsmith_metrics:word_meets_half(Wa, Placed),          % 2 >= ceil(3/2)=2
+    \+ crosswordsmith_metrics:word_meets_half(Wd1, Placed).      % 1  < 2
 
 % word_half_threshold/2 (P10): the single ceil(L/2) definition that both
 % word_meets_half and lint's checked_half rule reuse.
@@ -469,8 +469,8 @@ test(word_half_threshold_is_ceil_half) :-
 test(word_max_unch_run_longest_gap) :-
     sample_cross(Placed),
     Placed = [Wa, Wd1, _],
-    word_max_unch_run(Wa,  Placed, 1),    % A: checked,unchecked,checked
-    word_max_unch_run(Wd1, Placed, 2).    % D1: checked,unchecked,unchecked
+    crosswordsmith_metrics:word_max_unch_run(Wa,  Placed, 1),    % A: checked,unchecked,checked
+    crosswordsmith_metrics:word_max_unch_run(Wd1, Placed, 2).    % D1: checked,unchecked,unchecked
 
 % P4: the hoisted canonical bitmap. layout_dir_cells/2 computes both directions
 % ONCE; word_checked_bitmap/3 turns it into the word's 1/0 checked flags, and the
@@ -485,7 +485,7 @@ test(word_checked_bitmap_canonical_and_derived) :-
     bits_checked_count(BitsA, 2), bits_max_unch_run(BitsA, 1),
     bits_checked_count(BitsD, 1), bits_max_unch_run(BitsD, 2),
     % identical to the single-direction (W, Placed) forms used by arrange:
-    word_checked_count(Wa, Placed, 2), word_max_unch_run(Wd1, Placed, 2).
+    word_checked_count(Wa, Placed, 2), crosswordsmith_metrics:word_max_unch_run(Wd1, Placed, 2).
 
 % --- helpers (word_letters) ---------------------------------------------------
 

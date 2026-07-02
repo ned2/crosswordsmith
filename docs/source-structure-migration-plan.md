@@ -393,27 +393,29 @@ via `user` inheritance until 4.5/4.7.
 
 ### 4.5 `crosswordsmith_metrics`
 
-- [ ] Add `:- module(crosswordsmith_metrics, [...]).`.
-- [ ] Export the metric predicates with real cross-module consumers:
-  - [ ] `layout_dir_cells/2` (lint)
-  - [ ] `word_checked_bitmap/3` (lint)
-  - [ ] `bits_checked_count/2` (lint)
-  - [ ] `bits_max_unch_run/2` (lint)
-  - [ ] `word_half_threshold/2` (lint)
-  - [ ] `cell_rc/4` (lint)
-  - [ ] `word_checked_count/3` (arrange)
-  - [ ] `word_letters/3` (arrange, fill)
-  - [ ] `placed_bbox/4` (arrange)
-  - [ ] `word_cells/5` (arrange)
-- [ ] Do **not** export: `crossing_count/6` (internal-only — note: the earlier
-      draft of this plan listed it as `/5`, which was wrong on both counts),
-      `checked_cells/2`, `word_meets_half/2`, `word_max_unch_run/3`,
-      `dir_cells/3` (test-only — tests qualify).
-- [ ] Update `crosswordsmith_lint` and `crosswordsmith_fill` to import
+- [x] Add `:- module(crosswordsmith_metrics, [...]).`.
+- [x] Export the metric predicates with real cross-module consumers:
+  - [x] `layout_dir_cells/2` (lint)
+  - [x] `word_checked_bitmap/3` (lint)
+  - [x] `bits_checked_count/2` (lint)
+  - [x] `bits_max_unch_run/2` (lint)
+  - [x] `word_half_threshold/2` (lint)
+  - [x] `cell_rc/4` (lint; arrange too after the Phase-3 `extend_cell` move)
+  - [x] `word_checked_count/3` (arrange)
+  - [x] `word_letters/3` (arrange, fill)
+  - [x] `placed_bbox/4` (arrange)
+  - [x] `word_cells/5` (arrange)
+- [x] Do **not** export: `crossing_count/6` (internal-only — note: the earlier
+      draft of this plan listed it as `/5`, which was wrong on both counts;
+      it moved to arrange with the constructor in Phase 3, so it no longer
+      exists here), `checked_cells/2`, `word_meets_half/2`,
+      `word_max_unch_run/3`, `dir_cells/3` (test-only — tests qualify).
+- [x] Update `crosswordsmith_lint` and `crosswordsmith_fill` to import
       metrics explicitly; `load.pl`'s `use_module` keeps plain `arrange.pl`
       resolving until 4.6.
-- [ ] Qualify the `crossword.plt` quality-block calls.
-- [ ] Run `make test`.
+- [x] Qualify the `crossword.plt` quality-block calls (the four test-only
+      predicates; exported ones resolve unqualified via `user`).
+- [x] Run `make test`.
 
 ### 4.6 `crosswordsmith_arrange`
 
