@@ -362,19 +362,19 @@ via `user` inheritance until 4.5/4.7.
 
 ### 4.3 `crosswordsmith_stockgrid`
 
-- [ ] Add `:- module(crosswordsmith_stockgrid, [...]).`.
-- [ ] Import `crosswordsmith_lint` explicitly (for `lint_run/5`). Core's
+- [x] Add `:- module(crosswordsmith_stockgrid, [...]).`.
+- [x] Import `crosswordsmith_lint` explicitly (for `lint_run/5`). Core's
       `assign_clue_numbers/2` resolves via `user` inheritance until 4.7.
-- [ ] Export (fill uses the first three; the validate/report trio is
+- [x] Export (fill uses the first three; the validate/report trio is
       deliberate library API):
-  - [ ] `stockgrid_load/2`
-  - [ ] `mask_white_cells/3`
-  - [ ] `grid_run/4`
-  - [ ] `stockgrid_validate/3`
-  - [ ] `stockgrid_validate_file/3`
-  - [ ] `stockgrid_report/1`
-- [ ] Qualify `stockgrid.plt` internals (`grid_lights/3`).
-- [ ] Run `make test`.
+  - [x] `stockgrid_load/2`
+  - [x] `mask_white_cells/3`
+  - [x] `grid_run/4`
+  - [x] `stockgrid_validate/3`
+  - [x] `stockgrid_validate_file/3`
+  - [x] `stockgrid_report/1`
+- [x] Qualify `stockgrid.plt` internals (`grid_lights/3`).
+- [x] Run `make test`.
 
 ### 4.4 `crosswordsmith_fill`
 

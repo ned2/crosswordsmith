@@ -26,5 +26,5 @@
 :- ensure_loaded(crosswordsmith(arrange)).
 :- use_module(crosswordsmith(lint)).
 :- use_module(crosswordsmith(export)).
-:- ensure_loaded(crosswordsmith(stockgrid)).
+:- use_module(crosswordsmith(stockgrid)).
 :- ensure_loaded(crosswordsmith(fill)).

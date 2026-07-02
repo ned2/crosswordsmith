@@ -27,7 +27,7 @@ test(stockgrid_loads_mask) :-
 test(stockgrid_derives_lights) :-
     maplist(string_chars, ["...", "...", "..."], Mask),
     mask_white_cells(Mask, 3, WS),
-    grid_lights(3, WS, Words),
+    crosswordsmith_stockgrid:grid_lights(3, WS, Words),
     length(Words, 6),
     forall(member(W, Words), get_dict(len, W, 3)).
 
@@ -36,7 +36,7 @@ test(stockgrid_splits_on_blocks) :-
     maplist(string_chars, ["...#...", ".......", "...#...",
                            ".......", "...#...", ".......", "...#..."], Mask),
     mask_white_cells(Mask, 7, WS),
-    grid_lights(7, WS, Words),
+    crosswordsmith_stockgrid:grid_lights(7, WS, Words),
     once(( member(W, Words), get_dict(dir, W, across), get_dict(len, W, 3) )).
 
 % --- validator catches illegal grids -----------------------------------------
@@ -67,7 +67,7 @@ test(bundled_grids_are_symmetric) :-
     forall( bundled_grid(F),
             ( stockgrid_load(F, grid(_, Size, Mask)),
               mask_white_cells(Mask, Size, WS),
-              grid_lights(Size, WS, Words),
+              crosswordsmith_stockgrid:grid_lights(Size, WS, Words),
               lint_run(Words, Size, 'blocked-uk', false, R),
               get_dict(grid, R, G),
               once(( member(GR, G), get_dict(rule, GR, symmetry), get_dict(severity, GR, 'PASS') )) )).

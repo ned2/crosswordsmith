@@ -12,14 +12,30 @@
 %
 % Slots (lights) are DERIVED on load - not stored - by run-scanning the mask,
 % then validated by `lint --profile blocked-uk` (the metric predicates as
-% template validators). Consult AFTER core.pl, metrics.pl and lint.pl.
-% This is a library (loader + validator); stock grids feed `lint` profiles and,
-% later, `fill`. There is no CLI verb.
+% template validators). This is a library (loader + validator); stock grids
+% feed `lint` profiles and `fill`. There is no CLI verb.
+%
+% Exports: fill uses stockgrid_load/2, mask_white_cells/3 and grid_run/4; the
+% validate/report trio is deliberate library API. Core's
+% assign_clue_numbers/2 resolves via `user` inheritance until Phase 4.7.
+% Internals are reached by tests as crosswordsmith_stockgrid:Pred(...).
+
+:- module(crosswordsmith_stockgrid,
+          [ stockgrid_load/2,
+            mask_white_cells/3,
+            grid_run/4,
+            stockgrid_validate/3,
+            stockgrid_validate_file/3,
+            stockgrid_report/1
+          ]).
 
 :- use_module(library(http/json)).
 :- use_module(library(apply)).
 :- use_module(library(lists)).
 :- use_module(library(ordsets)).
+
+% lint_run/5: the blocked-uk template validation.
+:- use_module(crosswordsmith(lint), [lint_run/5]).
 
 
 % --- load + parse the mask ---------------------------------------------------
