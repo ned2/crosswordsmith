@@ -683,3 +683,81 @@ Background research distilled for this campaign lives in `docs/research/`.
      3,418) and broad-but-shallow (thousands of 1-2-deep retreats) — the
      signature of a locally-suboptimal ordering, favouring wdeg over any
      backjumping scheme.
+
+### E-H6 — failure-driven word weights (dom/wdeg tie-break) — TRIED, REJECTED (reverted from code)
+
+- **Where (measured, then reverted):** `core.pl` — a non-backtrackable weight
+  store (`:- dynamic word_weight/2` keyed by answer atom, `weights_active/0`
+  guard), reset per search via `reset_search_weights/0` at both mrv_inc entries
+  (`find_crossword(mrv_inc,...)` and `construct_from_seed/5`), bumped on WIPEOUT
+  (select_inc filters Placeable to [] → blame the just-placed word, the classic
+  dom/wdeg analogue), and read as a SECONDARY sort key inside `select_inc`
+  (new `order_placeable/3` + `weight_key/2`: keysort on `k(Count,-Weight)` →
+  count ascending, then weight descending, input order last). No surviving code.
+- **Hypothesis (P1 #2):** wipeouts concentrate on ~8-10 words per dense rung
+  (top-5 = 75-91%), so failure-driven weights used ONLY as an equal-count
+  tie-break should steer the dense 34w/36w search away from its shallow thrash
+  for a large inference cut, without regressing the backtrack-free rungs.
+- **Design (held to the guidance):** weights SURVIVE backtracking (the point —
+  a threaded arg would undo the bump exactly when it matters), so a
+  non-backtrackable dynamic store; reset per corner (self-contained like the
+  E-H3 table abolish, so counts stay run-order independent); tie-break within
+  equal capped-count buckets ONLY (fail-first preserved); fully deterministic
+  (no RNG on the default path); seeded path left byte-identical. Per-node cost
+  is O(1)-ish: a first-arg-indexed `word_weight/2` read per candidate, and — key
+  design win — a `weights_active/0` guard so a search with no recorded failure
+  yet (and any backtrack-free rung) takes the ORIGINAL weight-free ordering,
+  byte-identical in both output and cost.
+- **The signal fired exactly as P1 predicted, and still bought nothing.**
+  Per-corner (the thrashing `topright`): 34w 1,756 bumps on 7 words
+  (FCC 583, EFD 345, ...), 36w 2,095 bumps on 12 words (DEAA 396, CBF 338, ...);
+  `21x21_80w` recorded ZERO bumps from both corners (guard kept it inert). The
+  blame concentrated on the right culprits — but reordering equal-count
+  candidates by that blame did not shrink the tree: 34w topright ≈ 44.2M→44.0M,
+  and the full ladder moved within noise.
+- **Result (`make bench-check --heavy`, warm, vs baseline.json):**
+
+  | rung | baseline | measured | delta | note |
+  | --- | --- | --- | --- | --- |
+  | 09x09_08w | 33,615 | (win) | ~-5% (cold probe) | light-rung fluke |
+  | 15x15_12w | 126,842 | 117,329 | **-7.50%** | light-rung fluke |
+  | 21x21_25w | 421,556 | 421,734 | +0.04% | inert |
+  | 15x15_28w | 557,743 | 557,866 | +0.02% | inert |
+  | 15x15_32w | 1,458,240 | 1,458,804 | +0.04% | inert |
+  | **09x09_16w** | 868,655 | 906,771 | **+4.39%** | **REGRESSION** |
+  | 21x21_80w | 10,005,936 | 10,006,258 | +0.00% | byte-identical (guard) |
+  | **15x15_34w** | 18,722,171 | 18,589,349 | **-0.71%** | target rung, within noise |
+  | **15x15_36w** | 44,804,532 | 44,605,072 | **-0.45%** | target rung, within noise |
+
+  Ratchet verdict: **FAIL** (1 regression). Reward (arrange_best_layout) held
+  on every rung EXCEPT **15x15_36w, which dropped 395 → 392** — a strictly WORSE
+  layout for a sub-noise "win". All other rewards unchanged.
+- **Why it fails (three ways, echoing I6):** (1) NO tree reduction on the target
+  — on top of mrv_inc's strong MRV variable ordering the low-count buckets are
+  mostly forced (0/1 placements), so there are few equal-count ties at the
+  critical shallow-retreat nodes for a tie-break to act on; floating a blamed
+  word within a tie just picks a DIFFERENT equally-doomed branch (the retreats
+  are structural near saturation). (2) It STEERED `09x09_16w` INTO A WORSE TREE
+  (+4.39%, reward unchanged so purely more work) — the same "reordering pushes
+  the search into a worse region" failure I6 hit on the mesh, and E4 hit
+  globally. (3) The only "wins" are light rungs (12w -7.5%, 08w) where a lucky
+  reorder found a shorter first path — not robust and not the target. A broader
+  bump event (event (c), bump on EVERY unplace via a backtracking-safe
+  `(true;bump,fail)` hook) was also measured: it recorded MORE bumps (34w 3,072,
+  36w 3,380 — matching P1's unplace counts) but gave the SAME sub-noise tree
+  (34w topright 17.5M, 36w topright 44.0M) while adding a per-node choicepoint on
+  the hot path, so it was discarded in favour of the cleaner wipeout event.
+- **Validation:** `make test` — 201 plunit pass, and ALL goldens byte-identical
+  (the shipped golden fixtures — bundled_17 fixed/max/fragment/candidates — never
+  wipe out on their winning path, so their first solution is unchanged; the only
+  output change was the 36w LADDER reward, not a golden). `bundled_17` sanity:
+  size 15 stays infeasible; size 17 reward 60/placed 6 unchanged.
+- **Verdict:** REJECTED — reverted from code (like I2/I6/E4). The P1 wdeg signal
+  is real and lands on the right words, but an equal-count tie-break cannot
+  convert that concentration into a search cut here: the addressable target
+  (34w/36w) moves within noise while a lighter dense rung (09x09_16w) regresses
+  +4.39% and 36w's layout reward drops. This closes the
+  docs/research/arrange-search-algorithms.md #1 (wdeg) bet as a NEGATIVE result.
+  Do not revisit as a within-bucket tie-break; any future attempt must change the
+  PRIMARY ordering (which I6/E4 already show this search punishes) or attack the
+  per-node counting cost that dominates the backtrack-free rungs instead.
