@@ -63,18 +63,19 @@ set, run it as `swipl crosswordsmith <args…>`.
 
 ### `arrange` — lay out a closed set of words
 
-    # Strict (place every word) on a tight square crop. The bundled set needs a
-    # side of 17 (it has a 16-letter answer); --size is a ceiling under the
-    # default --size-mode max, so the result auto-shrinks to fit.
+    # Strict (place every word) on an exact 17x17 grid — the bundled set has a
+    # 16-letter answer, so it needs a side of at least 17. Uncovered cells are
+    # emitted as blocks. (--size is the default framing; --strict is the default.)
     $ ./crosswordsmith arrange --size 17 --input fixtures/bundled_17_clues.pl
 
-    # A fixed 17x17 canvas (uncovered cells emitted as blocks).
-    $ ./crosswordsmith arrange --strict --size-mode fixed --size 17 \
+    # --max-size instead builds up to NxN and crops to the tight enclosing
+    # square, so the result auto-shrinks to fit the placed words.
+    $ ./crosswordsmith arrange --max-size 17 \
         --input fixtures/bundled_17_clues.pl
 
-    # Best-effort: place a maximal subset on a tight grid; the dropped words
-    # are recorded in the output's diagnostics property.
-    $ ./crosswordsmith arrange --best-effort --size 11 \
+    # Best-effort: place a maximal subset, cropped to a tight grid; the dropped
+    # words are recorded in the output's diagnostics property.
+    $ ./crosswordsmith arrange --best-effort --max-size 11 \
         --input fixtures/bundled_17_clues.pl
 
     # Seed from a partial layout (anchors): pin some words, let the engine
@@ -102,9 +103,9 @@ accept the `--flag=value` form):
 | `--input <file>` | **required** — the word/clue set (`.json` or `.pl`). |
 | `--strict` | fail unless every word is placed (the **default**). |
 | `--best-effort` | place a maximal subset; the dropped words are recorded in the output's `diagnostics` property. |
-| `--size <N>` | square grid side (default `15`; a *ceiling* under `--size-mode max`). |
-| `--size-mode fixed\|max` | `fixed` = exact N×N (blocks for empty cells); `max` = tight enclosing-square crop (the **default**). |
-| `--fragment <file>` | seed from a partial-layout fragment (JSON — the emit format made partial). Its `gridLength` sets `N`; `--size` is then redundant, and an error if it disagrees. |
+| `--size <N>` | exact grid side — an N×N grid, uncovered cells emitted as blocks (default `15`, a standard crossword side). Mutually exclusive with `--max-size`. |
+| `--max-size <N>` | build up to N×N, then crop to the tight enclosing square (`≤ N`). Mutually exclusive with `--size`. |
+| `--fragment <file>` | seed from a partial-layout fragment (JSON — the emit format made partial). Its `gridLength` sets `N`; `--size`/`--max-size` are then redundant, and an error if they disagree. |
 | `--candidates <K>` | emit up to `K` diverse layouts as a JSON array. Returns fewer than `K` (reported on stderr) when fewer ≥τ-distinct layouts exist. |
 | `--enumerate` | count every feasible full placement instead of emitting a layout. |
 | `--out <file>` | write output to `<file>` instead of stdout. |
@@ -135,7 +136,7 @@ including hand-authored ones.
     $ ./crosswordsmith lint --profile toc layout.json
 
     # Pipe arrange straight into lint under a strict profile.
-    $ ./crosswordsmith arrange --size-mode fixed --size 17 \
+    $ ./crosswordsmith arrange --size 17 \
         --input fixtures/bundled_17_clues.pl --out layout.json
     $ ./crosswordsmith lint --profile blocked-uk layout.json
 
@@ -434,8 +435,8 @@ The full schema and design rationale live in
 
 ## Implementation notes / limitations
 
-- **Grid size is not inferred.** You pass `--size N` (a ceiling under
-  `--size-mode max`). Too small for the words and `--strict` reports the
+- **Grid size is not inferred.** You pass `--size N` (an exact N×N grid) or
+  `--max-size N` (a ceiling, cropped to fit). Too small for the words and `--strict` reports the
   failure and exits non-zero rather than silently mangling the layout; under
   `--best-effort` the unplaceable words are dropped and recorded in the
   output's `diagnostics`.

@@ -85,9 +85,9 @@ arrange_opts_spec(
       [opt(best_effort), type(boolean), default(false),
        longflags(['best-effort']),                help('place a maximal subset; report dropped words')],
       [opt(size),        type(integer), default(-1), meta('N'),
-       longflags([size]),                         help('square grid side (default 15; a ceiling under --size-mode max)')],
-      [opt(size_mode),   type(atom),    default(max), meta('MODE'),
-       longflags(['size-mode']),                  help('fixed (exact NxN) or max (tight square crop; the default)')],
+       longflags([size]),                         help('exact grid side: an N x N grid (default 15). Mutually exclusive with --max-size')],
+      [opt(max_size),    type(integer), default(-1), meta('N'),
+       longflags(['max-size']),                   help('build up to N x N, then crop to the tight enclosing square (<= N). Mutually exclusive with --size')],
       [opt(fragment),    type(atom),    default(''), meta('FILE'),
        longflags([fragment]),                     help('seed from a partial-layout fragment (JSON); its gridLength sets N')],
       [opt(candidates),  type(integer), default(0), meta('K'),
@@ -130,8 +130,10 @@ arrange_dispatch(Opts) :-
     ( InputFile \== '' -> true ; cli_error('missing required --input FILE') ),
     drop_contract(Opts, Drop),
     memberchk(size(SizeOpt), Opts),
-    memberchk(size_mode(Mode), Opts),
-    ( arrange_size_mode(Mode) -> true ; cli_error('--size-mode must be fixed or max (got ~w)'-[Mode]) ),
+    memberchk(max_size(MaxSizeOpt), Opts),
+    validate_size_flag('--size', SizeOpt),
+    validate_size_flag('--max-size', MaxSizeOpt),
+    resolve_size_flags(SizeOpt, MaxSizeOpt, SizeNum, Mode),
     memberchk(fragment(FragFile), Opts),
     memberchk(candidates(K), Opts),
     memberchk(enumerate(Enum), Opts),
@@ -148,10 +150,7 @@ arrange_dispatch(Opts) :-
     set_verbose(Verbose),
     apply_seed_mode(SeedMode),
     load_clues(InputFile, Words),
-    arrange_action(Enum, K, FragFile, Words, SizeOpt, Drop, Mode, OutFile).
-
-arrange_size_mode(fixed).
-arrange_size_mode(max).
+    arrange_action(Enum, K, FragFile, Words, SizeNum, Drop, Mode, OutFile).
 
 % --strict / --best-effort are mutually exclusive; strict is the default.
 drop_contract(Opts, Drop) :-
@@ -210,7 +209,25 @@ apply_seed_mode(shuffle)  :-
     set_shuffle_seed(N),
     verbose_report("arrange: shuffle seed ~w (reproduce with --seed ~w)~n", [N, N]).
 
-% Resolve the size flag: -1 sentinel means "not given". For a fragment the
+% --size / --max-size: two mutually-exclusive ways to frame the output grid.
+%   --size N     : an exact N x N grid (SizeMode = fixed).
+%   --max-size M : build up to M x M, crop to the tight enclosing square (max).
+%   neither      : a standard 15 x 15 fixed grid.
+% -1 is each flag's "not given" sentinel; positivity is validated here.
+validate_size_flag(_Name, -1) :- !.
+validate_size_flag(_Name, N) :- integer(N), N > 0, !.
+validate_size_flag(Name, N) :- cli_error('~w must be a positive integer (got ~w)'-[Name, N]).
+
+% Fold the two flags into the (SizeNum, Mode) pair the rest of arrange consumes.
+% SizeNum keeps the -1 "not given" sentinel so the fragment path can fall back
+% to the fragment's own gridLength (resolve_size/2); a bare invocation resolves
+% to 15 x 15 fixed.
+resolve_size_flags(-1, -1, -1, fixed) :- !.
+resolve_size_flags(N,  -1, N,  fixed) :- !.
+resolve_size_flags(-1, M,  M,  max)   :- !.
+resolve_size_flags(_N, _M, _,  _)     :- cli_error('--size and --max-size are mutually exclusive').
+
+% Resolve the size number: -1 sentinel means "not given". For a fragment the
 % fragment's gridLength provides N; otherwise default to 15.
 resolve_size(-1, 15) :- !.
 resolve_size(N, N) :- integer(N), N > 0, !.

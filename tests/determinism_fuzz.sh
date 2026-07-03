@@ -37,7 +37,7 @@ printf '{"clues":[{"answer":"TT "},{"answer":"AT"}]}\n'             > "$WORK/tra
 printf '{"clues":[{"answer":"AB"},{"answer":"BA"}]}\n'             > "$WORK/two_short.json"
 printf '{ this is not json '                                       > "$WORK/malformed.json"
 # a valid layout to feed lint/export:
-$CS arrange --strict --size-mode fixed --size 17 \
+$CS arrange --strict --size 17 \
     --input fixtures/bundled_17_clues.pl > "$WORK/layout.json" 2>/dev/null
 
 # det "desc" cmd... : run 3x, require identical stdout + exit, defined exit (0/1)
@@ -90,21 +90,22 @@ echo "== determinism fuzz (3x byte-identity per case) =="
 
 # --- arrange: flag matrix on a normal input ----------------------------------
 N=fixtures/bundled_17_clues.pl
-det "arrange strict fixed 17"        $CS arrange --strict --size-mode fixed --size 17 --input $N
-det "arrange strict max 17"          $CS arrange --strict --size-mode max --size 17 --input $N
+det "arrange strict fixed 17"        $CS arrange --strict --size 17 --input $N
+det "arrange strict max 17"          $CS arrange --strict --max-size 17 --input $N
 det "arrange strict default size"    $CS arrange --strict --input $N
-det "arrange best-effort max 9"      $CS arrange --best-effort --size-mode max --size 9 --input $N
-det "arrange best-effort fixed 11"   $CS arrange --best-effort --size-mode fixed --size 11 --input $N
+det "arrange best-effort max 9"      $CS arrange --best-effort --max-size 9 --input $N
+det "arrange best-effort fixed 11"   $CS arrange --best-effort --size 11 --input $N
 det "arrange candidates 3"           $CS arrange --strict --size 17 --candidates 3 --input $N
 det "arrange check-target 1"         $CS arrange --strict --size 17 --check-target 1 --input $N
-det "arrange fragment"               $CS arrange --strict --size-mode fixed --fragment fixtures/bundled_17_fragment.json --input $N
-det "arrange flag=value form"        $CS arrange --strict --size=17 --size-mode=fixed --input=$N
+det "arrange fragment"               $CS arrange --strict --fragment fixtures/bundled_17_fragment.json --input $N
+det "arrange flag=value form"        $CS arrange --strict --size=17 --input=$N
+det "arrange size+max-size (reject)" $CS arrange --strict --size 17 --max-size 20 --input $N
 det "arrange enumerate small"        $CS arrange --enumerate --size 15 --input "$WORK/hyphen.json"
 
 # --- arrange: degenerate inputs (graceful + deterministic) -------------------
 for f in empty single_letters unicode dup hyphen punct digits lower trailing two_short malformed; do
-    det "arrange degen $f (max)" $CS arrange --strict --size-mode max --size 15 --input "$WORK/$f.json"
-    det "arrange degen $f (be)"  $CS arrange --best-effort --size-mode max --size 15 --input "$WORK/$f.json"
+    det "arrange degen $f (max)" $CS arrange --strict --max-size 15 --input "$WORK/$f.json"
+    det "arrange degen $f (be)"  $CS arrange --best-effort --max-size 15 --input "$WORK/$f.json"
 done
 det "arrange empty .pl"          $CS arrange --strict --size 15 --input "$WORK/empty.pl"
 
@@ -127,7 +128,7 @@ det "fill 13a (infeasible w/ sample dict)" $CS fill --grid grids/blocked_13a.jso
 # --- --out partial-write contract (§5.2) -------------------------------------
 echo "== --out partial-write contract =="
 outcheck nofile_on_fail "arrange ok --out"          $CS arrange --strict --size 17 --input $N
-outcheck nofile_on_fail "arrange infeasible --out"  $CS arrange --strict --size-mode fixed --size 3 --input $N
+outcheck nofile_on_fail "arrange infeasible --out"  $CS arrange --strict --size 3 --input $N
 outcheck report_always  "lint FAIL --out (complete report)" $CS lint --profile blocked-uk fixtures/lint_fail_layout.json
 outcheck nofile_on_fail "fill infeasible --out"     $CS fill --grid grids/blocked_13a.json --dict fixtures/wordlist_sample.txt
 

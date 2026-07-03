@@ -64,7 +64,7 @@ format detection (§7), Unix conventions (§8). NOT `convert`/`render`.
 | 9 | **Unix conventions** — diagnostics→stderr / data→stdout; `NO_COLOR`/TTY; `--out` atomic-on-success; deterministic output (D6) | §8, D6 | done | `tests/test_cli.py` (pipe/no-ANSI, `--out` on success only, stderr-only errors) |
 
 Fixtures regenerated from the engine (`crosswordsmith arrange --input
-fixtures/bundled_17_clues.pl --size 17 --size-mode fixed`, then `crosswordsmith
+fixtures/bundled_17_clues.pl --size 17`, then `crosswordsmith
 export --to …`) into `xword/tests/fixtures/`, plus the recreated S4/S5 keepsakes
 (`sample.ipuz.json` — block/circle/rebus/title/both-clue-shapes;
 `sample_decorated.exolve` — block/unfilled/circle/bars/enum-collision clue).

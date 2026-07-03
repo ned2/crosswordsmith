@@ -71,7 +71,7 @@ These are **deliberately excluded**. Adding any of them requires a §10 decision
 | **Solver-facing consumption** — HTML5 applet, hosting, embedding, solve analytics/heatmaps, blogs | All require a hosted backend; orthogonal to a CLI. |
 | **Bundling paywalled dictionaries** (Chambers/Collins/Oxford) | License. Ship only freely-redistributable data — MIT/CC0/CC-BY word lists, or UKACD18 (J Ross Beresford's *redistributable freeware* lexicon; **not** BSD-3 — if bundled, ship its copyright notice + license text verbatim). (Principle #9.) |
 | **Rectangular / non-square grids** (8×10 New Yorker, etc.) | Cut from the engine; square-only `--size N`. Revisit only if a Flavour-B engine ever needs it. |
-| **`free`/auto-size mode** for `arrange` | Replaced by `--size-mode max` (ceiling + crop). No size-search outer loop. |
+| **`free`/auto-size mode** for `arrange` | Replaced by `--max-size N` (ceiling + crop). No size-search outer loop. |
 | **Priority / per-word importance scores** in `arrange` | De-scoped; anchoring is handled by the fragment grid instead. |
 | **Barred-grid *generation*** | Different cell/edge model entirely — a separate engine, deferred indefinitely. The barred checking-math *lint* is a cheap exception (§8.3). |
 | **Real-time co-editing / community voting platform** | Large product surfaces orthogonal to a CLI. Git-diffable source is the collaboration story instead. |
@@ -105,7 +105,7 @@ The discipline: **one substrate, two solver tops.**
 
 **Cross-cutting invariants (apply to all components):**
 - **INV-1 — Metadata-agnostic engine.** Clue text, annotations, cluing scores, review flags ride in an opaque `meta` object joined to the answer at emit time. They MUST NOT be threaded through placement or clue-numbering. The JSON contract changes only by *additive* keys. (Principle #2.)
-- **INV-2 — Deterministic, diffable output.** Output is stable sorted-key JSON; identical input + flags ⇒ byte-identical output. No engine path carries randomization (`solve_shuffled` is NOT carried into `arrange`). (Principle #8.)
+- **INV-2 — Deterministic by default, diffable output.** Output is stable sorted-key JSON; under the default flags, identical input ⇒ byte-identical output. The *only* source of randomization is the opt-in `--seed N` / `--shuffle` perturbation of the strict `arrange` search (§7.6): it never touches the default flow, and a fixed `--seed N` is itself reproducible (identical input + `--seed N` ⇒ byte-identical). `--shuffle` deliberately draws a fresh seed each run and reports it under `--verbose` so a liked layout can be reproduced with `--seed`. (Principle #8.)
 - **INV-3 — Report, never silently degrade.** Dropped words, layout compromises, lint failures, and infeasible seeds are always reported, never swallowed. (Principle #5.) Reporting channel: per-layout quality caveats ride the emitted payload's `diagnostics` property (json-output-spec §6.4); failures and request-level shortfalls report on stderr (§5.1).
 - **INV-4 — License-clean by default.** Only permissively-licensed bundled data. (Principle #9.)
 
@@ -116,9 +116,10 @@ The discipline: **one substrate, two solver tops.**
 Every capability is a **verb**. A bare invocation prints usage and exits non-zero — it never performs an action.
 
 ```
-crosswordsmith arrange [--strict | --best-effort] [--size N] [--size-mode fixed|max]
+crosswordsmith arrange [--strict | --best-effort] [--size N | --max-size N]
                        [--fragment grid.json] [--candidates N] [--enumerate]
-                       [--check-target N] [--verbose] --input words.json [--out file.json]
+                       [--check-target N] [--seed N | --shuffle]
+                       [--verbose] --input words.json [--out file.json]
 crosswordsmith lint    --profile <name> [--allow-asymmetry] layout.json     # Flavour B
 crosswordsmith export  --to ipuz|exolve  layout.json [--out file]           # Flavour B / shared
 crosswordsmith fill    --grid template.json --seeds seeds.json [--verbose]  # Flavour B (DEFERRED)
@@ -154,11 +155,11 @@ A non-zero exit with `--out` MUST NOT write a partial output file.
 
 ### 5.3 Migration from the current CLI (LOCKED, one deliberate pass)
 The current interface — `./crossword.pl --input F [--strategy S] [--shuffle] [--all] [--quality ...] [--out O] <grid_length> [<start_loc>]` — is replaced by subcommands. This is a **breaking change**, done as one pass:
-- old `solve` (fixed-grid, place-all) ≡ `arrange --strict --size-mode fixed`
-- old `--quality` (engine-size, drop) ≡ `arrange --best-effort --size-mode max`
+- old `solve` (fixed-grid, place-all) ≡ `arrange --strict --size N` (exact N×N is the default framing)
+- old `--quality` (engine-size, drop) ≡ `arrange --best-effort --max-size N`
 - old `--all` (enumerate) ≡ `arrange --enumerate`
 - The required `GridLen` positional becomes `--size N` (resolving the current wart where `GridLen` is required but silently ignored under `--quality`).
-- `--shuffle` / `solve_shuffled` is **removed** (conflicts with INV-2 determinism).
+- old `--shuffle` / `solve_shuffled` (a whole randomized *strategy*) is **removed**; a later, narrower `--seed N` / `--shuffle` opt-in perturbs only the strict search's branch order, leaving the deterministic default flow untouched (INV-2, §7.6).
 - Old-style invocations are not specially handled: they fall through to the standard unknown-verb usage error (the dedicated "did you mean `arrange`?" migration hint has been retired now that there are no pre-migration consumers).
 - README, `run_tests.sh`, and golden fixtures are updated in the same pass.
 
@@ -208,7 +209,7 @@ A **fragment grid** is a partial layout the engine solves *from*. It is the sing
 - **Words and letters both supported.** A placed word = a run of fixed cells of known identity; a lone fixed cell = a nina constraint. Words-only is a valid v1; the schema *permits* letter-level so Flavour-B ninas drop in later. Fixed letters not belonging to a list word are **free nina constraints, not entries** — they do not count toward `--strict`'s "place all words".
 - **Reconciliation by answer string** against `--input`; the engine places the unmatched remainder. A fragment word absent from `--input` is an error.
 - **Validate up front** against the legality core (overlaps, adjacency/merge, unsatisfiable fixed letters) and report conflicts *before* searching.
-- **Size frame:** the fragment carries grid dimensions, which set `N`; `--size` is then redundant (if both given and they disagree, error). `--size-mode` still frames the result.
+- **Size frame:** the fragment carries grid dimensions, which set `N`; `--size`/`--max-size` are then redundant (if given and they disagree with the fragment, error). Which flag is used still frames the result — `--size` exact, `--max-size` cropped.
 
 **AC-FRAG-1** A fragment word not present in `--input` is rejected with a clear error.
 **AC-FRAG-2** A self-conflicting fragment (overlap/merge/unsatisfiable letter) is reported before any search runs.
@@ -228,7 +229,7 @@ A single verb that unifies the old `pack`/`solve` engines into one **determinist
 |---|---|
 | **Scenario** | General-purpose (any word list; website-TOC is one consumer). |
 | **Drop contract** | Configurable, **default `--strict`**. Strict fails only on a *genuinely unplaceable* word (no legal intersection anywhere). `--best-effort` drops unplaceable words and reports them. |
-| **Sizing** | Square `--size N` (default **15** — the dominant blocked-cryptic size) + `--size-mode {fixed\|max}`, default **`max`**. |
+| **Sizing** | Two mutually-exclusive square framings: `--size N` = an exact N×N grid (**default**, N=**15**, the dominant blocked-cryptic size); `--max-size N` = build up to N×N, then crop to the tight enclosing square (≤ N). |
 | **Aesthetic goal** | High interlock + even/balanced. Explicitly *not* raw density (old `quality.pl`) and *not* target-shape. |
 | **Weak slots** | Soft-penalty only: always place any legally-placeable word; stubs are penalised, never refused. No per-word hard floor. |
 | **Objective** | Capped per-word reward + small interlock tail (§7.2). |
@@ -250,9 +251,9 @@ A single verb that unifies the old `pack`/`solve` engines into one **determinist
 - **Anytime with a node/inference-count budget (not wall-clock):** optimization is strictly harder than first-solution search, so the contract is **"best within budget,"** not "proven optimum." MRV-first finds a strong incumbent early; budget exhaustion returns best-so-far. The budget MUST be a node/inference count for determinism (INV-2); a wall-clock cap may exist only as a safety valve that marks output `truncated`. **Budget-exhausted ≠ unplaceable** (see AC-ARR-1).
 
 ### 7.4 Sizing & candidates
-- **`max`** (default): `N` is a *ceiling*; emit the tight crop ≤ N×N (auto-shrinks for small inputs). Implemented as the tight enclosing **square**, side `max(H,W)`, anchored at the content's top-left — the output schema is single-`gridLength` square (§6.1), so the crop is squared rather than rectangular.
-- **`fixed`**: `N` is the *canvas*; emit a full N×N grid, uncovered cells as blocks.
-- Both modes are orthogonal to `--strict`/`--best-effort` (either can fail-strict or drop-best-effort when words don't fit N×N).
+- **`--size N`** (default framing; bare `arrange` ⇒ `--size 15`): `N` is the *canvas*; emit a full N×N grid, uncovered cells as blocks.
+- **`--max-size N`**: `N` is a *ceiling*; emit the tight crop ≤ N×N (auto-shrinks for small inputs). Implemented as the tight enclosing **square**, side `max(H,W)`, anchored at the content's top-left — the output schema is single-`gridLength` square (§6.5), so the crop is squared rather than rectangular.
+- The two are **mutually exclusive** — one selects exact framing, the other cropped — and both are orthogonal to `--strict`/`--best-effort` (either can fail-strict or drop-best-effort when words don't fit N×N).
 - **`--candidates N`**: default is a single deterministic best. `N` opts into alternatives selected for **diversity**. Distinctness is sourced from **constructor breadth (multiple deterministic seeds) + greedy diversity**, *not* from a single deterministic B&B's leaves (which are near-duplicates — the global optimum ± one nudged word). Then greedily pick the best, then each next-best whose **placement-distance ≥ τ** from all already-picked (distance = fraction of words placed at a different cell/orientation; τ default ~0.3, tunable/calibrated). This is why candidates ride the greedy path (plan Phase 6).
 
 ### 7.5 Acceptance criteria
@@ -260,14 +261,23 @@ A single verb that unifies the old `pack`/`solve` engines into one **determinist
 **AC-ARR-2** `arrange --best-effort` places a maximal subset, emits the layout, and reports the dropped set in the payload's `diagnostics.arrange.dropped` (json-output-spec §6.4; echoed on stderr under `--verbose`); never fails when ≥1 word is placeable.
 **AC-ARR-3** Every emitted layout re-validates as legal against the shared legality core (free property test).
 **AC-ARR-4** For the benchmark fixtures, the optimizer's reward ≥ the old `solve`'s arbitrary-fill reward (no regression in interlock quality).
-**AC-ARR-5** `--size-mode max` output is the tight enclosing square (side `max(H,W)` ≤ N), anchored at the content's top-left; `fixed` output is exactly N×N with blocks for empty cells.
-**AC-ARR-6** Output is deterministic (INV-2): repeated runs are byte-identical; no shuffle path exists.
+**AC-ARR-5** `--max-size N` output is the tight enclosing square (side `max(H,W)` ≤ N), anchored at the content's top-left; `--size N` output is exactly N×N with blocks for empty cells. The two flags are mutually exclusive; a bare `arrange` defaults to `--size 15`.
+**AC-ARR-6** Output is deterministic by default (INV-2): with no `--seed`/`--shuffle`, repeated runs are byte-identical. The opt-in perturbation (§7.6) is the sole randomization: `--seed N` is reproducible; `--shuffle` varies per run and prints its seed under `--verbose`.
 **AC-ARR-7** `--candidates K` returns up to K layouts, each pairwise ≥ τ apart; fewer than K only if fewer ≥τ-distinct layouts exist (and that is reported).
 **AC-ARR-8** `--enumerate` counts/emits all feasible full placements, matching the old `--all` count on shared fixtures.
 **AC-ARR-9** The carried incremental reward equals a from-scratch `layout_reward` recompute on the final placement (delta correctness).
 **AC-ARR-10** A run that hits the node/inference budget returns the best layout found so far and **flags** that the optimum was not proven.
 
 *(Calibration **locked by DP-1 (§10)** at the v1 defaults: `WCap:WTail = 5:1` (ε = 0.2), `target = ceil(L/2)`, `τ = 0.30`. The Phase-1.5 gate showed the cap is largely inert on realistic inputs (objective ≈ total-crossings), so fine-tuning has low leverage; `--check-target` remains the tunable escape hatch where `ceil(L/2)` is unreachable.)*
+
+### 7.6 Search perturbation — `--seed` / `--shuffle` (opt-in, off the deterministic path)
+
+The default `arrange` search is fully deterministic (INV-2, AC-ARR-6). Two opt-in flags perturb **only** the strict single-layout search, for pseudo-random variety without abandoning reproducibility:
+
+- **`--seed N`** (N ≥ 0) seeds the RNG to `N` and shuffles branch order at two seams — the seed-word choice, and within each equal-MRV-count bucket the candidate order. Same input + same `N` ⇒ byte-identical output. Distinct seeds give distinct layouts, all still placing every word: the fail-first MRV heuristic and reward selection are preserved, only *ties* are reordered.
+- **`--shuffle`** draws a fresh seed each run (a different layout every time) and, under `--verbose`, prints it so a liked layout reproduces with `--seed N`. Mutually exclusive with `--seed`.
+
+The seed never touches the deterministic flow: with neither flag, no RNG is seeded or consulted (INV-2 holds by construction). The perturbation rides the strict path only — it is rejected in combination with `--best-effort`, `--candidates`, and `--enumerate` (none reach the seam, so silently doing nothing would mislead). When set, the seed is recorded at `diagnostics.arrange.seed` (json-output-spec §6.4).
 
 ---
 

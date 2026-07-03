@@ -58,16 +58,16 @@ echo
 echo "=== golden output regression (the crosswordsmith CLI, end to end) ==="
 check_golden "arrange fixed" \
     tests/golden/arrange_bundled_17_fixed.json \
-    ./crosswordsmith arrange --strict --size-mode fixed --size 17 --input fixtures/bundled_17_clues.pl
+    ./crosswordsmith arrange --strict --size 17 --input fixtures/bundled_17_clues.pl
 check_golden "arrange max" \
     tests/golden/arrange_toc_demo_max.json \
-    ./crosswordsmith arrange --strict --size-mode max --size 25 --input fixtures/toc_demo.pl
+    ./crosswordsmith arrange --strict --max-size 25 --input fixtures/toc_demo.pl
 check_golden "arrange fragment" \
     tests/golden/arrange_bundled_17_fragment.json \
-    ./crosswordsmith arrange --strict --size-mode fixed --fragment fixtures/bundled_17_fragment.json --input fixtures/bundled_17_clues.pl
+    ./crosswordsmith arrange --strict --fragment fixtures/bundled_17_fragment.json --input fixtures/bundled_17_clues.pl
 check_golden "arrange candidates" \
     tests/golden/arrange_bundled_17_candidates.json \
-    ./crosswordsmith arrange --strict --size-mode fixed --candidates 3 --size 17 --input fixtures/bundled_17_clues.pl
+    ./crosswordsmith arrange --strict --candidates 3 --size 17 --input fixtures/bundled_17_clues.pl
 check_golden "lint toc" \
     tests/golden/lint_bundled_17_toc.json \
     ./crosswordsmith lint --profile toc tests/golden/arrange_bundled_17_fixed.json
@@ -94,6 +94,10 @@ check_exit "lint toc PASS/WARN -> zero" 0 \
 # the guard this run would be accepted (best_effort(false) -> still strict) -> 0.
 check_exit "arrange --no- flag rejected" 1 \
     ./crosswordsmith arrange --no-best-effort --size 17 --input fixtures/bundled_17_clues.pl
+# --size (exact NxN) and --max-size (ceiling + tight-square crop) are mutually
+# exclusive framings; supplying both is a usage error, not a silent precedence.
+check_exit "arrange --size + --max-size rejected" 1 \
+    ./crosswordsmith arrange --size 17 --max-size 20 --input fixtures/bundled_17_clues.pl
 
 # check_stderr <name> <grep-pattern> <want: present|absent> <command...>: run
 # the command (stdout discarded) and assert whether its stderr matches.
@@ -130,21 +134,21 @@ echo "=== stderr contract (design-spec §5.1: quiet success, --verbose summaries
 # Default: a clean success prints NOTHING on stderr - quality caveats (cap
 # inert, dropped words) ride the payload's diagnostics, not the terminal.
 check_stderr "arrange quiet by default" "placed" absent \
-    ./crosswordsmith arrange --size 17 --size-mode fixed --input fixtures/bundled_17_clues.pl
+    ./crosswordsmith arrange --size 17 --input fixtures/bundled_17_clues.pl
 check_stderr "cap-inert off stderr" "cap inert" absent \
-    ./crosswordsmith arrange --size 17 --size-mode fixed --input fixtures/bundled_17_clues.pl
+    ./crosswordsmith arrange --size 17 --input fixtures/bundled_17_clues.pl
 # ...the cap-inert compromise is reported in the payload instead (§7.2, INV-3,
 # json-output-spec §6.4), alongside the dropped set.
 check_stdout "capInert in diagnostics" '"capInert":true' present \
-    ./crosswordsmith arrange --size 17 --size-mode fixed --input fixtures/bundled_17_clues.pl
+    ./crosswordsmith arrange --size 17 --input fixtures/bundled_17_clues.pl
 check_stdout "dropped set in diagnostics" '"OMEGA POINT"' present \
-    ./crosswordsmith arrange --best-effort --size 5 --size-mode fixed --input fixtures/bundled_17_clues.pl
+    ./crosswordsmith arrange --best-effort --size 5 --input fixtures/bundled_17_clues.pl
 # fill's payload must NOT grow arrange diagnostics.
 check_stdout "fill payload has no diagnostics" '"diagnostics"' absent \
     ./crosswordsmith fill --grid fixtures/fill_grid_3.json --dict fixtures/wordlist_sample.txt
 # --verbose opts into the summary (cap-status note included).
 check_stderr "arrange --verbose summary" "placed 6, reward 60 (cap inert" present \
-    ./crosswordsmith arrange --verbose --size 17 --size-mode fixed --input fixtures/bundled_17_clues.pl
+    ./crosswordsmith arrange --verbose --size 17 --input fixtures/bundled_17_clues.pl
 # fill: quiet by default, summary under --verbose.
 check_stderr "fill quiet by default" "filled" absent \
     ./crosswordsmith fill --grid fixtures/fill_grid_3.json --dict fixtures/wordlist_sample.txt
