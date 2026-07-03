@@ -582,3 +582,35 @@ Background research distilled for this campaign lives in `docs/research/`.
   the dropped corners were exact transpose-twins of the kept ones. Guard:
   relies on a square canvas + transpose-symmetric branch step/reward — do not
   route the candidate/fragment/enumerate paths through `arrange_corners/1`.
+
+### E-H2 — var-cell grid term replaces the assoc grid — KEPT (shipped)
+
+- **Where:** `core.pl` (init_grid, assign_letters, check_prev/next_cell,
+  adj_is_free), `arrange.pl` (crossing_count, clashing_cell,
+  word_best_placement); merge 56bad96 (branch commit 79bca05).
+- **Hypothesis:** the AVL-assoc grid (cell -> `empty`|letter) was the top
+  measured constant-factor cost: every cell read O(log N^2) via
+  `$btree_find_node`, every write an allocated rebalanced path, all inside
+  mrv_count's innermost loop (~15% self-time on a mid rung). A single
+  compound `grid(C1..C(N^2))` — unbound var = empty, bound atom = letter —
+  makes reads arg/3 + var/nonvar (O(1), allocation-free) and writes a
+  unification undone by the trail, with an identical search tree.
+- **What:** pure representation swap; GIn/GOut collapse to one term. Two
+  forced adjustments: (1) assign_word rejects Start < 1 up front (arg/3
+  THROWS on negative indices where get_assoc merely failed — the old code
+  relied on that failure); (2) greedy word_best_placement scores BEFORE
+  assign_word, since the in-place bind would otherwise count the word's own
+  letters as crossings. White-box init_grid tests rewritten to the new rep.
+- **Result (vs the post-E-H1 baseline, `make bench-check --heavy`):** -14.8%
+  to -23.9% search inferences on every rung (15x15_36w 91.75M -> 72.79M);
+  wall medians down ~13-18% on the heavy tail; RSS flat; goldens
+  byte-identical; 186 plunit pass. Cumulative with E-H1: every rung -55% to
+  -62% vs the campaign start (36w rung 182.6M -> 72.8M).
+- **Verdict:** SHIPPED. Same search order, same output, materially fewer
+  inferences and less GC pressure (doubly valuable under WASM, whose
+  setjmp-heavy backtracking path is the expensive one — see
+  docs/research/swi-vm-wasm-performance.md).
+- **Caveat for later:** the greedy-path scoring reorder means placement_key
+  now runs for every crossing candidate, not only legal ones (the old
+  ordering's micro-optimization). The greedy path is unbenchmarked; if
+  best-effort/candidates rungs are ever added, revisit that ordering.
