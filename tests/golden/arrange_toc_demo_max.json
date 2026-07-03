@@ -1,4 +1,5 @@
 {
+  "diagnostics": {"arrange": {"capInert":true,"dropped": [],"reward":180}},
   "grid": [
     [
       {"across":1,"down":1,"letter":"P","number":1},

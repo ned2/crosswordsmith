@@ -310,6 +310,7 @@ different **expressive power**, with native the narrowest box:
 | Puzzle title / author | structure | ✗ | ✓ | ✓ |
 | Blocks, numbering, clues, enumeration, single letters | structure | ✓ | ✓ | ✓ |
 | Per-word `link` + arbitrary `meta` | **metadata** | ✓ (only native) | ✗ | ✗ |
+| Top-level `diagnostics` (engine quality caveats, json-output-spec §6.4) | **metadata** | ✓ (only native) | ✗ | ✗ |
 
 **The rule (D7)** splits on the *Class* column:
 
@@ -324,8 +325,9 @@ different **expressive power**, with native the narrowest box:
 Consequences of the table:
 
 - **The one metadata case is native → {ipuz, Exolve}** — native alone carries
-  `link`/`meta`. So converting **current crosswordsmith output (every word has a
-  `link`) to ipuz/Exolve now succeeds**, dropping the links with a warning.
+  `link`/`meta` and `diagnostics`. So converting **current crosswordsmith
+  output (every word has a `link`) to ipuz/Exolve now succeeds**, dropping the
+  links (and any `diagnostics`) with a warning.
 - **Structural loss is the blocking direction, mostly `→ native`** (native can't
   hold rectangular grids, rebus, styling, bars, title) — those fail until the
   deferred structural best-effort / native-uplift work lands.

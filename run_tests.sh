@@ -110,16 +110,40 @@ check_stderr() {
     fi
 }
 
+# check_stdout <name> <grep-pattern> <want: present|absent> <command...>: same
+# as check_stderr but against stdout (stderr discarded) — payload assertions.
+check_stdout() {
+    local name="$1" pattern="$2" want="$3"; shift 3
+    local out; out="$("$@" 2>/dev/null)"
+    local matched=absent
+    if printf '%s' "$out" | grep -q "$pattern"; then matched=present; fi
+    if [ "$matched" = "$want" ]; then
+        echo "stdout ($name): OK ($pattern $want)"
+    else
+        echo "stdout ($name): FAILED (want $pattern $want)"
+        status=1
+    fi
+}
+
 echo
 echo "=== stderr contract (design-spec §5.1: quiet success, --verbose summaries) ==="
-# Default: a clean success prints NO routine summary...
+# Default: a clean success prints NOTHING on stderr - quality caveats (cap
+# inert, dropped words) ride the payload's diagnostics, not the terminal.
 check_stderr "arrange quiet by default" "placed" absent \
     ./crosswordsmith arrange --size 17 --size-mode fixed --input fixtures/bundled_17_clues.pl
-# ...but the cap-inert degeneration warning is unconditional (§7.2, INV-3).
-check_stderr "cap-inert warning survives" "cap inert" present \
+check_stderr "cap-inert off stderr" "cap inert" absent \
     ./crosswordsmith arrange --size 17 --size-mode fixed --input fixtures/bundled_17_clues.pl
-# --verbose opts into the summary.
-check_stderr "arrange --verbose summary" "placed 6, reward 60" present \
+# ...the cap-inert compromise is reported in the payload instead (§7.2, INV-3,
+# json-output-spec §6.4), alongside the dropped set.
+check_stdout "capInert in diagnostics" '"capInert":true' present \
+    ./crosswordsmith arrange --size 17 --size-mode fixed --input fixtures/bundled_17_clues.pl
+check_stdout "dropped set in diagnostics" '"OMEGA POINT"' present \
+    ./crosswordsmith arrange --best-effort --size 5 --size-mode fixed --input fixtures/bundled_17_clues.pl
+# fill's payload must NOT grow arrange diagnostics.
+check_stdout "fill payload has no diagnostics" '"diagnostics"' absent \
+    ./crosswordsmith fill --grid fixtures/fill_grid_3.json --dict fixtures/wordlist_sample.txt
+# --verbose opts into the summary (cap-status note included).
+check_stderr "arrange --verbose summary" "placed 6, reward 60 (cap inert" present \
     ./crosswordsmith arrange --verbose --size 17 --size-mode fixed --input fixtures/bundled_17_clues.pl
 # fill: quiet by default, summary under --verbose.
 check_stderr "fill quiet by default" "filled" absent \

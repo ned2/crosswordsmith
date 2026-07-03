@@ -230,6 +230,42 @@ stdout as a complete JSON document. (Emitting `{"error": "no solution"}` with
 exit 0 was considered and rejected: a non-zero exit is the more Unix-friendly
 signal and keeps every success payload unconditionally valid JSON.)
 
+### 6.4 `diagnostics`
+
+An **optional** top-level object carrying quality caveats about how the
+payload was produced. Arrange output is best-effort by nature — most real
+clue sets will not achieve perfect health scores — so compromises are data
+for the consumer, not stderr noise (design-spec §5.1, INV-3). Verbs that
+compromise nothing (e.g. `fill`) omit the property entirely; a consumer must
+treat a missing `diagnostics` as "no caveats reported".
+
+Each key names the producing verb, so the object can grow richer per-producer
+metadata later (e.g. an embedded `lint` report) without collisions:
+
+```json
+"diagnostics": {
+  "arrange": {
+    "capInert": true,
+    "dropped": ["NARRATIVE FALLACY"],
+    "reward": 47
+  }
+}
+```
+
+The `arrange` sub-object (present on every arrange payload, including each
+element of a `--candidates` array — caveats are per-layout):
+
+| Field      | Type    | Meaning |
+|------------|---------|---------|
+| `capInert` | boolean | `true` when **no** placed word reaches its checking target — the capped objective has degenerated to plain total-crossings (design-spec §7.2); tune with `--check-target` |
+| `dropped`  | array   | answers from the input that were not placed (best-effort drops, AC-ARR-2), in input order; `[]` when everything placed |
+| `reward`   | integer | the engine's objective value for this layout (capped-checking reward, design-spec §7.2) |
+
+Structural fields (`gridLength`, `grid`, `words`) remain the complete layout
+contract: a consumer may ignore `diagnostics` wholesale and lose nothing but
+provenance. Downstream converters that cannot represent it (ipuz, Exolve)
+treat it as metadata-class content (drop-and-warn).
+
 ## 7. Mapping from the current format
 
 | Current | New |

@@ -70,8 +70,8 @@ set, run it as `swipl crosswordsmith <args…>`.
     $ ./crosswordsmith arrange --strict --size-mode fixed --size 17 \
         --input fixtures/bundled_17_clues.pl
 
-    # Best-effort: place a maximal subset on a tight grid; report the dropped
-    # words on stderr.
+    # Best-effort: place a maximal subset on a tight grid; the dropped words
+    # are recorded in the output's diagnostics property.
     $ ./crosswordsmith arrange --best-effort --size 11 \
         --input fixtures/bundled_17_clues.pl
 
@@ -99,14 +99,14 @@ accept the `--flag=value` form):
 | --- | --- |
 | `--input <file>` | **required** — the word/clue set (`.json` or `.pl`). |
 | `--strict` | fail unless every word is placed (the **default**). |
-| `--best-effort` | place a maximal subset; report dropped words on stderr. |
+| `--best-effort` | place a maximal subset; the dropped words are recorded in the output's `diagnostics` property. |
 | `--size <N>` | square grid side (default `15`; a *ceiling* under `--size-mode max`). |
 | `--size-mode fixed\|max` | `fixed` = exact N×N (blocks for empty cells); `max` = tight enclosing-square crop (the **default**). |
 | `--fragment <file>` | seed from a partial-layout fragment (JSON — the emit format made partial). Its `gridLength` sets `N`; `--size` is then redundant, and an error if it disagrees. |
 | `--candidates <K>` | emit up to `K` diverse layouts as a JSON array. Returns fewer than `K` (reported on stderr) when fewer ≥τ-distinct layouts exist. |
 | `--enumerate` | count every feasible full placement instead of emitting a layout. |
 | `--out <file>` | write output to `<file>` instead of stdout. |
-| `--verbose` | report the success summary (grid, placed, reward) on stderr; by default a clean success is silent there. Warnings (dropped words, cap inert, fewer-than-K candidates) and failures print regardless. |
+| `--verbose` | report the success summary (grid, placed, dropped, reward, cap status) on stderr; by default a clean success is silent there — quality caveats live in the output's `diagnostics` property instead. Fewer-than-K-candidates warnings and failures print regardless. |
 | `--help` / `-h` | print the arrange options. |
 
 `--strict` and `--best-effort` are mutually exclusive; `--enumerate` does not
@@ -397,6 +397,15 @@ emits object keys in sorted order, so on the wire they appear as `grid`,
   from the input clue set, `{}` if none). To follow a link from a cell, match
   the cell's `across`/`down` number **and** direction against `words`.
 
+- **`diagnostics`** *(optional; `arrange` output only)* — quality caveats
+  about how the layout was produced, under a per-producer key:
+  `diagnostics.arrange` carries `capInert` (no placed word reached its
+  checking target — the quality objective degenerated to plain
+  total-crossings; tune with `--check-target`), `dropped` (best-effort's
+  unplaced answers, `[]` when everything placed), and `reward` (the engine's
+  objective value). Arrange output is best-effort by nature, so these ride
+  the payload rather than stderr; consumers may ignore the property entirely.
+
 If no layout exists for the requested `grid_length`, the program produces
 no output and exits non-zero (and with `--out`, no file is written).
 
@@ -409,7 +418,8 @@ The full schema and design rationale live in
 - **Grid size is not inferred.** You pass `--size N` (a ceiling under
   `--size-mode max`). Too small for the words and `--strict` reports the
   failure and exits non-zero rather than silently mangling the layout; under
-  `--best-effort` the unplaceable words are dropped and reported.
+  `--best-effort` the unplaceable words are dropped and recorded in the
+  output's `diagnostics`.
 - **Best-within-budget, not proven-optimal.** `arrange` constructs a strong
   layout and rescores it; it does not exhaustively prove the optimum (the
   search superstructure was descoped after measurement — see

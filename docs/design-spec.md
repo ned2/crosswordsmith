@@ -106,7 +106,7 @@ The discipline: **one substrate, two solver tops.**
 **Cross-cutting invariants (apply to all components):**
 - **INV-1 — Metadata-agnostic engine.** Clue text, annotations, cluing scores, review flags ride in an opaque `meta` object joined to the answer at emit time. They MUST NOT be threaded through placement or clue-numbering. The JSON contract changes only by *additive* keys. (Principle #2.)
 - **INV-2 — Deterministic, diffable output.** Output is stable sorted-key JSON; identical input + flags ⇒ byte-identical output. No engine path carries randomization (`solve_shuffled` is NOT carried into `arrange`). (Principle #8.)
-- **INV-3 — Report, never silently degrade.** Dropped words, layout compromises, lint failures, and infeasible seeds are always reported, never swallowed. (Principle #5.)
+- **INV-3 — Report, never silently degrade.** Dropped words, layout compromises, lint failures, and infeasible seeds are always reported, never swallowed. (Principle #5.) Reporting channel: per-layout quality caveats ride the emitted payload's `diagnostics` property (json-output-spec §6.4); failures and request-level shortfalls report on stderr (§5.1).
 - **INV-4 — License-clean by default.** Only permissively-licensed bundled data. (Principle #9.)
 
 ---
@@ -133,10 +133,16 @@ crosswordsmith                                                              # �
 - **Quiet on clean success; `--verbose` opts into summaries.** A successful run
   writes nothing to stderr by default; `--verbose` (on `arrange`/`fill`) turns
   on the routine success summary (grid, placed, reward / filled slots) so the
-  engine composes silently in pipes. This gates *summaries only*: compromises
-  and warnings — dropped words (AC-ARR-2), fewer-than-K candidates (AC-ARR-7),
-  cap-inert degeneration (§7.2) — and every failure report remain
-  **unconditional** per INV-3. Stdout data is identical either way.
+  engine composes silently in pipes. **Quality caveats ride the payload, not
+  stderr**: arrange output is best-effort by nature (most real clue sets fall
+  short of perfect health), so per-layout compromises — dropped words
+  (AC-ARR-2), cap-inert degeneration (§7.2) — are reported in the emitted
+  payload's `diagnostics` property ([`json-output-spec.md`](./json-output-spec.md) §6.4) where consumers
+  can act on them, satisfying INV-3 without polluting the terminal (`--verbose`
+  echoes them on stderr for interactive runs). Request-level shortfalls with no
+  payload home (fewer-than-K candidates, AC-ARR-7) and every failure report
+  remain **unconditional** on stderr per INV-3. Stdout data is identical either
+  way.
 
 ### 5.2 Exit codes (LOCKED)
 | Code | Meaning |
@@ -235,7 +241,7 @@ A single verb that unifies the old `pack`/`solve` engines into one **determinist
 - `target(w) = ceil(L/2)` by default (reuses `word_meets_half/2`).
 - Default integer weights `WCap:WTail = 5:1` ⇒ `ε = 0.2`. The **cap creates balance** (stops rewarding already-checked words, redirecting effort to laggards, anti-stub in a length-aware way); the **tail keeps an interlock gradient above the cap** and breaks ties toward crossier layouts.
 - Integer arithmetic for deterministic tiebreaks (mirrors `placement_key`'s idiom).
-- **Reachability caveat (load-bearing — empirically confirmed).** The cap only balances when `target` is attainable at the densities Flavour A actually produces. Probes confirm this bites on realistic inputs: toc_demo reaches `ceil(L/2)` on only **1/16** words (and `--min-half` makes it infeasible outright), while the dense quality_22 mesh reaches it on **19/22** — so the cap is *inert on sparse link-sets, active on dense meshes*. Where it is inert, the objective **silently degenerates to plain total-crossings**. ⇒ `--check-target` MUST be a **real tunable**, and `target` and `ε` MUST be **calibrated against the fixtures *before weights are locked*** (calibration fixtures: toc_demo = sparse/inert, quality_22 = dense/active), lowering `target` below `ceil(L/2)` where half is unreachable, and **reporting when the objective has degenerated**. This is a calibration/tunability obligation, not a change to the objective *form*. *(Implemented as `--check-target N` (§5): it lowers the per-word target to `min(ceil(L/2), N)` — N only ever lowers, never raises — and strict mode reports "cap inert" on stderr when no placed word reaches its target, i.e. the objective has degenerated to total-crossings — unconditionally: it is a §5.1 warning, not part of the `--verbose` summary.)*
+- **Reachability caveat (load-bearing — empirically confirmed).** The cap only balances when `target` is attainable at the densities Flavour A actually produces. Probes confirm this bites on realistic inputs: toc_demo reaches `ceil(L/2)` on only **1/16** words (and `--min-half` makes it infeasible outright), while the dense quality_22 mesh reaches it on **19/22** — so the cap is *inert on sparse link-sets, active on dense meshes*. Where it is inert, the objective **silently degenerates to plain total-crossings**. ⇒ `--check-target` MUST be a **real tunable**, and `target` and `ε` MUST be **calibrated against the fixtures *before weights are locked*** (calibration fixtures: toc_demo = sparse/inert, quality_22 = dense/active), lowering `target` below `ceil(L/2)` where half is unreachable, and **reporting when the objective has degenerated**. This is a calibration/tunability obligation, not a change to the objective *form*. *(Implemented as `--check-target N` (§5): it lowers the per-word target to `min(ceil(L/2), N)` — N only ever lowers, never raises — and every arrange payload reports `capInert: true` in its `diagnostics` property (json-output-spec §6.4) when no placed word reaches its target, i.e. the objective has degenerated to total-crossings; the `--verbose` summary echoes the caveat on stderr per §5.1.)*
 - **`maximin`/leximin are NOT the search driver** (non-decomposable, useless early bound, defeats pruning). Reserve them only as a tiebreak among final top candidates, or as an optional hard per-word floor (a cheap forward-checkable *constraint*, not the objective).
 
 ### 7.3 Engine properties
@@ -251,7 +257,7 @@ A single verb that unifies the old `pack`/`solve` engines into one **determinist
 
 ### 7.5 Acceptance criteria
 **AC-ARR-1** `arrange --strict` resolves to exactly one of three outcomes and never drops silently: **(a)** all words placed in a legal layout; **(b)** search *completed* without placing a word ⇒ exit non-zero **naming the unplaceable word(s)**; **(c)** budget exhausted before a complete placement ⇒ exit non-zero reporting **"not proven within budget"** (NOT "unplaceable").
-**AC-ARR-2** `arrange --best-effort` places a maximal subset, emits the layout, and reports the dropped set; never fails when ≥1 word is placeable.
+**AC-ARR-2** `arrange --best-effort` places a maximal subset, emits the layout, and reports the dropped set in the payload's `diagnostics.arrange.dropped` (json-output-spec §6.4; echoed on stderr under `--verbose`); never fails when ≥1 word is placeable.
 **AC-ARR-3** Every emitted layout re-validates as legal against the shared legality core (free property test).
 **AC-ARR-4** For the benchmark fixtures, the optimizer's reward ≥ the old `solve`'s arbitrary-fill reward (no regression in interlock quality).
 **AC-ARR-5** `--size-mode max` output is the tight enclosing square (side `max(H,W)` ≤ N), anchored at the content's top-left; `fixed` output is exactly N×N with blocks for empty cells.

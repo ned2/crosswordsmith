@@ -137,17 +137,36 @@ cap_binding_count(Placed, Count) :-
                   Count).
 
 % §7.2 (INV-3): when the cap binds on NO placed word, the objective has
-% degenerated to plain total-crossings - report it (on stderr), pointing the
-% user at --check-target as the knob to lower an unreachable target. A spec
-% obligation, not a routine summary, so UNCONDITIONAL (independent of
-% --verbose).
-cap_inert_warning(Placed) :-
+% degenerated to plain total-crossings. That compromise - like a best-effort
+% drop - is reported in the emitted payload's diagnostics property
+% (json-output-spec §6.4) rather than on stderr: arrange output is best-effort
+% by nature, so quality caveats are data for the consumer, not terminal noise.
+cap_inert(Placed, CapInert) :-
     cap_binding_count(Placed, CB),
-    (   CB =:= 0
-    ->  format(user_error,
-               "arrange: cap inert: objective = total-crossings; \c
-tune with --check-target~n", [])
-    ;   true
+    (   CB =:= 0 -> CapInert = true ; CapInert = false ).
+
+% The diagnostics.arrange sub-dict for an emitted layout: what the solver
+% alone knows about how the result compromised. Recomputed from the final
+% placement so every emit path (strict, best-effort, fragment, candidates)
+% reports identically. dropped preserves input order.
+arrange_diag_dict(Numbered, Words,
+                  _{capInert: CapInert, dropped: Dropped, reward: Reward}) :-
+    arrange_weights(WCap, WTail),
+    layout_reward(WCap, WTail, Numbered, Reward),
+    cap_inert(Numbered, CapInert),
+    dropped_answers(Words, Numbered, Dropped).
+
+dropped_answers(Words, Placed, Dropped) :-
+    maplist([PW, A]>>get_dict(answer, PW, A), Placed, PlacedAnswers),
+    findall(A, ( member([A|_], Words), \+ memberchk(A, PlacedAnswers) ),
+            Dropped).
+
+% Human-readable cap-status suffix for the --verbose summary line (the
+% payload's capInert, surfaced for interactive runs that opted in).
+cap_status_note(Placed, Note) :-
+    (   cap_inert(Placed, true)
+    ->  Note = " (cap inert: objective = total-crossings; tune with --check-target)"
+    ;   Note = ""
     ).
 
 
@@ -236,11 +255,11 @@ arrange_strict_solve(Words, GridLen, SizeMode) :-
     check_unique_answers(Words),
     arrange_best_layout(Words, GridLen, Numbered, Reward, Outcome),
     (   Outcome == placed
-    ->  emit_arrange(Numbered, Words, GridLen, SizeMode),
+    ->  emit_arrange_diag(Numbered, Words, GridLen, SizeMode),
         length(Numbered, NP),
-        verbose_report("arrange: grid ~w, mode ~w, placed ~w, reward ~w~n",
-                       [GridLen, SizeMode, NP, Reward]),
-        cap_inert_warning(Numbered)
+        cap_status_note(Numbered, Note),
+        verbose_report("arrange: grid ~w, mode ~w, placed ~w, reward ~w~w~n",
+                       [GridLen, SizeMode, NP, Reward, Note])
     ;   arrange_report_failure(Outcome, Words, GridLen),
         fail
     ).
@@ -305,18 +324,13 @@ arrange_best_effort(Words, GridLen, Numbered, Reward, NumPlaced, Dropped) :-
 arrange_best_effort_solve(Words, GridLen, SizeMode) :-
     check_unique_answers(Words),
     (   arrange_best_effort(Words, GridLen, Numbered, Reward, NP, Dropped)
-    ->  emit_arrange(Numbered, Words, GridLen, SizeMode),
+    ->  % the dropped set rides the payload's diagnostics (INV-3, AC-ARR-2);
+        % the stderr summary is routine -> --verbose only
+        emit_arrange_diag(Numbered, Words, GridLen, SizeMode),
         length(Dropped, ND),
-        % a non-empty drop is a compromise: reported unconditionally (INV-3,
-        % AC-ARR-2); the all-placed summary is routine -> --verbose only
-        (   ND > 0
-        ->  format(user_error,
-                   "arrange: grid ~w, mode ~w, placed ~w, dropped ~w ~w, reward ~w~n",
-                   [GridLen, SizeMode, NP, ND, Dropped, Reward])
-        ;   verbose_report(
-                   "arrange: grid ~w, mode ~w, placed ~w, dropped ~w ~w, reward ~w~n",
-                   [GridLen, SizeMode, NP, ND, Dropped, Reward])
-        )
+        verbose_report(
+               "arrange: grid ~w, mode ~w, placed ~w, dropped ~w ~w, reward ~w~n",
+               [GridLen, SizeMode, NP, ND, Dropped, Reward])
     ;   format(user_error, "arrange: nothing placeable on ~wx~w grid~n",
                [GridLen, GridLen]),
         fail
@@ -329,11 +343,27 @@ arrange_best_effort_solve(Words, GridLen, SizeMode) :-
 %         anchored at the bbox top-left. Square keeps the single-`gridLength`
 %         output schema (rectangular grids are out of scope, design-spec §3).
 
+% Plain emit: layout only, no diagnostics. This is the variant fill's
+% emit_fill(max) delegates to - fill has no arrange-solver compromises to
+% report, so its payload must not grow a diagnostics.arrange sub-object.
 emit_arrange(Numbered, Words, GridLen, SizeMode) :-
     arrange_layout_dict(Numbered, Words, GridLen, SizeMode, Payload),
     current_output(Out),
     json_write_dict(Out, Payload),
     nl(Out).
+
+% arrange's own emit: the layout dict plus the diagnostics property
+% (json-output-spec §6.4) carrying the solver's quality caveats.
+emit_arrange_diag(Numbered, Words, GridLen, SizeMode) :-
+    arrange_diag_layout_dict(Numbered, Words, GridLen, SizeMode, Payload),
+    current_output(Out),
+    json_write_dict(Out, Payload),
+    nl(Out).
+
+arrange_diag_layout_dict(Numbered, Words, GridLen, SizeMode, Payload) :-
+    arrange_layout_dict(Numbered, Words, GridLen, SizeMode, Layout),
+    arrange_diag_dict(Numbered, Words, Diag),
+    put_dict(diagnostics, Layout, _{arrange: Diag}, Payload).
 
 % Build (without writing) the canonical layout dict for one placement, framed by
 % SizeMode. Splitting dict-construction from writing lets --candidates emit an
@@ -640,28 +670,25 @@ arrange_fragment_solve(Words, Frags, GridLen, strict, SizeMode) :-
     check_unique_answers(Words),
     arrange_fragment_strict(Words, Frags, GridLen, Numbered, Reward, Outcome),
     (   Outcome == placed
-    ->  emit_arrange(Numbered, Words, GridLen, SizeMode),
+    ->  emit_arrange_diag(Numbered, Words, GridLen, SizeMode),
         length(Numbered, NP),
+        cap_status_note(Numbered, Note),
         verbose_report(
-               "arrange: fragment-seeded, grid ~w, mode ~w, placed ~w, reward ~w~n",
-               [GridLen, SizeMode, NP, Reward])
+               "arrange: fragment-seeded, grid ~w, mode ~w, placed ~w, reward ~w~w~n",
+               [GridLen, SizeMode, NP, Reward, Note])
     ;   arrange_fragment_report_failure(Outcome, Words, GridLen),
         fail
     ).
 arrange_fragment_solve(Words, Frags, GridLen, best_effort, SizeMode) :-
     check_unique_answers(Words),
     (   arrange_fragment_best_effort(Words, Frags, GridLen, Numbered, Reward, NP, Dropped)
-    ->  emit_arrange(Numbered, Words, GridLen, SizeMode),
+    ->  % same contract as arrange_best_effort_solve: drops ride the payload's
+        % diagnostics, the stderr summary is --verbose only
+        emit_arrange_diag(Numbered, Words, GridLen, SizeMode),
         length(Dropped, ND),
-        % same contract as arrange_best_effort_solve: drops always, else --verbose
-        (   ND > 0
-        ->  format(user_error,
-                   "arrange: fragment-seeded, grid ~w, mode ~w, placed ~w, dropped ~w ~w, reward ~w~n",
-                   [GridLen, SizeMode, NP, ND, Dropped, Reward])
-        ;   verbose_report(
-                   "arrange: fragment-seeded, grid ~w, mode ~w, placed ~w, dropped ~w ~w, reward ~w~n",
-                   [GridLen, SizeMode, NP, ND, Dropped, Reward])
-        )
+        verbose_report(
+               "arrange: fragment-seeded, grid ~w, mode ~w, placed ~w, dropped ~w ~w, reward ~w~n",
+               [GridLen, SizeMode, NP, ND, Dropped, Reward])
     ;   format(user_error,
                "arrange: nothing placeable around the fragment on ~wx~w grid~n",
                [GridLen, GridLen]),
@@ -821,8 +848,10 @@ emit_candidates(NumberedLayouts, Words, GridLen, SizeMode) :-
     current_output(Out),
     json_write_dict(Out, Dicts),
     nl(Out).
+% Each candidate carries its own diagnostics: quality caveats are per-layout
+% (rewards differ; under a drops contract the dropped sets can too).
 candidate_dict(Words, GridLen, SizeMode, Numbered, Dict) :-
-    arrange_layout_dict(Numbered, Words, GridLen, SizeMode, Dict).
+    arrange_diag_layout_dict(Numbered, Words, GridLen, SizeMode, Dict).
 
 % Solve + emit the candidates array on stdout, report requested/returned/tau on
 % stderr (INV-3: a short return is reported, never silent). Fails (no stdout) if
