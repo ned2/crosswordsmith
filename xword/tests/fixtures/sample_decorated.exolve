@@ -1,0 +1,18 @@
+exolve-begin
+  exolve-id: xword-s5-keepsake
+  exolve-title: Decorated Sample
+  exolve-setter: S5 Spike
+  exolve-width: 4
+  exolve-height: 4
+  exolve-grid:
+    R|E_AD
+    E.B.
+    S0@U0
+    T.T.
+  exolve-across:
+    1 Peruse (4)
+    3 Partly filled row (4)
+  exolve-down:
+    1 Beethoven's Fifth (5)
+    2 Adjoin (4)
+exolve-end

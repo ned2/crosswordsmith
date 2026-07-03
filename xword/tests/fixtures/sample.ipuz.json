@@ -1,0 +1,33 @@
+{
+  "version": "http://ipuz.org/v2",
+  "kind": ["http://ipuz.org/crossword#1"],
+  "title": "Probe Sample",
+  "author": "S4 Spike",
+  "copyright": "2026 nobody",
+  "publisher": "crosswordsmith",
+  "notes": "hand-built to exercise block/rebus/circle/title/author",
+  "dimensions": {"width": 3, "height": 3},
+  "empty": "0",
+  "puzzle": [
+    [1, {"cell": 2, "style": {"shapebg": "circle"}}, 3],
+    [4, "0", "0"],
+    [5, "0", "#"]
+  ],
+  "solution": [
+    ["A", "B", "C"],
+    ["PH", "E", "F"],
+    ["G", "H", "#"]
+  ],
+  "clues": {
+    "Across": [
+      {"number": 1, "clue": "First across", "enumeration": "(3)"},
+      {"number": 4, "clue": "Rebus row", "enumeration": "(3)"},
+      {"number": 5, "clue": "Short one", "enumeration": "(2)"}
+    ],
+    "Down": [
+      [1, "First down"],
+      [2, "Circled top"],
+      [3, "Right column"]
+    ]
+  }
+}

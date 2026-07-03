@@ -45,7 +45,7 @@ All six seed spikes complete and gating cleared; findings + working snippets in
 
 ---
 
-## Phase 1 — MVP: `Board` + parsers + `view` (spec §13)
+## Phase 1 — MVP: `Board` + parsers + `view` (spec §13) — **done (2026-07-03)**
 
 **Deliverable:** the `Board` model + parsers (native / ipuz / Exolve) + the `view`
 command (solved default, `--blank`), grid + Across/Down clue lists, `--from`,
@@ -53,21 +53,22 @@ format detection (§7), Unix conventions (§8). NOT `convert`/`render`.
 
 | # | Component | Spec | Status | Verified by |
 |---|---|---|---|---|
-| 1 | **Package skeleton** — `xword/` src-layout, `pyproject.toml`, `xword.cli:main` entry point, `[raster]` extra stub, `uv`/`pytest` dev-run (S1) | §12, D8 | not started | `uv run xword --help`; `uv run pytest` green |
-| 2 | **CLI shell (cyclopts)** — `view`/`convert`/`render` verbs (convert/render stubbed), `--from`/`--to` enums, `--blank`/`-q`, per-verb `--help`, bare-`xword`→usage+non-zero, stdin default / positional override / `--out` on success (S1) | §6, §8, D1 | not started | subprocess exit-code + stdout/stderr goldens |
-| 3 | **`Board` model** — union-superset dataclasses; derived row-major numbering; enumeration normalisation; "invent nothing" (S2/S4/S5) | §5.1 | not started | unit tests on numbering + enumeration derivation |
-| 4 | **native parser** — `native JSON → Board` + `Board → native` | §5.1, json-output-spec §6 | not started | round-trip identity on `bundled_17` |
-| 5 | **ipuz parser** — `ipuz → Board` + `Board → ipuz`; read declared `empty`/`block`; object-form styled cells; 3 clue-item shapes (S4) | §5.1, §10 | not started | round-trip + structural parity vs engine `export` |
-| 6 | **Exolve parser** — `Exolve → Board` + `Board → Exolve`; tokenised grid rows + decorator suffixes; enumeration parse-back rule (S5) | §5.1, §10 | not started | round-trip + enumeration-extraction unit tests |
-| 7 | **Format detection ladder** — JSON→ipuz-first (`ipuz.org` in `version`/`kind`)→native; else Exolve markers; `--from` overrides; clear no-match error (S4/S5) | §7 | not started | detection unit tests over all three fixtures + garbage |
-| 8 | **`view` renderer** — `BoardGeom → Rich renderable` (manual `Text`); grid + clue lists; solved default + `--blank`; `soft_wrap` never-wraps; colour gating `isatty() and not NO_COLOR` (S2) | §5.2, §6.1 | not started | golden snapshots (solved + `--blank`, S3 recipe) |
-| 9 | **Unix conventions** — diagnostics→stderr / data→stdout; `NO_COLOR`/TTY; `--out` atomic-on-success; deterministic output (D6) | §8, D6 | not started | subprocess pipe/redirect/`NO_COLOR` tests |
+| 1 | **Package skeleton** — `xword/` src-layout, `pyproject.toml`, `xword.cli:main` entry point, `[raster]` extra stub, `uv`/`pytest` dev-run (S1) | §12, D8 | done | `uv run xword --help`; `uv run pytest` green (57 tests) |
+| 2 | **CLI shell (cyclopts)** — `view`/`convert`/`render` verbs (convert/render stubbed), `--from`/`--to` enums, `--blank`/`-q`, per-verb `--help`, bare-`xword`→usage+non-zero, stdin default / positional override / `--out` on success (S1) | §6, §8, D1 | done | `tests/test_cli.py` (subprocess exit codes + stream split) |
+| 3 | **`Board` model** — union-superset dataclasses; derived row-major numbering; enumeration normalisation; "invent nothing" (S2/S4/S5) | §5.1 | done | `tests/test_board.py` (numbering + enumeration units) |
+| 4 | **native parser** — `native JSON → Board` + `Board → native` | §5.1, json-output-spec §6 | done | `tests/test_formats.py::TestNative` (round-trip identity on `bundled_17`) |
+| 5 | **ipuz parser** — `ipuz → Board` + `Board → ipuz`; read declared `empty`/`block`; object-form styled cells; 3 clue-item shapes (S4) | §5.1, §10 | done | `tests/test_formats.py::TestIpuz` (round-trip is structurally identical to engine `export`) |
+| 6 | **Exolve parser** — `Exolve → Board` + `Board → Exolve`; tokenised grid rows + decorator suffixes; enumeration parse-back rule (S5) | §5.1, §10 | done | `tests/test_formats.py::TestExolve` + enum units in `test_board.py` |
+| 7 | **Format detection ladder** — JSON→ipuz-first (`ipuz.org` in `version`/`kind`)→native; else Exolve markers; `--from` overrides; clear no-match error (S4/S5) | §7 | done | `tests/test_detect.py` (all three fixtures + garbage) |
+| 8 | **`view` renderer** — `BoardGeom → Rich renderable` (manual `Text`); grid + clue lists; solved default + `--blank`; `soft_wrap` never-wraps; colour gating `isatty() and not NO_COLOR` (S2) | §5.2, §6.1 | done | `tests/test_view.py` goldens (`tests/golden/view_bundled_17_{solved,blank}.txt`, S3 recipe) + never-wraps test |
+| 9 | **Unix conventions** — diagnostics→stderr / data→stdout; `NO_COLOR`/TTY; `--out` atomic-on-success; deterministic output (D6) | §8, D6 | done | `tests/test_cli.py` (pipe/no-ANSI, `--out` on success only, stderr-only errors) |
 
-Fixtures reuse the engine's: regenerate a native layout via `crosswordsmith
-arrange --input fixtures/bundled_17_clues.pl --size 17 --size-mode fixed` and its
-ipuz/exolve via `crosswordsmith export --to …`; recreate the S4/S5 keepsake
-samples (small ipuz with block/circle/rebus/title; decorated Exolve) named in the
-spike findings. `pytest` under `xword/tests`.
+Fixtures regenerated from the engine (`crosswordsmith arrange --input
+fixtures/bundled_17_clues.pl --size 17 --size-mode fixed`, then `crosswordsmith
+export --to …`) into `xword/tests/fixtures/`, plus the recreated S4/S5 keepsakes
+(`sample.ipuz.json` — block/circle/rebus/title/both-clue-shapes;
+`sample_decorated.exolve` — block/unfilled/circle/bars/enum-collision clue).
+`pytest` under `xword/tests`.
 
 ---
 
@@ -98,12 +99,17 @@ spike findings. `pytest` under `xword/tests`.
 ## At a glance
 
 - **Phase 0 (spikes): done (2026-07-03)** — all S1–S6 findings folded into
-  `xword-spikes.md`, spec corrections applied, no new gating spikes. Phase 1 is
-  unblocked.
-- **Phase 1 (MVP): not started** — 9 components (skeleton → CLI → Board → three
-  parsers → detection → `view` → Unix conventions). Every tool choice and the
-  hard rendering/determinism problems are pre-resolved by Phase 0; Phase 1 is
-  construction, not discovery.
-- **Phases 2–4 + later: deferred** — not in current scope.
+  `xword-spikes.md`, spec corrections applied, no new gating spikes.
+- **Phase 1 (MVP): done (2026-07-03)** — all 9 components built under `xword/`
+  (src-layout package, `uv sync` / `uv run xword` / `uv run pytest`); 57 tests
+  green. Notable outcome: `xword`'s ipuz serialization is *structurally
+  identical* to the engine's `export --to ipuz` on `bundled_17` (the §11
+  cross-check holds already at the parser level); `convert`/`render` are
+  registered as stubs that exit 1 with a "not implemented (Phase 2/3)" error.
+- **Phase 2 (`convert`) is next** — the parsers/serializers it needs already
+  exist and are round-trip-tested; what remains is the verb wiring, the D7
+  strict-structure/drop-metadata policy (+ `-q`), and the engine cross-check
+  tests.
+- **Phases 2–4 + later: deferred** — not yet started.
 - **Nothing in progress; nothing blocked.** Q1 (grid geometry) is the only §14
   open question resolved so far; the rest gate Phases 3–4.
