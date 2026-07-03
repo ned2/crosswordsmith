@@ -5,7 +5,7 @@ iteration; §13 records what changed and why (two adversarial reviews). The
 engine is **greedy density-construction + local improvement** (research doc
 Approach B); branch-and-bound is demoted to an optional, later refinement.
 
-Companion: `scratch/crossword-setting-and-generation-QA.md` (research) and
+Companion: [`docs/crossword-setting-and-generation-QA.md`](./crossword-setting-and-generation-QA.md) (research) and
 `docs/experiments.md` (solver strategies; I2 value-ordering result; I5 maximality
 fix; start-position bias).
 

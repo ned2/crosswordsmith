@@ -5,6 +5,16 @@ puzzle *satisfying*, the tools that fill grids from a word set, and two concrete
 CSP-style generation algorithms — one for American/themed grids and one purpose-built
 for cryptic grids.
 
+> **Status — research/exploration snapshot.** Where this disagrees with
+> [`design-spec.md`](./design-spec.md) or [`cryptic-layout-spec.md`](./cryptic-layout-spec.md),
+> those specs win. It is retained mainly for the concrete generation **algorithms**
+> (Q4–Q6) — a road-not-taken: `cryptic-layout-spec.md` adopted only the greedy
+> "Approach B" constructor and deliberately rejected the GAC / signature-table
+> machinery, so that design space survives nowhere else. The setter-craft and
+> tooling-landscape background (much of Q1–Q3) is covered more fully, and with
+> primary sources, in [`cryptic-setter-research.md`](./cryptic-setter-research.md);
+> those parts are trimmed to pointers here to avoid duplicating it.
+
 ---
 
 ## Q1. What process and methodologies do crossword setters use to make *satisfying* crosswords?
@@ -47,20 +57,14 @@ tense/part-of-speech/number; a trailing "?" signals wordplay). Late-week difficu
 from **fair misdirection**.
 
 ### The cryptic (British) tradition
-Inverts the emphasis: the grid matters less, the artistry is in individual clues.
+Inverts the emphasis: the grid matters less, the artistry is in individual clues
+(Ximenean *definition + fair wordplay + nothing else*, the Ximenean↔Libertarian
+spectrum, surface reading, the "padding" fault).
 
-- Foundational model is **Ximenean** (after Derrick Macnutt / "Ximenes"): every clue =
-  **exact definition + fair wordplay + nothing else.** The solver separates definition
-  from wordplay.
-- Governing value is **fairness through fair misdirection**: a clue may mislead, but must
-  still point to the answer by an indirect-but-fair route. Ximenean rigor demands proper
-  indicators, no indirect anagrams, no misleading punctuation, unique answers, and even
-  correct grammar in link words.
-- Central tension: **Ximenean vs. Libertarian** setting (strict instructional grammar vs.
-  looser, playful misdirection). Each setter sits somewhere on that spectrum.
-- The prized skill is the **surface reading** — making the clue read as an innocent, natural
-  sentence that disguises its mechanism. The most common fault is "padding" (words added
-  only to improve the surface that muddy the cryptic instruction).
+> Covered in depth — with the full setter pipeline and primary sources — in
+> [`cryptic-setter-research.md`](./cryptic-setter-research.md) ("How cryptic
+> setters actually work") and design principle #7 there ("Be Ximenean-configurable,
+> never Ximenean-only"). Not repeated here.
 
 ### The psychology of "satisfying" (both traditions)
 **Fair misdirection** (tricked, but fairly), the **aha moment** (the click of resolution),
@@ -75,57 +79,20 @@ Inverts the emphasis: the grid matters less, the artistry is in individual clues
 
 ## Q2. How are *cryptic* crosswords laid out — the grid construction process specifically?
 
-Counterintuitive punchline: for standard cryptics, the grid is usually the **easiest**
-part and often isn't designed from scratch. The genuinely hard layout work lives in the
-barred-grid variants.
+Punchline: for standard cryptics the grid is usually the **easiest** part and often
+isn't designed from scratch — the leverage is **half-checking** (only ~half of each
+entry's letters are checked; the rest are "**unches**" belonging to one word, giving
+the lattice / "odd-odd" look). That decoupling is what Q5's algorithm exploits, and
+it's why setters spend their effort on clues, not grid-filling. The genuinely hard
+layout work lives in the barred-grid variants and in hidden structure (Ninas).
 
-### Why the cryptic grid is less constrained than it looks
-- The defining fact is the **checking pattern.** American grids check 100% of cells (every
-  white square is in both an across and a down word) — that's what makes them brutal to fill.
-- Cryptic grids deliberately check only **~half** the letters of each entry (round up for
-  odd lengths, so odd entries start and end checked). The result is the **lattice / "odd-odd"**
-  look, with isolated unchecked cells ("**unches**") belonging to only one word.
-- Because ~every other letter is a free unch, the fill is far looser — which is exactly
-  why setters spend their effort on clues, not combinatorial grid-filling.
-
-### Fairness rules on the grid
-- No two unchecked letters adjacent; at least half the letters in each word checked;
-  three-letter entries avoided (some markets ban them).
-- Three unches in a row is the cardinal sin — essentially unpublishable.
-- Whether **odd or even** letters are checked changes difficulty (odd-checked is easier).
-
-### Setters often don't draw the grid
-- Dominant practice is **reuse from a stock library**; UK publications keep a fixed grid-set.
-- A working constructor's method: Google-image-search "cryptic crossword," pick a grid whose
-  slot lengths fit your **seed entries**, and verify it obeys the checking rules.
-- Construction software supports this (e.g. a "fill in alternative blocks" lattice you split
-  into the entry lengths you want).
-
-### The fill-and-clue workflow (non-linear)
-From the setter Anax's account:
-- Build the grid complete with **a few clues already written**, then do the rest — because a
-  fill can collapse late, and re-cluing changed answers is painful.
-- Don't clue in grid order. Reason: **wordplay rationing.** Editors cap devices (e.g. The
-  Times limits anagrams per puzzle); setters balance charades, containers, double definitions,
-  etc., and spread them across the grid. Cluing 1-Across onward greedily wastes a device you'd
-  want elsewhere.
-- Many setters keep a running notebook of wordplay spotted in daily life; a pre-made clue can
-  seed the whole grid (the grid is built *around* a clue they already love).
-
-### Where layout actually gets hard
-- **Barred grids** (Azed, the Listener, most cryptic puzzlehunt crosswords): no black squares,
-  bars mark boundaries. Among the hardest to *write* (more places to create accidental nonsense),
-  but bars still allow unches where a cell is bookended by two bars. They run *higher* checking,
-  which licenses their obscure vocabulary — an explicit trade: more checking (harder to fill)
-  buys rarer words (harder to solve).
-- **Ninas:** a hidden message, classically along the perimeter unches, meant to be invisible to
-  a normal solve. Hiding a message in the unches *removes* their freedom — which is why a theme
-  or Nina is also the licence to dip just below 50% checking (it gives solvers extra help). The
-  thematic layer and the checking budget are two sides of one ledger.
-
-**Summary:** a standard cryptic grid is deliberately engineered to be easy to fill (half-checking,
-reusable stock grids), freeing the setter for clues; the hard layout problems — barred grids,
-hidden structure — are the ones setters opt into, trading slack back for difficulty and elegance.
+> The full treatment — checking/unch fairness rules, stock-grid reuse, barred grids,
+> Ninas, the Anax "few clues during fill / wordplay-rationing" workflow, and the
+> observed grid-size distribution — lives in
+> [`cryptic-setter-research.md`](./cryptic-setter-research.md) (checking rules, the
+> "Stock-grid libraries" and "Grid sizes in the wild" addenda) and is encoded as
+> normative lint/profile rules in [`design-spec.md`](./design-spec.md) §8. Not
+> repeated here; Q5 below re-defines the checked/unch terms it needs independently.
 
 ---
 
@@ -135,11 +102,14 @@ The answer splits by how literally you mean "given a target set."
 
 ### Easy version vs. hard version
 - **Easy (mature, fast):** design/pick a grid, **pin a few words you want**, and let software
-  fill the rest from a large scored dictionary. Crossword Compiler "fills round existing words,"
-  uses word scoring for high-quality fills, has a Pro Filler tool to fit theme words, and flags
-  unfillable slots in the background. Qxw (free), CrossFire, Crosshare, Sympathy do similar autofill.
+  fill the rest from a large scored dictionary. This is the standard autofill every mainstream
+  tool does — see the tool table in
+  [`cryptic-setter-research.md`](./cryptic-setter-research.md) (Crossword Compiler, Qxw,
+  Crossfire, Crosshare, Exet, …) rather than re-listing them here.
 - **Hard (the real inverse):** given a **closed set**, pack as many as possible into one interlocked
-  grid, designing the grid around them with little/no outside filler.
+  grid, designing the grid around them with little/no outside filler. *(This closed-set inversion —
+  no filler dictionary — is exactly crosswordsmith's model; see the "closed-set vs. authentic-layout
+  tension" analysis in `cryptic-setter-research.md`.)*
 
 ### Tools aimed at the inverse problem
 - **AmuseLabs "Magic Fill" (PuzzleMe):** built for the small-custom-list case — upload your list,
@@ -483,12 +453,14 @@ the decoupled fill.
 ---
 
 ## Sources & further reading
-- Patrick Berry, *Crossword Constructor's Handbook* (American construction).
-- Ximenes (Derrick Macnutt), *On the Art of the Crossword* (1966) (cryptic principles).
-- NYT, "How to Make a Crossword Puzzle" (five-part series).
-- Crossword Unclued (grid checking, symmetry, Ninas); Alberich Crosswords (Ninas).
-- "Actually Setting" by Anax (setter's workflow, wordplay rationing).
+
+For the **setter-craft and tooling** background (Berry, Ximenes, NYT, Anax, Crossword
+Unclued, Alberich, Crossword Compiler / Qxw docs, …), see the fuller primary-source
+bibliography in [`cryptic-setter-research.md`](./cryptic-setter-research.md); not
+duplicated here.
+
+Specific to this doc's unique material:
 - AmuseLabs PuzzleMe "Magic Fill" docs (word-list-driven dense fill, Must-Have Words).
-- Crossword Compiler / Qxw documentation (autofill, scoring, theme fits).
-- Background: CSP arc consistency, MRV/least-constraining heuristics, table-constraint GAC/STR,
-  CSP phase-transition literature (crossword phase transition: Anbulagan & Botea).
+- **Algorithms (Q4–Q6):** CSP arc consistency, MRV / least-constraining heuristics,
+  table-constraint GAC/STR, and the CSP phase-transition literature (crossword phase
+  transition: Anbulagan & Botea).
