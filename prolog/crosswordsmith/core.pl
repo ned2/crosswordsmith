@@ -73,9 +73,6 @@
 % Used by the JSON output emitter (canonically library(json) on SWI 10+).
 :- use_module(library(http/json)).
 
-% limit/2, used by the capped placement count in the mrv_capped strategy.
-:- use_module(library(solution_sequences)).
-
 % random_permutation/2 for the opt-in search perturbation (set_search_seed/1).
 % NOT reached on the deterministic path (search_seed/1 unset -> identity), so a
 % default run never draws from — nor even seeds — the RNG.
@@ -349,29 +346,67 @@ mrv_cap(mrv_capped, 2).
 
 positive_key(Count-_) :- Count > 0.
 
-% Count Entry's viable placements right now, bounded by Cap. aggregate_all/3
-% counts each candidate (Start,Dir) from find_intersecting_word that also
-% survives the assign_word adjacency/bounds checks; like findall it undoes the
-% goal's bindings, so the caller's Start/Dir (ground on the first word, unbound
-% after) are left untouched.
-mrv_count(Cap, PlacedWords, GridLen, Start, Dir, GIn, Entry, Count) :-
+% Count Entry's viable placements right now, bounded by Cap. Each candidate is a
+% (Start,Dir) from find_intersecting_word that also survives the assign_word
+% adjacency/bounds checks. Like findall, counting UNDOES the goal's bindings, so
+% the caller's Start/Dir (ground on the first word, unbound after) are left
+% untouched.
+%
+% Cap is `unbounded` (exact MRV, `mrv` strategy) or the integer 2 (mrv_capped /
+% mrv_inc, which only ever need the 0 / 1 / >=2 buckets - see select_word/9 and
+% assign_words_inc/9). The unbounded path keeps aggregate_all/3; the hot Cap=2
+% path uses count_upto2/2, a hand-rolled saturating counter that avoids
+% aggregate_all's spec-checking (error:has_type/2) and limit/2's per-solution
+% nb-state machinery. The cut makes the two clauses mutually exclusive and keeps
+% each call deterministic (a bare variable-cap head would leave a choicepoint).
+mrv_count(unbounded, PlacedWords, GridLen, Start, Dir, GIn, Entry, Count) :-
+    !,
+    mrv_count_goal(PlacedWords, GridLen, Start, Dir, GIn, Entry, Goal),
+    aggregate_all(count, Goal, Count).
+mrv_count(2, PlacedWords, GridLen, Start, Dir, GIn, Entry, Count) :-
+    mrv_count_goal(PlacedWords, GridLen, Start, Dir, GIn, Entry, Goal),
+    count_upto2(Goal, Count).
+
+% The placement-enumeration goal shared by both count paths: a candidate
+% (Start,Dir) from find_intersecting_word that also survives assign_word's
+% adjacency/bounds checks. On backtracking it re-binds Start/Dir to the next
+% placement (or leaves them unbound when it fails), so the counter around it must
+% undo those bindings.
+mrv_count_goal(PlacedWords, GridLen, Start, Dir, GIn, Entry, Goal) :-
     Entry = [Word|_],
     entry_letters(Entry, Letters2),
     length(Letters2, WLen),
-    aggregate_all(count,
-            capped(Cap,
-                   ( find_intersecting_word(Letters2, WLen, PlacedWords, GridLen,
-                                            Start, Dir),
-                     assign_word(Word, Letters2, WLen, Start, Dir, GridLen,
-                                 PlacedWords, GIn, _Placed, _G1) )),
-            Count).
+    Goal = ( find_intersecting_word(Letters2, WLen, PlacedWords, GridLen,
+                                    Start, Dir),
+             assign_word(Word, Letters2, WLen, Start, Dir, GridLen,
+                         PlacedWords, GIn, _Placed, _G1) ).
 
-% Cap is `unbounded` (no cap, for mrv) or an integer (mrv_capped). The cut keeps
-% the unbounded case deterministic - without it, clause 2's variable head leaves a
-% spurious choicepoint on every call. The integer cap goes through limit/2.
-:- meta_predicate capped(+, 0).   % Goal is called / limited (P12)
-capped(unbounded, Goal) :- !, call(Goal).
-capped(N, Goal) :- limit(N, Goal).
+% count_upto2(:Goal, -Count): Count is the number of solutions of Goal SATURATED
+% at 2 (so Count is 0, 1, or 2, where 2 means ">=2"). Like findall/aggregate_all
+% it leaves NO residual bindings from Goal on exit - the search relies on the
+% caller's Start/Dir being untouched.
+%
+% This is the SWI manual's non-backtrackable solution counter (a fresh mutable
+% holder incremented per solution via nb_setarg/3 - see manipterm, succeeds_n_times)
+% with an early exit: the failure-driven loop stops the moment the 2nd solution
+% lands (N >= 2), so it never enumerates a word's remaining placements. Wrapping
+% the loop in \+ discards the loop's bindings whether it stopped early (inner goal
+% succeeded -> \+ fails) or ran dry (inner goal failed -> \+ succeeds); either way
+% the nb_setarg side effect on the holder survives (it is non-backtrackable) and
+% carries the count out. A fresh holder per call keeps this reentrant - no global
+% key to collide if counts ever nest.
+:- meta_predicate count_upto2(0, -).
+count_upto2(Goal, Count) :-
+    Counter = counter(0),
+    (   \+ ( Goal,
+             arg(1, Counter, N0),
+             N is N0 + 1,
+             nb_setarg(1, Counter, N),
+             N >= 2 )
+    ->  true
+    ;   true
+    ),
+    arg(1, Counter, Count).
 
 
 % mrv_inc: capped MRV with an INCREMENTAL count cache (idea I1 in

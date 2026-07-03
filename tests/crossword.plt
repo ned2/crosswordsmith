@@ -109,6 +109,51 @@ test(answer_meta_assoc_join) :-
 :- end_tests(utilities).
 
 
+% Saturating solution counter (mrv_count's hot Cap=2 path)
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% count_upto2/2 must reproduce aggregate_all(count, limit(2, Goal), _)
+% EXACTLY: 0 / 1 / 2-saturated, and - like findall - leave NO residual
+% bindings from Goal on exit (the arrange search relies on the counted
+% Start/Dir staying untouched).
+
+:- begin_tests(count_upto2).
+
+test(zero, [true(N =:= 0)]) :-
+    crosswordsmith_core:count_upto2(member(_, []), N).
+test(one, [true(N =:= 1)]) :-
+    crosswordsmith_core:count_upto2(member(_, [a]), N).
+test(two_exact, [true(N =:= 2)]) :-
+    crosswordsmith_core:count_upto2(member(_, [a,b]), N).
+test(saturates_at_two, [true(N =:= 2)]) :-
+    crosswordsmith_core:count_upto2(member(_, [a,b,c,d,e]), N).
+test(filtered_goal_one, [true(N =:= 1)]) :-
+    crosswordsmith_core:count_upto2((member(X, [1,2,3]), X =:= 2), N).
+test(filtered_goal_zero, [true(N =:= 0)]) :-
+    crosswordsmith_core:count_upto2((member(X, [1,2,3]), X > 9), N).
+
+% No residual bindings: the counted variable is unbound after counting
+% (exercises both the >=2 early-exit path and the exhausted path).
+test(no_residual_binding_saturated, [true(var(X))]) :-
+    crosswordsmith_core:count_upto2(member(X, [a,b,c]), _).
+test(no_residual_binding_single, [true(var(X))]) :-
+    crosswordsmith_core:count_upto2(member(X, [only]), _).
+test(no_residual_binding_empty, [true(var(X))]) :-
+    crosswordsmith_core:count_upto2(member(X, []), _).
+
+% Semidet: yields exactly one solution, no choicepoint left behind.
+test(deterministic) :-
+    findall(N, crosswordsmith_core:count_upto2(member(_, [a,b,c]), N), Ns),
+    Ns == [2].
+
+% Matches the reference (aggregate_all + limit/2) across a range of arities.
+test(matches_reference, [forall(member(L, [[], [x], [x,y], [x,y,z], [x,y,z,w]]))]) :-
+    aggregate_all(count, limit(2, member(_, L)), Ref),
+    crosswordsmith_core:count_upto2(member(_, L), Got),
+    Got =:= Ref.
+
+:- end_tests(count_upto2).
+
+
 % The solver
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
