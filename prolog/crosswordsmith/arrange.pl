@@ -180,16 +180,38 @@ cap_status_note(Placed, Note) :-
 % Phase 2-3 - strict layout (construct + rescore + emit) with size framing.
 %
 % Per the Phase-1.5 gate the B&B search is descoped: strict mode constructs a
-% complete placement via the reused MRV-inc path over the four canonical start
-% corners (cheap construction diversity), rescores each with layout_reward/4,
-% and emits the best. place-all-or-fail with budget-aware 3-outcome semantics.
+% complete placement via the reused MRV-inc path over the strict start corners
+% (arrange_corners/1 - one per transpose-pair; see the note there and E-H1),
+% rescores each with layout_reward/4, and emits the best. place-all-or-fail with
+% budget-aware 3-outcome semantics.
 % ---------------------------------------------------------------------------
 
 % Construction budget (inferences) for finding ONE complete placement per
 % corner. First solutions on puzzle-shaped inputs are 5-462 ms (well under).
 arrange_budget(500_000_000).
 
-% Best-scoring complete placement over the four start corners, rescored and
+% The start corners the STRICT construct path sweeps. This is deliberately a
+% 2-corner subset of core.pl's start_locs/1 ([topleft_across, topleft_down,
+% topright, bottomleft]): the four corners form two TRANSPOSE-PAIRS,
+% {topleft_across, topleft_down} and {topright, bottomleft}. Transposing the
+% grid (swap rows<->cols) maps across<->down while preserving letter order, so
+% the mrv_inc search trees of a pair are exact transposes of each other - same
+% solutions modulo transposition, and layout_reward is transpose-invariant (it
+% counts checked cells), so a pair's first-solution rewards are identical.
+% Sweeping all four therefore does ~2x redundant work in strict mode. We keep
+% ONE corner per pair (topleft_across, topright) - the same two the reward-tie
+% break already prefers (sort(1,@>=) is stable, so ties resolve to the earlier
+% corner). Verified reward-equal AND literal-transpose across every ladder rung
+% in benchmarks/workloads.pl (grids 9/15/21, 8..80 words). See experiment E-H1
+% in docs/experiments.md.
+%
+% SCOPE: strict construct only. start_locs/1 stays 4-corner for the
+% greedy/best-effort/candidates paths, where transposed layouts are legitimately
+% DISTINCT candidates (candidate diversity), and for the fragment/enumerate
+% paths. Do not route those through arrange_corners/1.
+arrange_corners([topleft_across, topright]).
+
+% Best-scoring complete placement over the strict start corners, rescored and
 % picked by reward (deterministic: reward desc, ties by start-corner order).
 % Outcome: placed | not_proven (budget hit) | infeasible (search completed,
 % no full placement).
@@ -202,7 +224,7 @@ arrange_best_layout(Words, GridLen, Numbered, Reward, Outcome) :-
 % AC-ARR-1c / AC-ARR-10 "not proven within budget" path (tests/arrange.plt).
 arrange_best_layout(Words, GridLen, Budget, Numbered, Reward, Outcome) :-
     arrange_weights(WCap, WTail),
-    start_locs(Locs),
+    arrange_corners(Locs),
     construct_corners(Locs, Words, GridLen, WCap, WTail, Budget, Results),
     findall(R-P, member(ok(R, P), Results), OKs),
     (   OKs = [_|_]
