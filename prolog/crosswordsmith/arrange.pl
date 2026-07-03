@@ -50,7 +50,8 @@
 % The shared substrate: legality core + MRV-inc branch step, layout build +
 % numbering, geometry, and the strategy registry.
 :- use_module(crosswordsmith(core),
-              [ assign_clue_numbers/2,
+              [ verbose_report/2,
+                assign_clue_numbers/2,
                 build_grid_rows/3,
                 build_words/4,
                 answer_meta_assoc/2,
@@ -137,12 +138,17 @@ cap_binding_count(Placed, Count) :-
 
 % §7.2 (INV-3): when the cap binds on NO placed word, the objective has
 % degenerated to plain total-crossings - report it (on stderr), pointing the
-% user at --check-target as the knob to lower an unreachable target.
-cap_status_note(Placed, Note) :-
+% user at --check-target as the knob to lower an unreachable target. A spec
+% obligation, not a routine summary, so UNCONDITIONAL (independent of
+% --verbose).
+cap_inert_warning(Placed) :-
     cap_binding_count(Placed, CB),
-    ( CB =:= 0
-    ->  Note = ' (cap inert: objective = total-crossings; tune with --check-target)'
-    ;   Note = '' ).
+    (   CB =:= 0
+    ->  format(user_error,
+               "arrange: cap inert: objective = total-crossings; \c
+tune with --check-target~n", [])
+    ;   true
+    ).
 
 
 % ---------------------------------------------------------------------------
@@ -232,9 +238,9 @@ arrange_strict_solve(Words, GridLen, SizeMode) :-
     (   Outcome == placed
     ->  emit_arrange(Numbered, Words, GridLen, SizeMode),
         length(Numbered, NP),
-        cap_status_note(Numbered, Note),
-        format(user_error, "arrange: grid ~w, mode ~w, placed ~w, reward ~w~w~n",
-               [GridLen, SizeMode, NP, Reward, Note])
+        verbose_report("arrange: grid ~w, mode ~w, placed ~w, reward ~w~n",
+                       [GridLen, SizeMode, NP, Reward]),
+        cap_inert_warning(Numbered)
     ;   arrange_report_failure(Outcome, Words, GridLen),
         fail
     ).
@@ -301,9 +307,16 @@ arrange_best_effort_solve(Words, GridLen, SizeMode) :-
     (   arrange_best_effort(Words, GridLen, Numbered, Reward, NP, Dropped)
     ->  emit_arrange(Numbered, Words, GridLen, SizeMode),
         length(Dropped, ND),
-        format(user_error,
-               "arrange: grid ~w, mode ~w, placed ~w, dropped ~w ~w, reward ~w~n",
-               [GridLen, SizeMode, NP, ND, Dropped, Reward])
+        % a non-empty drop is a compromise: reported unconditionally (INV-3,
+        % AC-ARR-2); the all-placed summary is routine -> --verbose only
+        (   ND > 0
+        ->  format(user_error,
+                   "arrange: grid ~w, mode ~w, placed ~w, dropped ~w ~w, reward ~w~n",
+                   [GridLen, SizeMode, NP, ND, Dropped, Reward])
+        ;   verbose_report(
+                   "arrange: grid ~w, mode ~w, placed ~w, dropped ~w ~w, reward ~w~n",
+                   [GridLen, SizeMode, NP, ND, Dropped, Reward])
+        )
     ;   format(user_error, "arrange: nothing placeable on ~wx~w grid~n",
                [GridLen, GridLen]),
         fail
@@ -629,7 +642,7 @@ arrange_fragment_solve(Words, Frags, GridLen, strict, SizeMode) :-
     (   Outcome == placed
     ->  emit_arrange(Numbered, Words, GridLen, SizeMode),
         length(Numbered, NP),
-        format(user_error,
+        verbose_report(
                "arrange: fragment-seeded, grid ~w, mode ~w, placed ~w, reward ~w~n",
                [GridLen, SizeMode, NP, Reward])
     ;   arrange_fragment_report_failure(Outcome, Words, GridLen),
@@ -640,9 +653,15 @@ arrange_fragment_solve(Words, Frags, GridLen, best_effort, SizeMode) :-
     (   arrange_fragment_best_effort(Words, Frags, GridLen, Numbered, Reward, NP, Dropped)
     ->  emit_arrange(Numbered, Words, GridLen, SizeMode),
         length(Dropped, ND),
-        format(user_error,
-               "arrange: fragment-seeded, grid ~w, mode ~w, placed ~w, dropped ~w ~w, reward ~w~n",
-               [GridLen, SizeMode, NP, ND, Dropped, Reward])
+        % same contract as arrange_best_effort_solve: drops always, else --verbose
+        (   ND > 0
+        ->  format(user_error,
+                   "arrange: fragment-seeded, grid ~w, mode ~w, placed ~w, dropped ~w ~w, reward ~w~n",
+                   [GridLen, SizeMode, NP, ND, Dropped, Reward])
+        ;   verbose_report(
+                   "arrange: fragment-seeded, grid ~w, mode ~w, placed ~w, dropped ~w ~w, reward ~w~n",
+                   [GridLen, SizeMode, NP, ND, Dropped, Reward])
+        )
     ;   format(user_error,
                "arrange: nothing placeable around the fragment on ~wx~w grid~n",
                [GridLen, GridLen]),
@@ -814,12 +833,14 @@ arrange_candidates_solve(Words, GridLen, DropContract, SizeMode, K) :-
         Returned > 0
     ->  emit_candidates(Layouts, Words, GridLen, SizeMode),
         candidate_tau_pct(TauPct),
+        % fewer-than-K is a reportable compromise (AC-ARR-7): unconditional;
+        % the got-what-you-asked-for summary is routine -> --verbose only
         (   Returned < K
         ->  format(user_error,
                    "arrange: ~w candidate(s) requested, ~w returned (tau ~w%); \c
 fewer >=tau-distinct layouts exist~n",
                    [K, Returned, TauPct])
-        ;   format(user_error,
+        ;   verbose_report(
                    "arrange: ~w candidate(s) requested, ~w returned (tau ~w%)~n",
                    [K, Returned, TauPct])
         )

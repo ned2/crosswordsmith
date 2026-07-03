@@ -106,6 +106,7 @@ accept the `--flag=value` form):
 | `--candidates <K>` | emit up to `K` diverse layouts as a JSON array. Returns fewer than `K` (reported on stderr) when fewer ≥τ-distinct layouts exist. |
 | `--enumerate` | count every feasible full placement instead of emitting a layout. |
 | `--out <file>` | write output to `<file>` instead of stdout. |
+| `--verbose` | report the success summary (grid, placed, reward) on stderr; by default a clean success is silent there. Warnings (dropped words, cap inert, fewer-than-K candidates) and failures print regardless. |
 | `--help` / `-h` | print the arrange options. |
 
 `--strict` and `--best-effort` are mutually exclusive; `--enumerate` does not
@@ -194,6 +195,7 @@ with `lint`/`export`.
 | `--seeds <file>` | seed words to pin (a fragment, §6.6); filled around as hard pins. |
 | `--dict <file>` | word list, one per line (default: a small bundled sample; real fills: `--dict UKACD18`). |
 | `--out <file>` | write to `<file>` instead of stdout. |
+| `--verbose` | report the success summary (grid, filled slots) on stderr; a clean success is silent there by default. Failures print regardless. |
 
 Each white cell is a shared logical variable, so crossings are consistent by
 construction; the search is MRV backtracking (most-constrained slot first) over

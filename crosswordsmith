@@ -96,6 +96,8 @@ arrange_opts_spec(
        longflags([enumerate]),                    help('count every feasible full placement instead of emitting a layout')],
       [opt(check_target), type(integer), default(-1), meta('N'),
        longflags(['check-target']),               help('lower the per-word checking target to <= N (default ceil(L/2); the reachability escape hatch)')],
+      [opt(verbose),     type(boolean), default(false),
+       longflags([verbose]),                      help('report the success summary (grid, placed, reward) on stderr; warnings and failures print regardless')],
       [opt(input),       type(atom),    default(''), meta('FILE'),
        longflags([input]),                        help('REQUIRED: the word/clue set (.json or .pl)')],
       [opt(out),         type(atom),    default(''), meta('FILE'),
@@ -133,6 +135,8 @@ arrange_dispatch(Opts) :-
     memberchk(check_target(CT), Opts),
     validate_check_target(CT),
     set_check_target(CT),
+    memberchk(verbose(Verbose), Opts),
+    set_verbose(Verbose),
     load_clues(InputFile, Words),
     arrange_action(Enum, K, FragFile, Words, SizeOpt, Drop, Mode, OutFile).
 
@@ -321,6 +325,8 @@ fill_opts_spec(
        longflags([seeds]),                   help('seed words to pin (a fragment, §6.6)')],
       [opt(dict),  type(atom),    default(''), meta('FILE'),
        longflags([dict]),                    help('word list, one per line (default: a small bundled sample; real fills: --dict UKACD18)')],
+      [opt(verbose), type(boolean), default(false),
+       longflags([verbose]),                 help('report the success summary (grid, filled slots) on stderr; failures print regardless')],
       [opt(out),   type(atom),    default(''), meta('FILE'),
        longflags([out]),                     help('write output to FILE instead of stdout')]
     ]).
@@ -350,6 +356,8 @@ fill_dispatch(Opts, Positional) :-
     ( Grid \== '' -> true ; fill_err('requires --grid FILE (a stock-grid mask)') ),
     memberchk(seeds(Seeds0), Opts), ( Seeds0 == '' -> Seeds = none ; Seeds = Seeds0 ),
     memberchk(dict(Dict0), Opts),   ( Dict0 == ''  -> default_dict(Dict) ; Dict = Dict0 ),
+    memberchk(verbose(Verbose), Opts),
+    set_verbose(Verbose),
     memberchk(out(OutFile), Opts),
     with_output(OutFile, fill_solve(Grid, Seeds, Dict, fixed)).
 

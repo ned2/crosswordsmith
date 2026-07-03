@@ -95,6 +95,38 @@ check_exit "lint toc PASS/WARN -> zero" 0 \
 check_exit "arrange --no- flag rejected" 1 \
     ./crosswordsmith arrange --no-best-effort --size 17 --input fixtures/bundled_17_clues.pl
 
+# check_stderr <name> <grep-pattern> <want: present|absent> <command...>: run
+# the command (stdout discarded) and assert whether its stderr matches.
+check_stderr() {
+    local name="$1" pattern="$2" want="$3"; shift 3
+    local err; err="$("$@" 2>&1 >/dev/null)"
+    local matched=absent
+    if printf '%s' "$err" | grep -q "$pattern"; then matched=present; fi
+    if [ "$matched" = "$want" ]; then
+        echo "stderr ($name): OK ($pattern $want)"
+    else
+        echo "stderr ($name): FAILED (want $pattern $want, got: $err)"
+        status=1
+    fi
+}
+
+echo
+echo "=== stderr contract (design-spec §5.1: quiet success, --verbose summaries) ==="
+# Default: a clean success prints NO routine summary...
+check_stderr "arrange quiet by default" "placed" absent \
+    ./crosswordsmith arrange --size 17 --size-mode fixed --input fixtures/bundled_17_clues.pl
+# ...but the cap-inert degeneration warning is unconditional (§7.2, INV-3).
+check_stderr "cap-inert warning survives" "cap inert" present \
+    ./crosswordsmith arrange --size 17 --size-mode fixed --input fixtures/bundled_17_clues.pl
+# --verbose opts into the summary.
+check_stderr "arrange --verbose summary" "placed 6, reward 60" present \
+    ./crosswordsmith arrange --verbose --size 17 --size-mode fixed --input fixtures/bundled_17_clues.pl
+# fill: quiet by default, summary under --verbose.
+check_stderr "fill quiet by default" "filled" absent \
+    ./crosswordsmith fill --grid fixtures/fill_grid_3.json --dict fixtures/wordlist_sample.txt
+check_stderr "fill --verbose summary" "filled" present \
+    ./crosswordsmith fill --verbose --grid fixtures/fill_grid_3.json --dict fixtures/wordlist_sample.txt
+
 echo
 if [ "$status" -eq 0 ]; then
     echo "ALL TESTS PASSED"

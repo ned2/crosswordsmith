@@ -118,10 +118,10 @@ Every capability is a **verb**. A bare invocation prints usage and exits non-zer
 ```
 crosswordsmith arrange [--strict | --best-effort] [--size N] [--size-mode fixed|max]
                        [--fragment grid.json] [--candidates N] [--enumerate]
-                       [--check-target N] --input words.json [--out file.json]
+                       [--check-target N] [--verbose] --input words.json [--out file.json]
 crosswordsmith lint    --profile <name> [--allow-asymmetry] layout.json     # Flavour B
 crosswordsmith export  --to ipuz|exolve  layout.json [--out file]           # Flavour B / shared
-crosswordsmith fill    --grid template.json --seeds seeds.json              # Flavour B (DEFERRED)
+crosswordsmith fill    --grid template.json --seeds seeds.json [--verbose]  # Flavour B (DEFERRED)
 crosswordsmith                                                              # → usage, exit ≠ 0
 ```
 
@@ -130,6 +130,13 @@ crosswordsmith                                                              # �
 - `--out <file>` writes to a file instead of stdout; composes with any verb. Absent ⇒ stdout.
 - `--flag=value` and `--flag value` are both accepted.
 - Unknown flags/verbs are an error with a usage hint, not silently ignored.
+- **Quiet on clean success; `--verbose` opts into summaries.** A successful run
+  writes nothing to stderr by default; `--verbose` (on `arrange`/`fill`) turns
+  on the routine success summary (grid, placed, reward / filled slots) so the
+  engine composes silently in pipes. This gates *summaries only*: compromises
+  and warnings — dropped words (AC-ARR-2), fewer-than-K candidates (AC-ARR-7),
+  cap-inert degeneration (§7.2) — and every failure report remain
+  **unconditional** per INV-3. Stdout data is identical either way.
 
 ### 5.2 Exit codes (LOCKED)
 | Code | Meaning |
@@ -228,7 +235,7 @@ A single verb that unifies the old `pack`/`solve` engines into one **determinist
 - `target(w) = ceil(L/2)` by default (reuses `word_meets_half/2`).
 - Default integer weights `WCap:WTail = 5:1` ⇒ `ε = 0.2`. The **cap creates balance** (stops rewarding already-checked words, redirecting effort to laggards, anti-stub in a length-aware way); the **tail keeps an interlock gradient above the cap** and breaks ties toward crossier layouts.
 - Integer arithmetic for deterministic tiebreaks (mirrors `placement_key`'s idiom).
-- **Reachability caveat (load-bearing — empirically confirmed).** The cap only balances when `target` is attainable at the densities Flavour A actually produces. Probes confirm this bites on realistic inputs: toc_demo reaches `ceil(L/2)` on only **1/16** words (and `--min-half` makes it infeasible outright), while the dense quality_22 mesh reaches it on **19/22** — so the cap is *inert on sparse link-sets, active on dense meshes*. Where it is inert, the objective **silently degenerates to plain total-crossings**. ⇒ `--check-target` MUST be a **real tunable**, and `target` and `ε` MUST be **calibrated against the fixtures *before weights are locked*** (calibration fixtures: toc_demo = sparse/inert, quality_22 = dense/active), lowering `target` below `ceil(L/2)` where half is unreachable, and **reporting when the objective has degenerated**. This is a calibration/tunability obligation, not a change to the objective *form*. *(Implemented as `--check-target N` (§5): it lowers the per-word target to `min(ceil(L/2), N)` — N only ever lowers, never raises — and strict mode reports "cap inert" on stderr when no placed word reaches its target, i.e. the objective has degenerated to total-crossings.)*
+- **Reachability caveat (load-bearing — empirically confirmed).** The cap only balances when `target` is attainable at the densities Flavour A actually produces. Probes confirm this bites on realistic inputs: toc_demo reaches `ceil(L/2)` on only **1/16** words (and `--min-half` makes it infeasible outright), while the dense quality_22 mesh reaches it on **19/22** — so the cap is *inert on sparse link-sets, active on dense meshes*. Where it is inert, the objective **silently degenerates to plain total-crossings**. ⇒ `--check-target` MUST be a **real tunable**, and `target` and `ε` MUST be **calibrated against the fixtures *before weights are locked*** (calibration fixtures: toc_demo = sparse/inert, quality_22 = dense/active), lowering `target` below `ceil(L/2)` where half is unreachable, and **reporting when the objective has degenerated**. This is a calibration/tunability obligation, not a change to the objective *form*. *(Implemented as `--check-target N` (§5): it lowers the per-word target to `min(ceil(L/2), N)` — N only ever lowers, never raises — and strict mode reports "cap inert" on stderr when no placed word reaches its target, i.e. the objective has degenerated to total-crossings — unconditionally: it is a §5.1 warning, not part of the `--verbose` summary.)*
 - **`maximin`/leximin are NOT the search driver** (non-decomposable, useless early bound, defeats pruning). Reserve them only as a tiebreak among final top candidates, or as an optional hard per-word floor (a cheap forward-checkable *constraint*, not the objective).
 
 ### 7.3 Engine properties

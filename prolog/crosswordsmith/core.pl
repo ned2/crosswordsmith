@@ -18,6 +18,8 @@
             with_output/2,
             load_clues/2,
             emit_json/3,
+            set_verbose/1,
+            verbose_report/2,
             % clue numbering + layout build
             assign_clue_numbers/2,
             build_grid_rows/3,
@@ -110,6 +112,20 @@ with_output('', Goal) :-
 with_output(File, Goal) :-
     with_output_to(string(Text), Goal),
     setup_call_cleanup(open(File, write, S), write(S, Text), close(S)).
+
+% Success-summary verbosity (design-spec §5.1). Routine success summaries
+% ("arrange: grid ..., reward ...", "fill: ... filled N slots") print on
+% stderr only under --verbose; verbose_report/2 is their one gate. Warnings
+% and compromises (dropped words, fewer-than-K candidates, cap-inert
+% degeneration) and all failure reports stay unconditional per INV-3 - they
+% must NOT go through verbose_report.
+:- dynamic verbose_mode/0.
+
+set_verbose(true)  :- ( verbose_mode -> true ; assertz(verbose_mode) ).
+set_verbose(false) :- retractall(verbose_mode).
+
+verbose_report(Fmt, Args) :-
+    ( verbose_mode -> format(user_error, Fmt, Args) ; true ).
 
 
 % Clue input loading

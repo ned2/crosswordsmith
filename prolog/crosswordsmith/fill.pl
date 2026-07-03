@@ -39,7 +39,8 @@
 :- use_module(crosswordsmith(arrange), [load_fragment/3, emit_arrange/4]).
 
 % Numbering + the canonical JSON emit for the filled layout.
-:- use_module(crosswordsmith(core), [assign_clue_numbers/2, emit_json/3]).
+:- use_module(crosswordsmith(core),
+              [assign_clue_numbers/2, emit_json/3, verbose_report/2]).
 
 fill_budget(800_000_000).   % inference budget (determinism via INV-2, bounded)
 
@@ -267,7 +268,7 @@ fill_solve(GridFile, SeedFileOrNone, DictFile, SizeMode) :-
     (   Outcome == filled
     ->  emit_fill(Numbered, InputWords, Size, SizeMode),
         length(Numbered, NS),
-        format(user_error, "fill: grid ~wx~w, filled ~w slots~n", [Size, Size, NS])
+        verbose_report("fill: grid ~wx~w, filled ~w slots~n", [Size, Size, NS])
     ;   fill_report_failure(Outcome, SearchSlots, DictByLen, Index, Size),
         fail
     ).
