@@ -2,7 +2,7 @@
 
 SHELL := /bin/bash
 
-.PHONY: test unit golden update-golden fuzz bench bench-check bench-matrix
+.PHONY: test unit golden update-golden fuzz bench bench-check bench-record bench-log bench-history bench-matrix
 
 BENCH_FORMAT ?= text
 BENCH_ARGS ?=
@@ -73,14 +73,41 @@ update-golden:
 bench:
 	swipl -q benchmarks/run_arrange.pl -- --format $(BENCH_FORMAT) $(BENCH_ARGS)
 
-# Regression gate: run the core product bench and diff it against the committed
-# benchmarks/baseline.json. The gated metric is search inferences on the warm
-# core cells (deterministic, machine-independent); wall/rss are reported but never
-# gated. Exits nonzero on a real search regression. NOT on the `make test` path -
-# benchmarks are off the test path today; run this on demand or before a release.
+# Performance ratchet: run the 15x15 ladder and diff each rung's search-inference
+# count against benchmarks/baseline.json. A DROP is a win; a RISE past the
+# baseline's tolerance is a regression (nonzero exit). Deterministic + machine-
+# independent, so it hill-climbs the arrange algorithm (a -X% here predicts ~X%
+# under WASM). wall/rss are reported but never gated. Core rungs only by default;
+# add the hard tail with BENCH_ARGS=--heavy. NOT on the `make test` path.
 #   make bench-check
+#   make bench-check BENCH_ARGS=--heavy
 bench-check:
-	swipl -q benchmarks/check_baseline.pl
+	swipl -q benchmarks/check_baseline.pl $(BENCH_ARGS)
+
+# Ratchet the baseline DOWN to the currently-measured numbers - run this to accept
+# an improvement (or after an intentional algorithm change) and review the diff.
+# Also appends the run to benchmarks/history.jsonl (the over-time ledger). Add
+# BENCH_ARGS=--heavy to also re-record the heavy tail rungs.
+#   make bench-record
+#   make bench-record BENCH_ARGS=--heavy
+bench-record:
+	swipl -q benchmarks/check_baseline.pl --record $(BENCH_ARGS)
+
+# Append the current measurement to benchmarks/history.jsonl WITHOUT moving the
+# baseline - use it to log a data point (e.g. a mid-experiment reading, or the same
+# commit on another host) while leaving the ratchet reference untouched. Stamps the
+# git commit + timestamp so rungs stay comparable over time.
+#   make bench-log
+#   make bench-log BENCH_ARGS=--heavy
+bench-log:
+	swipl -q benchmarks/check_baseline.pl --log $(BENCH_ARGS)
+
+# Render the recorded history (benchmarks/history.jsonl) as a per-rung trend:
+# latest search_inf, the last step's delta, and the cumulative delta since the first
+# entry. Reads the ledger only - runs no benchmark.
+#   make bench-history
+bench-history:
+	swipl -q benchmarks/check_baseline.pl --history
 
 # Strategy x fixture comparison matrix (CSV on stdout). Each fixture runs on
 # its manifest grid (benchmarks/fixtures.pl). Optionally restrict strategies:

@@ -312,6 +312,29 @@ neither `fixtures.pl` nor product workloads.)
   tolerances (inferences: tight; wall/rss: loose, same-machine). Not before we
   know what's stable.
 
+**Phase 4 — as built (2026-07): hill-climbing ratchet + cost ladder + history.**
+The exact regression *gate* became a *hill-climbing instrument* (the goal shifted
+to tracking arrange perf toward a WASM runtime, where the inference count is the
+portable signal — identical native vs WASM, only wall-per-inference changes).
+- **Workloads → a cost ladder** (`benchmarks/workloads.pl`): planted-witness mesh
+  fixtures (`gen_mesh_fixture.py`) whose warm search cost climbs ~0.1M→182M across
+  three grid sizes — 9×9, 15×15 (deep density ladder), 21×21 — since size changes
+  branching geometry / 4-corner start / N² memory, so a win at one size can regress
+  at another. Difficulty is driven by word density + small alphabet K, NOT size.
+  Each size has a difficulty *cliff* (fast-resolve or thrash); each "hard" rung is
+  the densest that still completes deterministically. `Budget` raised to 2e9 so hard
+  rungs run to true completion (a ratchetable count) instead of saturating.
+- **`baseline.json` is now a ratchet** (`mode:"ratchet"`, `metric:"search_inf"`,
+  `regression_tolerance_pct`): a DROP is a win (`make bench-record` to accept), a
+  RISE past tolerance fails; SWI-version mismatch downgrades a regression to WARN.
+  `core` rungs run by default; `--heavy` adds the hard tail. `check_baseline.pl`
+  hosts check / `--record` / `--log` / `--history`.
+- **`benchmarks/history.jsonl`** — append-only, git-tracked ledger (one JSON line
+  per run, stamped with git commit + timestamp). The baseline is a *moving*
+  reference so it can't show a trajectory; the ledger keeps per-rung `search_inf`
+  comparable over time. `make bench-record`/`bench-log` append; `make bench-history`
+  renders the per-rung trend (latest, step Δ, cumulative Δ).
+
 ## 10. Makefile / invocation (post-rework)
 
 ```make

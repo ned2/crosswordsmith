@@ -2,37 +2,72 @@
   "tool": "crosswordsmith-arrange-bench",
   "host": "lana x86_64",
   "swi_prolog": "10.1.10",
-  "gate_metric": "search_inf",
-  "generated_note": "search_inf is the gated metric: warm (warmup>=1) core-tier arrange search inferences, deterministic and machine-independent, so any change is a real search regression (or an intended algorithm change that needs this file regenerated). wall/rss are host-specific and INFORMATIONAL ONLY - never gated. Regenerate: swipl -q benchmarks/run_arrange.pl -- --format json, then transcribe search_inf_med (and cmd_wall_med_ms / cmd_rss_med_kib for reference) per core workload. Only the SWI-Prolog version pinned above produces these exact inference counts.",
+  "mode": "ratchet",
+  "metric": "search_inf",
+  "regression_tolerance_pct": 0.5,
+  "generated_note": "search_inf is the tracked metric: warm arrange search inferences over the 9x9/15x15/21x21 cost ladder (benchmarks/workloads.pl). Deterministic and machine-independent (same count native or under WASM), so it hill-climbs performance across grid sizes: a drop is a real win, a rise past regression_tolerance_pct is a regression. `make bench-check` reports the per-rung delta and fails only on a regression; `make bench-record` ratchets these down after you accept a win. Add BENCH_ARGS=--heavy to include the hard tail rungs. wall/rss are host-specific and informational only. Only the pinned SWI-Prolog version reproduces these exact counts. Regenerate: make bench-record BENCH_ARGS=--heavy.",
   "workloads": {
-    "bundled_17_clues.pl": {
-      "size": 17,
-      "warmup": 3,
-      "iterations": 20,
-      "gate": "exact",
-      "search_inf": 673334,
-      "cmd_wall_med_ms": 90.0,
-      "cmd_rss_med_kib": 11700,
+    "ladder_09x09_08w.pl": {
+      "grid": 9, "words": 8, "tier": "core",
+      "warmup": 3, "iterations": 20, "budget": 2000000000,
+      "search_inf": 98058,
+      "cmd_wall_med_ms": 140.0, "cmd_rss_med_kib": 11350,
       "info_only": ["cmd_wall_med_ms", "cmd_rss_med_kib"]
     },
-    "benchmark_08_words.pl": {
-      "size": 13,
-      "warmup": 2,
-      "iterations": 8,
-      "gate": "exact",
-      "search_inf": 7827864,
-      "cmd_wall_med_ms": 460.0,
-      "cmd_rss_med_kib": 11660,
+    "ladder_09x09_16w.pl": {
+      "grid": 9, "words": 16, "tier": "heavy",
+      "warmup": 2, "iterations": 3, "budget": 2000000000,
+      "search_inf": 3059551,
+      "cmd_wall_med_ms": 230.0, "cmd_rss_med_kib": 11580,
       "info_only": ["cmd_wall_med_ms", "cmd_rss_med_kib"]
     },
-    "benchmark_70_mesh_words.pl": {
-      "size": 21,
-      "warmup": 1,
-      "iterations": 3,
-      "gate": "exact",
-      "search_inf": 19753766,
-      "cmd_wall_med_ms": 1040.0,
-      "cmd_rss_med_kib": 13740,
+    "ladder_15x15_12w.pl": {
+      "grid": 15, "words": 12, "tier": "core",
+      "warmup": 3, "iterations": 20, "budget": 2000000000,
+      "search_inf": 448384,
+      "cmd_wall_med_ms": 170.0, "cmd_rss_med_kib": 11624,
+      "info_only": ["cmd_wall_med_ms", "cmd_rss_med_kib"]
+    },
+    "ladder_15x15_28w.pl": {
+      "grid": 15, "words": 28, "tier": "core",
+      "warmup": 3, "iterations": 15, "budget": 2000000000,
+      "search_inf": 1655215,
+      "cmd_wall_med_ms": 160.0, "cmd_rss_med_kib": 12048,
+      "info_only": ["cmd_wall_med_ms", "cmd_rss_med_kib"]
+    },
+    "ladder_15x15_32w.pl": {
+      "grid": 15, "words": 32, "tier": "core",
+      "warmup": 3, "iterations": 10, "budget": 2000000000,
+      "search_inf": 4804420,
+      "cmd_wall_med_ms": 330.0, "cmd_rss_med_kib": 12102,
+      "info_only": ["cmd_wall_med_ms", "cmd_rss_med_kib"]
+    },
+    "ladder_15x15_34w.pl": {
+      "grid": 15, "words": 34, "tier": "heavy",
+      "warmup": 0, "iterations": 1, "budget": 2000000000,
+      "search_inf": 68508076,
+      "cmd_wall_med_ms": 3580.0, "cmd_rss_med_kib": 12148,
+      "info_only": ["cmd_wall_med_ms", "cmd_rss_med_kib"]
+    },
+    "ladder_15x15_36w.pl": {
+      "grid": 15, "words": 36, "tier": "heavy",
+      "warmup": 0, "iterations": 1, "budget": 2000000000,
+      "search_inf": 182552102,
+      "cmd_wall_med_ms": 9470.0, "cmd_rss_med_kib": 11972,
+      "info_only": ["cmd_wall_med_ms", "cmd_rss_med_kib"]
+    },
+    "ladder_21x21_25w.pl": {
+      "grid": 21, "words": 25, "tier": "core",
+      "warmup": 3, "iterations": 20, "budget": 2000000000,
+      "search_inf": 1264379,
+      "cmd_wall_med_ms": 130.0, "cmd_rss_med_kib": 12012,
+      "info_only": ["cmd_wall_med_ms", "cmd_rss_med_kib"]
+    },
+    "ladder_21x21_80w.pl": {
+      "grid": 21, "words": 80, "tier": "heavy",
+      "warmup": 1, "iterations": 2, "budget": 2000000000,
+      "search_inf": 27815454,
+      "cmd_wall_med_ms": 1485.0, "cmd_rss_med_kib": 14242,
       "info_only": ["cmd_wall_med_ms", "cmd_rss_med_kib"]
     }
   }

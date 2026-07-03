@@ -17,7 +17,7 @@
 :- module(bench_subjects,
           [ size_flag/4,
             arrange_command_sampler/6,
-            arrange_search_sampler/4 ]).
+            arrange_search_sampler/5 ]).
 
 :- use_module(library(lists)).
 
@@ -42,13 +42,19 @@ expected_exit(infeasible, 1) :- !.
 expected_exit(Expected, Got) :-
     throw(error(bench_command_exit(expected(Expected), exit(Got)), _)).
 
-% SEARCH layer sampler. arrange_best_layout/5 is single-valued and always
-% succeeds with an Outcome (placed | not_proven | infeasible); we assert it
-% matches Expected per iteration (plan m2) then DROP it - the sample carries only
-% the numeric wall/cpu/inferences that measure/3 summarizes.
-arrange_search_sampler(Words, GridLen, Expected, Sample) :-
+% SEARCH layer sampler. Uses the budget-EXPLICIT arrange_best_layout/6 (arrange.pl)
+% so the bench can raise the inference budget above the shipped 500M default: a
+% pathological workload that would otherwise SATURATE the budget (its count pinned
+% to the budget constant, useless as a hill-climbing signal) instead runs to true
+% completion, yielding a deterministic count that reflects the search's real cost.
+% Any Budget >= a completing fixture's true cost gives the SAME count, so this does
+% not perturb the fast workloads. arrange_best_layout/6 is single-valued and always
+% succeeds with an Outcome (placed | not_proven | infeasible); we assert it matches
+% Expected per iteration (plan m2) then DROP it - the sample carries only the
+% numeric wall/cpu/inferences that measure/3 summarizes.
+arrange_search_sampler(Words, GridLen, Budget, Expected, Sample) :-
     bench_core:inproc_sampler(
-        crosswordsmith_arrange:arrange_best_layout(Words, GridLen, _, _, Outcome),
+        crosswordsmith_arrange:arrange_best_layout(Words, GridLen, Budget, _, _, Outcome),
         Sample),
     ( outcome_ok(Expected, Outcome) -> true
     ; throw(error(bench_search_outcome(expected(Expected), got(Outcome)), _)) ).

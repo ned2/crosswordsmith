@@ -53,11 +53,11 @@ main :-
     memberchk(iterations(ItOv), Opts),
     memberchk(warmup(WuOv), Opts),
     findall(Row,
-            ( arrange_workload(F, Size, Mode, It0, Wu0, Exp, Tier),
+            ( arrange_workload(F, Size, Mode, It0, Wu0, Exp, Tier, Budget),
               workload_selected(Filter, Heavy, F, Tier),
               apply_override(ItOv, It0, It),
               apply_override(WuOv, Wu0, Wu),
-              run_workload(F, Size, Mode, It, Wu, Exp, Row) ),
+              run_workload(F, Size, Mode, It, Wu, Exp, Budget, Row) ),
             Rows),
     emit(Fmt, Rows).
 
@@ -94,14 +94,14 @@ apply_override(-1, Default, Default) :- !.
 apply_override(Override, _, Override).
 
 % --- one workload: measure both layers, derive the breakdown -----------------
-run_workload(Fixture, Size, Mode, Iters, Warmup, Expected, Row) :-
+run_workload(Fixture, Size, Mode, Iters, Warmup, Expected, Budget, Row) :-
     repo_file(Fixture, File),
     read_clues(File, Words),
     file_base_name(Fixture, Name),
     crosswordsmith_exe(Exe),
     Opts = _{warmup: Warmup, iterations: Iters},
     measure(arrange_command_sampler(Exe, File, Size, Mode, Expected), Opts, Cmd),
-    measure(arrange_search_sampler(Words, Size, Expected),            Opts, Search),
+    measure(arrange_search_sampler(Words, Size, Budget, Expected),    Opts, Search),
     CmdWallMinMs    is Cmd.stats.wall.min      * 1000.0,
     CmdWallMedMs    is Cmd.stats.wall.median   * 1000.0,
     CmdRssMedKiB    is round(Cmd.stats.rss.median),
