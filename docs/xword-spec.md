@@ -1,6 +1,6 @@
 # Spec: `xword` — a terminal viewer & format multitool for crossword layouts
 
-Status: **building** — Phases 0–2 done, see [`xword-status.md`](xword-status.md).
+Status: **building** — Phases 0–3 done, see [`xword-status.md`](xword-status.md).
 This file is the single source of truth; it absorbed the original standalone
 decision record (2026-07-03).
 
@@ -258,10 +258,15 @@ Common CLI conventions (§8) apply to all three.
     xword render --to png  layout.json --out puzzle.png     # needs xword[raster]
 
 - `--to svg|html|png|pdf` **required**. `--blank` applies here too (D3).
-- **SVG** = self-contained master: grid + clue lists, deterministic element ids.
-- **HTML** = semantic page: grid as inline SVG + clue lists as HTML, styleable.
-- **PNG/PDF** = rasterised/converted *from the SVG* (`xword[raster]` extra); no
-  second layout path.
+- **SVG** = self-contained master: title + grid + two-column clue lists,
+  deterministic element ids (`cell-r{r}-c{c}`, `word-{n}-{dir}`); glyphs are
+  `<text>` (Q3 resolved — cairosvg embeds outlines in the PDF regardless).
+- **HTML** = semantic page: grid as inline SVG + clue lists as HTML (`<ol>` with
+  per-clue `value`/id), styled by **one built-in inline `<style>`** — the page
+  is self-contained and deterministic (Q2 resolved); a `--css` hook is deferred.
+- **PNG/PDF** = rasterised/converted *from the SVG* (`xword[raster]` extra,
+  `cairosvg`); no second layout path. Tested by dimensions/magic, not
+  byte-golden (host-font `<text>`, §11).
 - **Binary-to-TTY guard**: `png`/`pdf` refuse to write to a terminal — require
   `--out` or a redirect.
 
@@ -459,11 +464,15 @@ is the plan; the tracker says where we are.
   S2** (see §6.1): 3w×1h cell interior, single-line box borders (pitch 4×2 ⇒
   square), `█` blocks, superscript inline corner numbers, `bold cyan`/default/
   `grey42` colour scheme gated on TTY-and-not-`NO_COLOR`.
-- **HTML styling surface** — a single built-in stylesheet vs a `--css` hook.
-- **SVG glyphs for the raster/PDF path** (S6) — keep grid/clue text as `<text>`
-  (accessible HTML, but host-font-dependent raster) vs convert to `<path>`
-  (font-independent, fully deterministic bytes, guaranteed glyph fidelity in the
-  PDF). A Phase-3 sub-decision, not a Phase-0 gate.
+- ~~**HTML styling surface** — a single built-in stylesheet vs a `--css`
+  hook~~ — **resolved (Phase 3)**: one built-in inline `<style>`, so the HTML
+  page is self-contained and deterministic (D6). A `--css` hook stays a cheap
+  future add, not v1.
+- ~~**SVG glyphs for the raster/PDF path** (S6) — `<text>` vs `<path>`~~ —
+  **resolved (Phase 3)**: `<text>`. cairosvg already embeds glyph outlines into
+  the PDF (S6), so the PDF is print-quality regardless; `<path>` glyphs (and the
+  cross-machine raster byte-goldens they would enable) stay deferred (§11). The
+  raster path is therefore tested by dimensions/magic, not byte-identity.
 - **Rectangular native** — confirmed hard-error (structural, D7); a
   square-padding/uplift option is the deferred best-effort path, not v1.
 - **Engine byte-parity** — reachable once we decide whether `xword` should

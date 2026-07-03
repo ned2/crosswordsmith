@@ -89,11 +89,36 @@ on stderr (`-q` silences, stdout untouched); structural engine cross-check.
 
 ---
 
+## Phase 3 — `render` (spec §13) — **done (2026-07-03)**
+
+**Deliverable:** `xword render --to svg|html|png|pdf` over the shared `BoardGeom`
+(spec §5.2) — an **SVG** master (title + grid + two-column clue lists), a
+semantic **HTML** page (inline SVG grid + HTML clue lists, one built-in
+stylesheet), and **PNG/PDF** rasterised *from that SVG* behind the
+`xword[raster]` extra (`cairosvg`, S6). Deterministic (D6): coordinate-derived
+ids, no uuid/timestamps. Binary-to-TTY guard on png/pdf.
+
+| # | Component | Spec | Status | Verified by |
+|---|---|---|---|---|
+| 1 | **`render` verb wiring** — `--to svg\|html\|png\|pdf` required, `--from` optional (detect), `--blank`, stdin/stdout + `--out` on success; text vs binary write | §6.3, §8 | done | `tests/test_cli.py` (svg/html→stdout, `--out` on success, png `--out` binary) |
+| 2 | **SVG renderer** — `master_svg` (standalone: title + grid + clue lists) + `grid_svg` (grid-only, embedded by HTML); `<text>` glyphs (Q3); circle/bar/rebus; coord-derived ids | §5.2, §6.3, D6 | done | `tests/test_render.py` goldens (`render_bundled_17_{solved,blank}.svg`) + id / decoration / determinism units |
+| 3 | **HTML renderer** — self-contained page: one built-in inline `<style>` (Q2), inline `grid_svg`, semantic `<ol>` clue lists with per-clue `value` + `word-{n}-{dir}` id | §6.3, §14 Q2 | done | `tests/test_render.py` goldens (`render_bundled_17_{solved,blank}.html`) |
+| 4 | **Raster backend** — `to_png`/`to_pdf` convert the master SVG via **lazy** cairosvg; the two failure modes reported distinctly (extra missing vs system cairo missing) | §6.3, §8, §12 | done | `tests/test_render.py` (PNG magic + IHDR width; PDF magic; monkeypatched `ImportError`/`OSError`) |
+| 5 | **Binary-to-TTY guard** — png/pdf refuse a terminal stdout (checked *before* any raster work); require `--out`/redirect | §6.3 | done | `tests/test_cli.py::test_render_png_refuses_terminal` (real pty) |
+| 6 | **Determinism (D6)** — coord-derived ids (`cell-r{r}-c{c}`, `word-{n}-{dir}`), no uuid/datetime; SVG/HTML byte-golden; raster dims/magic only (host-font `<text>`, §11) | D6, §11 | done | `tests/test_render.py` (goldens + the `uuid`/`urn:`/year lint, modulo the fixed SVG namespace URI) |
+
+Geometry stayed the shared superset (§5.2): `GeomCell` gained `bar_right`/
+`bar_below` (populated from `Cell`) so the SVG master draws bars — the terminal
+renderer ignores them, unchanged. cairosvg 2.9.0 + system `libcairo.so.2` were
+present, so the full PNG/PDF path is exercised (raster tests `importorskip`
+cairosvg, so the base suite still runs without the extra).
+
+---
+
 ## Later phases (spec §13) — deferred
 
 | Phase | Deliverable | Status |
 |---|---|---|
-| 3 | `render` to SVG + HTML; PNG/PDF behind `xword[raster]` (`cairosvg`, S6) | deferred |
 | 4 | Interactive **Textual** renderer over the same `Board` (S2 confirmed the seam) | deferred |
 | later | Best-effort **structural** conversion (crop/flatten + warnings) and/or native-model uplift; restores engine byte-parity | deferred |
 
@@ -104,8 +129,8 @@ on stderr (`-q` silences, stdout untouched); structural engine cross-check.
 | # | Question | Status |
 |---|---|---|
 | Q1 | Colour scheme & cell geometry for the terminal grid | **resolved by S2** (§6.1) |
-| Q2 | HTML styling surface — built-in stylesheet vs `--css` hook | open (Phase 3) |
-| Q3 | SVG glyphs for raster/PDF: `<text>` vs `<path>` | open (Phase 3 sub-decision, S6) |
+| Q2 | HTML styling surface — built-in stylesheet vs `--css` hook | **resolved (Phase 3)**: one built-in inline `<style>` (self-contained + deterministic, D6); a `--css` hook stays a cheap future add |
+| Q3 | SVG glyphs for raster/PDF: `<text>` vs `<path>` | **resolved (Phase 3)**: `<text>` — cairosvg embeds glyph outlines in the PDF regardless (S6); `<path>` / cross-machine raster byte-goldens stay deferred (§11/§14) |
 | Q4 | Rectangular native — confirmed hard-error; square-padding uplift is deferred best-effort | resolved (hard-error); uplift deferred |
 | Q5 | Engine byte-parity — whether `xword` matches the engine's *invented* default title (ipuz `"Untitled"` + `exolve-title: Untitled`) | open (currently: no, invent nothing) |
 | Q6 | Textual scope (candidate cycling, `--watch`, clue panes) | open (Phase 4 design) |
@@ -125,9 +150,16 @@ on stderr (`-q` silences, stdout untouched); structural engine cross-check.
   with the D7 policy; 83 tests green. Two flagged judgment calls resolved and
   spec'd (§6.2): native→native **preserves** `diagnostics` (payload-lossless
   identity), and no `exolve-id` is emitted (Exolve auto-derives one from a
-  grid/clue signature, so nothing downstream requires it). `render` remains a
-  stub that exits 1 with a "not implemented (Phase 3)" error.
-- **Phase 3 (`render`) is next**; Phases 3–4 + later: deferred, not yet started.
-- **Nothing in progress; nothing blocked.** Q1 (grid geometry) is the only §14
-  open question resolved so far; the rest gate Phases 3–4 (Q5's title question
-  now only gates engine byte-parity — the structural cross-check is in).
+  grid/clue signature, so nothing downstream requires it).
+- **Phase 3 (`render`): done (2026-07-03)** — `render --to svg|html|png|pdf`
+  over the shared `BoardGeom`; **101 tests green** (base suite `importorskip`s
+  cairosvg so it runs without the extra; the full raster path was exercised
+  here). SVG/HTML are deterministic byte-goldens; PNG/PDF are tested by
+  dims/magic (host-font `<text>`, §11). The two Phase-3 open questions are
+  resolved and spec'd: **Q2** → one built-in inline stylesheet (self-contained,
+  D6); **Q3** → `<text>` glyphs (cairosvg embeds outlines in the PDF anyway).
+- **Phase 4 (Textual TUI) is next**; Phase 4 + later: deferred, not yet started.
+- **Nothing in progress; nothing blocked.** §14 open questions resolved so far:
+  Q1 (grid geometry), Q2 (HTML styling), Q3 (SVG glyphs). The rest gate Phase 4
+  / later (Q5's title question now only gates engine byte-parity — the
+  structural cross-check is in).

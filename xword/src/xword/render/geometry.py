@@ -18,6 +18,8 @@ class GeomCell:
     letter: str | None = None
     number: int | None = None
     circle: bool = False
+    bar_right: bool = False  # thick edge on the cell's right (Exolve `|`, ipuz barred)
+    bar_below: bool = False  # thick edge on the cell's bottom (Exolve `_`)
 
 
 @dataclass
@@ -47,6 +49,8 @@ def board_geometry(board: Board, *, blank: bool = False) -> BoardGeom:
                 letter=None if blank else cell.letter,
                 number=cell.number,
                 circle=cell.circle,
+                bar_right=cell.bar_right,
+                bar_below=cell.bar_below,
             )
             for cell in row
         ]

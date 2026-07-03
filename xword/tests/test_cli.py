@@ -5,6 +5,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 FIXTURES = Path(__file__).parent / "fixtures"
 GOLDEN = Path(__file__).parent / "golden"
 NATIVE = FIXTURES / "bundled_17.native.json"
@@ -101,8 +103,51 @@ def test_per_verb_help():
     assert "--blank" in result.stdout
 
 
-def test_render_stub_exits_nonzero():
+def test_render_svg_to_stdout():
     result = run("render", "--to", "svg", str(NATIVE))
-    assert result.returncode == 1
+    assert result.returncode == 0
+    assert result.stdout.startswith("<svg")
+    assert result.stderr == ""
+
+
+def test_render_out_written_on_success(tmp_path):
+    out = tmp_path / "puzzle.svg"
+    result = run("render", "--to", "svg", str(NATIVE), "--out", str(out))
+    assert result.returncode == 0
     assert result.stdout == ""
-    assert "not implemented" in result.stderr
+    assert out.read_text() == (GOLDEN / "render_bundled_17_solved.svg").read_text()
+
+
+def test_render_html_to_stdout():
+    result = run("render", "--to", "html", str(NATIVE))
+    assert result.returncode == 0
+    assert result.stdout.startswith("<!doctype html>")
+
+
+def test_render_png_refuses_terminal():
+    # png/pdf must not spew bytes at a real terminal (§6.3); the guard fires
+    # before any raster work, so this holds even without the [raster] extra.
+    import os
+    import pty
+
+    master, slave = pty.openpty()
+    proc = subprocess.run(
+        [sys.executable, "-m", "xword.cli", "render", "--to", "png", str(NATIVE)],
+        stdin=subprocess.DEVNULL,
+        stdout=slave,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    os.close(slave)
+    os.close(master)
+    assert proc.returncode == 1
+    assert "terminal" in proc.stderr.lower()
+
+
+def test_render_png_out_writes_binary(tmp_path):
+    pytest.importorskip("cairosvg")
+    out = tmp_path / "puzzle.png"
+    result = run("render", "--to", "png", str(NATIVE), "--out", str(out))
+    assert result.returncode == 0
+    assert result.stdout == ""
+    assert out.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"

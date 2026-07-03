@@ -20,7 +20,10 @@ from rich.console import Console
 from . import XwordError, __version__
 from .convert import convert_text
 from .formats import parse_board
+from .render import raster
 from .render.geometry import board_geometry
+from .render.html import html_document
+from .render.svg import master_svg
 from .render.terminal import print_view
 from .util import capture_console, make_view_console
 
@@ -59,6 +62,14 @@ def _read_input(file: Optional[Path]) -> str:
     if sys.stdin.isatty():
         raise XwordError("no input: pass a FILE argument or pipe a layout to stdin")
     return sys.stdin.read()
+
+
+def _write_text(text: str, out: Optional[Path]) -> None:
+    """Write a text artefact to --out (built fully first, so only on success) or stdout."""
+    if out is not None:
+        out.write_text(text, encoding="utf-8")
+    else:
+        sys.stdout.write(text)
 
 
 @app.command
@@ -125,6 +136,9 @@ def render(
     ] = None,
     *,
     to: Annotated[RenderFormat, Parameter(name="--to", help="Target format (required).")],
+    from_: Annotated[
+        Optional[DataFormat], Parameter(help="Input format; overrides detection.")
+    ] = None,
     blank: Annotated[
         bool, Parameter(help="Render the empty reader's view (numbers, no letters).")
     ] = False,
@@ -132,8 +146,26 @@ def render(
         Optional[Path], Parameter(name=("--out", "-o"), help="Write to FILE instead of stdout.")
     ] = None,
 ) -> None:
-    """Render a layout to a visual artefact (svg/html/png/pdf). [not yet implemented]"""
-    raise XwordError("'render' is not implemented yet (Phase 3; spec §13)")
+    """Render a layout to a visual artefact (svg/html/png/pdf)."""
+    text = _read_input(file)
+    board = parse_board(text, from_.value if from_ else None)
+    geom = board_geometry(board, blank=blank)
+
+    if to is RenderFormat.svg:
+        _write_text(master_svg(geom), out)
+    elif to is RenderFormat.html:
+        _write_text(html_document(geom), out)
+    else:  # png / pdf — binary; refuse to spew bytes at a terminal (§6.3)
+        if out is None and sys.stdout.isatty():
+            raise XwordError(
+                f"refusing to write binary {to.value} to a terminal; use --out FILE or redirect"
+            )
+        svg = master_svg(geom)
+        data = raster.to_png(svg) if to is RenderFormat.png else raster.to_pdf(svg)
+        if out is not None:
+            out.write_bytes(data)
+        else:
+            sys.stdout.buffer.write(data)
 
 
 def main() -> None:
