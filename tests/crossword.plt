@@ -88,13 +88,14 @@ test(start_bottomleft,     [true(N-D == 273-across)]):- start_loc(bottomleft, 17
 test(remove_x_first, [true(R == [a,c,b]), nondet]) :- remove_x(b, [a,b,c,b], R).
 test(remove_x_absent, [true(R == [a,b,c]), nondet]) :- remove_x(z, [a,b,c], R).
 
-% init_grid builds a GridLen*GridLen assoc of `empty` cells.
-test(init_grid_size, [true(Len =:= 9)]) :-
-    init_grid(3, G), assoc_to_list(G, L), length(L, Len).
+% init_grid builds a grid(...) term of GridLen*GridLen unbound (empty) cells;
+% cell Num is arg Num.
+test(init_grid_size, [true(Arity =:= 9)]) :-
+    init_grid(3, G), functor(G, grid, Arity).
 test(init_grid_empty) :-
-    init_grid(3, G), get_assoc(1, G, empty), get_assoc(9, G, empty).
+    init_grid(3, G), arg(1, G, C1), var(C1), arg(9, G, C9), var(C9).
 test(init_grid_no_extra, [fail]) :-
-    init_grid(3, G), get_assoc(10, G, _).
+    init_grid(3, G), arg(10, G, _).
 
 % answer_meta_assoc/2 (P5): the answer->meta assoc that replaces the O(n^2)
 % member/2 rescan in the emit join. An entry with metadata maps to its dict; an
@@ -106,6 +107,51 @@ test(answer_meta_assoc_join) :-
     get_assoc('DOG', A, M2), dict_pairs(M2, _, []).
 
 :- end_tests(utilities).
+
+
+% Saturating solution counter (mrv_count's hot Cap=2 path)
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% count_upto2/2 must reproduce aggregate_all(count, limit(2, Goal), _)
+% EXACTLY: 0 / 1 / 2-saturated, and - like findall - leave NO residual
+% bindings from Goal on exit (the arrange search relies on the counted
+% Start/Dir staying untouched).
+
+:- begin_tests(count_upto2).
+
+test(zero, [true(N =:= 0)]) :-
+    crosswordsmith_core:count_upto2(member(_, []), N).
+test(one, [true(N =:= 1)]) :-
+    crosswordsmith_core:count_upto2(member(_, [a]), N).
+test(two_exact, [true(N =:= 2)]) :-
+    crosswordsmith_core:count_upto2(member(_, [a,b]), N).
+test(saturates_at_two, [true(N =:= 2)]) :-
+    crosswordsmith_core:count_upto2(member(_, [a,b,c,d,e]), N).
+test(filtered_goal_one, [true(N =:= 1)]) :-
+    crosswordsmith_core:count_upto2((member(X, [1,2,3]), X =:= 2), N).
+test(filtered_goal_zero, [true(N =:= 0)]) :-
+    crosswordsmith_core:count_upto2((member(X, [1,2,3]), X > 9), N).
+
+% No residual bindings: the counted variable is unbound after counting
+% (exercises both the >=2 early-exit path and the exhausted path).
+test(no_residual_binding_saturated, [true(var(X))]) :-
+    crosswordsmith_core:count_upto2(member(X, [a,b,c]), _).
+test(no_residual_binding_single, [true(var(X))]) :-
+    crosswordsmith_core:count_upto2(member(X, [only]), _).
+test(no_residual_binding_empty, [true(var(X))]) :-
+    crosswordsmith_core:count_upto2(member(X, []), _).
+
+% Semidet: yields exactly one solution, no choicepoint left behind.
+test(deterministic) :-
+    findall(N, crosswordsmith_core:count_upto2(member(_, [a,b,c]), N), Ns),
+    Ns == [2].
+
+% Matches the reference (aggregate_all + limit/2) across a range of arities.
+test(matches_reference, [forall(member(L, [[], [x], [x,y], [x,y,z], [x,y,z,w]]))]) :-
+    aggregate_all(count, limit(2, member(_, L)), Ref),
+    crosswordsmith_core:count_upto2(member(_, L), Got),
+    Got =:= Ref.
+
+:- end_tests(count_upto2).
 
 
 % The solver

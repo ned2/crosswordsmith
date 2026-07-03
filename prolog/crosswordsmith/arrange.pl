@@ -186,16 +186,38 @@ cap_status_note(Placed, Note) :-
 % Phase 2-3 - strict layout (construct + rescore + emit) with size framing.
 %
 % Per the Phase-1.5 gate the B&B search is descoped: strict mode constructs a
-% complete placement via the reused MRV-inc path over the four canonical start
-% corners (cheap construction diversity), rescores each with layout_reward/4,
-% and emits the best. place-all-or-fail with budget-aware 3-outcome semantics.
+% complete placement via the reused MRV-inc path over the strict start corners
+% (arrange_corners/1 - one per transpose-pair; see the note there and E-H1),
+% rescores each with layout_reward/4, and emits the best. place-all-or-fail with
+% budget-aware 3-outcome semantics.
 % ---------------------------------------------------------------------------
 
 % Construction budget (inferences) for finding ONE complete placement per
 % corner. First solutions on puzzle-shaped inputs are 5-462 ms (well under).
 arrange_budget(500_000_000).
 
-% Best-scoring complete placement over the four start corners, rescored and
+% The start corners the STRICT construct path sweeps. This is deliberately a
+% 2-corner subset of core.pl's start_locs/1 ([topleft_across, topleft_down,
+% topright, bottomleft]): the four corners form two TRANSPOSE-PAIRS,
+% {topleft_across, topleft_down} and {topright, bottomleft}. Transposing the
+% grid (swap rows<->cols) maps across<->down while preserving letter order, so
+% the mrv_inc search trees of a pair are exact transposes of each other - same
+% solutions modulo transposition, and layout_reward is transpose-invariant (it
+% counts checked cells), so a pair's first-solution rewards are identical.
+% Sweeping all four therefore does ~2x redundant work in strict mode. We keep
+% ONE corner per pair (topleft_across, topright) - the same two the reward-tie
+% break already prefers (sort(1,@>=) is stable, so ties resolve to the earlier
+% corner). Verified reward-equal AND literal-transpose across every ladder rung
+% in benchmarks/workloads.pl (grids 9/15/21, 8..80 words). See experiment E-H1
+% in docs/experiments.md.
+%
+% SCOPE: strict construct only. start_locs/1 stays 4-corner for the
+% greedy/best-effort/candidates paths, where transposed layouts are legitimately
+% DISTINCT candidates (candidate diversity), and for the fragment/enumerate
+% paths. Do not route those through arrange_corners/1.
+arrange_corners([topleft_across, topright]).
+
+% Best-scoring complete placement over the strict start corners, rescored and
 % picked by reward (deterministic: reward desc, ties by start-corner order).
 % Outcome: placed | not_proven (budget hit) | infeasible (search completed,
 % no full placement).
@@ -208,7 +230,7 @@ arrange_best_layout(Words, GridLen, Numbered, Reward, Outcome) :-
 % AC-ARR-1c / AC-ARR-10 "not proven within budget" path (tests/arrange.plt).
 arrange_best_layout(Words, GridLen, Budget, Numbered, Reward, Outcome) :-
     arrange_weights(WCap, WTail),
-    start_locs(Locs),
+    arrange_corners(Locs),
     construct_corners(Locs, Words, GridLen, WCap, WTail, Budget, Results),
     findall(R-P, member(ok(R, P), Results), OKs),
     (   OKs = [_|_]
@@ -581,8 +603,8 @@ fragment_conflict(Answer, Letters, Start, Dir, WLen, GridLen, Grid) :-
 % First cell whose grid letter is already fixed to something the word cannot
 % supply (an overlap conflict). Cells and Letters are the parallel run.
 clashing_cell([Cell|_], [L|_], Grid, Cell, Existing, L) :-
-    get_assoc(Cell, Grid, Existing),
-    Existing \== empty,
+    arg(Cell, Grid, Existing),
+    nonvar(Existing),               % a filled cell (an empty cell is an unbound var)
     Existing \== L,
     !.
 clashing_cell([_|Cs], [_|Ls], Grid, Cell, Existing, Wanted) :-
@@ -996,16 +1018,23 @@ best_move([C|Cs], move(Entry, PW, G1)) :-
 % Best legal placement of one word on the current grid, cut-free: assign_word
 % legality is folded INTO the findall generator so only legal placements are
 % collected (keyed by the density score), and the head of the @>=-sorted list is
-% the best - no first-solution `!`. Folding the legality filter ahead of scoring
-% means placement_key runs only for legal candidates (not every crossing
-% candidate), which is why this is faster than the cut version (see spec v1b.1).
+% the best - no first-solution `!` (see spec v1b.1).
+%
+% Order matters: placement_key MUST score against the PRE-placement Grid, so it
+% runs BEFORE assign_word here. With the var-cell grid, assign_word mutates Grid
+% in place (G1 is the SAME term as Grid, cells bound), so scoring after it would
+% count this word's own just-placed letters as crossings. Scoring first reads
+% the pristine grid; assign_word then binds it and findall snapshots G1 (an
+% independent copy: bound cells -> atoms, empty cells -> fresh vars). The score
+% is still only kept for LEGAL placements (assign_word is in the same
+% conjunction, so an illegal Start drops the whole solution from the findall).
 word_best_placement(Entry, Placed, GridLen, Grid, BBox, Score, PW, GOut) :-
     word_letters(Entry, Letters, WLen),
     Entry = [Word|_],
     findall(Key-place(PW1, G1),
             ( find_intersecting_word(Letters, WLen, Placed, GridLen, Start, Dir),
-              assign_word(Word, Letters, WLen, Start, Dir, GridLen, Placed, Grid, PW1, G1),
-              placement_key(Letters, Start, Dir, WLen, GridLen, Grid, BBox, Key) ),
+              placement_key(Letters, Start, Dir, WLen, GridLen, Grid, BBox, Key),
+              assign_word(Word, Letters, WLen, Start, Dir, GridLen, Placed, Grid, PW1, G1) ),
             Keyed),
     Keyed = [_|_],
     sort(1, @>=, Keyed, [Score-place(PW, GOut)|_]).
@@ -1019,10 +1048,21 @@ placement_key(Letters, Start, Dir, WLen, GridLen, Grid, BBox, Key) :-
     Key is Crossings * 10000 - Growth.
 
 crossing_count(Letters, Start, Dir, GridLen, Grid, Count) :-
+    % Reject an off-grid (underflow) start before indexing the grid: since
+    % word_best_placement now scores BEFORE assign_word, find_intersecting_word/6
+    % can hand us a Start < 1 that assign_word would go on to reject. With the
+    % var-cell grid, arg/3 THROWS on a negative index (the old get_assoc/3 failed
+    % silently), so fail here instead - the candidate is dropped either way. With
+    % Start >= 1 and a fitted run, every cell index stays >= 1 (greedy-path only).
+    Start >= 1,
     cc_(Letters, Start, Dir, GridLen, Grid, 0, Count).
 cc_([], _, _, _, _, A, A).
 cc_([L|Ls], Num, Dir, GridLen, Grid, A0, Count) :-
-    ( get_assoc(Num, Grid, L) -> A1 is A0 + 1 ; A1 = A0 ),
+    % A crossing = the cell already holds this exact letter. `==` is a pure test
+    % (never binds), so scoring a candidate leaves the grid untouched; an empty
+    % (unbound) cell is never == an atom, so it counts as no crossing.
+    arg(Num, Grid, Cell),
+    ( Cell == L -> A1 is A0 + 1 ; A1 = A0 ),
     next_cell(Dir, Num, GridLen, Num2),
     cc_(Ls, Num2, Dir, GridLen, Grid, A1, Count).
 

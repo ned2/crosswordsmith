@@ -533,3 +533,231 @@ comb tax motivated E5 (`mrv_inc`).
   what let E5 be evaluated. A better fixture is tracked as I4.
   *(Op note: those sweeps balloon Prolog stacks into the GBs before any timeout
   fires — run heavy solves under `ulimit -v` to avoid an OOM kill.)*
+
+---
+
+## Crosswordsmith arrange campaign — 2026-07 (post-pivot engine)
+
+Everything above this section predates the pivot to the crosswordsmith
+arrange engine (the rebuilt strict construct/rescore/emit path in
+`prolog/crosswordsmith/arrange.pl` over `core.pl`'s mrv_inc). The kept
+learnings (mrv_inc, capped counts, the I5 merge guard) are folded into the
+current engine; the REJECTED verdicts above (I2 value ordering, I6 degree,
+E4 static ordering) were adjudicated on the old engine + old fixture suite
+and are treated as advisory, not binding. The quantitative reference for this
+campaign is `benchmarks/baseline.json` over the 9/15/21 cost ladder
+(`benchmarks/workloads.pl`); never compare against pre-pivot numbers.
+Background research distilled for this campaign lives in `docs/research/`.
+
+### E-H1 — strict-mode transpose-pair corner dedup — KEPT (shipped)
+
+- **Where:** `arrange.pl` `arrange_corners/1` (strict construct path only);
+  commit 30628c7.
+- **Hypothesis:** the 4 start corners in `start_locs/1`
+  ([topleft_across, topleft_down, topright, bottomleft]) form two
+  TRANSPOSE-PAIRS — {topleft_across, topleft_down} and {topright, bottomleft}.
+  Transposing the grid (row<->col) maps across<->down while preserving letter
+  order, so a pair's mrv_inc search trees are exact transposes: same first
+  solution modulo transposition, and `layout_reward` is transpose-invariant
+  (it counts checked cells), so a pair's first-solution rewards are identical.
+  Strict mode therefore did ~2x redundant work sweeping all four.
+- **What:** scope strict `arrange_best_layout/6` to a new
+  `arrange_corners([topleft_across, topright])` — one representative per pair,
+  the same two the reward-tie break already prefers (stable `sort(1,@>=)`), so
+  the emitted best is byte-unchanged. `start_locs/1` stays 4-corner for the
+  greedy/best-effort/candidates paths (transposed layouts are legitimately
+  distinct candidates there) and the fragment/enumerate paths.
+- **Verification (before changing anything):** per-corner first solution over
+  every ladder rung (grids 9/15/21, 8..80 words). Within each pair, rewards are
+  identical AND the partner placement is the literal grid-transpose of its
+  mate, on all 9 rungs incl. the two heaviest. The two pairs are NOT equal to
+  each other (e.g. 15x15_32w: pair-A 347 vs pair-B 349), so both
+  representatives are retained.
+- **Result (search inferences, `make bench-check --heavy` vs the pre-change
+  baseline):** -49.6% to -50.1% on every rung (09x09_08w 98,058 -> 49,035;
+  15x15_36w 182.6M -> 91.8M). No regressions. `make test`: 186 plunit pass,
+  goldens byte-identical. Baseline re-recorded at the new counts
+  (`make bench-record BENCH_ARGS=--heavy`).
+- **Verdict:** SHIPPED. A ~2x strict-search win at zero output change, since
+  the dropped corners were exact transpose-twins of the kept ones. Guard:
+  relies on a square canvas + transpose-symmetric branch step/reward — do not
+  route the candidate/fragment/enumerate paths through `arrange_corners/1`.
+
+### E-H2 — var-cell grid term replaces the assoc grid — KEPT (shipped)
+
+- **Where:** `core.pl` (init_grid, assign_letters, check_prev/next_cell,
+  adj_is_free), `arrange.pl` (crossing_count, clashing_cell,
+  word_best_placement); merge 56bad96 (branch commit 79bca05).
+- **Hypothesis:** the AVL-assoc grid (cell -> `empty`|letter) was the top
+  measured constant-factor cost: every cell read O(log N^2) via
+  `$btree_find_node`, every write an allocated rebalanced path, all inside
+  mrv_count's innermost loop (~15% self-time on a mid rung). A single
+  compound `grid(C1..C(N^2))` — unbound var = empty, bound atom = letter —
+  makes reads arg/3 + var/nonvar (O(1), allocation-free) and writes a
+  unification undone by the trail, with an identical search tree.
+- **What:** pure representation swap; GIn/GOut collapse to one term. Two
+  forced adjustments: (1) assign_word rejects Start < 1 up front (arg/3
+  THROWS on negative indices where get_assoc merely failed — the old code
+  relied on that failure); (2) greedy word_best_placement scores BEFORE
+  assign_word, since the in-place bind would otherwise count the word's own
+  letters as crossings. White-box init_grid tests rewritten to the new rep.
+- **Result (vs the post-E-H1 baseline, `make bench-check --heavy`):** -14.8%
+  to -23.9% search inferences on every rung (15x15_36w 91.75M -> 72.79M);
+  wall medians down ~13-18% on the heavy tail; RSS flat; goldens
+  byte-identical; 186 plunit pass. Cumulative with E-H1: every rung -55% to
+  -62% vs the campaign start (36w rung 182.6M -> 72.8M).
+- **Verdict:** SHIPPED. Same search order, same output, materially fewer
+  inferences and less GC pressure (doubly valuable under WASM, whose
+  setjmp-heavy backtracking path is the expensive one — see
+  docs/research/swi-vm-wasm-performance.md).
+- **Caveat for later:** the greedy-path scoring reorder means placement_key
+  now runs for every crossing candidate, not only legal ones (the old
+  ordering's micro-optimization). The greedy path is unbenchmarked; if
+  best-effort/candidates rungs are ever added, revisit that ordering.
+
+### E-H5 — saturating placement counter for the capped mrv_count path — KEPT (small)
+
+- **Where:** `mrv_count/8` (`core.pl`) Cap=2 path (mrv_capped + production
+  mrv_inc); the mrv/unbounded path stays on aggregate_all. Merge d59f0d4
+  (branch commit b766f4d).
+- **What:** `count_upto2/2` — the SWI-manual nb_setarg failure-driven counter
+  with early exit at the 2nd solution, wrapped in `\+` so Start/Dir bindings
+  are discarded like findall; fresh counter(0) holder per call (reentrant).
+  Candidates measured on real mid-search goal tuples: aggregate_all+limit
+  (ref); nb_setarg loop -0.15% (winner); staged call_nth +24%; \+ \+ probes
+  +49% — count=1 is the PLURALITY case at search nodes, so re-running
+  variants lose badly (useful fact for future counting code).
+- **Result:** -0.04% to -0.24% per rung, 0 regressions, goldens
+  byte-identical; new count_upto2 plunit unit locks 0/1/2 + no-residual-
+  binding semantics. R1 research (docs/research/swi-vm-wasm-performance.md)
+  had already corrected the original hypothesis: the profiled has_type tax
+  belonged to list_to_set/2, not aggregate_all — hence the small size.
+- **Verdict:** KEPT (marginal but monotonic and behaviour-locked). Ratcheted
+  together with E-H3.
+
+### E-H3 — tabled crossing/letter memos on the mrv_inc hot path — KEPT (shipped)
+
+- **Where:** `core.pl` — `:- table pair_crossings/3` (the ordered x(PPos,Pos)
+  crossing sequence per ordered letter-list pair, replacing per-call
+  intersection/3 + list_to_set/2 + two nth1/3 backtracking passes in
+  find_intersecting_word/6) and `:- table answer_letters/2` (the atom_chars +
+  delete/3 letter footprint behind entry_letters/2). Merge 365c7a6 (branch
+  commit 43c16b3).
+- **Order preservation (hard requirement, held):** the tabled findall lifts
+  the former inline conjunction verbatim, so candidate order and every golden
+  are byte-identical.
+- **Determinism invariant (load-bearing):** tables are abolished at the
+  mrv_inc find_crossword/6 boundary. A search amortizes ~|Words|^2 pair
+  entries across millions of nodes but starts cold, so search_inf is
+  self-contained and run-order independent (core-only == --heavy counts,
+  verified). Do NOT remove the abolish for a warm-table micro-win.
+- **Result (standalone, vs pre-campaign baseline):** -8% to -30.6% per rung,
+  heavy tail gains most (36w 182.6M -> 126.7M standalone). Composed with
+  E-H1/E-H2/E-H5 and ratcheted: 36w now 44.8M (-75.5% cumulative).
+- **Cost:** whole-process RSS rises with table size (21x21_80w 14.2 ->
+  24.9 MiB, +75%; mid rungs +13-20%), bounded per search, freed at the
+  boundary. Tabling is available under the WASM build (single-threaded, so
+  shared-table caveats moot) — but the footprint matters for the ~300MB
+  Android ceiling; revisit if WASM memory becomes tight.
+- **Verdict:** SHIPPED. The biggest single constant-factor win of the
+  campaign after the corner dedup.
+
+### P1 — backtrack-distance / failure-clustering probe — MEASUREMENT (no merge)
+
+- **What:** nb_setval place/unplace/wipeout instrumentation on
+  assign_words_inc/select_inc, run on the dense rungs from both production
+  corners. Artifacts on probe branch (worktree commit a74ffcf+0b32369):
+  benchmarks/probe_backtrack.pl + scratch/probe_p1_output.txt.
+- **Findings:**
+  1. CBJ headroom: NONE. Retreats are 84-86% distance 1-2, the distribution
+     dies by 5, max observed 7. Conflict-directed backjumping / dynamic
+     backtracking is NOT worth building for this search. (Closes the
+     question docs/research/arrange-search-algorithms.md #2 left open.)
+  2. wdeg signal: STRONG. Wipeouts concentrate on ~8-10 words per rung
+     (top-5 = 75-91%) — an adaptive weighted tie-break has real signal.
+     Addressable surface: the thrashing corner on 34w/36w only.
+  3. 21x21_80w places all 80 words with ZERO backtracking from both
+     corners: its ~10M-inference cost is pure per-node counting work.
+     Only constant-factor cuts help it; no ordering change can.
+  4. Churn is corner-asymmetric (36w: topleft_across 4 unplaces vs topright
+     3,418) and broad-but-shallow (thousands of 1-2-deep retreats) — the
+     signature of a locally-suboptimal ordering, favouring wdeg over any
+     backjumping scheme.
+
+### E-H6 — failure-driven word weights (dom/wdeg tie-break) — TRIED, REJECTED (reverted from code)
+
+- **Where (measured, then reverted):** `core.pl` — a non-backtrackable weight
+  store (`:- dynamic word_weight/2` keyed by answer atom, `weights_active/0`
+  guard), reset per search via `reset_search_weights/0` at both mrv_inc entries
+  (`find_crossword(mrv_inc,...)` and `construct_from_seed/5`), bumped on WIPEOUT
+  (select_inc filters Placeable to [] → blame the just-placed word, the classic
+  dom/wdeg analogue), and read as a SECONDARY sort key inside `select_inc`
+  (new `order_placeable/3` + `weight_key/2`: keysort on `k(Count,-Weight)` →
+  count ascending, then weight descending, input order last). No surviving code.
+- **Hypothesis (P1 #2):** wipeouts concentrate on ~8-10 words per dense rung
+  (top-5 = 75-91%), so failure-driven weights used ONLY as an equal-count
+  tie-break should steer the dense 34w/36w search away from its shallow thrash
+  for a large inference cut, without regressing the backtrack-free rungs.
+- **Design (held to the guidance):** weights SURVIVE backtracking (the point —
+  a threaded arg would undo the bump exactly when it matters), so a
+  non-backtrackable dynamic store; reset per corner (self-contained like the
+  E-H3 table abolish, so counts stay run-order independent); tie-break within
+  equal capped-count buckets ONLY (fail-first preserved); fully deterministic
+  (no RNG on the default path); seeded path left byte-identical. Per-node cost
+  is O(1)-ish: a first-arg-indexed `word_weight/2` read per candidate, and — key
+  design win — a `weights_active/0` guard so a search with no recorded failure
+  yet (and any backtrack-free rung) takes the ORIGINAL weight-free ordering,
+  byte-identical in both output and cost.
+- **The signal fired exactly as P1 predicted, and still bought nothing.**
+  Per-corner (the thrashing `topright`): 34w 1,756 bumps on 7 words
+  (FCC 583, EFD 345, ...), 36w 2,095 bumps on 12 words (DEAA 396, CBF 338, ...);
+  `21x21_80w` recorded ZERO bumps from both corners (guard kept it inert). The
+  blame concentrated on the right culprits — but reordering equal-count
+  candidates by that blame did not shrink the tree: 34w topright ≈ 44.2M→44.0M,
+  and the full ladder moved within noise.
+- **Result (`make bench-check --heavy`, warm, vs baseline.json):**
+
+  | rung | baseline | measured | delta | note |
+  | --- | --- | --- | --- | --- |
+  | 09x09_08w | 33,615 | (win) | ~-5% (cold probe) | light-rung fluke |
+  | 15x15_12w | 126,842 | 117,329 | **-7.50%** | light-rung fluke |
+  | 21x21_25w | 421,556 | 421,734 | +0.04% | inert |
+  | 15x15_28w | 557,743 | 557,866 | +0.02% | inert |
+  | 15x15_32w | 1,458,240 | 1,458,804 | +0.04% | inert |
+  | **09x09_16w** | 868,655 | 906,771 | **+4.39%** | **REGRESSION** |
+  | 21x21_80w | 10,005,936 | 10,006,258 | +0.00% | byte-identical (guard) |
+  | **15x15_34w** | 18,722,171 | 18,589,349 | **-0.71%** | target rung, within noise |
+  | **15x15_36w** | 44,804,532 | 44,605,072 | **-0.45%** | target rung, within noise |
+
+  Ratchet verdict: **FAIL** (1 regression). Reward (arrange_best_layout) held
+  on every rung EXCEPT **15x15_36w, which dropped 395 → 392** — a strictly WORSE
+  layout for a sub-noise "win". All other rewards unchanged.
+- **Why it fails (three ways, echoing I6):** (1) NO tree reduction on the target
+  — on top of mrv_inc's strong MRV variable ordering the low-count buckets are
+  mostly forced (0/1 placements), so there are few equal-count ties at the
+  critical shallow-retreat nodes for a tie-break to act on; floating a blamed
+  word within a tie just picks a DIFFERENT equally-doomed branch (the retreats
+  are structural near saturation). (2) It STEERED `09x09_16w` INTO A WORSE TREE
+  (+4.39%, reward unchanged so purely more work) — the same "reordering pushes
+  the search into a worse region" failure I6 hit on the mesh, and E4 hit
+  globally. (3) The only "wins" are light rungs (12w -7.5%, 08w) where a lucky
+  reorder found a shorter first path — not robust and not the target. A broader
+  bump event (event (c), bump on EVERY unplace via a backtracking-safe
+  `(true;bump,fail)` hook) was also measured: it recorded MORE bumps (34w 3,072,
+  36w 3,380 — matching P1's unplace counts) but gave the SAME sub-noise tree
+  (34w topright 17.5M, 36w topright 44.0M) while adding a per-node choicepoint on
+  the hot path, so it was discarded in favour of the cleaner wipeout event.
+- **Validation:** `make test` — 201 plunit pass, and ALL goldens byte-identical
+  (the shipped golden fixtures — bundled_17 fixed/max/fragment/candidates — never
+  wipe out on their winning path, so their first solution is unchanged; the only
+  output change was the 36w LADDER reward, not a golden). `bundled_17` sanity:
+  size 15 stays infeasible; size 17 reward 60/placed 6 unchanged.
+- **Verdict:** REJECTED — reverted from code (like I2/I6/E4). The P1 wdeg signal
+  is real and lands on the right words, but an equal-count tie-break cannot
+  convert that concentration into a search cut here: the addressable target
+  (34w/36w) moves within noise while a lighter dense rung (09x09_16w) regresses
+  +4.39% and 36w's layout reward drops. This closes the
+  docs/research/arrange-search-algorithms.md #1 (wdeg) bet as a NEGATIVE result.
+  Do not revisit as a within-bucket tie-break; any future attempt must change the
+  PRIMARY ordering (which I6/E4 already show this search punishes) or attack the
+  per-node counting cost that dominates the backtrack-free rungs instead.

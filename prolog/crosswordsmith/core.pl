@@ -70,16 +70,17 @@
 % being a fixed-arity compound record pw/8 of the word's attributes. See
 % the placed words utility predicate section below for its structure.
 %
-% The second data structure is as association list used to to store
-% the contents of each cell in the grid. The keys are the numbers of
-% the cells (1 through to GridLen*GridLen) and the values are the
-% contents of the cell.
+% The second data structure holds the contents of the grid. It is a single
+% compound term grid(C1, ..., C(GridLen*GridLen)) whose Num-th argument is cell
+% Num (1 through GridLen*GridLen, row-major): an UNBOUND variable when the cell
+% is empty, bound to a letter atom when filled. Reads are arg/3 + var/nonvar
+% (O(1), allocation-free); a placement unifies the cell variable with its
+% letter and is undone automatically by the trail on backtracking, so a grid's
+% GIn and GOut are one and the same term (the old immutable-version threading
+% collapses onto the trail). See docs/experiments.md (E-H2).
 
 % Used by the JSON output emitter (canonically library(json) on SWI 10+).
 :- use_module(library(http/json)).
-
-% limit/2, used by the capped placement count in the mrv_capped strategy.
-:- use_module(library(solution_sequences)).
 
 % random_permutation/2 for the opt-in search perturbation (set_search_seed/1).
 % NOT reached on the deterministic path (search_seed/1 unset -> identity), so a
@@ -277,6 +278,16 @@ find_crossword(GridLen, Words, Loc, Grid, PlacedWords) :-
 % (assign_words_inc/9) rather than sharing the stateless assign_words/9 path.
 find_crossword(mrv_inc, GridLen, Words, Loc, Grid, PlacedWords) :-
     !,
+    % Reset the per-search crossing memo (see pair_crossings/3): the tabled
+    % (Val,PPos,Pos) sequences are a pure function of two answers' letters and
+    % never change, so they amortize across the millions of nodes in THIS
+    % search - but abolishing at the search boundary keeps each search's
+    % inference count self-contained and order-independent (a warm table
+    % carried across searches/workloads would make counts depend on run order,
+    % breaking the benchmark's determinism invariant). The rebuild is ~|Words|^2
+    % pairs, negligible against the search it serves.
+    abolish_table_subgoals(pair_crossings(_,_,_)),
+    abolish_table_subgoals(answer_letters(_,_)),
     init_grid(GridLen, G1),
     start_loc(Loc, GridLen, StartNum, StartDir),
     assign_words_inc(Words, [], none, GridLen, StartNum, StartDir, G1, Grid, PlacedWords).
@@ -354,29 +365,67 @@ mrv_cap(mrv_capped, 2).
 
 positive_key(Count-_) :- Count > 0.
 
-% Count Entry's viable placements right now, bounded by Cap. aggregate_all/3
-% counts each candidate (Start,Dir) from find_intersecting_word that also
-% survives the assign_word adjacency/bounds checks; like findall it undoes the
-% goal's bindings, so the caller's Start/Dir (ground on the first word, unbound
-% after) are left untouched.
-mrv_count(Cap, PlacedWords, GridLen, Start, Dir, GIn, Entry, Count) :-
+% Count Entry's viable placements right now, bounded by Cap. Each candidate is a
+% (Start,Dir) from find_intersecting_word that also survives the assign_word
+% adjacency/bounds checks. Like findall, counting UNDOES the goal's bindings, so
+% the caller's Start/Dir (ground on the first word, unbound after) are left
+% untouched.
+%
+% Cap is `unbounded` (exact MRV, `mrv` strategy) or the integer 2 (mrv_capped /
+% mrv_inc, which only ever need the 0 / 1 / >=2 buckets - see select_word/9 and
+% assign_words_inc/9). The unbounded path keeps aggregate_all/3; the hot Cap=2
+% path uses count_upto2/2, a hand-rolled saturating counter that avoids
+% aggregate_all's spec-checking (error:has_type/2) and limit/2's per-solution
+% nb-state machinery. The cut makes the two clauses mutually exclusive and keeps
+% each call deterministic (a bare variable-cap head would leave a choicepoint).
+mrv_count(unbounded, PlacedWords, GridLen, Start, Dir, GIn, Entry, Count) :-
+    !,
+    mrv_count_goal(PlacedWords, GridLen, Start, Dir, GIn, Entry, Goal),
+    aggregate_all(count, Goal, Count).
+mrv_count(2, PlacedWords, GridLen, Start, Dir, GIn, Entry, Count) :-
+    mrv_count_goal(PlacedWords, GridLen, Start, Dir, GIn, Entry, Goal),
+    count_upto2(Goal, Count).
+
+% The placement-enumeration goal shared by both count paths: a candidate
+% (Start,Dir) from find_intersecting_word that also survives assign_word's
+% adjacency/bounds checks. On backtracking it re-binds Start/Dir to the next
+% placement (or leaves them unbound when it fails), so the counter around it must
+% undo those bindings.
+mrv_count_goal(PlacedWords, GridLen, Start, Dir, GIn, Entry, Goal) :-
     Entry = [Word|_],
     entry_letters(Entry, Letters2),
     length(Letters2, WLen),
-    aggregate_all(count,
-            capped(Cap,
-                   ( find_intersecting_word(Letters2, WLen, PlacedWords, GridLen,
-                                            Start, Dir),
-                     assign_word(Word, Letters2, WLen, Start, Dir, GridLen,
-                                 PlacedWords, GIn, _Placed, _G1) )),
-            Count).
+    Goal = ( find_intersecting_word(Letters2, WLen, PlacedWords, GridLen,
+                                    Start, Dir),
+             assign_word(Word, Letters2, WLen, Start, Dir, GridLen,
+                         PlacedWords, GIn, _Placed, _G1) ).
 
-% Cap is `unbounded` (no cap, for mrv) or an integer (mrv_capped). The cut keeps
-% the unbounded case deterministic - without it, clause 2's variable head leaves a
-% spurious choicepoint on every call. The integer cap goes through limit/2.
-:- meta_predicate capped(+, 0).   % Goal is called / limited (P12)
-capped(unbounded, Goal) :- !, call(Goal).
-capped(N, Goal) :- limit(N, Goal).
+% count_upto2(:Goal, -Count): Count is the number of solutions of Goal SATURATED
+% at 2 (so Count is 0, 1, or 2, where 2 means ">=2"). Like findall/aggregate_all
+% it leaves NO residual bindings from Goal on exit - the search relies on the
+% caller's Start/Dir being untouched.
+%
+% This is the SWI manual's non-backtrackable solution counter (a fresh mutable
+% holder incremented per solution via nb_setarg/3 - see manipterm, succeeds_n_times)
+% with an early exit: the failure-driven loop stops the moment the 2nd solution
+% lands (N >= 2), so it never enumerates a word's remaining placements. Wrapping
+% the loop in \+ discards the loop's bindings whether it stopped early (inner goal
+% succeeded -> \+ fails) or ran dry (inner goal failed -> \+ succeeds); either way
+% the nb_setarg side effect on the holder survives (it is non-backtrackable) and
+% carries the count out. A fresh holder per call keeps this reentrant - no global
+% key to collide if counts ever nest.
+:- meta_predicate count_upto2(0, -).
+count_upto2(Goal, Count) :-
+    Counter = counter(0),
+    (   \+ ( Goal,
+             arg(1, Counter, N0),
+             N is N0 + 1,
+             nb_setarg(1, Counter, N),
+             N >= 2 )
+    ->  true
+    ;   true
+    ),
+    arg(1, Counter, Count).
 
 
 % mrv_inc: capped MRV with an INCREMENTAL count cache (idea I1 in
@@ -528,6 +577,17 @@ inc_count(PrevMap, LastLetters, PlacedWords, GridLen, Start, Dir, GIn, Entry, AI
     put_assoc(A, AIn, Count, AOut).
 
 entry_letters([Word|_], Letters) :-
+    answer_letters(Word, Letters).
+
+% answer_letters(+Word, -Letters): the placement footprint (letters with space
+% and hyphen separators dropped) of a single answer atom. Word is ground, so
+% this is a pure function of the atom and is tabled: the mrv_inc counting path
+% (mrv_count/select_inc/inc_count) re-derives a word's letters per node, and the
+% atom_chars + two delete/3 passes are memoized to one lookup after the first.
+% Reset per search alongside pair_crossings/3 (find_crossword), so the inference
+% count stays self-contained across benchmark iterations.
+:- table answer_letters/2.
+answer_letters(Word, Letters) :-
     atom_chars(Word, L0),
     delete(L0, ' ', L1),
     delete(L1, '-', Letters).
@@ -538,7 +598,7 @@ shares_letter(Letters, OtherLetters) :-
     !.
 
 
-% Given a Word and a set of Placed words, locates a candidate 
+% Given a Word and a set of Placed words, locates a candidate
 % start cell and direction that intersects with an existing word.
 
 % No placed words; just use grounded Start and Dir values
@@ -549,18 +609,54 @@ find_intersecting_word(Letters, WLen, PlacedWords, GridLen, Start, Dir) :-
     pw_letters(PW, PLetters),
     pw_dir(PW, PDir),
     pw_start(PW, PStart),
-    intersection(Letters, PLetters, Vals),
-    list_to_set(Vals, Vals2),
-    member(Val, Vals2),
-    nth1(PPos, PLetters, Val),
-    nth1(Pos, Letters, Val),
+    % The (PPos,Pos) crossing sequence for this (new letters, placed letters)
+    % pair is grid-independent and unchanging, so it is memoized once by
+    % pair_crossings/3 (tabled) and replayed here. member/2 walks the precomputed
+    % list in the SAME order the former inline intersection/list_to_set/nth1/nth1
+    % conjunction produced (HARD requirement: order is golden-visible).
+    pair_crossings(Letters, PLetters, Crossings),
+    member(x(PPos, Pos), Crossings),
     calc_num(PDir, GridLen, PPos, PStart, PNum),
     swap_dir(PDir, Dir),
     calc_start(Dir, GridLen, Pos, PNum, Start),
     fits_on_grid(Dir, Start, WLen, GridLen).
 
+% pair_crossings(+Letters, +PLetters, -Crossings): the ordered list of x(PPos,Pos)
+% cells at which a NEW word (letters Letters) can cross an already-placed word
+% (letters PLetters) - PPos the crossing position in the placed word, Pos the
+% position in the new word. Both letter-lists are GROUND (derived from the ground
+% answer atom; the non-ground part of a [Answer,_{...}] entry never reaches here),
+% so this is a pure function of the two letter sequences and is memoized with
+% tabling: a search reuses each pair across all its nodes instead of re-deriving
+% intersection/3 + list_to_set/2 + two nth1/3 backtracking passes per call.
+%
+% ORDER IS LOAD-BEARING. The findall reproduces the former inline conjunction
+% verbatim: intersection/3 keeps Letters-order-with-duplicates, list_to_set/2
+% dedupes to the new word's distinct crossing letters in first-occurrence order,
+% then for each such Val, PPos ascends over the placed word and Pos ascends over
+% the new word. Replaying the collected list preserves first (and all) solutions
+% byte-for-byte. Val itself is not retained - the caller only needs the two
+% positions. Tabling is supported under the SWI WASM build.
+:- table pair_crossings/3.
+pair_crossings(Letters, PLetters, Crossings) :-
+    findall(x(PPos, Pos),
+            ( intersection(Letters, PLetters, Vals),
+              list_to_set(Vals, Vals2),
+              member(Val, Vals2),
+              nth1(PPos, PLetters, Val),
+              nth1(Pos, Letters, Val) ),
+            Crossings).
+
 
 assign_word(Word, Letters, WLen, Start, Dir, GridLen, PlacedWords, GIn, Placed, GOut) :-
+    % Reject an off-grid (underflow) start cell. find_intersecting_word/6 can
+    % compute a Start < 1 that still passes fits_on_grid (the end lands on-grid),
+    % which the old assoc grid rejected implicitly: get_assoc/3 FAILED for the
+    % absent negative key. arg/3 instead THROWS for a negative index (0 and
+    % >arity still fail, as get_assoc did), so we reject Start < 1 here, once per
+    % word. With Start >= 1 and a valid run, every downstream cell index is >= 1,
+    % so no read can go negative (an over-grid index fails, never throws).
+    Start >= 1,
     % make sure previous cell does not have a letter
     check_prev_cell(Dir, Start, GridLen, GIn),
     assign_letters(Letters, Start, Dir, GridLen, Cells, GIn, GOut),
@@ -608,84 +704,88 @@ placed_boundary_cell(PW, GridLen, After) :-
 
 % Previous cell before start of word. Make sure it doesn't contain
 % anything.
-check_prev_cell(Dir, Num, GridLen, G) :-
+check_prev_cell(Dir, Num, GridLen, Grid) :-
     (
      % don't check if start letter is start of a row/col
      is_start_cell(Dir, Num, GridLen)
     ;
-     % otherwise prev cell must be empty
+     % otherwise prev cell must be empty (an unbound var)
      prev_cell(Dir, Num, GridLen, Prev),
-     get_assoc(Prev, G, empty)
+     arg(Prev, Grid, Cell), var(Cell)
     ), !.
 
 
 % Next cell after end of word. Make sure it doesn't contain anything.
-check_next_cell(Dir, Num, GridLen, G) :-
+check_next_cell(Dir, Num, GridLen, Grid) :-
     prev_cell(Dir, Num, GridLen, Prev),
     (
      % no need to check if prev was end of row/col
      is_end_cell(Dir, Prev, GridLen)
     ;
-     % then this cell must be empty
-     get_assoc(Num, G, empty)
+     % then this cell must be empty (an unbound var)
+     arg(Num, Grid, Cell), var(Cell)
     ), !.
 
 
-% Assign each letter of the word, checking that adjacent cells
-% are empty to prevent words being placed next to each other.
+% Assign each letter of the word, checking that adjacent cells are empty to
+% prevent words being placed next to each other. The grid is mutated in place by
+% binding empty cell vars, so GIn and GOut are the SAME term (backtracking
+% unbinds via the trail); they thread as one.
 
 % Last letter of word, make sure next cell is free
-assign_letters([], Num, Dir, GridLen, [], G, G) :- 
-    check_next_cell(Dir, Num, GridLen, G).
+assign_letters([], Num, Dir, GridLen, [], Grid, Grid) :-
+    check_next_cell(Dir, Num, GridLen, Grid).
 
 
-assign_letters([L|Ls], Num, Dir, GridLen, [Num|RestCells], GIn, GOut) :-
-    get_assoc(Num, GIn, X),
+assign_letters([L|Ls], Num, Dir, GridLen, [Num|RestCells], Grid, GridOut) :-
+    arg(Num, Grid, Cell),
     (
      % existing letter in this cell matches letter being placed,
      % nothing needs doing, we can continue to next letter
-     X == L,
-     G1 = GIn
+     nonvar(Cell),
+     Cell == L
     ;
-     % no letter in this cell, so check adjacent cells are free
-     % and then add letter to this cell
-     X == empty,
-     adj_is_free(Dir, Num, GridLen, GIn),
-     put_assoc(Num, GIn, L, G1)
+     % empty cell (an unbound var), so check adjacent cells are free
+     % and then bind this cell to the letter
+     var(Cell),
+     adj_is_free(Dir, Num, GridLen, Grid),
+     Cell = L
     ), !,
     next_cell(Dir, Num, GridLen, Num2),
-    assign_letters(Ls, Num2, Dir, GridLen, RestCells, G1, GOut).
+    assign_letters(Ls, Num2, Dir, GridLen, RestCells, Grid, GridOut).
 
 
-% check that adjacent cells are empty
-adj_is_free(down, Num, GridLen, G) :-
+% check that adjacent cells are empty (unbound vars). arg/3 + var/1 is a pure
+% test - it never binds a cell (aliasing a fresh local to an empty cell's var
+% leaves both unbound), so a CHECK can never accidentally fill a cell.
+adj_is_free(down, Num, GridLen, Grid) :-
     N1 is Num - 1,
     N2 is Num + 1,
     M is Num mod GridLen,
     (
      M == 0 -> % last cell in row
-     get_assoc(N1, G, empty)
+     arg(N1, Grid, C1), var(C1)
     ;
      M == 1 -> % first cell in row
-     get_assoc(N2, G, empty)
+     arg(N2, Grid, C2), var(C2)
     ;
-     get_assoc(N1, G, empty),
-     get_assoc(N2, G, empty)
+     arg(N1, Grid, C1), var(C1),
+     arg(N2, Grid, C2), var(C2)
     ).
 
-adj_is_free(across, Num, GridLen, G) :-
+adj_is_free(across, Num, GridLen, Grid) :-
     N1 is Num - GridLen,
     N2 is Num + GridLen,
     LastCell is (GridLen * GridLen),
     (
      N1 =< 0 -> % before beginning of grid
-     get_assoc(N2, G, empty)
+     arg(N2, Grid, C2), var(C2)
     ;
      N2 > LastCell -> % after end of grid
-     get_assoc(N1, G, empty)
+     arg(N1, Grid, C1), var(C1)
     ;
-     get_assoc(N1, G, empty),
-     get_assoc(N2, G, empty)
+     arg(N1, Grid, C1), var(C1),
+     arg(N2, Grid, C2), var(C2)
     ).
 
 
@@ -960,13 +1060,12 @@ calc_num(down, GridLen, WPos, WStart, WNum) :-
     WNum is  WStart + (GridLen * (WPos - 1)).
 
 
-new_tile(Num, Num-empty).
-
+% The grid is the compound term grid(C1,...,C(N*N)); cell Num is arg Num, an
+% unbound var when empty. functor/3 builds it with N*N fresh variables in one
+% allocation (441 args at 21x21 is fine). See the data-structure note above.
 init_grid(GridLen, Grid) :-
     NumTiles is GridLen * GridLen,
-    numlist(1, NumTiles, Tiles),
-    maplist(new_tile, Tiles, TupleList),
-    list_to_assoc(TupleList, Grid).
+    functor(Grid, grid, NumTiles).
 
 
 
