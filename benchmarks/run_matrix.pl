@@ -119,7 +119,6 @@ read_clues(File, Words) :-
 % A fixture with no clues/1 term (typo, truncation, wrong path) must be a hard
 % error: silently unifying Words=[] makes an empty puzzle "solve" trivially and
 % records a bogus measured cell, corrupting the batch docs/experiments.md reads.
-% Mirror run_benchmarks.pl's read_fixture_clues/3 (throw fixture_missing_clues/1).
 read_loop(S, File, Words) :-
     read_term(S, T, []),
     ( T == end_of_file -> throw(error(fixture_missing_clues(File), _))

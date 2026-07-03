@@ -4,13 +4,8 @@ SHELL := /bin/bash
 
 .PHONY: test unit golden update-golden fuzz bench bench-matrix
 
-BENCH_FIXTURE ?= fixtures/bundled_17_clues.pl
-BENCH_GRID ?= 17
-BENCH_START_LOC ?= topleft_across
-BENCH_ITERATIONS ?= 30
-BENCH_WARMUP ?= 3
 BENCH_FORMAT ?= text
-BENCH_STRATEGY ?=
+BENCH_ARGS ?=
 
 # Full suite: plunit tests + golden-output regression.
 test:
@@ -67,18 +62,16 @@ update-golden:
 	./crosswordsmith fill --grid fixtures/fill_grid_3.json --dict fixtures/wordlist_sample.txt 2>/dev/null > tests/golden/fill_3.json
 	@echo "Regenerated golden files (arrange fixed/max/fragment/candidates + lint toc + export ipuz/exolve + fill)"
 
-# Local performance baselines. Results are machine-specific and reporting-only.
-# Benchmarks the production default strategy unless BENCH_STRATEGY is set, e.g.
-#   make bench BENCH_FIXTURE=fixtures/benchmark_16_dense_words.pl BENCH_ITERATIONS=1 BENCH_WARMUP=0 BENCH_STRATEGY=baseline
+# Product benchmark for `arrange`: end-to-end command latency, the in-process
+# search alone, and the CLI-wrapper overhead between them (rest = command -
+# search), over the workloads in benchmarks/workloads.pl. Core workloads only by
+# default; results are machine-specific and reporting-only. Compare on the search
+# inference counts (machine-independent); wall/rss are reporting-only.
+#   make bench
+#   make bench BENCH_ARGS=--heavy                       # + budget-saturating probes (~26s each)
+#   make bench BENCH_FORMAT=csv BENCH_ARGS="--fixture bundled"
 bench:
-	swipl -q benchmarks/run_benchmarks.pl -- \
-		--grid $(BENCH_GRID) \
-		--start-loc $(BENCH_START_LOC) \
-		--iterations $(BENCH_ITERATIONS) \
-		--warmup $(BENCH_WARMUP) \
-		--format $(BENCH_FORMAT) \
-		$(if $(BENCH_STRATEGY),--strategy $(BENCH_STRATEGY),) \
-		$(BENCH_FIXTURE)
+	swipl -q benchmarks/run_arrange.pl -- --format $(BENCH_FORMAT) $(BENCH_ARGS)
 
 # Strategy x fixture comparison matrix (CSV on stdout). Each fixture runs on
 # its manifest grid (benchmarks/fixtures.pl). Optionally restrict strategies:

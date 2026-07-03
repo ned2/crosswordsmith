@@ -7,10 +7,12 @@
 % - the same loop serves the strategy matrix and the product bench. Adding a new
 % thing to benchmark means writing a sampler, never editing this loop.
 
-:- module(bench_core, [ measure/3, inproc_sampler/2 ]).
+:- module(bench_core, [ measure/3, inproc_sampler/2, process_sampler/5 ]).
 
 :- use_module(library(lists)).
 :- use_module(library(apply)).
+:- use_module(library(process)).
+:- use_module(library(readutil)).
 
 % measure(+Sampler, +Opts, -Summary)
 %   Sampler : called as call(Sampler, Sample); Sample is a dict metric->number.
@@ -54,6 +56,46 @@ measured_sample(Sampler, Sample) :-
 inproc_sampler(Goal, _{wall:W, cpu:C, inferences:I}) :-
     call_time(Goal, T),
     W = T.wall, C = T.cpu, I = T.inferences.
+
+% process_sampler(+Exe, +Argv, -WallSeconds, -MaxRssKiB, -ExitCode)
+%   The COMMAND layer: run `Exe Argv...` as a fresh child under
+%   `/usr/bin/time -f "%e %M"`, capturing end-to-end wall (%e, seconds) and peak
+%   resident set (%M, KiB). This is the honest top-level latency a user feels -
+%   SWI startup, load.pl, arg parsing, search, emit, all of it. The timing goes
+%   to a scratch file via `-o` so it never mixes with the command's own streams
+%   (both discarded; a successful arrange is quiet with --out /dev/null).
+%
+%   Deliberately NOT a measure/3 sampler on its own: it returns the raw exit code
+%   so a caller (subjects.pl) can assert it against the workload's Expected before
+%   wrapping wall+rss into a sample dict. rss is a whole-process footprint, not a
+%   search-memory metric (plan §7).
+process_sampler(Exe, Argv, Wall, Rss, Exit) :-
+    tmp_file_stream(text, TimeFile, TStream), close(TStream),
+    setup_call_cleanup(
+        true,
+        run_under_time(Exe, Argv, TimeFile, Wall, Rss, Exit),
+        delete_file(TimeFile)).
+
+run_under_time(Exe, Argv, TimeFile, Wall, Rss, Exit) :-
+    append(['-o', TimeFile, '-f', '%e %M', Exe], Argv, TimeArgv),
+    process_create('/usr/bin/time', TimeArgv,
+                   [ stdout(null), stderr(null), process(PID) ]),
+    process_wait(PID, Status),
+    ( Status = exit(Exit) -> true ; Exit = -1 ),
+    read_time_file(TimeFile, Wall, Rss).
+
+% Parse the `%e %M` line GNU time wrote. Take the FIRST line carrying two numeric
+% tokens: a failed command makes time append a "Command exited..." line, which we
+% skip rather than misparse.
+read_time_file(TimeFile, Wall, Rss) :-
+    read_file_to_string(TimeFile, Str, []),
+    split_string(Str, "\n", "", Lines),
+    ( member(Line, Lines),
+      split_string(Line, " ", " ", Toks0),
+      exclude(==(""), Toks0, [WS, RS | _]),
+      catch((number_string(Wall, WS), number_string(Rss, RS)), _, fail)
+    ->  true
+    ;   throw(error(bench_time_parse_failed(Str), _)) ).
 
 % Per-metric {min,median,mean} over the samples, for every NUMERIC-valued key in
 % the first sample. Non-numeric annotations are skipped.

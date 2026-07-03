@@ -468,26 +468,42 @@ Run the full regression suite with:
 
     $ make test
 
-For local performance comparisons, run the benchmark harness:
+There are two benchmarks, answering different questions. Both share the
+measurement core in `benchmarks/bench_core.pl` (warmup, iterate, summarize;
+one median definition). All numbers are machine-specific and reporting-only;
+compare on **inferences**, which are deterministic and portable, not on wall time.
+
+**Product benchmark** — how long `arrange` takes a user, for the workloads in
+`benchmarks/workloads.pl`:
 
     $ make bench
 
-or directly:
+For each workload it reports three layers over the same word set: `cmd_wall`
+(end-to-end `crosswordsmith arrange` process latency), `search` (the in-process
+4-corner search alone), and `rest` (the CLI-wrapper overhead between them,
+`cmd_wall - search`). Core workloads run by default; the budget-saturating
+latency probes (~26 s each) are opt-in:
 
-    $ swipl -q benchmarks/run_benchmarks.pl -- fixtures/bundled_17_clues.pl
+    $ make bench BENCH_ARGS=--heavy
+    $ make bench BENCH_FORMAT=csv BENCH_ARGS="--fixture bundled"
 
-The harness reports min, median, and mean wall time, CPU time, and inference
-counts for a Prolog fixture file that defines `clues/1`. These numbers are
-machine-specific and are intended for comparing local branches, not as CI
-thresholds or authoritative baselines. The default fixture is
-`fixtures/bundled_17_clues.pl`; pass a different fixture path directly, or use
-`make bench BENCH_FIXTURE=fixtures/other.pl BENCH_GRID=<n>`. Use `--grid <n>`,
-`--start-loc <loc>`, `--iterations <n>`, `--warmup <n>`, and
-`--format text|csv|json` to shape a direct run. With `make bench`, the matching
-variables are `BENCH_GRID`, `BENCH_START_LOC`, `BENCH_ITERATIONS`,
-`BENCH_WARMUP`, and `BENCH_FORMAT`. The default format is `text`.
+`rss` is the whole-process peak footprint, not a search-memory metric. Note that
+`arrange` latency is bimodal: `arrange` tries four start corners under a shared
+inference budget, so an input whose non-placing corners fail fast is ~0.1-1 s,
+while one whose corner triggers deep search burns the whole budget (~26 s) even
+after a valid layout was already found — the heavy probes exist to keep that
+cliff visible.
 
-Synthetic benchmark fixtures are included for deeper search workloads:
+**Strategy matrix** — algorithm research (comparing the solver strategies, not a
+shipped path). One CSV row per (strategy, fixture) over `benchmarks/fixtures.pl`,
+each on its manifest grid:
+
+    $ make bench-matrix
+    $ make bench-matrix BENCH_STRATEGIES="baseline mrv_capped"
+
+The matrix measures the single-corner search directly, so its per-fixture numbers
+are lighter than the product command (which runs all four corners). The synthetic
+fixtures it drives:
 
 | fixture | words | grid |
 | --- | ---: | ---: |
@@ -496,12 +512,3 @@ Synthetic benchmark fixtures are included for deeper search workloads:
 | `fixtures/benchmark_16_dense_words.pl` | 16 | 17 |
 | `fixtures/benchmark_20_words.pl` | 20 | 37 |
 | `fixtures/benchmark_26_words.pl` | 26 | 49 |
-
-For example:
-
-    $ make bench BENCH_FIXTURE=fixtures/benchmark_20_words.pl BENCH_GRID=37
-
-The dense 16-word fixture is intentionally much slower than the others; start
-with one measured iteration:
-
-    $ make bench BENCH_FIXTURE=fixtures/benchmark_16_dense_words.pl BENCH_GRID=17 BENCH_ITERATIONS=1 BENCH_WARMUP=0
