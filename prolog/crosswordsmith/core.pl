@@ -268,6 +268,16 @@ find_crossword(GridLen, Words, Loc, Grid, PlacedWords) :-
 % (assign_words_inc/9) rather than sharing the stateless assign_words/9 path.
 find_crossword(mrv_inc, GridLen, Words, Loc, Grid, PlacedWords) :-
     !,
+    % Reset the per-search crossing memo (see pair_crossings/3): the tabled
+    % (Val,PPos,Pos) sequences are a pure function of two answers' letters and
+    % never change, so they amortize across the millions of nodes in THIS
+    % search - but abolishing at the search boundary keeps each search's
+    % inference count self-contained and order-independent (a warm table
+    % carried across searches/workloads would make counts depend on run order,
+    % breaking the benchmark's determinism invariant). The rebuild is ~|Words|^2
+    % pairs, negligible against the search it serves.
+    abolish_table_subgoals(pair_crossings(_,_,_)),
+    abolish_table_subgoals(answer_letters(_,_)),
     init_grid(GridLen, G1),
     start_loc(Loc, GridLen, StartNum, StartDir),
     assign_words_inc(Words, [], none, GridLen, StartNum, StartDir, G1, Grid, PlacedWords).
@@ -519,6 +529,17 @@ inc_count(PrevMap, LastLetters, PlacedWords, GridLen, Start, Dir, GIn, Entry, AI
     put_assoc(A, AIn, Count, AOut).
 
 entry_letters([Word|_], Letters) :-
+    answer_letters(Word, Letters).
+
+% answer_letters(+Word, -Letters): the placement footprint (letters with space
+% and hyphen separators dropped) of a single answer atom. Word is ground, so
+% this is a pure function of the atom and is tabled: the mrv_inc counting path
+% (mrv_count/select_inc/inc_count) re-derives a word's letters per node, and the
+% atom_chars + two delete/3 passes are memoized to one lookup after the first.
+% Reset per search alongside pair_crossings/3 (find_crossword), so the inference
+% count stays self-contained across benchmark iterations.
+:- table answer_letters/2.
+answer_letters(Word, Letters) :-
     atom_chars(Word, L0),
     delete(L0, ' ', L1),
     delete(L1, '-', Letters).
@@ -529,7 +550,7 @@ shares_letter(Letters, OtherLetters) :-
     !.
 
 
-% Given a Word and a set of Placed words, locates a candidate 
+% Given a Word and a set of Placed words, locates a candidate
 % start cell and direction that intersects with an existing word.
 
 % No placed words; just use grounded Start and Dir values
@@ -540,15 +561,43 @@ find_intersecting_word(Letters, WLen, PlacedWords, GridLen, Start, Dir) :-
     get_dict(letters, PW, PLetters),
     get_dict(dir, PW, PDir),
     get_dict(start, PW, PStart),
-    intersection(Letters, PLetters, Vals),
-    list_to_set(Vals, Vals2),
-    member(Val, Vals2),
-    nth1(PPos, PLetters, Val),
-    nth1(Pos, Letters, Val),
+    % The (PPos,Pos) crossing sequence for this (new letters, placed letters)
+    % pair is grid-independent and unchanging, so it is memoized once by
+    % pair_crossings/3 (tabled) and replayed here. member/2 walks the precomputed
+    % list in the SAME order the former inline intersection/list_to_set/nth1/nth1
+    % conjunction produced (HARD requirement: order is golden-visible).
+    pair_crossings(Letters, PLetters, Crossings),
+    member(x(PPos, Pos), Crossings),
     calc_num(PDir, GridLen, PPos, PStart, PNum),
     swap_dir(PDir, Dir),
     calc_start(Dir, GridLen, Pos, PNum, Start),
     fits_on_grid(Dir, Start, WLen, GridLen).
+
+% pair_crossings(+Letters, +PLetters, -Crossings): the ordered list of x(PPos,Pos)
+% cells at which a NEW word (letters Letters) can cross an already-placed word
+% (letters PLetters) - PPos the crossing position in the placed word, Pos the
+% position in the new word. Both letter-lists are GROUND (derived from the ground
+% answer atom; the non-ground part of a [Answer,_{...}] entry never reaches here),
+% so this is a pure function of the two letter sequences and is memoized with
+% tabling: a search reuses each pair across all its nodes instead of re-deriving
+% intersection/3 + list_to_set/2 + two nth1/3 backtracking passes per call.
+%
+% ORDER IS LOAD-BEARING. The findall reproduces the former inline conjunction
+% verbatim: intersection/3 keeps Letters-order-with-duplicates, list_to_set/2
+% dedupes to the new word's distinct crossing letters in first-occurrence order,
+% then for each such Val, PPos ascends over the placed word and Pos ascends over
+% the new word. Replaying the collected list preserves first (and all) solutions
+% byte-for-byte. Val itself is not retained - the caller only needs the two
+% positions. Tabling is supported under the SWI WASM build.
+:- table pair_crossings/3.
+pair_crossings(Letters, PLetters, Crossings) :-
+    findall(x(PPos, Pos),
+            ( intersection(Letters, PLetters, Vals),
+              list_to_set(Vals, Vals2),
+              member(Val, Vals2),
+              nth1(PPos, PLetters, Val),
+              nth1(Pos, Letters, Val) ),
+            Crossings).
 
 
 assign_word(Word, Letters, WLen, Start, Dir, GridLen, PlacedWords, GIn, Placed, GOut) :-
