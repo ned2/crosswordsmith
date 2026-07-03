@@ -790,3 +790,29 @@ Background research distilled for this campaign lives in `docs/research/`.
   a per-word letter-presence bitmask to short-circuit non-crossing pairs
   before the pair_crossings lookup and inside inc_count's shares_letter
   (tracked as E-H8, the campaign's final perf experiment).
+
+### E-H8 — per-word letter-bitmask prefilter — REJECTED (no surviving code)
+
+- **Idea:** an integer letter-presence mask per answer (bit = 1 << (char
+  code /\ 63); exact on real crossword alphabets, conservative under
+  collision) to short-circuit "do these words share a letter?" in O(1) AND:
+  gating find_intersecting_word's per-placed-word crossing enumeration and
+  replacing inc_count's shares_letter list scan.
+- **Execution caveat:** the experiment ran against the PRE-Wave-1 tree
+  (worktree branched at abbc770), so its gate target was the old inline
+  intersection/3 rather than the current tabled pair_crossings lookup. The
+  rejection stands anyway because the decisive measurement is
+  base-independent (below). Rejected diff inspectable on the experiment
+  branch (commit bd1c064); nothing merged.
+- **Result:** +1.3% to +2.9% inferences on 8/9 ladder rungs (0 wins);
+  bundled_17 (real words) +0.65%. Root cause: the prefilter almost never
+  fires — measured AND=0 skip rates 2.6-13.7% (find_intersecting_word) and
+  10-17% (inc_count). The brief's alphabet intuition INVERTED: real answers
+  are letter-DENSE (esp. multi-word answers), so real-word masks are dense
+  and pairs nearly always share a bit — bundled_17 had the WORST yield
+  (2.6%). Per-word letter density, not alphabet size, governs disjointness.
+- **Verdict:** REJECTED, do not revisit on this solver. With <=14% skippable
+  pairs, no gate-target cost (inline or tabled) leaves room for the mask
+  constant paid on the 86-97% of pairs that pass through. This closes the
+  constant-factor idea queue: together with E-H7's "representation seam
+  mined out" verdict, the campaign's per-node cost reduction is done.
