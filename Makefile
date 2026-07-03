@@ -2,7 +2,7 @@
 
 SHELL := /bin/bash
 
-.PHONY: test unit golden update-golden fuzz bench bench-matrix
+.PHONY: test unit golden update-golden fuzz bench bench-check bench-matrix
 
 BENCH_FORMAT ?= text
 BENCH_ARGS ?=
@@ -72,6 +72,15 @@ update-golden:
 #   make bench BENCH_FORMAT=csv BENCH_ARGS="--fixture bundled"
 bench:
 	swipl -q benchmarks/run_arrange.pl -- --format $(BENCH_FORMAT) $(BENCH_ARGS)
+
+# Regression gate: run the core product bench and diff it against the committed
+# benchmarks/baseline.json. The gated metric is search inferences on the warm
+# core cells (deterministic, machine-independent); wall/rss are reported but never
+# gated. Exits nonzero on a real search regression. NOT on the `make test` path -
+# benchmarks are off the test path today; run this on demand or before a release.
+#   make bench-check
+bench-check:
+	swipl -q benchmarks/check_baseline.pl
 
 # Strategy x fixture comparison matrix (CSV on stdout). Each fixture runs on
 # its manifest grid (benchmarks/fixtures.pl). Optionally restrict strategies:
