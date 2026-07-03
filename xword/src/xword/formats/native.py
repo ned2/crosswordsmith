@@ -2,11 +2,21 @@
 
 Numbering/word geometry are re-derived from the block pattern; the source's
 `words[]` entries are attached to the derived words by (direction, cells).
+
+The serializer is the structural-fidelity authority for the native target
+(D7, spec §10): native is the narrowest box, so anything it cannot represent
+— rectangular grids, title/author, circled/barred/prefilled/styled cells,
+rebus, unfilled cells — raises an XwordError naming the property and a
+capable target. Native's enumeration lives in the answer's spaces/hyphens,
+so an answer-less word (ipuz/Exolve source) is reconstructed from the grid
+letters split per its enumeration; on enum/grid mismatch the grid wins
+(same principle as the Exolve enum disambiguator, spec §5.1).
 """
 
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 from .. import XwordError
@@ -14,6 +24,7 @@ from ..board import (
     Board,
     Cell,
     Grid,
+    Word,
     derive_words,
     enumeration_from_answer,
     grid_answer,
@@ -80,7 +91,10 @@ def parse(text: str) -> Board:
         if isinstance(clue, str):
             word.clue = clue
 
-    return Board(height=n, width=n, grid=grid, words=words)
+    diagnostics = obj.get("diagnostics")
+    if diagnostics is not None and not isinstance(diagnostics, dict):
+        raise XwordError("native: diagnostics must be an object")
+    return Board(height=n, width=n, grid=grid, words=words, diagnostics=diagnostics)
 
 
 def serialize(board: Board) -> str:
@@ -89,6 +103,12 @@ def serialize(board: Board) -> str:
             f"native cannot hold a rectangular grid ({board.width}x{board.height}); "
             "native is square-only — target ipuz or exolve instead"
         )
+    for key in ("title", "author"):
+        if key in board.meta:
+            raise XwordError(
+                f"native cannot hold a puzzle {key} ({board.meta[key]!r}) — "
+                "target ipuz or exolve instead"
+            )
     grid_out: list[list[Any]] = []
     for r, row in enumerate(board.grid):
         row_out: list[Any] = []
@@ -96,14 +116,35 @@ def serialize(board: Board) -> str:
             if cell is None:
                 row_out.append(None)
                 continue
+            if cell.circle:
+                raise XwordError(
+                    f"native cannot hold a circled cell (at [{r},{c}]) — "
+                    "target ipuz or exolve instead"
+                )
+            if cell.bar_right or cell.bar_below:
+                raise XwordError(
+                    f"native cannot hold a barred cell (at [{r},{c}]) — "
+                    "target ipuz or exolve instead"
+                )
+            if cell.prefilled:
+                raise XwordError(
+                    f"native cannot hold a prefilled cell (at [{r},{c}]) — "
+                    "target exolve instead"
+                )
+            if cell.style:
+                raise XwordError(
+                    f"native cannot hold cell styling ({cell.style!r} at [{r},{c}]) — "
+                    "target ipuz instead"
+                )
             if cell.letter is None:
                 raise XwordError(
-                    f"native cannot hold an unfilled cell (at [{r},{c}]); "
-                    "native carries solved layouts only"
+                    f"native cannot hold an unfilled cell (at [{r},{c}]); native "
+                    "carries solved layouts only — target ipuz or exolve instead"
                 )
             if len(cell.letter) > 1:
                 raise XwordError(
-                    f"native cannot hold a rebus cell ({cell.letter!r} at [{r},{c}])"
+                    f"native cannot hold a rebus cell ({cell.letter!r} at [{r},{c}]) — "
+                    "target ipuz instead"
                 )
             row_out.append(
                 {
@@ -117,11 +158,14 @@ def serialize(board: Board) -> str:
 
     words_out: list[dict[str, Any]] = []
     for word in sorted(board.words, key=lambda w: (w.number, w.direction)):
-        answer = word.answer if word.answer is not None else grid_answer(board, word)
+        answer = word.answer
         if answer is None:
-            raise XwordError(
-                f"native cannot hold word {word.number} {word.direction}: unfilled cells"
-            )
+            letters = grid_answer(board, word)
+            if letters is None:  # unreachable after the grid scan; kept as a guard
+                raise XwordError(
+                    f"native cannot hold word {word.number} {word.direction}: unfilled cells"
+                )
+            answer = _answer_from_enumeration(letters, word)
         meta = dict(word.meta)
         if word.clue is not None and "clue" not in meta:
             meta["clue"] = word.clue
@@ -135,4 +179,48 @@ def serialize(board: Board) -> str:
             }
         )
 
-    return dump_json({"grid": grid_out, "gridLength": board.height, "words": words_out})
+    payload: dict[str, Any] = {
+        "grid": grid_out,
+        "gridLength": board.height,
+        "words": words_out,
+    }
+    if board.diagnostics is not None:
+        # native -> native keeps diagnostics: the target can hold it, so D7's
+        # drop-when-homeless rule never triggers (spec §10)
+        payload["diagnostics"] = board.diagnostics
+    return dump_json(payload)
+
+
+# native encodes the enumeration in the answer's display form: "," (word
+# break) as a space, "-" as a hyphen. Other enum separators (. ' and space)
+# have no native encoding and are a structural failure.
+_ENUM_SEP_TO_CHAR = {",": " ", "-": "-"}
+
+
+def _answer_from_enumeration(letters: str, word: Word) -> str:
+    """Rebuild the display answer from bare grid letters + the enumeration.
+
+    On enum/grid mismatch the grid is the authority (spec §5.1): the plain
+    letters are returned and the enumeration re-derives as `(n)`.
+    """
+    if word.enumeration is None:
+        return letters
+    parts = re.findall(r"[0-9]+|[^0-9]", word.enumeration.strip().strip("()"))
+    if sum(int(p) for p in parts if p.isdigit()) != len(letters):
+        return letters
+    out: list[str] = []
+    i = 0
+    for p in parts:
+        if p.isdigit():
+            out.append(letters[i : i + int(p)])
+            i += int(p)
+        else:
+            sep = _ENUM_SEP_TO_CHAR.get(p)
+            if sep is None:
+                raise XwordError(
+                    f"native cannot hold the enumeration {word.enumeration!r} of word "
+                    f"{word.number} {word.direction}: its answers encode only word "
+                    "breaks (,) and hyphens (-) — target ipuz or exolve instead"
+                )
+            out.append(sep)
+    return "".join(out)

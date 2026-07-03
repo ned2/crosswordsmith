@@ -72,11 +72,27 @@ export --to …`) into `xword/tests/fixtures/`, plus the recreated S4/S5 keepsak
 
 ---
 
+## Phase 2 — `convert` (spec §13) — **done (2026-07-03)**
+
+**Deliverable:** `xword convert --to native|ipuz|exolve` any→any (D7): structural
+failures block with the property + a capable target named; metadata drops warn
+on stderr (`-q` silences, stdout untouched); structural engine cross-check.
+
+| # | Component | Spec | Status | Verified by |
+|---|---|---|---|---|
+| 1 | **`convert` verb wiring** — parse → fidelity → serialize; `--to` required, `--from` optional (detect), stdin/stdout + `--out` on success, `-q` | §6.2, §8 | done | `tests/test_convert.py::TestCli` |
+| 2 | **D7 strict structure** — `→ native` fails on rectangular / title / circled / barred / prefilled / styled / unfilled / rebus / unencodable enum, each naming a capable target; v1 serializer gaps (rebus→exolve, prefill→ipuz, styling→exolve) fail likewise | §10, D7 | done | `tests/test_convert.py::TestStructuralFailures` |
+| 3 | **D7 metadata drop-and-warn** — per-word `link`/`meta` keys + top-level `diagnostics` dropped on `→ ipuz/exolve` with one stderr warning each; `-q` silences, stdout byte-identical; native target drops nothing | §6.2, §10 | done | `tests/test_convert.py::TestMetadataDrops` + `TestCli` |
+| 4 | **`diagnostics` passthrough** — carried on `Board`, native→native re-emits verbatim (payload-lossless identity, json-output-spec §6.4) | §6.2, §10 | done | fixture `arrange_bundled_17_fixed.json` (engine golden verbatim) in `TestMetadataDrops`/`TestCli` |
+| 5 | **Puzzle-lossless round-trips** — native→ipuz→native and native→exolve→native = source minus `link`; display answers reconstructed from enumeration (`(5,5)` → `"OMEGA POINT"`), grid wins on enum mismatch; exolve→ipuz→exolve keeps bars/circles/unfilled (barred StyleSpec synthesized) | §10 | done | `tests/test_convert.py::TestRoundTrips` |
+| 6 | **Engine cross-check (structural)** — convert native→ipuz/exolve agrees with `crosswordsmith export` on grid/numbering/clues/enumeration; sole divergence = engine's invented title (Q5) + its constant `exolve-id` (xword emits none — Exolve auto-derives one, spec §6.2) | §11 | done | `tests/test_convert.py::TestEngineCrossCheck` |
+
+---
+
 ## Later phases (spec §13) — deferred
 
 | Phase | Deliverable | Status |
 |---|---|---|
-| 2 | `convert` any→any (D7): structural failures block; metadata drops warn on stderr (`-q`); structural engine cross-check | deferred |
 | 3 | `render` to SVG + HTML; PNG/PDF behind `xword[raster]` (`cairosvg`, S6) | deferred |
 | 4 | Interactive **Textual** renderer over the same `Board` (S2 confirmed the seam) | deferred |
 | later | Best-effort **structural** conversion (crop/flatten + warnings) and/or native-model uplift; restores engine byte-parity | deferred |
@@ -104,12 +120,14 @@ export --to …`) into `xword/tests/fixtures/`, plus the recreated S4/S5 keepsak
   (src-layout package, `uv sync` / `uv run xword` / `uv run pytest`); 57 tests
   green. Notable outcome: `xword`'s ipuz serialization is *structurally
   identical* to the engine's `export --to ipuz` on `bundled_17` (the §11
-  cross-check holds already at the parser level); `convert`/`render` are
-  registered as stubs that exit 1 with a "not implemented (Phase 2/3)" error.
-- **Phase 2 (`convert`) is next** — the parsers/serializers it needs already
-  exist and are round-trip-tested; what remains is the verb wiring, the D7
-  strict-structure/drop-metadata policy (+ `-q`), and the engine cross-check
-  tests.
-- **Phases 2–4 + later: deferred** — not yet started.
+  cross-check holds already at the parser level).
+- **Phase 2 (`convert`): done (2026-07-03)** — any→any among the three formats
+  with the D7 policy; 83 tests green. Two flagged judgment calls resolved and
+  spec'd (§6.2): native→native **preserves** `diagnostics` (payload-lossless
+  identity), and no `exolve-id` is emitted (Exolve auto-derives one from a
+  grid/clue signature, so nothing downstream requires it). `render` remains a
+  stub that exits 1 with a "not implemented (Phase 3)" error.
+- **Phase 3 (`render`) is next**; Phases 3–4 + later: deferred, not yet started.
 - **Nothing in progress; nothing blocked.** Q1 (grid geometry) is the only §14
-  open question resolved so far; the rest gate Phases 3–4.
+  open question resolved so far; the rest gate Phases 3–4 (Q5's title question
+  now only gates engine byte-parity — the structural cross-check is in).

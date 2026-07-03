@@ -18,6 +18,7 @@ from ..board import (
     Board,
     Cell,
     Grid,
+    Meta,
     enumeration_from_cells,
     derive_words,
     extract_clue_enum,
@@ -144,6 +145,20 @@ def _attach_clues(board: Board, direction: str, lines: list[str]) -> None:
         word.enumeration = enum
 
 
+def _style_expressible(style: Meta) -> bool:
+    """True when every ipuz style key is already carried by Cell decorator flags."""
+    for key, value in style.items():
+        if key == "shapebg" and value == "circle":
+            continue
+        if key == "barred":
+            continue
+        return False
+    return True
+
+
+# Note: no exolve-id is emitted (invent-nothing). Exolve treats the directive
+# as optional and derives an id from a signature of the grid and clues when
+# absent, so consumers lose nothing but cross-edit state continuity (spec §6.2).
 def serialize(board: Board) -> str:
     lines = ["exolve-begin"]
     lines.append(f"  exolve-width: {board.width}")
@@ -162,7 +177,12 @@ def serialize(board: Board) -> str:
             if cell.letter is not None and len(cell.letter) > 1:
                 raise XwordError(
                     f"exolve output does not support rebus cells yet "
-                    f"({cell.letter!r} at [{r},{c}])"
+                    f"({cell.letter!r} at [{r},{c}]) — target ipuz instead"
+                )
+            if cell.style and not _style_expressible(cell.style):
+                raise XwordError(
+                    f"exolve cannot hold ipuz cell styling ({cell.style!r} at "
+                    f"[{r},{c}]) — target ipuz instead"
                 )
             chars.append(cell.letter or "0")
             if cell.circle:

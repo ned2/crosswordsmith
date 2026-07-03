@@ -74,7 +74,16 @@ def parse(text: str) -> Board:
                 cells.append(None)
                 continue
             circle = bool(style) and style.get("shapebg") == "circle"
-            cells.append(Cell(circle=circle, style=style))
+            barred = style.get("barred") if style else None
+            barred = barred.upper() if isinstance(barred, str) else ""
+            cells.append(
+                Cell(
+                    circle=circle,
+                    bar_right="R" in barred,
+                    bar_below="B" in barred,
+                    style=style,
+                )
+            )
         grid.append(cells)
     validate_grid(grid)
 
@@ -147,22 +156,36 @@ def _attach_clues(board: Board, direction: str, items: list[Any]) -> None:
         word.enumeration = enum if enum is not None else enumeration_from_cells(word.cells)
 
 
+def _synth_style(cell: Cell) -> dict[str, Any] | None:
+    """An ipuz StyleSpec for decorations carried as Cell flags (Exolve sources)."""
+    style: dict[str, Any] = {}
+    if cell.circle:
+        style["shapebg"] = "circle"
+    barred = ("R" if cell.bar_right else "") + ("B" if cell.bar_below else "")
+    if barred:
+        style["barred"] = barred
+    return style or None
+
+
 def serialize(board: Board) -> str:
     puzzle: list[list[Any]] = []
     solution: list[list[Any]] = []
     any_letter = False
-    for row in board.grid:
+    for r, row in enumerate(board.grid):
         prow: list[Any] = []
         srow: list[Any] = []
-        for cell in row:
+        for c, cell in enumerate(row):
             if cell is None:
                 prow.append("#")
                 srow.append("#")
                 continue
+            if cell.prefilled:
+                raise XwordError(
+                    f"ipuz output does not support prefilled cells yet "
+                    f"(at [{r},{c}]) — target exolve instead"
+                )
             label: Any = cell.number if cell.number is not None else 0
-            style = cell.style if cell.style is not None else (
-                {"shapebg": "circle"} if cell.circle else None
-            )
+            style = cell.style if cell.style is not None else _synth_style(cell)
             prow.append({"cell": label, "style": style} if style else label)
             if cell.letter is None:
                 srow.append(0)

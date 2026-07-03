@@ -81,6 +81,14 @@ class TestIpuz:
 
     def test_rebus_blocks_native_serialization(self, fixtures):
         board = parse_board((fixtures / "sample.ipuz.json").read_text())
+        # title and the circled cell block first (both structural too, D7);
+        # strip them so the assertion pins the rebus check specifically
+        board.meta.clear()
+        for row in board.grid:
+            for cell in row:
+                if cell is not None:
+                    cell.circle = False
+                    cell.style = None
         with pytest.raises(XwordError, match="rebus"):
             serialize_board(board, "native")
 

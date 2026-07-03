@@ -101,9 +101,8 @@ def test_per_verb_help():
     assert "--blank" in result.stdout
 
 
-def test_convert_render_stubs_exit_nonzero():
-    for verb, to in (("convert", "ipuz"), ("render", "svg")):
-        result = run(verb, "--to", to, str(NATIVE))
-        assert result.returncode == 1
-        assert result.stdout == ""
-        assert "not implemented" in result.stderr
+def test_render_stub_exits_nonzero():
+    result = run("render", "--to", "svg", str(NATIVE))
+    assert result.returncode == 1
+    assert result.stdout == ""
+    assert "not implemented" in result.stderr

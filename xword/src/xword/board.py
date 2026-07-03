@@ -58,6 +58,7 @@ class Board:
     grid: Grid
     words: list[Word] = field(default_factory=list)
     meta: Meta = field(default_factory=dict)  # puzzle-level: title?, author?
+    diagnostics: Meta | None = None  # native passthrough (json-output-spec §6.4)
 
 
 def derive_words(grid: Grid) -> list[Word]:

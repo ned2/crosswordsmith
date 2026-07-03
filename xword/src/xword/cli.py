@@ -18,6 +18,7 @@ from cyclopts.types import ExistingFile
 from rich.console import Console
 
 from . import XwordError, __version__
+from .convert import convert_text
 from .formats import parse_board
 from .render.geometry import board_geometry
 from .render.terminal import print_view
@@ -105,8 +106,16 @@ def convert(
         bool, Parameter(name=("--quiet", "-q"), help="Silence metadata-drop warnings.")
     ] = False,
 ) -> None:
-    """Convert between data formats (any -> any). [not yet implemented]"""
-    raise XwordError("'convert' is not implemented yet (Phase 2; spec §13)")
+    """Convert between data formats (any -> any)."""
+    text = _read_input(file)
+    result, warnings = convert_text(text, to.value, from_.value if from_ else None)
+    if not quiet:
+        for warning in warnings:
+            print(f"xword: warning: {warning}", file=sys.stderr)
+    if out is not None:
+        out.write_text(result, encoding="utf-8")
+    else:
+        sys.stdout.write(result)
 
 
 @app.command

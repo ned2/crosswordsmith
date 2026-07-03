@@ -1,7 +1,8 @@
 # Spec: `xword` — a terminal viewer & format multitool for crossword layouts
 
-Status: **design** — not yet built. This file is the single source of truth; it
-absorbed the original standalone decision record (2026-07-03).
+Status: **building** — Phases 0–2 done, see [`xword-status.md`](xword-status.md).
+This file is the single source of truth; it absorbed the original standalone
+decision record (2026-07-03).
 
 `xword` is a standalone **Python** tool, a downstream consumer of the
 crosswordsmith engine — **not** part of the engine's four-verb design-spec. The
@@ -232,12 +233,23 @@ Common CLI conventions (§8) apply to all three.
   warning; stdout is never touched by it.
 - **Invent nothing** — enumeration/clue are *derived* where absent, never
   fabricated; nothing puzzle-level (e.g. a placeholder title) is manufactured.
+- **`native → native` is payload-lossless.** The native target holds
+  everything metadata-class (per-word `link`/`meta` verbatim, top-level
+  `diagnostics` passed through), so D7's drop-when-homeless rule never
+  triggers and no warning is emitted. `diagnostics` is carried on the `Board`
+  and re-emitted only when present (a payload without it stays without it).
+- **No `exolve-id` is emitted** (invent-nothing; resolved Phase 2). Exolve
+  documents the directive as optional: when absent it "create[s] one from a
+  signature of the grid and the clues", so consumers require nothing — the
+  only cost is that solving state keyed on the auto-id resets if the puzzle
+  is edited, which an invented constant id would not fix anyway.
 - **Engine cross-check** — dropping `link` now matches the engine's own
   `export`; the sole remaining divergence is that `export` *invents* a default
   title on **both** targets (`title:"Untitled"` for ipuz, `exolve-title:
   Untitled` for Exolve — confirmed S4/S5) and `xword` (invent-nothing) emits
   neither — so v1 asserts **structural** agreement (§11), and byte-parity waits
-  on that title question.
+  on that title question. (The engine also emits a constant
+  `exolve-id: crosswordsmith-export`; `xword` emits none, see above.)
 
 ### 6.3 `render` — visual artefact
 
@@ -327,14 +339,29 @@ Consequences of the table:
 - **The one metadata case is native → {ipuz, Exolve}** — native alone carries
   `link`/`meta` and `diagnostics`. So converting **current crosswordsmith
   output (every word has a `link`) to ipuz/Exolve now succeeds**, dropping the
-  links (and any `diagnostics`) with a warning.
+  links (and any `diagnostics`) with a warning. **native → native drops
+  nothing** — the target holds it all (§6.2), so the identity conversion is
+  payload-lossless and silent.
 - **Structural loss is the blocking direction, mostly `→ native`** (native can't
   hold rectangular grids, rebus, styling, bars, title) — those fail until the
   deferred structural best-effort / native-uplift work lands.
+- **Enumeration survives `→ native` by answer reconstruction.** Native encodes
+  the enumeration in the answer's display form, so an answer-less source word
+  (ipuz/Exolve) has its answer rebuilt from the grid letters split per the
+  enumeration (`,` → space, `-` → hyphen) — `(5,5)` over `OMEGAPOINT` regains
+  `"OMEGA POINT"`. On enum/grid mismatch the grid wins (the enum re-derives as
+  `(n)`, same principle as the Exolve disambiguator, §5.1); separators native
+  answers cannot encode (`.`, `'`, space) are a **structural failure**.
 - **Round-trips are *puzzle*-lossless, not *payload*-lossless.**
   native→ipuz→native preserves the whole puzzle but drops `link`/`meta` at the
   ipuz hop; native→Exolve→native likewise. Payload-lossless round-trips need a
-  format that carries the metadata (none of today's targets do).
+  format that carries the metadata (today only native→native qualifies).
+- **v1 serializer coverage gaps fail strict, never drop silently.** Three
+  structural properties the *format* can hold but the v1 *serializer* does not
+  yet emit — rebus → Exolve, prefilled cells → ipuz, shaded/arbitrary-styled
+  cells → Exolve — fail with a "not supported yet" error naming a capable
+  target, per the D7 rule (a serializer gap must behave like a `✗` cell, not
+  like metadata). Closing them is ordinary later work, not a deferred decision.
 
 **Deferred escape hatches** (not rejected): (a) **best-effort *structural***
 conversion (crop/flatten with warnings); (b) **uplifting native's model** (add
