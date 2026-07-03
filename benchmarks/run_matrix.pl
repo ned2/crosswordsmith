@@ -30,7 +30,9 @@
    directory_file_path(RepoRoot, 'load.pl', Load),
    consult(Load),
    directory_file_path(RepoRoot, 'benchmarks/fixtures.pl', Manifest),
-   consult(Manifest).
+   consult(Manifest),
+   directory_file_path(BenchDir, 'bench_core.pl', BenchCore),
+   use_module(BenchCore).       % measure/3, inproc_sampler/2 (shared with run_arrange)
 
 :- initialization(main, main).
 
@@ -72,25 +74,29 @@ run_cell(Strategy, Rel, Grid, Start, Iters, Warmup) :-
     cell_limit_seconds(Limit),
     solve_status(Strategy, Words, Grid, Start, Limit, Status),
     ( Status == solved
-    ->  % Only solve_status (below) runs under call_with_time_limit; the warmup
-        % and measured solves here are unguarded. Safe because the search is
-        % deterministic - inference counts are identical across iterations, so a
-        % cell that solved within the probe's limit cannot newly hang here.
-        forall(between(1, Warmup, _), ignore(solve_once(Strategy, Words, Grid, Start))),
-        findall(W-I,
-                ( between(1, Iters, _),
-                  call_time(solve_once(Strategy, Words, Grid, Start), T),
-                  W is T.wall * 1000.0, I = T.inferences ),
-                Pairs),
-        pairs_keys_values(Pairs, Walls, Infs),
-        col(Walls, WMin, WMed),
-        col(Infs, IMin, IMed),
+    ->  % Warmup + measured loop + summary now come from bench_core (shared with
+        % run_arrange). solve_status above keeps the timeout/`no` gate OUTSIDE
+        % measure/3, which is success-only (plan §4). Only solve_status runs
+        % under call_with_time_limit; the measured solves are unguarded, safe
+        % because the search is deterministic - a cell that solved within the
+        % probe's limit cannot newly hang here.
+        measure(strategy_sample(Strategy, Words, Grid, Start),
+                _{warmup: Warmup, iterations: Iters}, Summary),
+        WMin is Summary.stats.wall.min * 1000.0,
+        WMed is Summary.stats.wall.median * 1000.0,
+        IMin = Summary.stats.inferences.min,
+        IMed = Summary.stats.inferences.median,
         format("~w,~w,~d,~w,~d,yes,~3f,~3f,~0f,~0f~n",
                [Strategy, Name, Grid, Start, Iters, WMin, WMed, IMin, IMed])
     ;   % Status is `no` (search exhausted) or `timeout` (exceeded the limit);
         % distinguished so a slow cell is never mistaken for unsatisfiable.
         format("~w,~w,~d,~w,~d,~w,,,,~n", [Strategy, Name, Grid, Start, Iters, Status])
     ).
+
+% Sampler closure for bench_core: one measured single-corner search -> one sample
+% (wall/cpu/inferences). measure/3 calls this as call(strategy_sample(...), Sample).
+strategy_sample(Strategy, Words, Grid, Start, Sample) :-
+    inproc_sampler(solve_once(Strategy, Words, Grid, Start), Sample).
 
 % solved | no | timeout, never throwing the time-limit error to the caller.
 solve_status(Strategy, Words, Grid, Start, Limit, Status) :-
@@ -103,17 +109,6 @@ solve_status(Strategy, Words, Grid, Start, Limit, Status) :-
 solve_once(Strategy, Words, Grid, Start) :-
     find_crossword(Strategy, Grid, Words, Start, _Grid, _Placed),
     !.
-
-% Min and "median" of a value list. For even-length lists this reports the upper
-% of the two central values (no averaging), unlike run_benchmarks.pl's median/3.
-% Immaterial for the authoritative inference metric (deterministic, so
-% upper-median == true median); only wall-clock (machine noise) would differ.
-col(Values, Min, Median) :-
-    msort(Values, Sorted),
-    Sorted = [Min|_],
-    length(Sorted, Len),
-    Mid is Len // 2,
-    nth0(Mid, Sorted, Median).
 
 repo_file(Rel, File) :-
     repo_root(Root),
