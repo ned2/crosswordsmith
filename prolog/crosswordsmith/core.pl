@@ -61,10 +61,14 @@
 % being a dict of attributes of the word. See the placed words utility
 % predicate section below for the structure of this dict.
 %
-% The second data structure is as association list used to to store
-% the contents of each cell in the grid. The keys are the numbers of
-% the cells (1 through to GridLen*GridLen) and the values are the
-% contents of the cell.
+% The second data structure holds the contents of the grid. It is a single
+% compound term grid(C1, ..., C(GridLen*GridLen)) whose Num-th argument is cell
+% Num (1 through GridLen*GridLen, row-major): an UNBOUND variable when the cell
+% is empty, bound to a letter atom when filled. Reads are arg/3 + var/nonvar
+% (O(1), allocation-free); a placement unifies the cell variable with its
+% letter and is undone automatically by the trail on backtracking, so a grid's
+% GIn and GOut are one and the same term (the old immutable-version threading
+% collapses onto the trail). See docs/experiments.md (E-H2).
 
 % Used by the JSON output emitter (canonically library(json) on SWI 10+).
 :- use_module(library(http/json)).
@@ -552,6 +556,14 @@ find_intersecting_word(Letters, WLen, PlacedWords, GridLen, Start, Dir) :-
 
 
 assign_word(Word, Letters, WLen, Start, Dir, GridLen, PlacedWords, GIn, Placed, GOut) :-
+    % Reject an off-grid (underflow) start cell. find_intersecting_word/6 can
+    % compute a Start < 1 that still passes fits_on_grid (the end lands on-grid),
+    % which the old assoc grid rejected implicitly: get_assoc/3 FAILED for the
+    % absent negative key. arg/3 instead THROWS for a negative index (0 and
+    % >arity still fail, as get_assoc did), so we reject Start < 1 here, once per
+    % word. With Start >= 1 and a valid run, every downstream cell index is >= 1,
+    % so no read can go negative (an over-grid index fails, never throws).
+    Start >= 1,
     % make sure previous cell does not have a letter
     check_prev_cell(Dir, Start, GridLen, GIn),
     assign_letters(Letters, Start, Dir, GridLen, Cells, GIn, GOut),
@@ -598,84 +610,88 @@ placed_boundary_cell(PW, GridLen, After) :-
 
 % Previous cell before start of word. Make sure it doesn't contain
 % anything.
-check_prev_cell(Dir, Num, GridLen, G) :-
+check_prev_cell(Dir, Num, GridLen, Grid) :-
     (
      % don't check if start letter is start of a row/col
      is_start_cell(Dir, Num, GridLen)
     ;
-     % otherwise prev cell must be empty
+     % otherwise prev cell must be empty (an unbound var)
      prev_cell(Dir, Num, GridLen, Prev),
-     get_assoc(Prev, G, empty)
+     arg(Prev, Grid, Cell), var(Cell)
     ), !.
 
 
 % Next cell after end of word. Make sure it doesn't contain anything.
-check_next_cell(Dir, Num, GridLen, G) :-
+check_next_cell(Dir, Num, GridLen, Grid) :-
     prev_cell(Dir, Num, GridLen, Prev),
     (
      % no need to check if prev was end of row/col
      is_end_cell(Dir, Prev, GridLen)
     ;
-     % then this cell must be empty
-     get_assoc(Num, G, empty)
+     % then this cell must be empty (an unbound var)
+     arg(Num, Grid, Cell), var(Cell)
     ), !.
 
 
-% Assign each letter of the word, checking that adjacent cells
-% are empty to prevent words being placed next to each other.
+% Assign each letter of the word, checking that adjacent cells are empty to
+% prevent words being placed next to each other. The grid is mutated in place by
+% binding empty cell vars, so GIn and GOut are the SAME term (backtracking
+% unbinds via the trail); they thread as one.
 
 % Last letter of word, make sure next cell is free
-assign_letters([], Num, Dir, GridLen, [], G, G) :- 
-    check_next_cell(Dir, Num, GridLen, G).
+assign_letters([], Num, Dir, GridLen, [], Grid, Grid) :-
+    check_next_cell(Dir, Num, GridLen, Grid).
 
 
-assign_letters([L|Ls], Num, Dir, GridLen, [Num|RestCells], GIn, GOut) :-
-    get_assoc(Num, GIn, X),
+assign_letters([L|Ls], Num, Dir, GridLen, [Num|RestCells], Grid, GridOut) :-
+    arg(Num, Grid, Cell),
     (
      % existing letter in this cell matches letter being placed,
      % nothing needs doing, we can continue to next letter
-     X == L,
-     G1 = GIn
+     nonvar(Cell),
+     Cell == L
     ;
-     % no letter in this cell, so check adjacent cells are free
-     % and then add letter to this cell
-     X == empty,
-     adj_is_free(Dir, Num, GridLen, GIn),
-     put_assoc(Num, GIn, L, G1)
+     % empty cell (an unbound var), so check adjacent cells are free
+     % and then bind this cell to the letter
+     var(Cell),
+     adj_is_free(Dir, Num, GridLen, Grid),
+     Cell = L
     ), !,
     next_cell(Dir, Num, GridLen, Num2),
-    assign_letters(Ls, Num2, Dir, GridLen, RestCells, G1, GOut).
+    assign_letters(Ls, Num2, Dir, GridLen, RestCells, Grid, GridOut).
 
 
-% check that adjacent cells are empty
-adj_is_free(down, Num, GridLen, G) :-
+% check that adjacent cells are empty (unbound vars). arg/3 + var/1 is a pure
+% test - it never binds a cell (aliasing a fresh local to an empty cell's var
+% leaves both unbound), so a CHECK can never accidentally fill a cell.
+adj_is_free(down, Num, GridLen, Grid) :-
     N1 is Num - 1,
     N2 is Num + 1,
     M is Num mod GridLen,
     (
      M == 0 -> % last cell in row
-     get_assoc(N1, G, empty)
+     arg(N1, Grid, C1), var(C1)
     ;
      M == 1 -> % first cell in row
-     get_assoc(N2, G, empty)
+     arg(N2, Grid, C2), var(C2)
     ;
-     get_assoc(N1, G, empty),
-     get_assoc(N2, G, empty)
+     arg(N1, Grid, C1), var(C1),
+     arg(N2, Grid, C2), var(C2)
     ).
 
-adj_is_free(across, Num, GridLen, G) :-
+adj_is_free(across, Num, GridLen, Grid) :-
     N1 is Num - GridLen,
     N2 is Num + GridLen,
     LastCell is (GridLen * GridLen),
     (
      N1 =< 0 -> % before beginning of grid
-     get_assoc(N2, G, empty)
+     arg(N2, Grid, C2), var(C2)
     ;
      N2 > LastCell -> % after end of grid
-     get_assoc(N1, G, empty)
+     arg(N1, Grid, C1), var(C1)
     ;
-     get_assoc(N1, G, empty),
-     get_assoc(N2, G, empty)
+     arg(N1, Grid, C1), var(C1),
+     arg(N2, Grid, C2), var(C2)
     ).
 
 
@@ -939,13 +955,12 @@ calc_num(down, GridLen, WPos, WStart, WNum) :-
     WNum is  WStart + (GridLen * (WPos - 1)).
 
 
-new_tile(Num, Num-empty).
-
+% The grid is the compound term grid(C1,...,C(N*N)); cell Num is arg Num, an
+% unbound var when empty. functor/3 builds it with N*N fresh variables in one
+% allocation (441 args at 21x21 is fine). See the data-structure note above.
 init_grid(GridLen, Grid) :-
     NumTiles is GridLen * GridLen,
-    numlist(1, NumTiles, Tiles),
-    maplist(new_tile, Tiles, TupleList),
-    list_to_assoc(TupleList, Grid).
+    functor(Grid, grid, NumTiles).
 
 
 
