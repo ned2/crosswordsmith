@@ -533,3 +533,52 @@ comb tax motivated E5 (`mrv_inc`).
   what let E5 be evaluated. A better fixture is tracked as I4.
   *(Op note: those sweeps balloon Prolog stacks into the GBs before any timeout
   fires — run heavy solves under `ulimit -v` to avoid an OOM kill.)*
+
+---
+
+## Crosswordsmith arrange campaign — 2026-07 (post-pivot engine)
+
+Everything above this section predates the pivot to the crosswordsmith
+arrange engine (the rebuilt strict construct/rescore/emit path in
+`prolog/crosswordsmith/arrange.pl` over `core.pl`'s mrv_inc). The kept
+learnings (mrv_inc, capped counts, the I5 merge guard) are folded into the
+current engine; the REJECTED verdicts above (I2 value ordering, I6 degree,
+E4 static ordering) were adjudicated on the old engine + old fixture suite
+and are treated as advisory, not binding. The quantitative reference for this
+campaign is `benchmarks/baseline.json` over the 9/15/21 cost ladder
+(`benchmarks/workloads.pl`); never compare against pre-pivot numbers.
+Background research distilled for this campaign lives in `docs/research/`.
+
+### E-H1 — strict-mode transpose-pair corner dedup — KEPT (shipped)
+
+- **Where:** `arrange.pl` `arrange_corners/1` (strict construct path only);
+  commit 30628c7.
+- **Hypothesis:** the 4 start corners in `start_locs/1`
+  ([topleft_across, topleft_down, topright, bottomleft]) form two
+  TRANSPOSE-PAIRS — {topleft_across, topleft_down} and {topright, bottomleft}.
+  Transposing the grid (row<->col) maps across<->down while preserving letter
+  order, so a pair's mrv_inc search trees are exact transposes: same first
+  solution modulo transposition, and `layout_reward` is transpose-invariant
+  (it counts checked cells), so a pair's first-solution rewards are identical.
+  Strict mode therefore did ~2x redundant work sweeping all four.
+- **What:** scope strict `arrange_best_layout/6` to a new
+  `arrange_corners([topleft_across, topright])` — one representative per pair,
+  the same two the reward-tie break already prefers (stable `sort(1,@>=)`), so
+  the emitted best is byte-unchanged. `start_locs/1` stays 4-corner for the
+  greedy/best-effort/candidates paths (transposed layouts are legitimately
+  distinct candidates there) and the fragment/enumerate paths.
+- **Verification (before changing anything):** per-corner first solution over
+  every ladder rung (grids 9/15/21, 8..80 words). Within each pair, rewards are
+  identical AND the partner placement is the literal grid-transpose of its
+  mate, on all 9 rungs incl. the two heaviest. The two pairs are NOT equal to
+  each other (e.g. 15x15_32w: pair-A 347 vs pair-B 349), so both
+  representatives are retained.
+- **Result (search inferences, `make bench-check --heavy` vs the pre-change
+  baseline):** -49.6% to -50.1% on every rung (09x09_08w 98,058 -> 49,035;
+  15x15_36w 182.6M -> 91.8M). No regressions. `make test`: 186 plunit pass,
+  goldens byte-identical. Baseline re-recorded at the new counts
+  (`make bench-record BENCH_ARGS=--heavy`).
+- **Verdict:** SHIPPED. A ~2x strict-search win at zero output change, since
+  the dropped corners were exact transpose-twins of the kept ones. Guard:
+  relies on a square canvas + transpose-symmetric branch step/reward — do not
+  route the candidate/fragment/enumerate paths through `arrange_corners/1`.
