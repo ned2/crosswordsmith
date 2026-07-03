@@ -48,7 +48,11 @@
             % utilities
             remove_x/3,
             shares_letter/2,
-            check_unique_answers/1
+            check_unique_answers/1,
+            % search perturbation (the arrange --seed / --shuffle knobs)
+            set_search_seed/1,
+            set_shuffle_seed/1,
+            current_search_seed/1
           ]).
 
 
@@ -67,6 +71,11 @@
 
 % limit/2, used by the capped placement count in the mrv_capped strategy.
 :- use_module(library(solution_sequences)).
+
+% random_permutation/2 for the opt-in search perturbation (set_search_seed/1).
+% NOT reached on the deterministic path (search_seed/1 unset -> identity), so a
+% default run never draws from — nor even seeds — the RNG.
+:- use_module(library(random)).
 
 % aggregate_all/3, used to count solutions in all_crossword/5.
 :- use_module(library(aggregate)).
@@ -394,11 +403,71 @@ assign_words_inc(Words, PlacedWords, StateIn, GridLen, Start, Dir, GIn, GOut, Ou
     assign_words_inc(RemWords, [Placed|PlacedWords], StateOut, GridLen,
                      _Start, _Dir, G1, GOut, Out).
 
+% --- search perturbation (the arrange --seed knob) --------------------------
+% The mrv_inc search is DETERMINISTIC by default. With no seed installed,
+% seed_word_order/2 and order_candidates/2 are pure identities and no RNG
+% builtin is reachable, so a default run's output is byte-identical (the golden
+% invariant holds) and the RNG is never even seeded. A seed opts into a
+% REPRODUCIBLE pseudo-random perturbation of the SAME search tree: it reorders
+% branches, never prunes or adds them, so completeness is unchanged. The seed
+% lives only on the perturbed path — it can never influence the deterministic
+% one.
+:- dynamic search_seed/1.
+
+% set_search_seed(N): install the search seed. -1 (the CLI "not given"
+% sentinel) clears it -> the fully deterministic path. N>=0 records the seed
+% and seeds SWI's global RNG ONCE, so a given N always reproduces the same
+% layout. Mirrors set_check_target/1: at most one search_seed/1 fact, retract
+% before assert, the sole sanctioned writer of the module-private dynamic.
+set_search_seed(-1) :- !, retractall(search_seed(_)).
+set_search_seed(N) :-
+    integer(N), N >= 0,
+    retractall(search_seed(_)),
+    set_random(seed(N)),
+    assertz(search_seed(N)).
+
+% current_search_seed(-N): the installed search seed, or FAILS if none (the
+% deterministic default). Lets the emitter record the seed as provenance in the
+% output without threading it through every emit signature. Semidet.
+current_search_seed(N) :- search_seed(N).
+
+% set_shuffle_seed(-N): the --shuffle path. Draw an UNPREDICTABLE seed from the
+% OS entropy source (a different N on each process run -> a different layout),
+% then install it as a normal search seed. Returning N keeps shuffle
+% RECOVERABLE: the run is still reproducible via --seed N, so a liked layout is
+% never lost. This is the only place that reseeds from entropy; --seed N and the
+% deterministic default never do.
+set_shuffle_seed(N) :-
+    set_random(seed(random)),
+    random_between(0, 1_000_000_000, N),
+    set_search_seed(N).
+
+% Seed-word order: which word anchors the layout. Deterministic = input order;
+% seeded = a shuffled copy (the single biggest source of layout variety).
+seed_word_order(Words, Order) :-
+    ( search_seed(_) -> random_permutation(Words, Order) ; Order = Words ).
+
+% Interior value ordering over the keysorted Count-Entry pairs (most-constrained
+% first). Deterministic = the plain values; seeded = shuffled WITHIN each
+% equal-count bucket only, so the fail-first heuristic (and thus solution
+% quality) is preserved while equally-ranked branches are explored in a
+% seed-varied order.
+order_candidates(Sorted, Ordered) :-
+    (   search_seed(_)
+    ->  group_pairs_by_key(Sorted, Groups),
+        maplist(shuffle_bucket, Groups, Buckets),
+        append(Buckets, Ordered)
+    ;   pairs_values(Sorted, Ordered)
+    ).
+
+shuffle_bucket(_Count-Entries, Shuffled) :- random_permutation(Entries, Shuffled).
+
 % Seed word (grid empty): branch over all words, as the other MRV strategies
 % do; the next node builds the full cache (StateOut = none).
 select_inc(Words, [], _StateIn, _GridLen, _Start, _Dir, _GIn, Entry, RemWords, none) :-
     !,
-    member(Entry, Words),
+    seed_word_order(Words, SeedOrder),
+    member(Entry, SeedOrder),
     remove_x(Entry, Words, RemWords).
 % Otherwise: get current counts (full or incremental), order most-constrained
 % first over the connectable words, pick backtrackably. The cache passed
@@ -411,7 +480,7 @@ select_inc(Words, PlacedWords, StateIn, GridLen, Start, Dir, GIn, Entry, RemWord
     map_list_to_pairs(count_of(CountMap), Words, Pairs),
     include(positive_key, Pairs, Placeable),
     keysort(Placeable, Sorted),
-    pairs_values(Sorted, Ordered),
+    order_candidates(Sorted, Ordered),
     member(Entry, Ordered),
     remove_x(Entry, Words, RemWords),
     entry_letters(Entry, EntryLetters),

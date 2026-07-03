@@ -148,13 +148,19 @@ cap_inert(Placed, CapInert) :-
 % The diagnostics.arrange sub-dict for an emitted layout: what the solver
 % alone knows about how the result compromised. Recomputed from the final
 % placement so every emit path (strict, best-effort, fragment, candidates)
-% reports identically. dropped preserves input order.
-arrange_diag_dict(Numbered, Words,
-                  _{capInert: CapInert, dropped: Dropped, reward: Reward}) :-
+% reports identically. dropped preserves input order. `seed` is added ONLY when
+% --seed/--shuffle perturbed the search (provenance to reproduce the layout via
+% --seed N); a deterministic run omits it, so its output is byte-unchanged.
+arrange_diag_dict(Numbered, Words, Diag) :-
     arrange_weights(WCap, WTail),
     layout_reward(WCap, WTail, Numbered, Reward),
     cap_inert(Numbered, CapInert),
-    dropped_answers(Words, Numbered, Dropped).
+    dropped_answers(Words, Numbered, Dropped),
+    Base = _{capInert: CapInert, dropped: Dropped, reward: Reward},
+    (   current_search_seed(Seed)
+    ->  put_dict(seed, Base, Seed, Diag)
+    ;   Diag = Base
+    ).
 
 dropped_answers(Words, Placed, Dropped) :-
     maplist([PW, A]>>get_dict(answer, PW, A), Placed, PlacedAnswers),

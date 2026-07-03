@@ -96,6 +96,10 @@ arrange_opts_spec(
        longflags([enumerate]),                    help('count every feasible full placement instead of emitting a layout')],
       [opt(check_target), type(integer), default(-1), meta('N'),
        longflags(['check-target']),               help('lower the per-word checking target to <= N (default ceil(L/2); the reachability escape hatch)')],
+      [opt(seed),        type(integer), default(-1), meta('N'),
+       longflags([seed]),                         help('perturb the strict search with RNG seed N (>=0) for a reproducible pseudo-random layout; omit for the deterministic layout')],
+      [opt(shuffle),     type(boolean), default(false),
+       longflags([shuffle]),                      help('perturb the strict search with a FRESH random seed each run (a different layout every time; --verbose prints the seed to reproduce it). Mutually exclusive with --seed')],
       [opt(verbose),     type(boolean), default(false),
        longflags([verbose]),                      help('report the success summary (grid, placed, reward) on stderr; warnings and failures print regardless')],
       [opt(input),       type(atom),    default(''), meta('FILE'),
@@ -135,8 +139,14 @@ arrange_dispatch(Opts) :-
     memberchk(check_target(CT), Opts),
     validate_check_target(CT),
     set_check_target(CT),
+    memberchk(seed(SeedOpt), Opts),
+    memberchk(shuffle(Shuffle), Opts),
+    validate_seed(SeedOpt),
+    seed_mode(Shuffle, SeedOpt, SeedMode),
+    guard_seed_combos(SeedMode, Drop, Enum, K),
     memberchk(verbose(Verbose), Opts),
     set_verbose(Verbose),
+    apply_seed_mode(SeedMode),
     load_clues(InputFile, Words),
     arrange_action(Enum, K, FragFile, Words, SizeOpt, Drop, Mode, OutFile).
 
@@ -160,6 +170,45 @@ drop_contract(Opts, Drop) :-
 validate_check_target(-1) :- !.
 validate_check_target(N) :- integer(N), N >= 1, !.
 validate_check_target(N) :- cli_error('--check-target must be a positive integer (got ~w)'-[N]).
+
+% --seed / --shuffle perturb the strict mrv_inc search (design note: a fully
+% deterministic default alongside an opt-in pseudo-random path; the seed never
+% touches the deterministic flow). --seed N (N>=0) is a REPRODUCIBLE seed;
+% --shuffle draws a FRESH one each run. -1 is the --seed "not given" sentinel.
+% The state lives behind core's exported set_search_seed/1 & set_shuffle_seed/1.
+validate_seed(-1) :- !.
+validate_seed(N) :- integer(N), N >= 0, !.
+validate_seed(N) :- cli_error('--seed must be a non-negative integer (got ~w)'-[N]).
+
+% Resolve --seed / --shuffle into one perturbation mode. They are mutually
+% exclusive: you either fix the seed or randomise it, never both.
+%   none | fixed(N) | shuffle
+seed_mode(true, -1, shuffle) :- !.
+seed_mode(true, _N, _)       :- !, cli_error('--seed and --shuffle are mutually exclusive').
+seed_mode(false, -1, none)   :- !.
+seed_mode(false, N,  fixed(N)).
+
+% Perturbation rides the strict single-layout search only. The greedy paths
+% (--best-effort, --candidates) and --enumerate never reach the perturbed seam,
+% so combining them would silently do nothing — reject it up front with a clear
+% message instead. Strict, with or without --fragment, is fine.
+guard_seed_combos(none, _Drop, _Enum, _K) :- !.
+guard_seed_combos(_Mode, best_effort, _Enum, _K) :- !,
+    cli_error('--seed/--shuffle perturb the strict search only; not compatible with --best-effort').
+guard_seed_combos(_Mode, _Drop, true, _K) :- !,
+    cli_error('--seed/--shuffle cannot be combined with --enumerate (enumeration counts placements; branch order is irrelevant)').
+guard_seed_combos(_Mode, _Drop, _Enum, K) :- K > 0, !,
+    cli_error('--seed/--shuffle cannot be combined with --candidates (candidates already emit diverse layouts deterministically)').
+guard_seed_combos(_Mode, _Drop, _Enum, _K).
+
+% Install the resolved perturbation. `shuffle` picks a fresh, recoverable seed
+% and (only under --verbose, honouring the quiet-success contract) reports it so
+% a liked layout can be reproduced with --seed N.
+apply_seed_mode(none)     :- set_search_seed(-1).
+apply_seed_mode(fixed(N)) :- set_search_seed(N).
+apply_seed_mode(shuffle)  :-
+    set_shuffle_seed(N),
+    verbose_report("arrange: shuffle seed ~w (reproduce with --seed ~w)~n", [N, N]).
 
 % Resolve the size flag: -1 sentinel means "not given". For a fragment the
 % fragment's gridLength provides N; otherwise default to 15.

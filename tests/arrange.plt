@@ -449,4 +449,112 @@ test(seed_candidates_longest_first) :-
     Seeds = [[S1|_], [S2|_], [S3|_]],
     S1 == 'AAAA', S2 == 'CCC', S3 == 'BB'.
 
+% --- --seed: opt-in pseudo-random search perturbation -----------------------
+% Design contract: a fully deterministic default path alongside a reproducible
+% seeded path, with the seed NEVER on the deterministic flow. set_search_seed/1
+% (exported by core) is the sole writer; -1 clears it. The byte-exact
+% deterministic emit is pinned by the golden (tests/golden/arrange_*.json);
+% these cover reproducibility, quality preservation, and — critically — that a
+% cleared seed restores the deterministic result even after the RNG was used.
+
+% Placement fingerprint: the sorted (answer, start, dir) triples of a layout.
+layout_sig(Numbered, Sig) :-
+    findall(A-S-D,
+            ( member(W, Numbered),
+              get_dict(answer, W, A), get_dict(start, W, S), get_dict(dir, W, D) ),
+            Sig0),
+    sort(Sig0, Sig).
+
+% Same seed => identical layout (reproducible). The seed is re-installed before
+% the second run so the global RNG stream restarts from the same point.
+test(seed_reproducible) :-
+    arrange_bundled(Words),
+    setup_call_cleanup(
+        set_search_seed(7),
+        ( crosswordsmith_arrange:arrange_best_layout(Words, 17, N1, _, placed),
+          set_search_seed(7),
+          crosswordsmith_arrange:arrange_best_layout(Words, 17, N2, _, placed) ),
+        set_search_seed(-1)),
+    layout_sig(N1, S1), layout_sig(N2, S2),
+    S1 == S2.
+
+% A seeded search preserves completeness/quality: still a full placement.
+test(seed_places_all_words) :-
+    arrange_bundled(Words),
+    setup_call_cleanup(
+        set_search_seed(1),
+        crosswordsmith_arrange:arrange_best_layout(Words, 17, Numbered, _R, Outcome),
+        set_search_seed(-1)),
+    Outcome == placed,
+    length(Numbered, 6).
+
+% At least one seed actually perturbs the layout away from the deterministic one
+% (robust to RNG-impl detail: it suffices that some seed in the set differs).
+test(seed_can_perturb_layout) :-
+    arrange_bundled(Words),
+    set_search_seed(-1),
+    crosswordsmith_arrange:arrange_best_layout(Words, 17, DetN, _, placed),
+    layout_sig(DetN, DetSig),
+    once(( member(Seed, [0, 1, 2, 3, 7, 42]),
+           setup_call_cleanup(
+               set_search_seed(Seed),
+               crosswordsmith_arrange:arrange_best_layout(Words, 17, SeedN, _, placed),
+               set_search_seed(-1)),
+           layout_sig(SeedN, SeedSig),
+           SeedSig \== DetSig )).
+
+% The seed is OFF the deterministic path: after running a seeded search (which
+% mutates the global RNG) and then clearing the seed, the deterministic layout
+% is byte-for-byte (fingerprint) identical to the pre-seed run.
+test(seed_cleared_restores_deterministic) :-
+    arrange_bundled(Words),
+    set_search_seed(-1),
+    crosswordsmith_arrange:arrange_best_layout(Words, 17, Before, _, placed),
+    layout_sig(Before, SigBefore),
+    setup_call_cleanup(
+        set_search_seed(5),
+        crosswordsmith_arrange:arrange_best_layout(Words, 17, _, _, placed),
+        set_search_seed(-1)),
+    crosswordsmith_arrange:arrange_best_layout(Words, 17, After, _, placed),
+    layout_sig(After, SigAfter),
+    SigAfter == SigBefore.
+
+% --shuffle draws a fresh seed from OS entropy but stays RECOVERABLE: it picks a
+% concrete integer N, and re-running with --seed N reproduces the same layout.
+% (We assert recoverability, not that two shuffles differ — that is inherently
+% probabilistic, and on a tiny word set only a few distinct layouts exist.)
+test(shuffle_seed_is_recoverable) :-
+    arrange_bundled(Words),
+    setup_call_cleanup(
+        set_shuffle_seed(N),
+        crosswordsmith_arrange:arrange_best_layout(Words, 17, ShufN, _, placed),
+        set_search_seed(-1)),
+    integer(N), N >= 0,
+    setup_call_cleanup(
+        set_search_seed(N),
+        crosswordsmith_arrange:arrange_best_layout(Words, 17, RepeatN, _, placed),
+        set_search_seed(-1)),
+    layout_sig(ShufN, S1), layout_sig(RepeatN, S2),
+    S1 == S2.
+
+% Provenance: a perturbed layout records its seed in diagnostics.arrange.seed,
+% so the JSON artifact is self-documenting (reproduce with --seed N).
+test(seed_recorded_in_diagnostics, [true(S == 7)]) :-
+    arrange_bundled(Words),
+    setup_call_cleanup(
+        set_search_seed(7),
+        ( crosswordsmith_arrange:arrange_best_layout(Words, 17, Numbered, _, placed),
+          crosswordsmith_arrange:arrange_diag_dict(Numbered, Words, Diag) ),
+        set_search_seed(-1)),
+    get_dict(seed, Diag, S).
+
+% The deterministic default omits the seed key entirely (missing = default),
+% so its emitted diagnostics — and thus the golden — are byte-unchanged.
+test(no_seed_absent_from_diagnostics) :-
+    arrange_bundled(Words),
+    set_search_seed(-1),
+    crosswordsmith_arrange:arrange_best_layout(Words, 17, Numbered, _, placed),
+    crosswordsmith_arrange:arrange_diag_dict(Numbered, Words, Diag),
+    \+ get_dict(seed, Diag, _).
+
 :- end_tests(arrange).

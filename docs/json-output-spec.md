@@ -260,6 +260,7 @@ element of a `--candidates` array — caveats are per-layout):
 | `capInert` | boolean | `true` when **no** placed word reaches its checking target — the capped objective has degenerated to plain total-crossings (design-spec §7.2); tune with `--check-target` |
 | `dropped`  | array   | answers from the input that were not placed (best-effort drops, AC-ARR-2), in input order; `[]` when everything placed |
 | `reward`   | integer | the engine's objective value for this layout (capped-checking reward, design-spec §7.2) |
+| `seed`     | integer | **optional** — the RNG seed that produced this layout, present **only** when `--seed N` or `--shuffle` perturbed the search; reproduce the exact layout with `--seed <value>`. Absent (the default) means the deterministic search, so a missing `seed` = "not perturbed" |
 
 Structural fields (`gridLength`, `grid`, `words`) remain the complete layout
 contract: a consumer may ignore `diagnostics` wholesale and lose nothing but

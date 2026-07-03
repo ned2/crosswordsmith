@@ -9,9 +9,11 @@ diffable output throughout. It feeds clue-writing tools; it is not one (no
 auto-cluing). The full product vision and acceptance criteria live in
 [`docs/design-spec.md`](docs/design-spec.md).
 
-Everything is **deterministic**: identical input and flags always produce
-byte-identical output — no randomness, no shuffle. One CLI, one verb per
-capability:
+Everything is **deterministic by default**: identical input and flags always
+produce byte-identical output — no randomness, no shuffle. (`arrange` takes
+opt-in `--seed N` / `--shuffle` flags for a reproducible or fresh pseudo-random
+layout; neither ever touches the default deterministic path — see below.) One
+CLI, one verb per capability:
 
 - **`arrange`** — lay out *these specific* words into an interlocking,
   crossword-shaped layout (*Flavour A* — a closed word set, aesthetic interlock).
@@ -355,8 +357,25 @@ This describes the shared **legality core** (`prolog/crosswordsmith/core.pl`),
 which `arrange`
 reuses. `arrange` drives it with a deterministic most-constrained-first
 (MRV) ordering, constructs over the four start corners, rescores each complete
-layout by a capped interlock objective, and emits the best — so the output is
-stable and shuffle-free (the old random `--shuffle` path was removed).
+layout by a capped interlock objective, and emits the best — so by default the
+output is stable and shuffle-free.
+
+For variety, two opt-in flags perturb only the branch **ordering** of the same
+MRV search (shuffling the seed word and shuffling within equal-constraint
+buckets, so completeness and solution quality are unchanged):
+
+- **`arrange --seed N`** (N ≥ 0) — a *reproducible* pseudo-random layout: a
+  given `N` always reproduces the same grid.
+- **`arrange --shuffle`** — a *fresh* random layout on every run (seeded from
+  OS entropy). It stays recoverable: `--verbose` prints the seed it drew
+  (`arrange: shuffle seed 508756889 (reproduce with --seed 508756889)`), so a
+  layout you like is never lost. Mutually exclusive with `--seed`.
+
+Both live entirely on this opt-in path — with neither flag, no RNG is seeded or
+consulted, so the deterministic default is byte-for-byte untouched. They apply
+to the strict search (with or without `--fragment`) and are rejected with
+`--best-effort`, `--candidates`, or `--enumerate`, which don't route through
+that seam. (Use `--candidates K` for *deterministic* diverse layouts.)
 
 ### Finishing and output
 
