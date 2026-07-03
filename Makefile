@@ -25,16 +25,16 @@ fuzz:
 # Just the golden-output regression checks (the crosswordsmith CLI, end to end).
 golden:
 	@diff -u tests/golden/arrange_bundled_17_fixed.json \
-		<(./crosswordsmith arrange --strict --size-mode fixed --size 17 --input fixtures/bundled_17_clues.pl 2>/dev/null) \
+		<(./crosswordsmith arrange --strict --size 17 --input fixtures/bundled_17_clues.pl 2>/dev/null) \
 		&& echo "golden (arrange fixed): OK"
 	@diff -u tests/golden/arrange_toc_demo_max.json \
-		<(./crosswordsmith arrange --strict --size-mode max --size 25 --input fixtures/toc_demo.pl 2>/dev/null) \
+		<(./crosswordsmith arrange --strict --max-size 25 --input fixtures/toc_demo.pl 2>/dev/null) \
 		&& echo "golden (arrange max): OK"
 	@diff -u tests/golden/arrange_bundled_17_fragment.json \
-		<(./crosswordsmith arrange --strict --size-mode fixed --fragment fixtures/bundled_17_fragment.json --input fixtures/bundled_17_clues.pl 2>/dev/null) \
+		<(./crosswordsmith arrange --strict --fragment fixtures/bundled_17_fragment.json --input fixtures/bundled_17_clues.pl 2>/dev/null) \
 		&& echo "golden (arrange fragment): OK"
 	@diff -u tests/golden/arrange_bundled_17_candidates.json \
-		<(./crosswordsmith arrange --strict --size-mode fixed --candidates 3 --size 17 --input fixtures/bundled_17_clues.pl 2>/dev/null) \
+		<(./crosswordsmith arrange --strict --candidates 3 --size 17 --input fixtures/bundled_17_clues.pl 2>/dev/null) \
 		&& echo "golden (arrange candidates): OK"
 	@diff -u tests/golden/lint_bundled_17_toc.json \
 		<(./crosswordsmith lint --profile toc tests/golden/arrange_bundled_17_fixed.json 2>/dev/null) \
@@ -52,10 +52,10 @@ golden:
 # Regenerate the golden files. Use only after an INTENTIONAL output change,
 # and review the diff before committing.
 update-golden:
-	./crosswordsmith arrange --strict --size-mode fixed --size 17 --input fixtures/bundled_17_clues.pl 2>/dev/null > tests/golden/arrange_bundled_17_fixed.json
-	./crosswordsmith arrange --strict --size-mode max --size 25 --input fixtures/toc_demo.pl 2>/dev/null > tests/golden/arrange_toc_demo_max.json
-	./crosswordsmith arrange --strict --size-mode fixed --fragment fixtures/bundled_17_fragment.json --input fixtures/bundled_17_clues.pl 2>/dev/null > tests/golden/arrange_bundled_17_fragment.json
-	./crosswordsmith arrange --strict --size-mode fixed --candidates 3 --size 17 --input fixtures/bundled_17_clues.pl 2>/dev/null > tests/golden/arrange_bundled_17_candidates.json
+	./crosswordsmith arrange --strict --size 17 --input fixtures/bundled_17_clues.pl 2>/dev/null > tests/golden/arrange_bundled_17_fixed.json
+	./crosswordsmith arrange --strict --max-size 25 --input fixtures/toc_demo.pl 2>/dev/null > tests/golden/arrange_toc_demo_max.json
+	./crosswordsmith arrange --strict --fragment fixtures/bundled_17_fragment.json --input fixtures/bundled_17_clues.pl 2>/dev/null > tests/golden/arrange_bundled_17_fragment.json
+	./crosswordsmith arrange --strict --candidates 3 --size 17 --input fixtures/bundled_17_clues.pl 2>/dev/null > tests/golden/arrange_bundled_17_candidates.json
 	./crosswordsmith lint --profile toc tests/golden/arrange_bundled_17_fixed.json 2>/dev/null > tests/golden/lint_bundled_17_toc.json
 	./crosswordsmith export --to ipuz tests/golden/arrange_bundled_17_fixed.json 2>/dev/null > tests/golden/export_bundled_17.ipuz
 	./crosswordsmith export --to exolve tests/golden/arrange_bundled_17_fixed.json 2>/dev/null > tests/golden/export_bundled_17.exolve
