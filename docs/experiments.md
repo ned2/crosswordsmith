@@ -614,3 +614,72 @@ Background research distilled for this campaign lives in `docs/research/`.
   now runs for every crossing candidate, not only legal ones (the old
   ordering's micro-optimization). The greedy path is unbenchmarked; if
   best-effort/candidates rungs are ever added, revisit that ordering.
+
+### E-H5 — saturating placement counter for the capped mrv_count path — KEPT (small)
+
+- **Where:** `mrv_count/8` (`core.pl`) Cap=2 path (mrv_capped + production
+  mrv_inc); the mrv/unbounded path stays on aggregate_all. Merge d59f0d4
+  (branch commit b766f4d).
+- **What:** `count_upto2/2` — the SWI-manual nb_setarg failure-driven counter
+  with early exit at the 2nd solution, wrapped in `\+` so Start/Dir bindings
+  are discarded like findall; fresh counter(0) holder per call (reentrant).
+  Candidates measured on real mid-search goal tuples: aggregate_all+limit
+  (ref); nb_setarg loop -0.15% (winner); staged call_nth +24%; \+ \+ probes
+  +49% — count=1 is the PLURALITY case at search nodes, so re-running
+  variants lose badly (useful fact for future counting code).
+- **Result:** -0.04% to -0.24% per rung, 0 regressions, goldens
+  byte-identical; new count_upto2 plunit unit locks 0/1/2 + no-residual-
+  binding semantics. R1 research (docs/research/swi-vm-wasm-performance.md)
+  had already corrected the original hypothesis: the profiled has_type tax
+  belonged to list_to_set/2, not aggregate_all — hence the small size.
+- **Verdict:** KEPT (marginal but monotonic and behaviour-locked). Ratcheted
+  together with E-H3.
+
+### E-H3 — tabled crossing/letter memos on the mrv_inc hot path — KEPT (shipped)
+
+- **Where:** `core.pl` — `:- table pair_crossings/3` (the ordered x(PPos,Pos)
+  crossing sequence per ordered letter-list pair, replacing per-call
+  intersection/3 + list_to_set/2 + two nth1/3 backtracking passes in
+  find_intersecting_word/6) and `:- table answer_letters/2` (the atom_chars +
+  delete/3 letter footprint behind entry_letters/2). Merge 365c7a6 (branch
+  commit 43c16b3).
+- **Order preservation (hard requirement, held):** the tabled findall lifts
+  the former inline conjunction verbatim, so candidate order and every golden
+  are byte-identical.
+- **Determinism invariant (load-bearing):** tables are abolished at the
+  mrv_inc find_crossword/6 boundary. A search amortizes ~|Words|^2 pair
+  entries across millions of nodes but starts cold, so search_inf is
+  self-contained and run-order independent (core-only == --heavy counts,
+  verified). Do NOT remove the abolish for a warm-table micro-win.
+- **Result (standalone, vs pre-campaign baseline):** -8% to -30.6% per rung,
+  heavy tail gains most (36w 182.6M -> 126.7M standalone). Composed with
+  E-H1/E-H2/E-H5 and ratcheted: 36w now 44.8M (-75.5% cumulative).
+- **Cost:** whole-process RSS rises with table size (21x21_80w 14.2 ->
+  24.9 MiB, +75%; mid rungs +13-20%), bounded per search, freed at the
+  boundary. Tabling is available under the WASM build (single-threaded, so
+  shared-table caveats moot) — but the footprint matters for the ~300MB
+  Android ceiling; revisit if WASM memory becomes tight.
+- **Verdict:** SHIPPED. The biggest single constant-factor win of the
+  campaign after the corner dedup.
+
+### P1 — backtrack-distance / failure-clustering probe — MEASUREMENT (no merge)
+
+- **What:** nb_setval place/unplace/wipeout instrumentation on
+  assign_words_inc/select_inc, run on the dense rungs from both production
+  corners. Artifacts on probe branch (worktree commit a74ffcf+0b32369):
+  benchmarks/probe_backtrack.pl + scratch/probe_p1_output.txt.
+- **Findings:**
+  1. CBJ headroom: NONE. Retreats are 84-86% distance 1-2, the distribution
+     dies by 5, max observed 7. Conflict-directed backjumping / dynamic
+     backtracking is NOT worth building for this search. (Closes the
+     question docs/research/arrange-search-algorithms.md #2 left open.)
+  2. wdeg signal: STRONG. Wipeouts concentrate on ~8-10 words per rung
+     (top-5 = 75-91%) — an adaptive weighted tie-break has real signal.
+     Addressable surface: the thrashing corner on 34w/36w only.
+  3. 21x21_80w places all 80 words with ZERO backtracking from both
+     corners: its ~10M-inference cost is pure per-node counting work.
+     Only constant-factor cuts help it; no ordering change can.
+  4. Churn is corner-asymmetric (36w: topleft_across 4 unplaces vs topright
+     3,418) and broad-but-shallow (thousands of 1-2-deep retreats) — the
+     signature of a locally-suboptimal ordering, favouring wdeg over any
+     backjumping scheme.

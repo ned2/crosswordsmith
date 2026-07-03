@@ -46,7 +46,16 @@ Effort S/M. Real risk of a null result given I6; must be benched on the ladder.
 - Explanation-based weighted degree: https://www.researchgate.net/publication/318137036
 - Evaluation of modern variable-selection strategies: https://www.researchgate.net/publication/228635686
 
-### 2. CBJ / dynamic backtracking — INSTRUMENT FIRST, prototype only if ceiling is high
+> **P1 UPDATE (2026-07-04, measured):** the instrumentation pass ran (see
+> experiments.md P1). Verdicts: **CBJ is ruled out** — retreat distances are
+> 84-86% at 1-2, max ever observed 7; there is nothing to jump over. **wdeg
+> has strong signal** — wipeouts concentrate on ~8-10 words per dense rung
+> (top-5 = 75-91%) — but its addressable surface is only the thrashing
+> corner on the 15x15 dense rungs; 21x21_80w has ZERO backtracking (its cost
+> is pure per-node counting; only constant-factor work helps it). Sections
+> below kept for the reasoning trail.
+
+### 2. CBJ / dynamic backtracking — RULED OUT by P1 (was: instrument first)
 
 Prosser's CBJ backjumps to the deepest conflict-set variable; Ginsberg's
 dynamic backtracking (JAIR 1993 — demonstrated on crosswords, but the
