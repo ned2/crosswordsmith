@@ -761,3 +761,32 @@ Background research distilled for this campaign lives in `docs/research/`.
   Do not revisit as a within-bucket tie-break; any future attempt must change the
   PRIMARY ordering (which I6/E4 already show this search punishes) or attack the
   per-node counting cost that dominates the backtrack-free rungs instead.
+
+### E-H7 — placed-word record: dict -> pw/8 compound — KEPT (shipped)
+
+- **Where:** all placed-word consumers — core.pl (assign_word builds
+  pw(Answer, Letters, Cells, Dir, Len, Start, End, Num); accessors
+  pw_answer/2..pw_num/2 exported; placed_boundary_cell reads the
+  precomputed End instead of last/2 per candidate; add_clue_word binds the
+  fresh Num var via pure rebuild), metrics.pl, arrange.pl, lint.pl,
+  stockgrid.pl, fill.pl (the metric layer is duck-typed and shared by the
+  solver AND validator paths, so all moved in lockstep; lint/stockgrid/fill
+  build records with unused fields unbound). export.pl reads only emitted
+  JSON — untouched. Merge 43a4729 (branch commit c2e3ebd).
+- **Hypothesis:** placed-word get_dict field reads (~1.5x compound access;
+  hot in find_intersecting_word, no_word_merge, the scorers) plus the
+  per-candidate last(Cells) recomputation are a residual constant factor.
+- **Result (composed on Wave 1, vs the ratcheted baseline):** -1.9% to
+  -9.7% per rung, 0 regressions; goldens byte-identical; 201 plunit pass.
+  Composed value EXCEEDS the standalone-vs-old-tree measurement (-0.95%..
+  -7.0%): Wave 1 shrank the surrounding costs, so the dict reads were a
+  larger share of what remained — complementary, not overlapping. Gradient:
+  broad forward searches win most (21x21_80w -9.7%, many placed-word field
+  reads per candidate), the trail-dominated 36w rung least (-1.9%).
+- **Verdict:** SHIPPED. And per the honest diminishing-returns read: the
+  representation seam is now MINED OUT — Letters-as-packed-atom would lose
+  (the crossing machinery needs lists), cells-as-compound buys nothing.
+  The one remaining constant-factor idea with substance is algorithmic:
+  a per-word letter-presence bitmask to short-circuit non-crossing pairs
+  before the pair_crossings lookup and inside inc_count's shares_letter
+  (tracked as E-H8, the campaign's final perf experiment).
