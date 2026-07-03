@@ -137,7 +137,9 @@ def _clue_column(
         f'<text x="{x}" y="{y + HEADING_FONT}" font-size="{HEADING_FONT}" '
         f'font-weight="bold" fill="{LETTER_FILL}">{_esc(heading)}</text>'
     ]
-    cy = y + HEADING_FONT + 8
+    # Advance a full line below the heading baseline so the first clue clears
+    # the heading (matching the inter-clue baseline step); +8 overlapped it.
+    cy = y + HEADING_FONT + LINE_H
     budget = max(1, (width - NUM_COL) // CLUE_ADVANCE)
     text_x = x + NUM_COL
     for entry in entries:
