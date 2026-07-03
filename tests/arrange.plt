@@ -160,10 +160,10 @@ test(unplaceable_empty_when_interlocking, [true(Bad == [])]) :-
 % original answer atom (with the hyphen) is preserved for export enumeration.
 test(hyphenated_answer_strips_separator, [nondet]) :-
     crosswordsmith_arrange:arrange_best_layout([['WELL-BEING'], ['BELOW']], 15, Numbered, _R, placed),
-    member(W, Numbered), get_dict(answer, W, 'WELL-BEING'), !,
-    get_dict(len, W, Len), Len =:= 9,
-    get_dict(cells, W, Cells), length(Cells, 9),
-    get_dict(letters, W, Ls), \+ memberchk('-', Ls), \+ memberchk(' ', Ls).
+    member(W, Numbered), pw_answer(W, 'WELL-BEING'), !,
+    pw_len(W, Len), Len =:= 9,
+    pw_cells(W, Cells), length(Cells, 9),
+    pw_letters(W, Ls), \+ memberchk('-', Ls), \+ memberchk(' ', Ls).
 
 % --- Phase 3: emit framing ---------------------------------------------------
 
@@ -285,12 +285,12 @@ test(fragment_pins_preserved_partial) :-
     bundled_two_word_fragment(Frags),
     crosswordsmith_arrange:arrange_fragment_strict(Words, Frags, 17, Numbered, _R, placed),
     length(Numbered, 6),
-    once(( member(Wg, Numbered), get_dict(answer, Wg, 'GNOSTIC GOSPELS') )),
-    get_dict(cells, Wg, Cg), maplist(cell_coord(17), Cg, RCg),
+    once(( member(Wg, Numbered), pw_answer(Wg, 'GNOSTIC GOSPELS') )),
+    pw_cells(Wg, Cg), maplist(cell_coord(17), Cg, RCg),
     RCg == [[0,3],[1,3],[2,3],[3,3],[4,3],[5,3],[6,3],[7,3],
             [8,3],[9,3],[10,3],[11,3],[12,3],[13,3]],
-    once(( member(We, Numbered), get_dict(answer, We, 'ETERNAL RETURN') )),
-    get_dict(cells, We, Ce), maplist(cell_coord(17), Ce, RCe),
+    once(( member(We, Numbered), pw_answer(We, 'ETERNAL RETURN') )),
+    pw_cells(We, Ce), maplist(cell_coord(17), Ce, RCe),
     RCe == [[4,2],[4,3],[4,4],[4,5],[4,6],[4,7],[4,8],
             [4,9],[4,10],[4,11],[4,12],[4,13],[4,14]].
 
@@ -419,10 +419,10 @@ test(candidates_emit_is_json_array) :-
 % Placement distance is translation-invariant: a layout and its one-row shift
 % have distance 0 (the same crossword, just moved).
 test(candidates_distance_translation_invariant) :-
-    L1 = [ word{answer:'ABC', dir:across, start:1,  cells:[1,2,3]},
-           word{answer:'ADE', dir:down,   start:1,  cells:[1,18,35]} ],
-    L2 = [ word{answer:'ABC', dir:across, start:18, cells:[18,19,20]},
-           word{answer:'ADE', dir:down,   start:18, cells:[18,35,52]} ],
+    L1 = [ pw('ABC', _, [1,2,3],    across, _, 1,  _, _),
+           pw('ADE', _, [1,18,35],  down,   _, 1,  _, _) ],
+    L2 = [ pw('ABC', _, [18,19,20], across, _, 18, _, _),
+           pw('ADE', _, [18,35,52], down,   _, 18, _, _) ],
     crosswordsmith_arrange:placement_assoc(L1, 17, A1),
     crosswordsmith_arrange:placement_assoc(L2, 17, A2),
     crosswordsmith_arrange:pos_diff_count(A1, A2, 0).
@@ -461,7 +461,7 @@ test(seed_candidates_longest_first) :-
 layout_sig(Numbered, Sig) :-
     findall(A-S-D,
             ( member(W, Numbered),
-              get_dict(answer, W, A), get_dict(start, W, S), get_dict(dir, W, D) ),
+              pw_answer(W, A), pw_start(W, S), pw_dir(W, D) ),
             Sig0),
     sort(Sig0, Sig).
 

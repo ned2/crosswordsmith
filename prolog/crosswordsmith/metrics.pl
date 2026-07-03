@@ -43,9 +43,9 @@
 % (P11).
 :- use_module(library(pairs)).
 
-% next_cell/4 (word_cells/5's stepper) — metrics' ONLY core dependency,
-% confirmed at the Phase-3 constructor extraction.
-:- use_module(crosswordsmith(core), [next_cell/4]).
+% next_cell/4 (word_cells/5's stepper) plus the placed-word record (pw/8)
+% field accessors — the metric predicates read cells/dir off each placed word.
+:- use_module(crosswordsmith(core), [next_cell/4, pw_cells/2, pw_dir/2]).
 
 % --- shared answer/footprint helpers ----------------------------------------
 
@@ -72,7 +72,7 @@ cell_rc(Cell, GridLen, R, C) :-
 
 placed_bbox(Placed, GridLen, bbox(MinR, MaxR, MinC, MaxC), Area) :-
     findall(R-C,
-            ( member(PW, Placed), get_dict(cells, PW, Cells), member(Cell, Cells),
+            ( member(PW, Placed), pw_cells(PW, Cells), member(Cell, Cells),
               cell_rc(Cell, GridLen, R, C) ),
             RCs),
     RCs = [_|_],
@@ -97,8 +97,8 @@ checked_cells(Placed, Count) :-
 
 dir_cells(Placed, Dir, Set) :-
     findall(Cell,
-            ( member(PW, Placed), get_dict(dir, PW, Dir),
-              get_dict(cells, PW, Cells), member(Cell, Cells) ),
+            ( member(PW, Placed), pw_dir(PW, Dir),
+              pw_cells(PW, Cells), member(Cell, Cells) ),
             Cs),
     sort(Cs, Set).
 
@@ -119,7 +119,7 @@ layout_dir_cells(Placed, dircells(AcrossCells, DownCells)) :-
 % precomputed dircells/2: an across word's crossings live in the down set, and
 % vice versa.
 word_checked_bitmap(W, dircells(AcrossCells, DownCells), Bits) :-
-    get_dict(cells, W, Cells), get_dict(dir, W, Dir),
+    pw_cells(W, Cells), pw_dir(W, Dir),
     ( Dir == across -> Perp = DownCells ; Perp = AcrossCells ),
     checked_bits(Cells, Perp, Bits).
 
@@ -143,7 +143,7 @@ word_half_threshold(L, T) :- T is (L + 1) // 2.
 
 % A word is "half-checked" iff at least ceil(L/2) of its cells are crossings.
 word_meets_half(W, Placed) :-
-    get_dict(cells, W, Cells), length(Cells, L),
+    pw_cells(W, Cells), length(Cells, L),
     word_checked_count(W, Placed, CC),
     word_half_threshold(L, T),
     CC >= T.
@@ -161,6 +161,6 @@ word_max_unch_run(W, Placed, MaxRun) :-
     bits_max_unch_run(Bits, MaxRun).
 
 word_perp_bits(W, Placed, Bits) :-
-    get_dict(cells, W, Cells), get_dict(dir, W, Dir),
+    pw_cells(W, Cells), pw_dir(W, Dir),
     other_dir(Dir, OD), dir_cells(Placed, OD, ODCells),
     checked_bits(Cells, ODCells, Bits).

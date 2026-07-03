@@ -14,14 +14,14 @@
 % A tiny controlled layout on a 5x5 grid: across CAT (cells 1,2,3) crossing down
 % COT (cells 1,6,11) at cell 1. Each word is checked at only its shared cell, so
 % neither is half-checked; each has an unchecked run of 2 ending the word.
-mini_layout([ word{answer:'CAT', dir:across, cells:[1,2,3],  len:3, num:1},
-              word{answer:'COT', dir:down,   cells:[1,6,11], len:3, num:1} ]).
+mini_layout([ pw('CAT', _, [1,2,3],  across, 3, _, _, 1),
+              pw('COT', _, [1,6,11], down,   3, _, _, 1) ]).
 
 % A fully-interlocked 2x2 mesh (every cell checked); also symmetric + connected.
-dense_mesh([ word{answer:'AB', dir:across, cells:[1,2], len:2, num:1},
-             word{answer:'CD', dir:across, cells:[3,4], len:2, num:2},
-             word{answer:'AC', dir:down,   cells:[1,3], len:2, num:1},
-             word{answer:'BD', dir:down,   cells:[2,4], len:2, num:2} ]).
+dense_mesh([ pw('AB', _, [1,2], across, 2, _, _, 1),
+             pw('CD', _, [3,4], across, 2, _, _, 2),
+             pw('AC', _, [1,3], down,   2, _, _, 1),
+             pw('BD', _, [2,4], down,   2, _, _, 2) ]).
 
 grid_rule_sev(Report, Rule, Sev) :-
     get_dict(grid, Report, Grid),
@@ -39,8 +39,8 @@ test(lint_loads_canonical_word) :-
         _{gridLength:5, words:[
             _{number:1, direction:"across", answer:"CAT", cells:[[0,0],[0,1],[0,2]]}]},
         5, [W]),
-    get_dict(answer, W, 'CAT'), get_dict(dir, W, across),
-    get_dict(cells, W, [1,2,3]), get_dict(len, W, 3), get_dict(num, W, 1).
+    pw_answer(W, 'CAT'), pw_dir(W, across),
+    pw_cells(W, [1,2,3]), pw_len(W, 3), pw_num(W, 1).
 
 test(lint_layout_no_grid_length_throws, [throws(error(lint_no_grid_length, _))]) :-
     crosswordsmith_lint:lint_dict_layout(_{words:[]}, _, _).
@@ -100,14 +100,14 @@ test(lint_american_applies_exact_per_word_ruleset) :-
 
 % Two non-touching words on one grid form two components -> connectivity trips.
 test(lint_connectivity_detects_split) :-
-    Split = [ word{answer:'CAT', dir:across, cells:[1,2,3],    len:3, num:1},
-              word{answer:'DOG', dir:across, cells:[13,14,15], len:3, num:2} ],
+    Split = [ pw('CAT', _, [1,2,3], across, 3, _, _, 1),
+              pw('DOG', _, [13,14,15], across, 3, _, _, 2) ],
     lint_run(Split, 5, toc, false, R),
     grid_rule_sev(R, connectivity, 'WARN').
 
 % A single connected word passes connectivity.
 test(lint_connectivity_passes_connected) :-
-    One = [ word{answer:'CAT', dir:across, cells:[4,5,6], len:3, num:1} ],
+    One = [ pw('CAT', _, [4,5,6], across, 3, _, _, 1) ],
     lint_run(One, 3, toc, false, R),
     grid_rule_sev(R, connectivity, 'PASS').
 
@@ -115,25 +115,25 @@ test(lint_connectivity_passes_connected) :-
 
 % A centred 3x3 row {4,5,6} is 180-symmetric -> PASS even under blocked-uk.
 test(lint_symmetry_passes_on_symmetric_pattern) :-
-    Sym = [ word{answer:'CAT', dir:across, cells:[4,5,6], len:3, num:1} ],
+    Sym = [ pw('CAT', _, [4,5,6], across, 3, _, _, 1) ],
     lint_run(Sym, 3, 'blocked-uk', false, R),
     grid_rule_sev(R, symmetry, 'PASS').
 
 % The top row {1,2,3} is asymmetric -> FAIL under blocked-uk...
 test(lint_symmetry_fails_asymmetric_under_blocked_uk) :-
-    Asym = [ word{answer:'CAT', dir:across, cells:[1,2,3], len:3, num:1} ],
+    Asym = [ pw('CAT', _, [1,2,3], across, 3, _, _, 1) ],
     lint_run(Asym, 3, 'blocked-uk', false, R),
     grid_rule_sev(R, symmetry, 'FAIL').
 
 % ...never hard-FAILs under --allow-asymmetry (downgraded to WARN)...
 test(lint_symmetry_allow_asymmetry_downgrades_to_warn) :-
-    Asym = [ word{answer:'CAT', dir:across, cells:[1,2,3], len:3, num:1} ],
+    Asym = [ pw('CAT', _, [1,2,3], across, 3, _, _, 1) ],
     lint_run(Asym, 3, 'blocked-uk', true, R),
     grid_rule_sev(R, symmetry, 'WARN').
 
 % ...and never FAILs at all under a profile that does not enforce it (toc).
 test(lint_symmetry_advisory_under_toc) :-
-    Asym = [ word{answer:'CAT', dir:across, cells:[1,2,3], len:3, num:1} ],
+    Asym = [ pw('CAT', _, [1,2,3], across, 3, _, _, 1) ],
     lint_run(Asym, 3, toc, false, R),
     grid_rule_sev(R, symmetry, 'WARN').
 
@@ -157,8 +157,8 @@ test(barred_band_table) :-
 % (P4: eval_word_rule/5 now takes the word's precomputed checked bitmap; build it
 % via the same layout_dir_cells/word_checked_bitmap path lint_run uses.)
 test(barred_band_fails_underchecked_five) :-
-    W = word{answer:'ABCDE', dir:across, cells:[1,2,3,4,5], len:5, num:1},
-    D = word{answer:'XYZ',   dir:down,   cells:[3,20,37],   len:3, num:2},
+    W = pw('ABCDE', _, [1,2,3,4,5], across, 5, _, _, 1),
+    D = pw('XYZ', _, [3,20,37], down, 3, _, _, 2),
     layout_dir_cells([W, D], DirCells),
     word_checked_bitmap(W, DirCells, Bits),
     crosswordsmith_lint:eval_word_rule(checked_band, fail, W, Bits, result(checked_band, Sev, _)),

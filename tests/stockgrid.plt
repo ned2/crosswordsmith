@@ -29,7 +29,7 @@ test(stockgrid_derives_lights) :-
     mask_white_cells(Mask, 3, WS),
     crosswordsmith_stockgrid:grid_lights(3, WS, Words),
     length(Words, 6),
-    forall(member(W, Words), get_dict(len, W, 3)).
+    forall(member(W, Words), pw_len(W, 3)).
 
 % A '#' splits a row into lights; runs shorter than 2 are not lights.
 test(stockgrid_splits_on_blocks) :-
@@ -37,7 +37,7 @@ test(stockgrid_splits_on_blocks) :-
                            ".......", "...#...", ".......", "...#..."], Mask),
     mask_white_cells(Mask, 7, WS),
     crosswordsmith_stockgrid:grid_lights(7, WS, Words),
-    once(( member(W, Words), get_dict(dir, W, across), get_dict(len, W, 3) )).
+    once(( member(W, Words), pw_dir(W, across), pw_len(W, 3) )).
 
 % --- validator catches illegal grids -----------------------------------------
 % A grid whose interior columns carry no down light leaves a 3-long unchecked

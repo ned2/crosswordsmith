@@ -17,8 +17,8 @@ do_fill(GridFile, SeedFile, DictFile, Across, Down) :-
     exclude(crosswordsmith_fill:seeded_slot(SeededKeys), Slots, SearchSlots),
     crosswordsmith_fill:load_dict(DictFile, DictByLen, Index),
     crosswordsmith_fill:fill_attempt(SearchSlots, Slots, DictByLen, Index, filled, Numbered, _),
-    findall(A, ( member(W, Numbered), get_dict(dir, W, across), get_dict(answer, W, A) ), Across),
-    findall(A, ( member(W, Numbered), get_dict(dir, W, down),   get_dict(answer, W, A) ), Down).
+    findall(A, ( member(W, Numbered), pw_dir(W, across), pw_answer(W, A) ), Across),
+    findall(A, ( member(W, Numbered), pw_dir(W, down),   pw_answer(W, A) ), Down).
 
 
 :- begin_tests(fill).
@@ -89,7 +89,7 @@ test(fill_seed_need_not_be_in_dict) :-
     crosswordsmith_fill:fill_attempt(SearchSlots, Slots, DictByLen, Index, Outcome, Numbered, _),
     delete_file(F),
     Outcome == filled,
-    findall(A, ( member(W, Numbered), get_dict(dir, W, across), get_dict(answer, W, A) ), Across),
+    findall(A, ( member(W, Numbered), pw_dir(W, across), pw_answer(W, A) ), Across),
     Across == ['CAT', 'ORE', 'WED'].
 
 % A seed whose answer matches no slot of the grid is rejected.

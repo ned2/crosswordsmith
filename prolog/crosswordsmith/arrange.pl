@@ -68,6 +68,12 @@
                 find_crossword/6,
                 all_crossword/5,
                 default_strategy/1,
+                pw_answer/2,
+                pw_cells/2,
+                pw_dir/2,
+                pw_len/2,
+                pw_start/2,
+                pw_num/2,
                 remove_x/3,
                 shares_letter/2,
                 check_unique_answers/1
@@ -113,7 +119,7 @@ set_check_target(N) :-
 % checked(w) is reused from metrics.pl's word_checked_count/3 (W's cells that
 % are also covered by a perpendicular placed word).
 word_reward(WCap, WTail, PW, Placed, R) :-
-    get_dict(len, PW, L),
+    pw_len(PW, L),
     check_target(L, T),
     word_checked_count(PW, Placed, C),
     Capped is min(C, T),
@@ -131,7 +137,7 @@ layout_reward(WCap, WTail, Placed, Reward) :-
 cap_binding_count(Placed, Count) :-
     aggregate_all(count,
                   ( member(PW, Placed),
-                    get_dict(len, PW, L), check_target(L, T),
+                    pw_len(PW, L), check_target(L, T),
                     word_checked_count(PW, Placed, C),
                     C >= T ),
                   Count).
@@ -163,7 +169,7 @@ arrange_diag_dict(Numbered, Words, Diag) :-
     ).
 
 dropped_answers(Words, Placed, Dropped) :-
-    maplist([PW, A]>>get_dict(answer, PW, A), Placed, PlacedAnswers),
+    maplist(pw_answer, Placed, PlacedAnswers),
     findall(A, ( member([A|_], Words), \+ memberchk(A, PlacedAnswers) ),
             Dropped).
 
@@ -409,10 +415,10 @@ cropped_cell(CellMap, GridLen, MinR, MinC, R, C, Json) :-
     ).
 
 cropped_word(MetaAssoc, GridLen, MinR, MinC, PW, WordObj) :-
-    get_dict(answer, PW, Answer),
-    get_dict(dir, PW, Dir),
-    get_dict(num, PW, Num),
-    get_dict(cells, PW, Cells),
+    pw_answer(PW, Answer),
+    pw_dir(PW, Dir),
+    pw_num(PW, Num),
+    pw_cells(PW, Cells),
     maplist(cropped_coord(GridLen, MinR, MinC), Cells, Coords),
     get_assoc(Answer, MetaAssoc, Meta),
     WordObj = _{number: Num, direction: Dir, answer: Answer,
@@ -798,7 +804,7 @@ placement_assoc(Placed, GridLen, Assoc) :-
     placed_bbox(Placed, GridLen, bbox(MinR, _MaxR, MinC, _MaxC), _Area),
     findall(A-(RR-RC-D),
             ( member(PW, Placed),
-              get_dict(answer, PW, A), get_dict(start, PW, S), get_dict(dir, PW, D),
+              pw_answer(PW, A), pw_start(PW, S), pw_dir(PW, D),
               cell_coord(GridLen, S, [SR, SC]),
               RR is SR - MinR, RC is SC - MinC ),
             Pairs),

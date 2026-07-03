@@ -45,6 +45,15 @@
             default_strategy/1,
             valid_strategy/1,
             require_strategy/1,
+            % placed-word record (pw/8) accessors
+            pw_answer/2,
+            pw_letters/2,
+            pw_cells/2,
+            pw_dir/2,
+            pw_len/2,
+            pw_start/2,
+            pw_end/2,
+            pw_num/2,
             % utilities
             remove_x/3,
             shares_letter/2,
@@ -58,8 +67,8 @@
 
 % The program uses two simple data structures. The first is a list of
 % words that have been placed on the crossword grid with each element
-% being a dict of attributes of the word. See the placed words utility
-% predicate section below for the structure of this dict.
+% being a fixed-arity compound record pw/8 of the word's attributes. See
+% the placed words utility predicate section below for its structure.
 %
 % The second data structure is as association list used to to store
 % the contents of each cell in the grid. The keys are the numbers of
@@ -537,9 +546,9 @@ find_intersecting_word(_Letters, _WLen, [], _GridLen, _Start, _Dir).
 
 find_intersecting_word(Letters, WLen, PlacedWords, GridLen, Start, Dir) :-
     member(PW, PlacedWords),
-    get_dict(letters, PW, PLetters),
-    get_dict(dir, PW, PDir),
-    get_dict(start, PW, PStart),
+    pw_letters(PW, PLetters),
+    pw_dir(PW, PDir),
+    pw_start(PW, PStart),
     intersection(Letters, PLetters, Vals),
     list_to_set(Vals, Vals2),
     member(Val, Vals2),
@@ -558,9 +567,11 @@ assign_word(Word, Letters, WLen, Start, Dir, GridLen, PlacedWords, GIn, Placed, 
     % keep every word a maximal run: this word must not fill the boundary cell
     % of an already-placed word (see no_word_merge/3 and docs/experiments.md I5)
     no_word_merge(Cells, GridLen, PlacedWords),
-    % `num` is added later by assign_clue_numbers/2
-    Placed = word{answer:Word, letters:Letters, cells:Cells,
-                  dir:Dir, len:WLen, start:Start}.
+    % Precompute the word's END cell (last of the cells run) once here, so
+    % placed_boundary_cell/3 reads it in O(1) instead of recomputing last(Cells)
+    % per candidate. `Num` is left a fresh var until assign_clue_numbers/2.
+    last(Cells, End),
+    Placed = pw(Word, Letters, Cells, Dir, WLen, Start, End, _Num).
 
 
 % A valid crossword needs every word to be a MAXIMAL run of cells - bounded on
@@ -584,14 +595,13 @@ no_word_merge(Cells, GridLen, PlacedWords) :-
 % and the cell just after its end, in the word's own direction (omitting either
 % when the word abuts the grid edge there).
 placed_boundary_cell(PW, GridLen, Before) :-
-    get_dict(dir, PW, Dir),
-    get_dict(start, PW, Start),
+    pw_dir(PW, Dir),
+    pw_start(PW, Start),
     \+ is_start_cell(Dir, Start, GridLen),
     prev_cell(Dir, Start, GridLen, Before).
 placed_boundary_cell(PW, GridLen, After) :-
-    get_dict(dir, PW, Dir),
-    get_dict(cells, PW, Cells),
-    last(Cells, End),
+    pw_dir(PW, Dir),
+    pw_end(PW, End),                 % precomputed in assign_word (was last(Cells))
     \+ is_end_cell(Dir, End, GridLen),
     next_cell(Dir, End, GridLen, After).
 
@@ -767,11 +777,11 @@ build_grid_rows(PlacedWords, GridLen, Rows) :-
 
 % Fold one placed word's cells into the cell map.
 add_word_cells(PW, AIn, AOut) :-
-    get_dict(cells, PW, Cells),
-    get_dict(letters, PW, Letters),
-    get_dict(dir, PW, Dir),
-    get_dict(num, PW, Num),
-    get_dict(start, PW, Start),
+    pw_cells(PW, Cells),
+    pw_letters(PW, Letters),
+    pw_dir(PW, Dir),
+    pw_num(PW, Num),
+    pw_start(PW, Start),
     foldl(add_cell(Dir, Num, Start), Cells, Letters, AIn, AOut).
 
 
@@ -838,14 +848,14 @@ canonical_word_order(PlacedWords, Ordered) :-
     keysort(Keyed, Sorted),
     pairs_values(Sorted, Ordered).
 
-word_canon_key(PW, Num-Dir) :- get_dict(num, PW, Num), get_dict(dir, PW, Dir).
+word_canon_key(PW, Num-Dir) :- pw_num(PW, Num), pw_dir(PW, Dir).
 
 
 placed_to_word(MetaAssoc, GridLen, PW, WordObj) :-
-    get_dict(answer, PW, Answer),
-    get_dict(dir, PW, Dir),
-    get_dict(num, PW, Num),
-    get_dict(cells, PW, Cells),
+    pw_answer(PW, Answer),
+    pw_dir(PW, Dir),
+    pw_num(PW, Num),
+    pw_cells(PW, Cells),
     maplist(cell_coord(GridLen), Cells, Coords),
     get_assoc(Answer, MetaAssoc, Meta),
     WordObj = _{number: Num, direction: Dir, answer: Answer,
@@ -862,17 +872,28 @@ cell_coord(GridLen, Cell, [Row, Col]) :-
 % Placed word utility predicates:
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-% A placed word is a dict:
-%   word{answer:Answer, letters:Letters, cells:Cells, dir:Dir,
-%        len:Len, start:Start, num:ClueNum}
-% `num` is absent until assign_clue_numbers/2 fills it in.
+% A placed word is a fixed-arity compound record (formerly a word{...} dict):
+%   pw(Answer, Letters, Cells, Dir, Len, Start, End, Num)
+% End is the word's last cell (precomputed in assign_word). `Num` (the clue
+% number) is a fresh, unbound var until assign_clue_numbers/2 rebuilds the record
+% with it bound (a pure, setarg-free rebuild). The accessors below are arg/3-style
+% one-liners the compiler indexes cheaply; call sites read like the old dict gets.
+pw_answer( pw(A,_,_,_,_,_,_,_), A).
+pw_letters(pw(_,L,_,_,_,_,_,_), L).
+pw_cells(  pw(_,_,C,_,_,_,_,_), C).
+pw_dir(    pw(_,_,_,D,_,_,_,_), D).
+pw_len(    pw(_,_,_,_,L,_,_,_), L).
+pw_start(  pw(_,_,_,_,_,S,_,_), S).
+pw_end(    pw(_,_,_,_,_,_,E,_), E).
+pw_num(    pw(_,_,_,_,_,_,_,N), N).
 
 
-start_is(PW, Start) :- get_dict(start, PW, Start).
+start_is(PW, Start) :- pw_start(PW, Start).
 
-% Add the assigned clue number to a placed word.
-add_clue_word(PW, ClueNum, NumberedPW) :-
-    put_dict(num, PW, ClueNum, NumberedPW).
+% Bind the assigned clue number into a placed word by rebuilding the record with
+% Num filled (pure; no setarg, no dict mutation). The unnumbered record's Num var
+% is left untouched, so this is safe to backtrack over.
+add_clue_word(pw(A,L,C,D,Len,S,E,_), ClueNum, pw(A,L,C,D,Len,S,E,ClueNum)).
 
 
 

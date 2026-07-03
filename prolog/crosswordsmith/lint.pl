@@ -1,8 +1,10 @@
 % lint.pl - Flavour-B grid validator (design-spec §8.1). Consumes a canonical
 % layout (what `arrange` emits) and reports PASS / WARN / FAIL per rule, per
 % word, plus a summary verdict, under a named profile. It needs no engine: its
-% only project dependency is crosswordsmith_metrics (imported below) —
-% deliberately NOT the solver substrate (spec §4 boundary).
+% project dependencies are crosswordsmith_metrics (the measurement layer) plus
+% the shared placed-word record accessors (pw/8) from core — deliberately NOT the
+% solver's SEARCH substrate (spec §4 boundary). lint builds its own pw records
+% from the JSON contract; it never runs the solver.
 %
 % Exports: lint_solve/4 (CLI seam), lint_run/5 (stockgrid's validator),
 % lint_known_profile/1 (CLI validation), lint_load/3 (deliberate API).
@@ -20,7 +22,8 @@
 :- use_module(library(aggregate)).
 :- use_module(library(ordsets)).
 
-% The shared metric layer — lint's ONLY project dependency (spec §4 boundary).
+% The shared metric layer plus the placed-word record accessors (spec §4
+% boundary: the measurement + data-type layers, never the search substrate).
 :- use_module(crosswordsmith(metrics),
               [ layout_dir_cells/2,
                 word_checked_bitmap/3,
@@ -29,6 +32,8 @@
                 word_half_threshold/2,
                 cell_rc/4
               ]).
+:- use_module(crosswordsmith(core),
+              [ pw_answer/2, pw_cells/2, pw_dir/2, pw_len/2, pw_num/2 ]).
 
 
 % --- profiles: EXACTLY the rule/severity set each one applies (AC-LINT-4) ----
@@ -81,8 +86,11 @@ lint_dict_layout(Dict, GridLen, PlacedWords) :-
     ),
     maplist(lint_word(GridLen), Ws, PlacedWords).
 
-% One canonical words[] entry -> word{answer, dir, cells (1-based nums), len, num}.
-lint_word(GridLen, Entry, word{answer:A, dir:Dir, cells:CellNums, len:Len, num:Num}) :-
+% One canonical words[] entry -> a placed-word record pw(Answer, Letters, Cells
+% (1-based nums), Dir, Len, Start, End, Num). lint reads only answer/dir/cells/
+% len/num, so Letters/Start/End are left unbound (the metric layer touches only
+% cells/dir, which are bound here).
+lint_word(GridLen, Entry, pw(A, _Letters, CellNums, Dir, Len, _Start, _End, Num)) :-
     (   is_dict(Entry), get_dict(answer, Entry, RawA), lint_atom(RawA, A)
     ->  true
     ;   throw(error(lint_invalid_word(Entry), _))
@@ -112,7 +120,7 @@ lint_cell_num(GridLen, A, Pair, Num) :-
 % White (filled) cells = the union of all word cells (the black-square pattern
 % is the complement). An ordset, for the connectivity/symmetry set tests.
 filled_cells(PlacedWords, Filled) :-
-    findall(C, ( member(W, PlacedWords), get_dict(cells, W, Cs), member(C, Cs) ), All),
+    findall(C, ( member(W, PlacedWords), pw_cells(W, Cs), member(C, Cs) ), All),
     sort(All, Filled).
 
 
@@ -127,7 +135,7 @@ lint_run(PlacedWords, GridLen, Profile, AllowAsym, Report) :-
     findall(_{number:Num, direction:Dir, answer:A, results:Results},
             ( member(W, PlacedWords),
               word_rule_results(Rules, W, DirCells, Results),
-              get_dict(answer, W, A), get_dict(num, W, Num), get_dict(dir, W, Dir) ),
+              pw_answer(W, A), pw_num(W, Num), pw_dir(W, Dir) ),
             WordReports),
     findall(GR,
             ( member(Rule-Sev0, Rules), grid_rule(Rule),
@@ -173,20 +181,20 @@ upcase_sev(fail, 'FAIL').
 % from the shared bitmap primitives (metrics.pl); the two bit-pattern rules read
 % Bits directly.
 eval_word_rule(min_length, CS, W, _Bits, result(min_length, Sev, Detail)) :-
-    get_dict(len, W, L),
+    pw_len(W, L),
     ( L >= 3 -> Sev = pass, Detail = null
     ; Sev = CS, format(atom(Detail), "length ~w is below 3", [L]) ).
 eval_word_rule(checked_half, CS, W, Bits, result(checked_half, Sev, Detail)) :-
-    get_dict(len, W, L), bits_checked_count(Bits, C), word_half_threshold(L, T),
+    pw_len(W, L), bits_checked_count(Bits, C), word_half_threshold(L, T),
     ( C >= T -> Sev = pass, Detail = null
     ; Sev = CS, format(atom(Detail), "checked ~w of ~w, need ~w", [C, L, T]) ).
 eval_word_rule(checked_full, CS, W, Bits, result(checked_full, Sev, Detail)) :-
-    get_dict(len, W, L), bits_checked_count(Bits, C),
+    pw_len(W, L), bits_checked_count(Bits, C),
     ( C >= L -> Sev = pass, Detail = null
     ; Sev = CS, format(atom(Detail), "checked ~w of ~w (every cell must be checked)", [C, L]) ).
 % The Ximenean barred-grid band: unchecked count must not exceed barred_max_unch/2.
 eval_word_rule(checked_band, CS, W, Bits, result(checked_band, Sev, Detail)) :-
-    get_dict(len, W, L), bits_checked_count(Bits, C),
+    pw_len(W, L), bits_checked_count(Bits, C),
     Unch is L - C, barred_max_unch(L, Max),
     ( Unch =< Max -> Sev = pass, Detail = null
     ; Sev = CS, format(atom(Detail),

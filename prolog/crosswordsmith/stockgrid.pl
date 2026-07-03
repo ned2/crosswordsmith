@@ -37,7 +37,8 @@
 :- use_module(crosswordsmith(lint), [lint_run/5]).
 
 % assign_clue_numbers/2: number the derived lights for validation/reporting.
-:- use_module(crosswordsmith(core), [assign_clue_numbers/2]).
+% pw_cells/2: the placed-word record (pw/8) cell accessor the lights are read via.
+:- use_module(crosswordsmith(core), [assign_clue_numbers/2, pw_cells/2]).
 
 
 % --- load + parse the mask ---------------------------------------------------
@@ -109,15 +110,15 @@ grab_run([Cell|Cs], WS, [Cell|Run], Rest) :-
     grab_run(Cs, WS, Run, Rest).
 grab_run(Cs, _WS, [], Cs).
 
-% A light as a placed-word dict (synthetic answer of the right length; the metric
-% rules read only cells/dir/len/start, not the letters).
-light_word(Dir, Cells, word{answer:Synth, dir:Dir, cells:Cells, len:Len, start:Start}) :-
+% A light as a placed-word record pw/8 (synthetic answer of the right length; the
+% metric rules read only cells/dir/len/start, so Letters/End are left unbound).
+light_word(Dir, Cells, pw(Synth, _Letters, Cells, Dir, Len, Start, _End, _Num)) :-
     length(Cells, Len), Cells = [Start|_],
     length(As, Len), maplist(=('A'), As), atom_chars(Synth, As).
 
 % White cells covered by at least one light (the union of all light cells).
 light_cell_set(Lights, Set) :-
-    findall(C, ( member(W, Lights), get_dict(cells, W, Cs), member(C, Cs) ), All),
+    findall(C, ( member(W, Lights), pw_cells(W, Cs), member(C, Cs) ), All),
     list_to_ord_set(All, Set).
 
 
@@ -137,7 +138,7 @@ stockgrid_validate(grid(_Name, Size, Mask), Verdict, Fails) :-
               get_dict(results, WR, Rs), member(Res, Rs),
               get_dict(severity, Res, 'FAIL'), get_dict(rule, Res, Rule),
               get_dict(number, WR, Num), nth0(I, Ws, WR),
-              nth0(I, Words, SrcW), get_dict(cells, SrcW, Cells) ),
+              nth0(I, Words, SrcW), pw_cells(SrcW, Cells) ),
             WordFails),
     findall(fail(Rule, grid, none),
             ( get_dict(grid, Report, GRs), member(GR, GRs),

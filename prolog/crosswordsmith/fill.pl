@@ -38,9 +38,10 @@
 % emit_fill's `max` mode delegates the cropped emit to arrange.
 :- use_module(crosswordsmith(arrange), [load_fragment/3, emit_arrange/4]).
 
-% Numbering + the canonical JSON emit for the filled layout.
+% Numbering + the canonical JSON emit for the filled layout, plus the placed-word
+% record (pw/8) accessor fill uses to recover each answer for the emit metadata.
 :- use_module(crosswordsmith(core),
-              [assign_clue_numbers/2, emit_json/3, verbose_report/2]).
+              [assign_clue_numbers/2, emit_json/3, verbose_report/2, pw_answer/2]).
 
 fill_budget(800_000_000).   % inference budget (determinism via INV-2, bounded)
 
@@ -220,11 +221,10 @@ slot_candidate_count(DictByLen, Index, slot(Start, Dir, _, Vars), c(Count, Start
 slots_to_layout(Slots, Numbered, InputWords) :-
     maplist(slot_to_word, Slots, Placed),
     once(assign_clue_numbers(Placed, Numbered)),
-    findall([A], member(word{answer:A, letters:_, cells:_, dir:_, len:_, start:_}, Placed),
-            InputWords).
+    findall([A], ( member(PW, Placed), pw_answer(PW, A) ), InputWords).
 
 slot_to_word(slot(Start, Dir, Cells, Vars),
-             word{answer:A, letters:Vars, cells:Cells, dir:Dir, len:Len, start:Start}) :-
+             pw(A, Vars, Cells, Dir, Len, Start, _End, _Num)) :-
     length(Vars, Len), atom_chars(A, Vars).
 
 
