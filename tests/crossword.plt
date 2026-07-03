@@ -88,13 +88,14 @@ test(start_bottomleft,     [true(N-D == 273-across)]):- start_loc(bottomleft, 17
 test(remove_x_first, [true(R == [a,c,b]), nondet]) :- remove_x(b, [a,b,c,b], R).
 test(remove_x_absent, [true(R == [a,b,c]), nondet]) :- remove_x(z, [a,b,c], R).
 
-% init_grid builds a GridLen*GridLen assoc of `empty` cells.
-test(init_grid_size, [true(Len =:= 9)]) :-
-    init_grid(3, G), assoc_to_list(G, L), length(L, Len).
+% init_grid builds a grid(...) term of GridLen*GridLen unbound (empty) cells;
+% cell Num is arg Num.
+test(init_grid_size, [true(Arity =:= 9)]) :-
+    init_grid(3, G), functor(G, grid, Arity).
 test(init_grid_empty) :-
-    init_grid(3, G), get_assoc(1, G, empty), get_assoc(9, G, empty).
+    init_grid(3, G), arg(1, G, C1), var(C1), arg(9, G, C9), var(C9).
 test(init_grid_no_extra, [fail]) :-
-    init_grid(3, G), get_assoc(10, G, _).
+    init_grid(3, G), arg(10, G, _).
 
 % answer_meta_assoc/2 (P5): the answer->meta assoc that replaces the O(n^2)
 % member/2 rescan in the emit join. An entry with metadata maps to its dict; an
