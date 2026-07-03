@@ -65,3 +65,14 @@ arrange_workload('fixtures/ladder_09x09_16w.pl', 9,  size,  3, 2, placed, heavy,
 arrange_workload('fixtures/ladder_21x21_80w.pl', 21, size,  2, 1, placed, heavy, 2_000_000_000).  % 21x21 hard, ~27.8M inf, ~1.4 s
 arrange_workload('fixtures/ladder_15x15_34w.pl', 15, size,  1, 0, placed, heavy, 2_000_000_000).  % 15x15 hard, ~68.5M inf, ~3.2 s
 arrange_workload('fixtures/ladder_15x15_36w.pl', 15, size,  1, 0, placed, heavy, 2_000_000_000).  % 15x15 xhard, ~182M inf, ~8.7 s
+
+% -- heavy: post-campaign envelope guards (P2 probe, 2026-07-04). One rung per
+% size just past the PRE-campaign cliff, all completing with large headroom
+% under the shipped 5e8 budget on the post-E-H1..E-H7 engine. Generated
+% gen_mesh_fixture.py G N K 3 4 11: (9 17 5), (15 40 6), (21 82 6). The
+% near-cliff regime beyond these is instance-noisy + search-bound (see
+% benchmarks/results/2026-07-04-p2-envelope-probe.md) - do NOT promote
+% marginal ~5e8 instances to rungs; they would flip on any solver change.
+arrange_workload('fixtures/ladder_09x09_17w.pl', 9,  size,  1, 0, placed, heavy, 2_000_000_000).  % 9x9 xhard, past the old cliff, ~46.7M inf, ~2.5 s
+arrange_workload('fixtures/ladder_15x15_40w.pl', 15, size,  2, 1, placed, heavy, 2_000_000_000).  % 15x15 density sentinel, ~13.5M inf, ~0.7 s
+arrange_workload('fixtures/ladder_21x21_82w.pl', 21, size,  2, 1, placed, heavy, 2_000_000_000).  % 21x21 past the old "hard-for-all" line, ~10.8M inf, ~0.6 s

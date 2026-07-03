@@ -816,3 +816,57 @@ Background research distilled for this campaign lives in `docs/research/`.
   constant paid on the 86-97% of pairs that pass through. This closes the
   constant-factor idea queue: together with E-H7's "representation seam
   mined out" verdict, the campaign's per-node cost reduction is done.
+
+### P2 — density-envelope close-out probe — MEASUREMENT (rungs adopted)
+
+- **What:** density sweeps past the pre-campaign cliffs at all three grid
+  sizes, strict search under the SHIPPED 5e8 default budget on the
+  post-campaign engine, with multi-seed discipline at each edge (the I4
+  lesson: cliffs are instance-dependent). Full data:
+  benchmarks/results/2026-07-04-p2-envelope-probe.md.
+- **New envelope (robust = places across seeds):** 9x9 16w -> 17w (18w noisy
+  edge; 19w near geometric packing saturation - the generator itself
+  struggles to plant a witness); 15x15 36w -> 42w (44w noisy edge); 21x21
+  80w -> 82w robust, 84w noisy - the pre-campaign ">=82 hard for all" line
+  is broken.
+- **Cliff character:** instance-noisy AND search-bound. The seed-11 first
+  failures stay not_proven at 4x budget (2e9) while sibling seeds at the
+  same N place marginally at ~5e8 - the classic heavy-tailed backtracking
+  distribution. RAISING THE BUDGET IS NOT THE LEVER; the right future play
+  for the near-cliff regime is opt-in randomized restarts on not_proven
+  (docs/research/arrange-search-algorithms.md #3), which is a product
+  feature, not a search-speed change.
+- **Adopted:** three envelope-guard rungs (heavy tier) in workloads.pl +
+  baseline.json: ladder_09x09_17w (~46.7M), ladder_15x15_40w (~13.5M),
+  ladder_21x21_82w (~10.8M). Near-cliff marginal instances deliberately NOT
+  promoted (they'd flip on any solver change).
+- **Also notable:** near the envelope, cost is instance-dominated, not
+  word-count-dominated (15x15: 37w costs 23M, 42w only 4.2M under one seed).
+
+---
+
+## Campaign wrap-up — 2026-07-04
+
+Seven experiments (5 shipped, 2 rejected), two research sweeps, two
+measurement probes. Search inferences on the original ladder: **-67% to
+-76% per rung** (15x15_36w: 182.6M -> 43.9M, ~9.5s -> ~2.3s wall), all
+output byte-identical throughout. Shipped: E-H1 corner dedup (~2x), E-H2
+var-cell grid, E-H3 tabled crossing/letter memos, E-H5 count_upto2, E-H7
+pw/8 records. Rejected with recorded reasoning: E-H6 wdeg tie-break, E-H8
+letter bitmask. Probes: P1 (killed CBJ before it was built; found the 80w
+rung backtrack-free), P2 (envelope above).
+
+State of the idea space at pause (why the campaign stopped here):
+- Tree-size: CLOSED for the deterministic search (P1: no backjump
+  headroom; E-H6: failure-concentration signal exists but is not
+  convertible by tie-breaking; pre-pivot I2/E4/I6 cover value ordering and
+  static orders).
+- Constant-factor: MINED OUT (E-H7 verdict on representation; E-H8 verdict
+  on prefilters; R1 checklist of confirmed non-hot-spots).
+- Remaining levers are PRODUCT features, not search speed: (1) randomized
+  restarts on not_proven for the heavy-tailed near-cliff regime; (2) WASM
+  build guidance + one-time ladder inference-parity validation under
+  swipl-wasm (docs/research/swi-vm-wasm-performance.md); (3) greedy-path
+  (best-effort/candidates) benchmarking + incrementality, currently
+  unmeasured (E-H2 left a known greedy micro-regression: placement_key now
+  runs for every crossing candidate).

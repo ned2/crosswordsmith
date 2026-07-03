@@ -9,7 +9,7 @@
   "workloads": {
     "ladder_09x09_08w.pl": {
       "budget":2000000000,
-      "cmd_rss_med_kib":11782,
+      "cmd_rss_med_kib":11788,
       "cmd_wall_med_ms":50.0,
       "grid":9,
       "info_only": ["cmd_wall_med_ms", "cmd_rss_med_kib" ],
@@ -21,8 +21,8 @@
     },
     "ladder_09x09_16w.pl": {
       "budget":2000000000,
-      "cmd_rss_med_kib":12228,
-      "cmd_wall_med_ms":100.0,
+      "cmd_rss_med_kib":12272,
+      "cmd_wall_med_ms":110.0,
       "grid":9,
       "info_only": ["cmd_wall_med_ms", "cmd_rss_med_kib" ],
       "iterations":3,
@@ -33,7 +33,7 @@
     },
     "ladder_15x15_12w.pl": {
       "budget":2000000000,
-      "cmd_rss_med_kib":11946,
+      "cmd_rss_med_kib":11900,
       "cmd_wall_med_ms":60.0,
       "grid":15,
       "info_only": ["cmd_wall_med_ms", "cmd_rss_med_kib" ],
@@ -45,7 +45,7 @@
     },
     "ladder_15x15_28w.pl": {
       "budget":2000000000,
-      "cmd_rss_med_kib":13344,
+      "cmd_rss_med_kib":13436,
       "cmd_wall_med_ms":90.0,
       "grid":15,
       "info_only": ["cmd_wall_med_ms", "cmd_rss_med_kib" ],
@@ -57,7 +57,7 @@
     },
     "ladder_15x15_32w.pl": {
       "budget":2000000000,
-      "cmd_rss_med_kib":13824,
+      "cmd_rss_med_kib":13804,
       "cmd_wall_med_ms":140.0,
       "grid":15,
       "info_only": ["cmd_wall_med_ms", "cmd_rss_med_kib" ],
@@ -69,8 +69,8 @@
     },
     "ladder_15x15_34w.pl": {
       "budget":2000000000,
-      "cmd_rss_med_kib":14196,
-      "cmd_wall_med_ms":1030.0,
+      "cmd_rss_med_kib":14096,
+      "cmd_wall_med_ms":1010.0,
       "grid":15,
       "info_only": ["cmd_wall_med_ms", "cmd_rss_med_kib" ],
       "iterations":1,
@@ -81,7 +81,7 @@
     },
     "ladder_15x15_36w.pl": {
       "budget":2000000000,
-      "cmd_rss_med_kib":14148,
+      "cmd_rss_med_kib":14488,
       "cmd_wall_med_ms":2480.0,
       "grid":15,
       "info_only": ["cmd_wall_med_ms", "cmd_rss_med_kib" ],
@@ -93,7 +93,7 @@
     },
     "ladder_21x21_25w.pl": {
       "budget":2000000000,
-      "cmd_rss_med_kib":13178,
+      "cmd_rss_med_kib":13248,
       "cmd_wall_med_ms":80.0,
       "grid":21,
       "info_only": ["cmd_wall_med_ms", "cmd_rss_med_kib" ],
@@ -105,8 +105,8 @@
     },
     "ladder_21x21_80w.pl": {
       "budget":2000000000,
-      "cmd_rss_med_kib":24928,
-      "cmd_wall_med_ms":600.0,
+      "cmd_rss_med_kib":25152,
+      "cmd_wall_med_ms":590.0,
       "grid":21,
       "info_only": ["cmd_wall_med_ms", "cmd_rss_med_kib" ],
       "iterations":2,
