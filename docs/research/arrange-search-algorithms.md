@@ -30,7 +30,18 @@ back in play there.
 
 ## Ranked candidates
 
-### 1. Adaptive weighted-degree tie-breaking (dom/wdeg-style) — TRY FIRST
+### 1. Adaptive weighted-degree tie-breaking (dom/wdeg-style) — TRIED, REJECTED (E-H6)
+
+> **E-H6 UPDATE (2026-07-04, measured):** implemented and rejected. The
+> failure concentration P1 found is real and the weights land on the right
+> words, but a within-bucket tie-break cannot exploit it: mrv_inc's
+> low-count buckets are mostly forced, so there are few ties at the
+> shallow-retreat nodes; floating a blamed word just picks a different
+> equally-doomed branch. Target rungs sub-noise, one dense rung +4.4%
+> (the I6 steering failure mode), 36w reward regressed. With CBJ also
+> ruled out (P1), the tree-size avenue for the deterministic search is
+> CLOSED — remaining cost on hard rungs is per-node counting work.
+> Full entry in experiments.md. Original reasoning kept below.
 
 Boussemart et al.'s dom/wdeg: weight constraints by how often they cause
 failures *during this run*; order variables by domain/weight. Unlike I6's
