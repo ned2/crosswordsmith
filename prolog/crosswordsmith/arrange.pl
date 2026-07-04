@@ -57,7 +57,7 @@
                 answer_meta_assoc/2,
                 add_word_cells/3,
                 cell_coord/3,
-                init_grid/2,
+                init_gs/2,
                 start_loc/4,
                 start_locs/1,
                 next_cell/4,
@@ -556,7 +556,7 @@ reconcile_fragment_size(FragGridLen, OptSize, _) :-
 seed_from_fragment(Frags, Words, GridLen, SeededPlaced, SeededGrid, Remaining) :-
     check_fragment_unique(Frags),
     sort_frags_by_start(Frags, Ordered),
-    init_grid(GridLen, G0),
+    init_gs(GridLen, G0),
     foldl(pin_fragment_word(Words, GridLen), Ordered, []-G0, SeededPlaced-SeededGrid),
     fragment_answers(Ordered, Pinned),
     remaining_words(Words, Pinned, Remaining).
@@ -591,8 +591,10 @@ expected_run(Start, Dir, WLen, GridLen, FragCellNums) :-
 
 % Diagnose (and throw on) an illegal pin. A clashing fixed letter is the common,
 % precisely-reportable case; anything else (adjacency/merge/abutment) is reported
-% generically. fragment_conflict/7 always throws.
-fragment_conflict(Answer, Letters, Start, Dir, WLen, GridLen, Grid) :-
+% generically. fragment_conflict/7 always throws. It receives the gs/2 bundle and
+% reads the LETTER grid (a boundary-cell violation has no letter to report and
+% falls through to the generic branch).
+fragment_conflict(Answer, Letters, Start, Dir, WLen, GridLen, gs(Grid, _BGrid)) :-
     word_cells(Start, Dir, WLen, GridLen, Cells),
     (   clashing_cell(Cells, Letters, Grid, Cell, Existing, Wanted)
     ->  cell_coord(GridLen, Cell, RC),
@@ -961,7 +963,7 @@ neg_answer_len(Entry, NL) :- word_letters(Entry, _, WLen), NL is -WLen.
 % --- greedy construction from one start location --------------------------
 
 greedy_construct(Words, GridLen, Loc, Seed, Placed, Dropped) :-
-    init_grid(GridLen, G0),
+    init_gs(GridLen, G0),
     start_loc(Loc, GridLen, StartNum, StartDir),
     remove_x(Seed, Words, Rest),
     seed_word(Seed, StartNum, StartDir, GridLen, G0, SeedPW, G1),
@@ -1031,9 +1033,13 @@ best_move([C|Cs], move(Entry, PW, G1)) :-
 word_best_placement(Entry, Placed, GridLen, Grid, BBox, Score, PW, GOut) :-
     word_letters(Entry, Letters, WLen),
     Entry = [Word|_],
+    % Grid is the gs/2 bundle; the scorer reads letters only, so it gets the
+    % letter grid, while assign_word takes (and findall snapshots) the bundle -
+    % the boundary marks travel with the chosen NewGrid copy.
+    Grid = gs(LGrid, _BGrid),
     findall(Key-place(PW1, G1),
             ( find_intersecting_word(Letters, WLen, Placed, GridLen, Start, Dir),
-              placement_key(Letters, Start, Dir, WLen, GridLen, Grid, BBox, Key),
+              placement_key(Letters, Start, Dir, WLen, GridLen, LGrid, BBox, Key),
               assign_word(Word, Letters, WLen, Start, Dir, GridLen, Placed, Grid, PW1, G1) ),
             Keyed),
     Keyed = [_|_],

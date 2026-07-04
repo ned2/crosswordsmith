@@ -97,6 +97,13 @@ test(init_grid_empty) :-
 test(init_grid_no_extra, [fail]) :-
     init_grid(3, G), arg(10, G, _).
 
+% init_gs builds the gs(LetterGrid, BoundaryGrid) bundle the search threads:
+% two independent all-var grids of the same shape.
+test(init_gs_shape) :-
+    init_gs(3, gs(L, B)),
+    functor(L, grid, 9), functor(B, grid, 9),
+    arg(5, L, C), var(C), arg(5, B, M), var(M).
+
 % answer_meta_assoc/2 (P5): the answer->meta assoc that replaces the O(n^2)
 % member/2 rescan in the emit join. An entry with metadata maps to its dict; an
 % entry with none ([Answer]) maps to an empty dict.
@@ -222,17 +229,44 @@ test(duplicate_answer_rejected, [throws(error(duplicate_answer('CAT'), _))]) :-
 % Regression for I5: a word must stay a MAXIMAL run. Placing DFEEE across over
 % an already-placed DFEE (same start cell) would make DFEE a "word inside a
 % word" - two same-direction answers at one start, which assign_clue_numbers/2
-% cannot number. assign_word/10 must reject it (no_word_merge/3).
+% cannot number. assign_word/10 must reject it (no_word_merge_bg/2 via the
+% boundary grid marks maintained by mark_boundary/5).
 test(rejects_collinear_prefix_overlap, [fail]) :-
-    init_grid(10, G0),
+    init_gs(10, G0),
     assign_word('DFEE',  [d,f,e,e],   4, 1, across, 10, [],   G0, P1, G1),
     assign_word('DFEEE', [d,f,e,e,e], 5, 1, across, 10, [P1], G1, _, _).
 
 % ...but a collinear word separated by the required empty boundary cell is fine.
 test(allows_separated_collinear_word, [nondet]) :-
-    init_grid(10, G0),
+    init_gs(10, G0),
     assign_word('DFEE', [d,f,e,e], 4, 1, across, 10, [],   G0, P1, G1),
     assign_word('DOG',  [d,o,g],   3, 6, across, 10, [P1], G1, _, _).
+
+% The boundary grid after a placement: exactly the word's on-grid before-start /
+% after-end cells are marked, edge-abutting sides are omitted, and the LETTER
+% grid's boundary cells stay unbound (they must still read as empty to the
+% adjacency checks - only BoundaryGrid carries the mark).
+test(boundary_marks_after_placement, [nondet]) :-
+    init_gs(10, G0), G0 = gs(L, B),
+    % starts at column 1 (grid edge: no before-start mark), ends at cell 4
+    assign_word('DFEE', [d,f,e,e], 4, 1, across, 10, [], G0, _P1, _G1),
+    arg(5, B, M5), nonvar(M5),          % after-end boundary marked
+    arg(5, L, C5), var(C5),             % ...but still EMPTY in the letter grid
+    forall(between(1, 100, N), (N =:= 5 -> true ; arg(N, B, M), var(M))).
+
+% check_word_fits/5 (the counting path's non-binding legality probe) must agree
+% with assign_word/10 on accept AND reject, and must leave the grid untouched.
+test(check_word_fits_agrees_with_assign_word, [nondet]) :-
+    init_gs(10, GS), GS = gs(L, B),
+    assign_word('DFEE', [d,f,e,e], 4, 1, across, 10, [], GS, _P1, _),
+    % DOG down crossing the D at cell 1: legal for both
+    crosswordsmith_core:check_word_fits([d,o,g], 1, down, 10, GS),
+    % DFEEE across at 1 fills DFEE's boundary cell 5: illegal for both
+    \+ crosswordsmith_core:check_word_fits([d,f,e,e,e], 1, across, 10, GS),
+    % ...and the probe bound nothing: cells 11/21 (DOG's tail) still empty,
+    % boundary grid unchanged beyond DFEE's own mark at 5
+    arg(11, L, C11), var(C11), arg(21, L, C21), var(C21),
+    arg(6, B, M6), var(M6).
 
 % Regression for P1: a down word ending at cell (L-1)*L must still honour the
 % "cell directly below must be empty" guard (check_next_cell/4). On a 5x5, a
@@ -242,7 +276,7 @@ test(allows_separated_collinear_word, [nondet]) :-
 % The old crosswordsmith_core:is_end_cell(down) `>=` classified cell 20 as a bottom-row end and so
 % SKIPPED the below-must-be-empty check, wrongly allowing the placement.
 test(rejects_down_word_ending_above_filled_cell, [fail]) :-
-    init_grid(5, G0),
+    init_gs(5, G0),
     % fill the whole bottom row across, so cell 25 (below cell 20) is occupied
     assign_word('VWXYZ', [v,w,x,y,z], 5, 21, across, 5, [], G0, PA, G1),
     % a down word ending exactly at cell 20 must be rejected: cell 25 is filled

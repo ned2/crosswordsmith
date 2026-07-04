@@ -29,6 +29,7 @@
             % grid geometry
             cell_coord/3,
             init_grid/2,
+            init_gs/2,
             start_loc/4,
             start_locs/1,
             valid_loc/1,
@@ -288,11 +289,11 @@ find_crossword(mrv_inc, GridLen, Words, Loc, Grid, PlacedWords) :-
     % pairs, negligible against the search it serves.
     abolish_table_subgoals(pair_crossings(_,_,_)),
     abolish_table_subgoals(answer_letters(_,_)),
-    init_grid(GridLen, G1),
+    init_gs(GridLen, G1),
     start_loc(Loc, GridLen, StartNum, StartDir),
     assign_words_inc(Words, [], none, GridLen, StartNum, StartDir, G1, Grid, PlacedWords).
 find_crossword(Strategy, GridLen, Words, Loc, Grid, PlacedWords) :-
-    init_grid(GridLen, G1),
+    init_gs(GridLen, G1),
     % Get the cell number and direction for start loc
     start_loc(Loc, GridLen, StartNum, StartDir),
     assign_words(Strategy, Words, [], GridLen, StartNum, StartDir, G1, Grid, PlacedWords).
@@ -387,18 +388,23 @@ mrv_count(2, PlacedWords, GridLen, Start, Dir, GIn, Entry, Count) :-
     count_upto2(Goal, Count).
 
 % The placement-enumeration goal shared by both count paths: a candidate
-% (Start,Dir) from find_intersecting_word that also survives assign_word's
-% adjacency/bounds checks. On backtracking it re-binds Start/Dir to the next
-% placement (or leaves them unbound when it fails), so the counter around it must
-% undo those bindings.
+% (Start,Dir) from find_intersecting_word that also survives the legality
+% checks. On backtracking it re-binds Start/Dir to the next placement (or
+% leaves them unbound when it fails), so the counter around it must undo those
+% bindings.
+%
+% Counting only needs to know whether a candidate placement is LEGAL, not to
+% realize it: check_word_fits/5 runs the SAME checks as assign_word/10 but
+% binds no grid cell and builds neither the Cells list nor the pw/8 record
+% (all of which assign_word materialized only for count_upto2 to discard).
+% Same accept/reject set in the same enumeration order -> every count is
+% identical and the search tree/output/goldens stay byte-identical.
 mrv_count_goal(PlacedWords, GridLen, Start, Dir, GIn, Entry, Goal) :-
-    Entry = [Word|_],
     entry_letters(Entry, Letters2),
     length(Letters2, WLen),
     Goal = ( find_intersecting_word(Letters2, WLen, PlacedWords, GridLen,
                                     Start, Dir),
-             assign_word(Word, Letters2, WLen, Start, Dir, GridLen,
-                         PlacedWords, GIn, _Placed, _G1) ).
+             check_word_fits(Letters2, Start, Dir, GridLen, GIn) ).
 
 % count_upto2(:Goal, -Count): Count is the number of solutions of Goal SATURATED
 % at 2 (so Count is 0, 1, or 2, where 2 means ">=2"). Like findall/aggregate_all
@@ -648,7 +654,16 @@ pair_crossings(Letters, PLetters, Crossings) :-
             Crossings).
 
 
-assign_word(Word, Letters, WLen, Start, Dir, GridLen, PlacedWords, GIn, Placed, GOut) :-
+% The working grid is the bundle gs(LetterGrid, BoundaryGrid) (see init_gs/2):
+% two grid-sized compound terms threaded as one. LetterGrid holds placed letters
+% (empty = unbound var); BoundaryGrid marks the permanently-unfillable boundary
+% cells of placed words (marked = atom `b`, empty = unbound var). Bundling keeps
+% the deep counting chain (mrv_count / select_inc / inc_count) a pure pass-through
+% - it never inspects the grid, only carries it - so only the sites that actually
+% read cells (assign_word, check_word_fits, the greedy scorer, the fragment pin)
+% destructure the bundle.
+assign_word(Word, Letters, WLen, Start, Dir, GridLen, _PlacedWords,
+            gs(LGrid, BGrid), Placed, gs(LGrid, BGrid)) :-
     % Reject an off-grid (underflow) start cell. find_intersecting_word/6 can
     % compute a Start < 1 that still passes fits_on_grid (the end lands on-grid),
     % which the old assoc grid rejected implicitly: get_assoc/3 FAILED for the
@@ -658,15 +673,19 @@ assign_word(Word, Letters, WLen, Start, Dir, GridLen, PlacedWords, GIn, Placed, 
     % so no read can go negative (an over-grid index fails, never throws).
     Start >= 1,
     % make sure previous cell does not have a letter
-    check_prev_cell(Dir, Start, GridLen, GIn),
-    assign_letters(Letters, Start, Dir, GridLen, Cells, GIn, GOut),
+    check_prev_cell(Dir, Start, GridLen, LGrid),
+    assign_letters(Letters, Start, Dir, GridLen, Cells, LGrid, LGrid),
     % keep every word a maximal run: this word must not fill the boundary cell
-    % of an already-placed word (see no_word_merge/3 and docs/experiments.md I5)
-    no_word_merge(Cells, GridLen, PlacedWords),
-    % Precompute the word's END cell (last of the cells run) once here, so
-    % placed_boundary_cell/3 reads it in O(1) instead of recomputing last(Cells)
-    % per candidate. `Num` is left a fresh var until assign_clue_numbers/2.
+    % of an already-placed word (docs/experiments.md I5). O(1)/cell via the
+    % boundary grid: no cell of this word may be a marked boundary cell.
+    no_word_merge_bg(Cells, BGrid),
+    % Precompute the word's END cell (last of the cells run) once here so
+    % mark_boundary/5 needs no last/2, and record it in the pw/8 record.
     last(Cells, End),
+    % Incrementally maintain the boundary structure: mark THIS word's 0-2 on-grid
+    % boundary cells (before-start / after-end). The trail undoes these marks on
+    % backtrack, exactly as it undoes the letter bindings.
+    mark_boundary(Start, End, Dir, GridLen, BGrid),
     Placed = pw(Word, Letters, Cells, Dir, WLen, Start, End, _Num).
 
 
@@ -678,28 +697,77 @@ assign_word(Word, Letters, WLen, Start, Dir, GridLen, PlacedWords, GIn, Placed, 
 % fill the cell just past its end, retroactively making the shorter word a
 % "word inside a word". That produces two same-direction answers sharing a start
 % cell, which assign_clue_numbers/2 cannot number. We forbid it here: the word
-% being placed (cells Cells) must not occupy the boundary cell of any
-% already-placed word. (The reverse - an existing word occupying THIS word's
-% boundary - is already caught by check_prev_cell/check_next_cell, so together
-% the invariant is maintained inductively.)
-no_word_merge(Cells, GridLen, PlacedWords) :-
-    \+ ( member(PW, PlacedWords),
-         placed_boundary_cell(PW, GridLen, Boundary),
-         memberchk(Boundary, Cells) ).
+% being placed (cells Cells) must not occupy a marked boundary cell. (The reverse
+% - an existing word occupying THIS word's boundary - is already caught by
+% check_prev_cell/check_next_cell, so together the invariant holds inductively.)
+%
+% BoundaryGrid carries, for the current placed set, EXACTLY the union of every
+% placed word's on-grid boundary cells - the same set the former placed-words
+% scan (member/placed_boundary_cell/memberchk) recomputed per candidate - so the
+% accept/reject is identical, at O(1) per cell instead of O(placed words).
+no_word_merge_bg(Cells, BGrid) :-
+    \+ ( member(Cell, Cells),
+         arg(Cell, BGrid, Mark),
+         nonvar(Mark) ).
 
-% Each on-grid boundary cell of a placed word: the cell just before its start,
-% and the cell just after its end, in the word's own direction (omitting either
-% when the word abuts the grid edge there).
-placed_boundary_cell(PW, GridLen, Before) :-
-    pw_dir(PW, Dir),
-    pw_start(PW, Start),
-    \+ is_start_cell(Dir, Start, GridLen),
-    prev_cell(Dir, Start, GridLen, Before).
-placed_boundary_cell(PW, GridLen, After) :-
-    pw_dir(PW, Dir),
-    pw_end(PW, End),                 % precomputed in assign_word (was last(Cells))
-    \+ is_end_cell(Dir, End, GridLen),
-    next_cell(Dir, End, GridLen, After).
+% Mark a placed word's on-grid boundary cells in BoundaryGrid: the cell just
+% before its start, and the cell just after its end, in the word's own direction
+% (omitting either when the word abuts the grid edge there - the exact edge
+% conditions the former placed_boundary_cell/3 used). arg/3 with `b` binds an
+% empty boundary cell, or unifies harmlessly when two words' boundaries coincide.
+mark_boundary(Start, End, Dir, GridLen, BGrid) :-
+    (   is_start_cell(Dir, Start, GridLen)
+    ->  true
+    ;   prev_cell(Dir, Start, GridLen, Before),
+        arg(Before, BGrid, b)
+    ),
+    (   is_end_cell(Dir, End, GridLen)
+    ->  true
+    ;   next_cell(Dir, End, GridLen, After),
+        arg(After, BGrid, b)
+    ).
+
+
+% check_word_fits/5: a pure legality PROBE for the mrv_count Cap=2 counting path
+% (mrv_count_goal). It answers "would assign_word/10 accept this candidate?" with
+% NO side effects - it binds no letter cell, marks no boundary cell, and builds
+% neither the Cells run nor the pw/8 record (all of which assign_word materialized
+% only for count_upto2 to discard) - so it is cheaper per counted candidate and
+% leaves nothing for count_upto2's \+ to unwind (no trail churn in the loop).
+%
+% CORRECTNESS (must match assign_word exactly): Start >= 1 ; check_prev_cell ;
+% per cell (not a marked boundary cell, then a matching existing letter OR an
+% empty cell with free perpendicular neighbours) ; check_next_cell. Not binding is
+% sound for a one-shot check: a straight run's cells are all distinct (no
+% self-collision within one word) and adj_is_free reads only the two PERPENDICULAR
+% off-line neighbours - never a cell this word occupies - so nothing a check would
+% bind is ever re-read by the same check. Each counted candidate is thus evaluated
+% against the same grid, exactly as assign_word is (whose bindings the counting
+% loop backtracks away between candidates anyway). The boundary test is folded
+% into the per-cell walk (an O(1) BoundaryGrid read) rather than run as a separate
+% pass; the accept/reject SET is unchanged (a pure conjunction of the same
+% conditions), so every count stays byte-identical to the placed-words scan.
+check_word_fits(Letters, Start, Dir, GridLen, gs(LGrid, BGrid)) :-
+    Start >= 1,
+    check_prev_cell(Dir, Start, GridLen, LGrid),
+    check_letters(Letters, Start, Dir, GridLen, BGrid, LGrid).
+
+% Non-binding twin of assign_letters/7 with the O(1) boundary test folded in:
+% same per-cell letter test (matching existing letter, or empty cell with free
+% perpendicular neighbours) and same trailing check_next_cell/4, but it binds no
+% cell, marks no boundary, and builds no Cells run or pw/8 record.
+check_letters([], Num, Dir, GridLen, _BGrid, LGrid) :-
+    check_next_cell(Dir, Num, GridLen, LGrid).
+check_letters([L|Ls], Num, Dir, GridLen, BGrid, LGrid) :-
+    arg(Num, BGrid, Mark), var(Mark),      % not a placed word's boundary cell
+    arg(Num, LGrid, Cell),
+    (   nonvar(Cell),
+        Cell == L
+    ;   var(Cell),
+        adj_is_free(Dir, Num, GridLen, LGrid)
+    ), !,
+    next_cell(Dir, Num, GridLen, Num2),
+    check_letters(Ls, Num2, Dir, GridLen, BGrid, LGrid).
 
 
 % Previous cell before start of word. Make sure it doesn't contain
@@ -1066,6 +1134,19 @@ calc_num(down, GridLen, WPos, WStart, WNum) :-
 init_grid(GridLen, Grid) :-
     NumTiles is GridLen * GridLen,
     functor(Grid, grid, NumTiles).
+
+% The working-grid bundle threaded through the search: gs(LetterGrid,
+% BoundaryGrid). LetterGrid is the letter grid above; BoundaryGrid is a second
+% grid-sized all-var term in which assign_word marks the placed words' boundary
+% cells (atom `b`), giving no_word_merge_bg/2 and check_word_fits/5 an O(1)
+% arg/3+nonvar boundary test instead of a scan over all placed words. Boundary
+% cells stay UNBOUND in LetterGrid (they must still read as empty to
+% check_prev/next_cell and adj_is_free - a nonvar sentinel there would change
+% the search); the mark lives only in BoundaryGrid. Both structures backtrack
+% via the trail, so the bundle threads exactly as the single grid did.
+init_gs(GridLen, gs(LGrid, BGrid)) :-
+    init_grid(GridLen, LGrid),
+    init_grid(GridLen, BGrid).
 
 
 
