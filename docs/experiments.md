@@ -984,3 +984,31 @@ builds a complete spec for first-seen rungs. All 12 rungs now gate.
   count map stays bare ints (no ordering-loop unwrap) and capture cost
   moves off the light path - aiming to keep the 21x21 win with zero
   regressions. If that still fails the ratchet, this avenue closes.
+
+### E-H10b — sparse witness side-map — REJECTED (watched-witness avenue CLOSED)
+
+- **What:** E-H10's sound Count==2 shortcut rebuilt so the light path is
+  byte-for-byte master: CountMap stays bare ints, witnesses in a
+  backtrackable global (b_setval; the briefed state-threading variant
+  regressed +1.1..+3.1% from per-word wrap/unwrap and was dropped), capture
+  confined to the recount fallback behind a previously-saturated gate.
+  Branch experiment/e-h10b-sparse-witnesses (0ae0ec9), not merged.
+- **Result:** did its narrow job - E-H10's structural taxes gone (36w/17w
+  now pass), full 21x21 win retained (80w -17.6%, 82w -5.6%), identity
+  verified to the E-H9 standard (byte-identical on all 12 rungs, full-tree
+  counts identical across 4 strategies x 4 corners). But 3 light rungs
+  still regress (+0.6..+1.5%) past the 0.5% ratchet.
+- **The decisive diagnostic:** with shortcut AND capture disabled, the
+  bare admission probe (one assoc lookup per shares-letter word) alone
+  costs +0.60..+0.74% on the four smallest rungs - the eligibility test
+  exceeds tolerance before the shortcut does any work. On light rungs the
+  hit rate is ~5-6% and a bucket-2 rescan already early-exits at the 2nd
+  hit, so there is nothing to bury the probe under. No size-independent
+  signal can skip the probe only where it cannot pay off; input-size
+  switches are off-charter.
+- **Verdict:** REJECTED; the watched-witness avenue is CLOSED as
+  engineering. What remains is a POLICY question, not an experiment: the
+  blocked trade is ~+400 absolute inferences on a 28k rung vs -790k on a
+  4.5M rung. If the ratchet ever adopts an absolute-floor tolerance
+  (e.g. regressions under N absolute inferences do not gate), E-H10b is
+  shippable as-is from its branch.

@@ -139,3 +139,18 @@ instances' crossing graphs. Effort L.
 2. #1 (wdeg tie-break) behind a strategy flag, benched on the full ladder.
 3. #2 only if step 1 shows long backjump distances; #3 as a product feature
    for the not_proven tail independent of raw search speed.
+
+## Campaign closure note (2026-07-04, post E-H9/E-H10/P2/P3)
+
+- The per-node COUNTING cost P1 identified was subsequently cut hard by
+  E-H9 (check-only legality + O(1) boundary grid; -13..-50% per rung).
+- Watched-witness recount skipping (AC-4/watched-literals adaptation) was
+  tried twice (E-H10, E-H10b) and CLOSED: only the cap-saturated bucket is
+  sound (counts RISE for letter-sharing words - the reason the recount
+  trigger is letter-sharing), and the sound scope's admission probe alone
+  exceeds the ratchet on light rungs. See experiments.md.
+- P2+P3 established the decoupling result: near-cliff instances are
+  search-bound AND node-cost-insensitive (E-H9's -50% moved the envelope
+  by zero words). #3 above (budget-triggered randomized restarts) is
+  therefore THE envelope lever, full stop; everything else in this file
+  buys latency only.
