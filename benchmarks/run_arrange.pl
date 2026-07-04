@@ -57,7 +57,8 @@ main :-
               workload_selected(Filter, Heavy, F, Tier),
               apply_override(ItOv, It0, It),
               apply_override(WuOv, Wu0, Wu),
-              run_workload(F, Size, Mode, It, Wu, Exp, Budget, Row) ),
+              run_workload(F, Size, Mode, It, Wu, Exp, Budget, Row0),
+              Row = Row0.put(_{tier: Tier}) ),
             Rows),
     emit(Fmt, Rows).
 
@@ -111,7 +112,12 @@ run_workload(Fixture, Size, Mode, Iters, Warmup, Expected, Budget, Row) :-
     SearchInfMed     = Search.stats.inferences.median,
     RestMedMs       is max(0.0, CmdWallMedMs - SearchWallMedMs),
     ( CmdWallMedMs > 0.0 -> Share is 100.0 * SearchWallMedMs / CmdWallMedMs ; Share = 0.0 ),
+    length(Words, NumWords),
+    % warmup/budget/words ride along (with tier, added by the caller) so a
+    % recorder can build a COMPLETE baseline spec for a rung it has never seen
+    % (check_baseline --record adds new ladder rungs from these fields).
     Row = _{ fixture:Name, size:Size, mode:Mode, iterations:Iters, expected:Expected,
+             warmup:Warmup, budget:Budget, words:NumWords,
              cmd_wall_min_ms:CmdWallMinMs, cmd_wall_med_ms:CmdWallMedMs,
              cmd_rss_med_kib:CmdRssMedKiB,
              search_wall_min_ms:SearchWallMinMs, search_wall_med_ms:SearchWallMedMs,

@@ -189,7 +189,9 @@ do_record(BaselinePath, Baseline, Doc) :-
     get_dict(workloads, Baseline, WL0),
     dict_pairs(WL0, Tag, Pairs0),
     maplist(record_pair(Results), Pairs0, Pairs1),
-    dict_pairs(WL1, Tag, Pairs1),
+    new_rung_pairs(WL0, Results, NewPairs),
+    append(Pairs1, NewPairs, Pairs2),
+    dict_pairs(WL1, Tag, Pairs2),
     B1 = Baseline.put(_{host: RunHost, swi_prolog: RunSwi, workloads: WL1}),
     setup_call_cleanup(open(BaselinePath, write, S),
                        json_write_dict(S, B1, [width(90)]),
@@ -205,13 +207,36 @@ record_pair(Results, K-V0, K-V1) :-
                        cmd_rss_med_kib:  Row.cmd_rss_med_kib })
     ;   V1 = V0 ).
 
+% A measured rung with no baseline entry joins the baseline as a COMPLETE spec
+% (the first --record after a rung is added to workloads.pl). The spec metadata
+% (tier/warmup/budget/words) comes from the run_arrange result row.
+new_rung_pairs(WL0, Results, Pairs) :-
+    findall(K-Spec,
+            ( member(Row, Results),
+              get_dict(fixture, Row, F),
+              \+ find_baseline(WL0, F, _),
+              text_to_string(F, FS), atom_string(K, FS),
+              new_rung_spec(Row, Spec) ),
+            Pairs).
+
+new_rung_spec(Row, _{ search_inf:      Row.search_inf_med,
+                      cmd_wall_med_ms: Row.cmd_wall_med_ms,
+                      cmd_rss_med_kib: Row.cmd_rss_med_kib,
+                      info_only:       ["cmd_wall_med_ms", "cmd_rss_med_kib"],
+                      grid:            Row.size,
+                      words:           Row.words,
+                      tier:            Row.tier,
+                      iterations:      Row.iterations,
+                      warmup:          Row.warmup,
+                      budget:          Row.budget }).
+
 report_recorded(WL0, Row) :-
     get_dict(fixture, Row, Fx),
     get_dict(search_inf_med, Row, New),
     ( find_baseline(WL0, Fx, Spec), get_dict(search_inf, Spec, Old)
     ->  ( Old =:= 0 -> D = 0.0 ; D is (New - Old) / Old * 100.0 ), signed(D, DStr),
         format("  ~w~t~30|~D -> ~D  (~w%)~n", [Fx, Old, New, DStr])
-    ;   format("  ~w~t~30|new rung, recorded ~D  (not previously in baseline)~n", [Fx, New]) ).
+    ;   format("  ~w~t~30|new rung, added to baseline at ~D~n", [Fx, New]) ).
 
 unmeasured_note(WL0, Results) :-
     dict_pairs(WL0, _, Pairs),
