@@ -954,3 +954,33 @@ builds a complete spec for first-seen rungs. All 12 rungs now gate.
   Constant-factor wins buy LATENCY (and WASM headroom); envelope gains
   need a DIFFERENT TREE per attempt -> randomized restarts on not_proven
   remain the right (product-level) play.
+
+### E-H10 — watched-witness recount skipping — REJECTED (unsound as briefed; sound residue fails ratchet)
+
+- **Idea:** cache each word's first up-to-2 witness placements; on the
+  shares-letter recount trigger, revalidate witnesses via check_word_fits
+  (O(len)) and keep the previous bucket if they survive, skipping the full
+  rescan. Branch experiment/e-h10-watched-witnesses (92179c8), not merged.
+- **The core finding - the brief's soundness argument was WRONG:** the
+  orchestrator's monotonicity premise ("a word's placement set only shrinks
+  within a descent") is false for exactly the triggered words: sharing a
+  letter with the just-placed word is when a count can RISE (new crossings
+  against that word - the documented reason the trigger IS letter-sharing).
+  A bucket-1 word with a surviving witness can have true count 2; keeping
+  bucket 1 under-counts and reorders the search. Empirically: the bucket>=1
+  variant kept the full-tree solution SET identical but changed the emitted
+  first layout on 11/12 rungs. Only Count==2 is sound (the cap saturates:
+  both witnesses valid => still >=2).
+- **Sound Count==2 version (byte-identical everywhere, 204 plunit):**
+  bench FAIL - 3 regressions / 6 wins. 21x21_80w -18.5%, 21x21_82w -6.0%,
+  15x15_32w -3.4%, but light rungs +0.8..+1.4% from the flat tax (wc-unwrap
+  in the ordering loop + capture in every recount). Witness-survival
+  instrumentation explains the split exactly: the shortcut fires on 35% of
+  triggers at 80w but ~5-6% on light rungs (hit rate tracks fan-out). The
+  sound scope also excludes the volume: count<=1 is the plurality bucket
+  (P1) and a bucket-2 rescan already early-exits at the 2nd hit.
+- **Verdict:** REJECTED as shipped. One focused variant remains (E-H10b):
+  witnesses in a SPARSE side-map holding only cap-saturated words so the
+  count map stays bare ints (no ordering-loop unwrap) and capture cost
+  moves off the light path - aiming to keep the 21x21 win with zero
+  regressions. If that still fails the ratchet, this avenue closes.
