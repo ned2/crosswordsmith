@@ -1012,3 +1012,12 @@ builds a complete spec for first-seen rungs. All 12 rungs now gate.
   4.5M rung. If the ratchet ever adopts an absolute-floor tolerance
   (e.g. regressions under N absolute inferences do not gate), E-H10b is
   shippable as-is from its branch.
+- **Policy decision (2026-07-05, Ned):** ratchet stays strict (relative
+  0.5%, no absolute floor). Rationale: no product evidence yet that dense
+  21x21-class arranges will be common, and the win is only perceptible in
+  that scenario (under WASM); absent evidence, ratchet discipline is worth
+  more than an unproven latency gain. REVISIT TRIGGER: if browser telemetry
+  or product direction shows dense large-grid arranges are a real usage
+  class, adopt an absolute-floor tolerance (~10k inf) and merge
+  experiment/e-h10b-sparse-witnesses (0ae0ec9) as-is - it was verified
+  byte-identical and its win scales with word count.
