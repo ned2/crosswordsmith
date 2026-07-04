@@ -934,3 +934,23 @@ the report printed "new rung, recorded". The three P2 envelope guards were
 therefore never actually ratcheted (they lived only in history.jsonl).
 Fixed: run_arrange rows now carry tier/warmup/budget/words; the recorder
 builds a complete spec for first-seen rungs. All 12 rungs now gate.
+
+### P3 — post-E-H9 envelope re-check — MEASUREMENT (envelope unchanged)
+
+- **What:** re-ran all 15 of P2's marginal/failed near-cliff instances at
+  the shipped 5e8 budget on the post-E-H9 engine (fixtures regenerated,
+  byte-verified against P2's). Full data:
+  benchmarks/results/2026-07-04-p3-envelope-recheck.md.
+- **Result:** NOTHING flipped. No hard failure placed; the budget-marginal
+  placers reproduced their counts to within ~10 inferences, still pinned at
+  the ceiling. Only already-comfortable placements got cheaper (-18..-20%,
+  in E-H9's ladder range). Envelope statement identical to P2.
+- **The decision-relevant finding:** node cost and envelope are DECOUPLED.
+  P2 showed more budget is not the lever (fails persist at 4x); P3 shows
+  cheaper nodes are not the lever either - the campaign's biggest single
+  win moved the near-cliff envelope by zero words. Mechanism: a
+  search-bound corner consumes its full budget slice regardless of
+  per-node cost, so only within-budget solutions take the discount.
+  Constant-factor wins buy LATENCY (and WASM headroom); envelope gains
+  need a DIFFERENT TREE per attempt -> randomized restarts on not_proven
+  remain the right (product-level) play.
