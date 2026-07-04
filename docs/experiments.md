@@ -870,3 +870,67 @@ State of the idea space at pause (why the campaign stopped here):
   (best-effort/candidates) benchmarking + incrementality, currently
   unmeasured (E-H2 left a known greedy micro-regression: placement_key now
   runs for every crossing candidate).
+
+### E-H9 — check-only counting legality + O(1) boundary grid — SHIPPED (large)
+
+- **Where:** core.pl (mrv_count_goal -> check_word_fits/5 + check_letters/6;
+  assign_word/10 -> gs/2 bundle + no_word_merge_bg/2 + mark_boundary/5;
+  init_gs/2 exported; no_word_merge/3 and placed_boundary_cell/3 deleted),
+  arrange.pl (seed_from_fragment / greedy_construct use init_gs;
+  fragment_conflict and word_best_placement destructure the bundle).
+  Merge of experiment/e-h9-boundary-grid (e91ef6e).
+- **What (two composed changes):** (1) the Cap=2 counting goal calls
+  check_word_fits/5, a non-binding twin of assign_word (same checks, same
+  order: Start>=1, check_prev_cell, per-cell letter-match-or-adj_is_free,
+  check_next_cell, boundary test) that binds no grid var and builds no
+  Cells/pw record - the parts assign_word materialized only for count_upto2
+  to discard. Sound because a run's cells are distinct and adj_is_free reads
+  only perpendicular off-line cells, so nothing a check would bind is
+  re-read by the same check. (2) the no_word_merge placed-words scan
+  (O(|Placed|) per placement attempt AND per counted candidate) replaced by
+  a second grid-sized var term BoundaryGrid, bundled as
+  gs(LetterGrid, BoundaryGrid): assign_word marks a placed word's 0-2
+  on-grid boundary cells (atom b, trail-undone), the test is arg/3+nonvar
+  per cell. Boundary cells stay UNBOUND in the letter grid (they must read
+  as empty to the adjacency checks - the sentinel-in-letter-grid trap). The
+  counting chain never inspects the grid, so the bundle threads with zero
+  signature churn; fragment pinning and the greedy constructor share the
+  same assign_word, so maintenance is uniform.
+- **Attribution (measured separately):** Part 1 alone -0.04% to -0.81% per
+  rung (monotonic, 12/12). Part 2 is the win. A Part-1 variant replacing
+  no_word_merge's memberchk with arithmetic run-membership REGRESSED
+  (+0.7..+2.4%) - building the short Cells list and memberchk-ing it beats
+  per-placed-word arithmetic; kept the list.
+- **Result (composed, --heavy, all 12 rungs):** -12.9% to -50.3%
+  inferences, 0 regressions (21x21_80w 9.03M -> 4.49M, -50.3%; 15x15_36w
+  43.9M -> 38.3M; envelope rungs 17w -17.5%, 40w -22.7%, 82w -36.8%). Wall
+  -12..-35% on the heavy tail; RSS flat. On-model with P1: the
+  backtrack-free, counting-dominated rungs gain most.
+- **Identity verification (beyond byte-identical goldens, 204 plunit):**
+  arrange output byte-identical on all 12 rungs vs pre-change code;
+  FULL-TREE all_crossword solution counts identical
+  (baseline/mrv_capped/mrv_inc x 4 corners); --seed and --best-effort
+  outputs identical. Three new plunit tests lock init_gs shape,
+  boundary-mark maintenance/edge omission, and check_word_fits/assign_word
+  agreement + probe purity.
+- **Caveats:** assign_word (exported) now requires the gs/2 bundle and
+  ignores its PlacedWords arg; the boundary invariant rests on "every
+  placement goes through assign_word" (true for search/fragment/greedy).
+  Greedy findall snapshots copy two grids per kept candidate (path
+  unbenchmarked, but it also gains the O(1) merge test).
+- **Verdict:** SHIPPED, ratcheted. **Correction to the wrap-up above:** the
+  "constant-factor mined out" claim was scoped too broadly - it was true of
+  the REPRESENTATION seam (E-H7) and pair prefilters (E-H8), but this O(P)
+  -> O(1) complexity cut on the per-node counting work sat outside both.
+  Lesson recorded: distinguish "this seam is mined out" from "per-node cost
+  is minimal"; P1's finding that counting dominates the backtrack-free
+  rungs was the pointer, and it was still pointing after E-H8.
+
+### Bench-tool fix (found during E-H9 acceptance): --record dropped new rungs
+
+`check_baseline.pl --record` mapped over EXISTING baseline pairs only, so a
+measured rung absent from baseline.json was silently not persisted while
+the report printed "new rung, recorded". The three P2 envelope guards were
+therefore never actually ratcheted (they lived only in history.jsonl).
+Fixed: run_arrange rows now carry tier/warmup/budget/words; the recorder
+builds a complete spec for first-seen rungs. All 12 rungs now gate.
