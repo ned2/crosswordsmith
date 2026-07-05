@@ -1021,3 +1021,74 @@ builds a complete spec for first-seen rungs. All 12 rungs now gate.
   class, adopt an absolute-floor tolerance (~10k inf) and merge
   experiment/e-h10b-sparse-witnesses (0ae0ec9) as-is - it was verified
   byte-identical and its win scales with word count.
+
+## Fill campaign — 2026-07
+
+Plan: docs/plans/fill-perf-campaign.md (red-teamed GO 2026-07-05). Bench:
+benchmarks/run_fill.pl; ratchet: check_fill_baseline.pl + fill_baseline.json
+(search_inf gates at 0.5% relative; load_inf reported, non-gating until
+Phase 3 decides); equivalence oracle: check_fill_identity.sh (CLI
+byte-identity on every rung).
+
+### Phase 0 (fill) — benchmark build-out — COMPLETE (merged eeb2611)
+
+- **Where:** benchmarks/{run_fill,fill_subjects,fill_workloads,
+  check_fill_baseline}.pl, check_fill_identity.sh, gen_fill_dict.py,
+  fixtures/dict/ (ENABLE 172,823 words, public domain, + seeded 10k/25k/50k
+  subsets, all byte-frozen), fixtures/fill_grid_{04,05,09,11,13,15,17,21}a
+  .json + fill_seed_11a.json, fill_baseline.json + fill_history.jsonl +
+  fill_identity.sha256, tests/golden/fill_15_bench.json,
+  benchmarks/results/2026-07-05-fill-phase0.md. Branch campaign/fill-phase0
+  (base 9751190), fast-forwarded to master. NO product-code change.
+- **What:** the fill product bench (four attribution buckets — command /
+  dict_load / grid / search; fresh slots rebuilt OUTSIDE the timed goal per
+  sample, since fill_attempt destructively unifies the shared cell vars), an
+  11-rung completing ladder, a forked ratchet, a CLI byte-identity oracle
+  (the Phase 2 gate), and a 15x15-vs-full-ENABLE scale golden.
+- **Ladder:** 11 rungs, search 0.53M -> 34.9M inf, all `filled`
+  deterministically, min headroom 57x under the 2e9 bench budget. Baseline
+  verified IN-FILE after --record (all 11 rungs, complete specs — the
+  arrange silent-drop bug did not recur). search_inf and load_inf reproduce
+  +0.00% across 3 full runs; cold/warm search delta is a fixed 319 inf
+  (arrange's was ~7.6k).
+- **Headline finding (decision-grade):** dict_load exceeds 50% of
+  end-to-end CLI latency on 10 of 11 rungs (75-84% on full ENABLE; a flat
+  ~3.25s / 26,602,930 inf regardless of grid; 1.6M inf at 10k words). Only
+  g17_50k is search-dominated. The plan's Phase 3 conditional FIRES:
+  startup/dict-load outranks per-node search work for perceived latency.
+  P-F1 is therefore weighted toward the load layer (where inside
+  load_dict/build_index do the 26.6M go?) alongside the search-internals
+  attribution.
+- **Surprise (P-F1 must explain):** search cost is INVERSELY related to
+  dictionary size in the completing regime — sq04 costs 0.53M at 172k words
+  but 7.7M at 50k (14.6x); 9x9 x full ENABLE (34.9M) is the ladder's
+  hardest rung while 21x21 x full is 3.3M. Hypothesis: a bigger dictionary
+  makes early candidates succeed (shallow tree); a thinner one forces deep
+  backtracking. If confirmed, per-node candidate-cost wins (F-H3/F-H5) pay
+  most exactly where trees are deep — the thin-dictionary/hard regime.
+- **Envelope:** curated blocked_15a x full ENABLE -> not_proven at a 2e8
+  budget (~6x the hardest completing rung): full-width 15-cell lights
+  over-constrain the interlock. The bench-authored masks (shorter lights)
+  complete; the ladder ceiling (~35M) is honest, not forced. The plan's
+  ~100M ladder target sits inside the non-completing regime on real grids.
+- **Fixture trap found (latent product bug, out of campaign scope):** a
+  seed pin whose answer is ALSO reachable from the dictionary can crash the
+  emit — seeded slots are exempt from the no-duplicate rule (fill.pl:196),
+  so the search may re-place the pinned word elsewhere and
+  assign_clue_numbers throws unique_key_pairs (CLI exit 1 with an internal
+  error, e.g. pinning AAH against ENABLE). The seed fixture avoids the
+  overlap. Deserves a product fix ticket (clean report, not a throw);
+  output-semantics territory, so not this campaign's to change.
+- **Orchestrator decision (2026-07-05):** the plan's pre-campaign
+  "--budget CLI hook or reconcile 800M/500M" fix is DEFERRED: the bench
+  drives the budget-explicit fill_attempt/8 in-process, so no CLI surface
+  is needed for measurement, and moving the shipped 800M default can flip
+  not_proven outcomes (product semantics). REVISIT TRIGGER: envelope/
+  restart product work, or any Phase 3 change that touches CLI startup.
+- **Process note:** the original Phase 0 build agent stalled twice
+  (600s dead stream during bench invocations); recovered by a fresh agent
+  over the same worktree with commit-first ordering and swipl hygiene
+  (`</dev/null` on stdin so a load error cannot park swipl at the
+  interactive toplevel; timeout prefixes; one rung per invocation). The
+  inherited harness itself was sound — it reproduced the orchestrator's
+  independently measured load counts exactly.
