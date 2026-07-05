@@ -49,8 +49,13 @@
 %                deterministic - 1 sample is exact; extra samples confirm + median the wall)
 %   Warmup     - unmeasured warmup repetitions. The first in-process fill_attempt
 %                JIT-indexes fill's clauses; warmup>=1 measures the WARM count.
-%                Cold/warm delta is a fixed ~5-8k inferences (< 0.02% on every
-%                rung, absorbed by the 0.5% ratchet); see the results doc.
+%                Cold/warm delta is a FIXED 319 search inferences (MEASURED,
+%                Phase 0: identical on sq04/g21/g09 - a one-time first-call JIT
+%                cost, independent of tree size). warmup>=1 means both the
+%                recorded baseline and `bench-fill-check` measure the WARM count,
+%                so the gate compares warm-to-warm (zero delta). Relative size of
+%                the cold delta is 0.06% on the smallest rung, <0.001% on the
+%                largest; see the results doc.
 %   Expected   - the asserted Outcome (all rungs here: filled) / exit (0)
 %   Tier       - core | heavy
 %       core : sub-~4M-inference search; run by default (make bench-fill / -check).
