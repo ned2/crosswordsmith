@@ -330,9 +330,16 @@ Do these before trusting the browser build (or the ratchet as a WASM proxy):
    `heartbeat` knob (inference-counted, default 10k) is the primary mitigation
    and composes with arrange's inference-based budget. **Verify** the arrange/
    fill search actually yields under a low heartbeat; tune the spike's `50000`.
-2. **Inference-count parity is not certified** across native↔WASM. Run
-   `benchmarks/workloads.pl` once under `node src/swipl.js` and diff against
-   `benchmarks/baseline.json`.
+2. ✅ **Inference-count parity — CERTIFIED (2026-07-05).** Ran the full arrange
+   ladder (all 12 rungs, 9×9/15×15/21×21, ~28k–38.5M inferences) under both native
+   `swipl` and the wasm `node src/swipl.js`, measuring the same search-layer count
+   the ratchet records (`call_time` around `arrange_best_layout/6`, no `once/1`).
+   **All 12 rungs byte-identical native↔wasm**; native reproduced
+   `benchmarks/baseline.json` to within 0.0035% (one rung off by a single
+   inference — a first-warm-iteration wobble, and wasm shows the *same* +1, so it's
+   an engine artifact, not a VM difference). Wall was ~2.7× slower under wasm on
+   the heavy set — i.e. *only the wall-per-inference constant changed*, exactly the
+   ratchet's premise. Reproduce: `wasm/test/inference_parity.pl` (see wasm/README).
 3. **Stack.** 1 MB C stack; Prolog recursion is heap-backed so usually fine, but
    validate the deepest ladder rung. Raise `STACK_SIZE` only if it overflows.
 4. **Memory.** Budget conservatively on mobile (~300 MB observed, unconfirmed as
@@ -366,7 +373,10 @@ Applied in that file alongside this plan:
    `src/swipl.js` node bootstrap); smoked under `node src/swipl.js` — version
    `10.1.10 for wasm-emscripten`, `http/json` + `json_write_dict` verified. Build
    dir `~/src/swipl-devel/build.wasm` (gitignored; source tree left at the pin).
-2. Validation gate #2: ladder under node, diff inference counts. *(still open)*
+2. ✅ **DONE 2026-07-05.** Validation gate #2: ran the arrange ladder under both
+   VMs — **all 12 rungs byte-identical native↔wasm** (~28k–38.5M inferences),
+   native within 0.0035% of `baseline.json`. Inference-as-wasm-proxy certified;
+   harness kept as `wasm/test/inference_parity.pl`.
 3. ✅ **DONE 2026-07-05 (spike level).** `qcompile`d the app to
    `crosswordsmith.qlf` **with `node build.wasm/src/swipl.js`**; verified
    self-contained (loads with no source reachable). *Still to productionise:*

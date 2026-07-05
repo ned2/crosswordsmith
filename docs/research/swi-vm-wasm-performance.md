@@ -71,14 +71,19 @@ sources cited inline. Findings that became experiments are cross-referenced.
   setjmp/longjmp emulation sits exactly on the backtracking/exception
   control path a DFS exercises. Tree-size reductions pay more than
   inference-count parity suggests.
-- **Inference-count portability is NOT certified.** No documented guarantee
-  the same program yields identical counts under WASM (GC and setjmp
-  overhead are invisible to counts; indexing-driven choicepoint survival
-  could in principle shift redo counts, though the indexing code has no
-  `__EMSCRIPTEN__` conditionals). Cheap validation: run the existing ladder
-  (`benchmarks/workloads.pl`) once under swipl-wasm via Node and diff
-  against `benchmarks/baseline.json`. Do this before trusting the ratchet
-  as a WASM proxy.
+- **Inference-count portability — NOW CERTIFIED (2026-07-05).** The concern was
+  that the same program *might* yield different counts under WASM (GC/setjmp
+  overhead is invisible to counts, but indexing-driven choicepoint survival could
+  in principle shift redo counts). Empirically it does not: the full arrange
+  ladder (all 12 rungs, 9×9/15×15/21×21, ~28k–38.5M inferences) run under both
+  native `swipl` and wasm `node src/swipl.js` gives **byte-identical inference
+  counts on every rung**; native also reproduced `benchmarks/baseline.json` to
+  0.0035% (one rung ±1 inference, and wasm shows the same +1 — an engine artifact,
+  not a VM effect). Wall was ~2.7× slower under wasm on the heavy set: *only the
+  wall-per-inference constant changed.* The ratchet is a valid WASM proxy.
+  Reproduce: `wasm/test/inference_parity.pl` (measures the exact bench boundary —
+  `call_time` around `arrange_best_layout/6`, no `once/1` — without pulling
+  `library(process)`, which is absent under WASM).
 - **Startup:** `.qlf` is the documented fast path — `qcompile/2` with
   `include(user)` produces a single file loadable via `Prolog.consult()`
   from a URL. Author-measured: ~20x faster loading than source, ~50%
@@ -157,9 +162,13 @@ validated end-to-end in headless Chrome). In brief:
 
 1. Build `swipl-web` **from our own tree** (`~/src/swipl-devel`, exact-version
    parity — the pin already has the setjmp fix); qlf-only, `WASM_EXCEPTIONS` OFF.
-2. Validate ladder inference-count parity under Node/swipl-wasm once.
+2. ✅ Validate ladder inference-count parity under Node/swipl-wasm once —
+   **DONE, all 12 rungs byte-identical native↔wasm** (`wasm/test/inference_parity.pl`).
 3. Set heartbeat + stack_limit at init; single instance, reused; per-solve
    throwaway engine (`forEach({engine:true})`).
-4. Input via query binding; output via JSON (`json_write_dict` + `JSON.parse`),
-   not a bound dict — Prolog `null`/bool atoms come back as JS strings.
+4. **JSON in, JSON out** (`json_read_dict` in, `json_write_dict` + `JSON.parse`
+   out) — a bound dict is lossy BOTH ways: JS strings arrive as Prolog *atoms*
+   (breaking `string` checks), and Prolog `null`/bool atoms come back as JS
+   *strings*. Corrected after the browser run (earlier text said "input via query
+   binding").
 5. Run the solver in a Web Worker; cancel via `worker.terminate()`.

@@ -88,6 +88,17 @@ node wasm/test/headless.mjs     # exits 0 on "placed …"; expect the RAT/ARC/CA
 node wasm/test/probe.mjs        # low-level load/json diagnostic (run first if things break)
 ```
 
+**Inference-count parity (gate #2)** — proves the ratchet is a valid wasm proxy:
+the arrange search yields the *same* inference count native and under wasm, so a
+`-X%` ratchet win predicts a `~X%` wasm speedup. Run the ladder under both VMs and
+diff — certified byte-identical on all 12 rungs (2026-07-05):
+
+```bash
+swipl -q                                wasm/test/inference_parity.pl -- --heavy > /tmp/nat.csv  2>/dev/null
+node ~/src/swipl-devel/build.wasm/src/swipl.js -q wasm/test/inference_parity.pl -- --heavy > /tmp/wasm.csv 2>/dev/null
+diff /tmp/nat.csv /tmp/wasm.csv && echo "parity OK"     # (drop --heavy for just the 5 fast core rungs)
+```
+
 ## Browser gotchas (fixed in `client/worker.js` + `client/solve_browser.pl`)
 
 None of these show up under `node` — they are specific to the browser **Worker**:
