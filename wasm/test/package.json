@@ -2,13 +2,15 @@
   "name": "crosswordsmith-wasm-test",
   "version": "0.0.0",
   "private": true,
-  "description": "Headless-Chrome regression tests for the crosswordsmith WASM browser client",
+  "description": "Headless-Chrome regression tests for the crosswordsmith WASM browser client + SDK",
   "type": "module",
   "scripts": {
     "test": "node headless.mjs",
-    "probe": "node probe.mjs"
+    "probe": "node probe.mjs",
+    "check-types": "node golden_type_check.mjs"
   },
   "devDependencies": {
-    "playwright": "^1.55.0"
+    "playwright": "^1.55.0",
+    "typescript": "^5.6.0"
   }
 }

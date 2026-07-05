@@ -6,12 +6,12 @@
 // "is the Worker plumbing right". Same Playwright/system-Chrome setup as
 // headless.mjs.
 //
-// Prereq: server for wasm/client/ on $URL (default http://127.0.0.1:8080/).
+// Prereq: server for the wasm/ tree on $URL (default http://127.0.0.1:8080/).
 // Run:  node wasm/test/probe.mjs
 
 import { chromium } from 'playwright';
 
-const base = process.env.URL || 'http://127.0.0.1:8080/';
+const base = process.env.URL || 'http://127.0.0.1:8080/client/';
 const browser = await chromium.launch({ channel: 'chrome', headless: true, args: ['--no-sandbox'] });
 const page = await browser.newPage();
 const logs = [];

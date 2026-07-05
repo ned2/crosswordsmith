@@ -10,14 +10,14 @@
 //   T3 terminate      - is worker.terminate() a prompt cancel mid-search?
 //
 // The heavy word set is fixtures/ladder_15x15_36w.pl (36 words, 15x15,
-// satisfiable; ~38.3M inferences, parity-certified). Prereq: server for
-// wasm/client on $URL (default http://127.0.0.1:8080/) + Playwright in wasm/test.
+// satisfiable; ~38.3M inferences, parity-certified). Prereq: server for the
+// wasm/ tree on $URL's origin + Playwright in wasm/test.
 // Run: node wasm/test/yield_probe.mjs  (exit 0 = all three gates pass; each of
 // T1/T2/T3 asserts and a failure makes the process exit 1).
 
 import { chromium } from 'playwright';
 
-const URL = process.env.URL || 'http://127.0.0.1:8080/';
+const URL = process.env.URL || 'http://127.0.0.1:8080/client/harness.html?noauto=1';
 const SEARCH_INF = 38275505;
 // Responsiveness gate: gate #1 measured 0ms main-thread drift (the Worker isolates
 // the UI). Anything near the search's multi-second wall would mean the main thread
@@ -42,12 +42,17 @@ const check = (cond, reason) => { if (!cond) fails.push(reason); };
 // Shared page-side helper source: make a worker and warm it (load wasm+qlf, so
 // later timing excludes load). Returned as a string spliced into each evaluate.
 const HELPERS = `
-  function payload(words, opts){ return { clues: words.map(a=>({answer:a})), size: opts.size, mode:'fixed', bestEffort: opts.best }; }
+  let reqSeq = 0;
+  function payload(words, opts){ return { clues: words.map(a=>({answer:a})), size: opts.size, mode:'fixed', bestEffort: !!opts.best }; }
+  function requestMsg(params, heartbeat){
+    return { type:'request', request: { v:1, id:'y-'+(++reqSeq), verb:'arrange', params }, heartbeat };
+  }
   async function makeWarmWorker(heartbeat){
     const w = new Worker('./worker.js');
     await new Promise((res, rej) => {
-      w.onmessage = (ev)=>{ const m=ev.data; if(m.type==='result') res(); else if(m.type==='error') rej(new Error(m.message)); };
-      w.postMessage({ type:'solve', input: payload(${JSON.stringify(WARM)}, {size:5, best:true}), heartbeat });
+      w.onmessage = (ev)=>{ const m=ev.data; if(m.type!=='response') return;
+        const e=m.envelope; if(e.status==='success') res(); else rej(new Error(JSON.stringify(e))); };
+      w.postMessage(requestMsg(payload(${JSON.stringify(WARM)}, {size:5, best:true}), heartbeat));
     });
     return w;
   }
@@ -90,10 +95,15 @@ for (const hb of [10000, 50000, 500000, 2000000000]) {
       w.onmessage = (ev) => {
         const m = ev.data;
         if (m.type === 'pong') { midPongs++; }
-        else if (m.type === 'result') { solveMs = performance.now() - start; placed = (m.output.words || []).length; res(); }
-        else if (m.type === 'error') { solveMs = performance.now() - start; err = m.message; res(); }
+        else if (m.type === 'response') {
+          solveMs = performance.now() - start;
+          const e = m.envelope;
+          if (e.status === 'success') placed = e.result.words.length;
+          else err = e.status === 'error' ? e.error.message : JSON.stringify(e.detail);
+          res();
+        }
       };
-      w.postMessage({ type: 'solve', input: payload(WORDS, { size: 15, best: false }), heartbeat: hb });
+      w.postMessage(requestMsg(payload(WORDS, { size: 15, best: false }), hb));
     });
     clearInterval(timer);
     w.terminate();
@@ -123,10 +133,10 @@ const t3 = await page.evaluate(async ({ HELPERS, WORDS }) => {
   let resultPhase = null, terminated = false, killMs = 0;
   const start = performance.now();
   w.onmessage = (ev) => {
-    if ((ev.data.type === 'result' || ev.data.type === 'error') && resultPhase === null)
+    if (ev.data.type === 'response' && resultPhase === null)
       resultPhase = terminated ? 'after' : 'before';
   };
-  w.postMessage({ type: 'solve', input: payload(WORDS, { size: 15, best: false }), heartbeat: 50000 });
+  w.postMessage(requestMsg(payload(WORDS, { size: 15, best: false }), 50000));
   await new Promise(r => setTimeout(r, 800));
   const t0 = performance.now(); w.terminate(); terminated = true; killMs = Math.round(performance.now() - t0);
   await new Promise(r => setTimeout(r, 3000));   // the search would need ~4s more to finish
