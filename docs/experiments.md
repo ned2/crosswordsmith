@@ -1248,3 +1248,59 @@ byte-identity on every rung).
   restored). Standing rule extended: resume/fix-up messages must repeat
   the absolute-path + never-main-checkout discipline, not assume the
   original brief's context survives a session resume.
+
+### F-L1 — normalize parse loop: yall lambda → first-order filter — ACCEPTED (merged 16452de)
+
+- **Where:** branch experiment/f-l1-normalize @ 1b3220e (base ed5d556),
+  merged to master 16452de. prolog/crosswordsmith/fill.pl:
+  normalize_word/2 now calls new alpha_chars/2; results doc
+  benchmarks/results/2026-07-05-f-l1-normalize.md.
+- **What + mechanism (verified independently by the runner):** replaced
+  `include([C]>>char_type(C,alpha), Cs, L)` with a first-order
+  alpha_chars/2 recursion making the identical char_type(C, alpha)
+  decision per character (string_upper path untouched). fill.pl never
+  imports library(yall), so the lambda was runtime-meta-called with a
+  copy per character: 12.33 inf/char, 19.36M of ENABLE's 26.6M load_inf
+  — confirming P-F1's ~19.2M attribution. Control experiment: WITH yall
+  imported the lambda compile-expands and costs helper-price; the
+  premium was purely the runtime meta-call. The per-char cost model
+  predicted the product's load_inf to 1 inference (12,468,069 predicted
+  vs 12,468,070 measured for V1; 10,724,706 vs 10,724,707 for V2).
+- **Result (composed == standalone; master had only gained docs over the
+  branch base):** load_inf 26,602,930 → 10,724,707 (−59.69%) on the 9
+  full-ENABLE rungs; 7,757,017 → 3,164,117 (−59.21%) on the 50k rungs.
+  search_inf +0.00% on all 11 rungs (bit-identical, verified in the
+  recorded baseline diff). Command wall −12% to −30% per rung (warm
+  in-process load_dict 3.47s → 1.96s); RSS ±0.5%. Identity oracle 11/11
+  OK; full test suite green on branch and on merged master (orchestrator
+  re-ran all three gates independently). Baseline re-recorded at
+  16452de; history appended.
+- **Variants:** V1 (named helper inside include/3 — the P-F1 −53%
+  instrument variant) measured 12,468,070 @172k: real but strictly
+  slower than V2's first-order loop (10,724,707, also drops include/3's
+  per-element call/3). V1 rejected. No V3: avoiding the intermediate
+  char list would leave the frozen string_chars path — semantic risk
+  for a non-dominant payoff.
+- **Provenance:** V2 originated as the twin orchestrator's uncommitted
+  14-line draft (preserved at its worktree teardown). Treated as a
+  hypothesis per the never-partially-trust rule: the runner re-derived
+  equivalence by fuzz (42 edge strings incl. ß→SS, combining marks,
+  zero-width/NBSP, non-Latin digits, ligatures; 20k random char lists
+  raw+uppercased; every line of all four frozen dicts, elementwise ==
+  against the frozen include/lambda reference) plus a determinism check
+  before shipping.
+- **Expectation vs outcome:** pre-registered −53% was V1's number; the
+  shipped V2 beat it at −59.7% for the pre-stated reason (include/3
+  overhead also deleted). g17_50k's smaller wall gain (−11.9%) is the
+  expected signature of the one search-dominated rung.
+- **Follow-on signal:** remaining load wall is now build_index-bound
+  (~1.15s C keysort + GC residue, inference-blind) — strengthens F-L2
+  (precomputed index artifact) as the next Phase 3 experiment and
+  the F-H2 mask-shipping vehicle.
+- **Ratchet policy (scheduled decision, taken now):** load_inf is
+  PROMOTED from reported-only to GATING at the same 0.5% relative
+  tolerance, effective with the baseline recorded at 16452de. Grounds:
+  load is the dominant end-to-end term and now carries real wins worth
+  defending; F-H2's measured construction-tax risk lands exactly in
+  load; determinism is proven (runner's 3× md5-identical count tables +
+  orchestrator reproduction). Implemented as a separate infra commit.
