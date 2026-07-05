@@ -85,9 +85,15 @@
 % Used by the JSON output emitter (canonically library(json) on SWI 10+).
 :- use_module(library(http/json)).
 
-% random_permutation/2 for the opt-in search perturbation (set_search_seed/1).
-% NOT reached on the deterministic path (search_seed/1 unset -> identity), so a
-% default run never draws from — nor even seeds — the RNG.
+% library(random) serves only set_shuffle_seed/1's entropy draw (which WANTS
+% unpredictability). The seeded search deliberately does NOT use the VM RNG:
+% set_random/
+% random_permutation delegate to whatever backend the build linked (GMP's
+% generator natively, SWI's builtin under the USE_GMP=OFF wasm build), so the
+% same seed would produce different layouts on the CLI vs the browser. The
+% seeded path draws from a module-owned portable PRNG instead (splitmix64,
+% below). Neither is reached on the deterministic path (search_seed/1 unset ->
+% identity), so a default run never draws from — nor even seeds — any RNG.
 :- use_module(library(random)).
 
 % aggregate_all/3, used to count solutions in all_crossword/5.
@@ -480,16 +486,31 @@ assign_words_inc(Words, PlacedWords, StateIn, GridLen, Start, Dir, GIn, GOut, Ou
 % one.
 :- dynamic search_seed/1.
 
+% prng_state/1: the advancing state of the module-owned PRNG; exists iff
+% search_seed/1 does. Like the global RNG it replaced, it is NON-backtrackable
+% (retract/assert survives backtracking into the search) and shared with
+% {engine:true} search engines (dynamics live in the global database).
+:- dynamic prng_state/1.
+
 % set_search_seed(N): install the search seed. -1 (the CLI "not given"
 % sentinel) clears it -> the fully deterministic path. N>=0 records the seed
-% and seeds SWI's global RNG ONCE, so a given N always reproduces the same
-% layout. Mirrors set_check_target/1: at most one search_seed/1 fact, retract
-% before assert, the sole sanctioned writer of the module-private dynamic.
-set_search_seed(-1) :- !, retractall(search_seed(_)).
+% and seeds the module's PORTABLE PRNG (splitmix64) ONCE, so a given N always
+% reproduces the same layout — on every build of every platform. We own the
+% algorithm precisely so reproducibility is NOT engine-build-scoped: SWI's
+% set_random/1 seeds GMP's generator natively but SWI's builtin under the
+% USE_GMP=OFF wasm build, which made the same seed diverge CLI vs browser
+% (finding 2026-07-06, wasm-sdk-strategy §10). Mirrors set_check_target/1: at
+% most one search_seed/1 fact, retract before assert, the sole sanctioned
+% writer of the two module-private dynamics.
+set_search_seed(-1) :- !,
+    retractall(search_seed(_)),
+    retractall(prng_state(_)).
 set_search_seed(N) :-
     integer(N), N >= 0,
     retractall(search_seed(_)),
-    set_random(seed(N)),
+    retractall(prng_state(_)),
+    S0 is N /\ 0xFFFFFFFFFFFFFFFF,
+    assertz(prng_state(S0)),
     assertz(search_seed(N)).
 
 % current_search_seed(-N): the installed search seed, or FAILS if none (the
@@ -508,10 +529,48 @@ set_shuffle_seed(N) :-
     random_between(0, 1_000_000_000, N),
     set_search_seed(N).
 
+% The portable PRNG: splitmix64 (public-domain algorithm; reference vectors
+% locked in tests/arrange.plt). Pure unbounded-integer arithmetic masked to 64
+% bits, so it is bit-identical under GMP and LibBF — the same guarantee the
+% inference-parity certification rests on.
+splitmix64(S0, V, S1) :-
+    S1 is (S0 + 0x9E3779B97F4A7C15) /\ 0xFFFFFFFFFFFFFFFF,
+    Z1 is ((S1 xor (S1 >> 30)) * 0xBF58476D1CE4E5B9) /\ 0xFFFFFFFFFFFFFFFF,
+    Z2 is ((Z1 xor (Z1 >> 27)) * 0x94D049BB133111EB) /\ 0xFFFFFFFFFFFFFFFF,
+    V is Z2 xor (Z2 >> 31).
+
+% Draw one value and advance the state destructively (mirrors the global RNG's
+% non-backtracking stream). Throws if no seed is installed — every caller is
+% guarded by search_seed(_), so reaching this seedless is a program error.
+prng_draw(V) :-
+    (   retract(prng_state(S0))
+    ->  splitmix64(S0, V, S1),
+        assertz(prng_state(S1))
+    ;   throw(error(existence_error(prng_state, unseeded), _))
+    ).
+
+% seeded_permutation(+List, -Perm): selection shuffle driven by prng_draw/1 —
+% one draw per element, index by V mod remaining-length. The tiny modulo bias
+% (~len/2^64) is irrelevant here: the contract is reproducibility, not
+% statistical uniformity. O(n^2), fine at word-list scale.
+seeded_permutation([], []) :- !.
+seeded_permutation(List, [X|Perm]) :-
+    length(List, N),
+    prng_draw(V),
+    I is V mod N,
+    list_nth0_rest(I, List, X, Rest),
+    seeded_permutation(Rest, Perm).
+
+list_nth0_rest(0, [X|Rest], X, Rest) :- !.
+list_nth0_rest(I, [H|T], X, [H|Rest]) :-
+    I > 0,
+    I1 is I - 1,
+    list_nth0_rest(I1, T, X, Rest).
+
 % Seed-word order: which word anchors the layout. Deterministic = input order;
 % seeded = a shuffled copy (the single biggest source of layout variety).
 seed_word_order(Words, Order) :-
-    ( search_seed(_) -> random_permutation(Words, Order) ; Order = Words ).
+    ( search_seed(_) -> seeded_permutation(Words, Order) ; Order = Words ).
 
 % Interior value ordering over the keysorted Count-Entry pairs (most-constrained
 % first). Deterministic = the plain values; seeded = shuffled WITHIN each
@@ -526,7 +585,7 @@ order_candidates(Sorted, Ordered) :-
     ;   pairs_values(Sorted, Ordered)
     ).
 
-shuffle_bucket(_Count-Entries, Shuffled) :- random_permutation(Entries, Shuffled).
+shuffle_bucket(_Count-Entries, Shuffled) :- seeded_permutation(Entries, Shuffled).
 
 % Seed word (grid empty): branch over all words, as the other MRV strategies
 % do; the next node builds the full cache (StateOut = none).

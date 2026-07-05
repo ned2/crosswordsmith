@@ -564,14 +564,19 @@ throws; `doc_to_words/2` unexported, `mask_white_cells/3` exported, `lint_run/5`
 pure, Exolve emits text, `fragment_dict_words/3` pure — all confirmed.
 
 **Implementation finding (2026-07-06, arrange slice):** cross-VM *seeded* equality
-is impossible by construction: `set_random(seed(N))` seeds GMP's RNG natively but
+is impossible through the VM RNG: `set_random(seed(N))` seeds GMP's RNG natively but
 SWI's builtin RNG under the `USE_GMP=OFF` wasm build — the same seed draws a
 different sequence (verified: first `random/1` after `seed(42)` is 0.7846… native
-vs 0.3745… wasm). OQ-8's "engine-build-scoped reproducibility" is therefore a hard
-fact, not a caution. Locked accordingly in `wasm/test/value_golden.sh`: the seed
-seam natively (dispatch == CLI, one VM), and under wasm determinism (seed twice
-identical), perturbation (seeded ≠ seedless — an ignored seed can't fake it), and
-provenance; `crosswordsmith.d.ts` documents the scope on `seed`.
+vs 0.3745… wasm). **Resolved by owning the algorithm** (same day, while the seed
+feature was unreleased and the compat break free): the seeded path now draws from a
+module-owned portable splitmix64 (`core.pl` — pure unbounded-integer arithmetic,
+bit-identical under GMP and LibBF; known-answer locked against the published test
+vectors in `tests/arrange.plt`), with `library(random)` retained only for
+`--shuffle`'s entropy draw. OQ-8's reproducibility scope thus narrows from
+engine-*build* to engine-*version* (search-heuristic changes still re-map seeds).
+`wasm/test/value_golden.sh` deep-equals wasm `seed:42` against the CLI, plus
+native seam parity, determinism, perturbation (seeded ≠ seedless), and provenance;
+`crosswordsmith.d.ts` documents the scope on `seed`.
 
 ---
 

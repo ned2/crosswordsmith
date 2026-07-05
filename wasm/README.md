@@ -113,20 +113,21 @@ swipl -g browser_selftest -t halt wasm/client/solve_browser.pl
 **WASM value golden + same-instance determinism (node, no browser)** — the
 same requests through `browser_dispatch/3` under the REAL wasm VM must
 deep-equal the CLI's output (DEC-8: value-equality after parse, not bytes;
-covers seedless / the `max` crop / strict / best-effort, all through ONE
-reused instance so the per-request reset is proven under wasm):
+covers seedless / `seed:42` / the `max` crop / strict / best-effort, all
+through ONE reused instance so the per-request reset is proven under wasm):
 
 ```bash
 wasm/test/value_golden.sh          # WASM_SWIPL=… to point at the build tree
 ```
 
-Finding (2026-07-06): **seeded results cannot match across VMs.**
-`set_random(seed(N))` seeds GMP's RNG natively but SWI's builtin RNG under the
-`USE_GMP=OFF` wasm build — the same seed draws a different sequence, so
-seeded reproducibility is engine-*build*-scoped (strategy OQ-8, now a proven
-fact). The harness locks the seed seam natively (dispatch == CLI, same VM) and
-locks the semantics under wasm: seed 42 twice identical, seed genuinely
-perturbs the layout, provenance echoed in diagnostics.
+Finding (2026-07-06): **the VM RNG is not portable — so the engine owns its
+PRNG.** `set_random(seed(N))` seeds GMP's RNG natively but SWI's builtin RNG
+under the `USE_GMP=OFF` wasm build — the same seed drew a different sequence,
+making seeded layouts diverge CLI vs browser. Fixed by replacing the seeded
+path's RNG with a module-owned portable splitmix64 (`core.pl`; known-answer
+locked in `tests/arrange.plt`): the same seed now reproduces the same layout
+on every build, and the harness deep-equals wasm seed:42 against the CLI
+alongside determinism, perturbation, and provenance checks.
 
 **Type drift lock** — the committed goldens must structurally satisfy the
 hand-written `Layout` type (DEC-5):

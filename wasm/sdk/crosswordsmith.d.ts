@@ -30,11 +30,12 @@ export interface ArrangeInput {
   /** Perturb the strict search with RNG seed N (integer >= 0) for a
    *  reproducible pseudo-random layout; omit for the deterministic layout.
    *  Draw with randomSeed() for "regenerate". Not combinable with bestEffort.
-   *  Reproducibility is engine-BUILD-scoped (OQ-8) — a hard fact, not a
-   *  caution: the native CLI (GMP RNG) and this wasm engine (builtin RNG,
-   *  USE_GMP=OFF) produce DIFFERENT layouts from the very same seed, each
-   *  internally reproducible. Record engine provenance (cw.version.engine)
-   *  alongside any kept seed. */
+   *  The engine owns its PRNG (portable splitmix64, not the VM RNG — which
+   *  differs between the native GMP and wasm builds), so the same seed
+   *  reproduces the same layout on the CLI, in the browser, and on any
+   *  future build. Reproducibility is still ENGINE-VERSION-scoped (OQ-8):
+   *  a future engine may change search heuristics, so record provenance
+   *  (cw.version.engine) alongside any kept seed. */
   seed?: number;
 }
 

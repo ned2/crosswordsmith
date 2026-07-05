@@ -9,20 +9,21 @@
 #   reference : the real `crosswordsmith` CLI (its load_clues + flag resolvers)
 #   browser   : a v1 request envelope through browser_dispatch/3 under wasm
 # and the envelope's `result` must deep-equal the CLI's JSON. Cases cover
-# seedless, the max crop, strict and best-effort. All bundled-17/seed/seedless
+# seedless, seed:42, the max crop, strict and best-effort. All bundled-17
 # requests run through ONE wasm Prolog instance, interleaved, so the
 # per-request state reset is proven where it matters (a reused Worker
 # instance) — the same-instance determinism debt from the deployment plan §10.4.
 #
-# SEEDED requests are the one deliberate exception to cross-VM equality
-# (finding 2026-07-06, strategy §10): set_random(seed(N)) drives GMP's RNG
-# natively but SWI's builtin RNG under the USE_GMP=OFF wasm build — same seed,
-# different permutation, so native CLI seed:42 and wasm seed:42 CANNOT agree
-# by design. Seeded reproducibility is engine-build-scoped. What we lock
-# instead: (a) NATIVE dispatch of the seeded request == the CLI (the seam
-# honours the seed identically within one VM); under wasm: (b) seed:42 twice
-# is identical, (c) the seed genuinely perturbs the layout (≠ seedless — an
-# ignored seed can't fake this), (d) provenance in diagnostics.
+# SEEDED requests are cross-VM-equal BECAUSE the engine owns its PRNG
+# (portable splitmix64 in core.pl): SWI's set_random(seed(N)) drives GMP's RNG
+# natively but SWI's builtin RNG under the USE_GMP=OFF wasm build, so a
+# VM-RNG-seeded search could never agree CLI vs browser (finding 2026-07-06,
+# strategy §10 — the original motivation for owning the algorithm). Alongside
+# the wasm==CLI deep-equal we keep the finer diagnostics: (a) NATIVE dispatch
+# of the seeded request == the CLI (isolates a seam bug from a portability
+# bug); under wasm: (b) seed:42 twice is identical, (c) the seed genuinely
+# perturbs the layout (≠ seedless — an ignored seed can't fake this),
+# (d) provenance in diagnostics.
 #
 # Prereq: the swipl-devel wasm build tree (wasm/README.md). Override via
 #   WASM_SWIPL=/path/to/build.wasm/src/swipl.js
@@ -106,8 +107,10 @@ check(toc_max["result"] == ref("toc_max"),       "wasm result == CLI (toc-demo, 
 check(toy_strict["result"] == ref("toy_strict"), "wasm result == CLI (toy, strict)")
 check(toy_be["result"] == ref("toy_be"),         "wasm result == CLI (toy, best-effort)")
 
-# Seeded: cross-VM equality is impossible (GMP vs builtin RNG — see header);
-# lock the seam natively and the semantics under wasm.
+# Seeded: cross-VM equal because the engine owns its PRNG (see header); the
+# native-dispatch check stays to bisect seam bugs from portability bugs.
+check(b17_seed["result"] == ref("b17_seed"),
+      "wasm result == CLI (bundled-17, seed 42): portable PRNG")
 native_seed = json.loads(open(f"{tmp}/native_seed.jsonl").read())
 check(native_seed["result"] == ref("b17_seed"),
       "NATIVE dispatch == CLI (bundled-17, seed 42): seed seam parity")

@@ -457,6 +457,28 @@ test(seed_candidates_longest_first) :-
 % these cover reproducibility, quality preservation, and — critically — that a
 % cleared seed restores the deterministic result even after the RNG was used.
 
+% The PRNG is module-OWNED (portable splitmix64), so its output sequence is
+% part of the reproducibility contract: same seed => same layout on EVERY
+% build (native GMP, wasm LibBF — the VM RNG diverges between those backends,
+% which is why we own the algorithm). Known-answer locks: the seed-0 values
+% are the published splitmix64 test vectors; a refactor that shifts any draw
+% silently re-maps every kept seed, and only these tests would notice.
+test(splitmix64_known_answer) :-
+    crosswordsmith_core:splitmix64(0, V1, S1),
+    V1 =:= 16294208416658607535,
+    crosswordsmith_core:splitmix64(S1, V2, S2),
+    V2 =:= 7960286522194355700,
+    crosswordsmith_core:splitmix64(S2, V3, _),
+    V3 =:= 487617019471545679.
+
+% ...and the full draw discipline (destructive state advance + V mod N
+% selection shuffle), locked end-to-end through set_search_seed/1. Reference
+% permutation computed with an independent Python implementation.
+test(seeded_permutation_known_answer,
+     [ setup(set_search_seed(42)), cleanup(set_search_seed(-1)) ]) :-
+    crosswordsmith_core:seeded_permutation([a,b,c,d,e,f,g], P),
+    P == [f,b,e,a,d,c,g].
+
 % Placement fingerprint: the sorted (answer, start, dir) triples of a layout.
 layout_sig(Numbered, Sig) :-
     findall(A-S-D,
