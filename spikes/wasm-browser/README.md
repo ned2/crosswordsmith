@@ -25,14 +25,17 @@ swipl -q -g browser_selftest -t halt spikes/wasm-browser/solve_browser.pl
 ## Building the WASM artifacts (needed for the browser half)
 
 Prereq: **emsdk 6.0.1** (the version npm-swipl-wasm pins; swipl-devel has no wasm
-CI job so it isn't attested in-tree) — not yet installed on this box.
+CI job so it isn't attested in-tree). **Done once on 2026-07-05** — the full
+recipe below has been run and validated; it's kept here as the reproducible
+record.
 
 ```bash
 # 1. toolchain (WASM_HOME=$HOME/wasm is exported as the staging prefix)
 git clone https://github.com/emscripten-core/emsdk $WASM_HOME/emsdk
 cd $WASM_HOME/emsdk && ./emsdk install 6.0.1 && ./emsdk activate 6.0.1 && source ./emsdk_env.sh
 # stage wasm-side deps (zlib mandatory, pcre2) into $WASM_HOME — exact commands
-# in docs/plans/wasm-browser-deployment.md § "Dependency staging".
+# in docs/plans/wasm-browser-deployment.md § "Dependency staging". (zlib 1.3.2 +
+# pcre2 10.47 used; both resolved by find_package from $WASM_HOME.)
 
 # 2. build swipl-web from OUR pinned commit via the in-tree profile.
 #    Do NOT pass -DSWIPL_NATIVE_FRIEND: the friend must match the TARGET pointer
@@ -42,12 +45,20 @@ cd $WASM_HOME/emsdk && ./emsdk install 6.0.1 && ./emsdk activate 6.0.1 && source
 #    the toolchain, CMAKE_FIND_ROOT_PATH=$WASM_HOME, USE_GMP=OFF, Release, etc.
 cd ~/src/swipl-devel && git checkout aa6289399     # detached — pin the exact commit
 mkdir -p build.wasm && cd build.wasm
-../scripts/configure wasm
+../scripts/configure -y wasm     # -y MUST be first — without a tty the profile
+                                 # otherwise loops forever on a "Run Cmake?" prompt
 ninja swipl-web
 
 # 3. drop the three artifacts next to these files
 cp src/swipl-web.js src/swipl-web.wasm src/swipl-web.data <this-dir>/
 ```
+
+> **cmake note:** cmake 4.2.0–4.3.3 sits in emscripten's unsupported-shared-lib
+> window and prints `does not support emscripten shared libraries` on *every*
+> compile probe (seen loudly with cmake 4.2.3). It's **harmless** — the wasm
+> kernel links statically and `swipl-web` builds fine — just don't mistake the
+> warnings for errors. Configure runs hundreds of cross-compile probes (each
+> spawns emcc+node), so it takes a couple of minutes; the compile is ~600 steps.
 
 ## Building the app `.qlf`
 

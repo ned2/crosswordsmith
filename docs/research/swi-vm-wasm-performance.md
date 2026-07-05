@@ -125,6 +125,15 @@ sources cited inline. Findings that became experiments are cross-referenced.
   version+VM-signature only (word-size-independent), so a native x86 qlf loads-
   and-misbehaves rather than failing cleanly. Native qlf validation proves 64→64
   packaging only, not the crossing.
+  **BUILT 2026-07-05:** `swipl-web` was built from the pin with emsdk 6.0.1 (no
+  friend); the wasm binary self-bootstrapped `boot.prc`+library qlf under node,
+  confirming (a). `library(http/json)` + `json_write_dict` verified under `node
+  src/swipl.js`, confirming `json` is pulled via the `http` dep (configure log:
+  "Added packages json: Required by package http") — refuting a review claim that
+  it was missing. Build gotchas: `scripts/configure` needs `-y` as its first arg
+  (else it hangs on a tty-less confirm prompt); cmake 4.2.0–4.3.3 warns
+  "does not support emscripten shared libraries" on every probe but the static
+  wasm kernel builds fine.
 - **Gotchas:** `statistics(cputime)` returns walltime under WASM (display
   only; the arrange budget is inference-based so cutoffs are unaffected);
   multiple SWIPL instances leak (no destroy(),

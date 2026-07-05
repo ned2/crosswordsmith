@@ -51,10 +51,11 @@ constraint. (Adversarial review, 2026-07-05, caught this; §2/§6.)
 
 ## 2. Build — exact-version parity from our tree
 
-`$WASM_HOME` is exported to `$HOME/wasm` (the staging prefix, see below).
-`emsdk` is **not yet installed** on this box (`$WASM_HOME/emsdk` absent, no
-`emcc`); `ninja` is present. Installing emsdk + staging deps is the one real
-prerequisite.
+`$WASM_HOME` is exported to `$HOME/wasm` (the staging prefix, see below). **As of
+2026-07-05 this is all done:** emsdk 6.0.1 is installed at `$WASM_HOME/emsdk`,
+zlib/pcre2 are staged, and `swipl-web` is built + node-smoke-tested at
+`~/src/swipl-devel/build.wasm` (see the validation note under the recipe). The
+recipe below stays as the reproducible record.
 
 ```bash
 # 0. toolchain — emsdk 6.0.1 (the version npm-swipl-wasm pins in build-config.json;
@@ -69,10 +70,24 @@ cd $WASM_HOME/emsdk && ./emsdk install 6.0.1 && ./emsdk activate 6.0.1 && source
 # 2. pin the source to our exact commit, then configure via the in-tree profile
 cd ~/src/swipl-devel && git checkout aa6289399      # detached — else a later pull drifts HEAD
 mkdir -p build.wasm && cd build.wasm
-../scripts/configure wasm    # sets toolchain, CMAKE_FIND_ROOT_PATH=$WASM_HOME, USE_GMP=OFF,
-                             # INSTALL_PROLOG_SRC=OFF, Release, and NO native friend
+../scripts/configure -y wasm # -y MUST be the first arg (else configure hangs on an
+                             # interactive "Run Cmake?" prompt with no tty). The profile
+                             # sets toolchain, CMAKE_FIND_ROOT_PATH=$WASM_HOME, USE_GMP=OFF,
+                             # INSTALL_PROLOG_SRC=OFF, Release, and NO native friend.
 ninja swipl-web              # or: ninja swipl-web swipl-bundle
 ```
+
+> **Validated end-to-end on 2026-07-05** with emsdk 6.0.1 + cmake 4.2.3: builds
+> clean, `node src/swipl.js --version` → `10.1.10 for wasm-emscripten`,
+> `library(http/json)` loads and `json_write_dict` round-trips JSON `null`. Two
+> operational gotchas surfaced (folded into the recipe above):
+> - **`configure` needs `-y` first** — without a tty it otherwise loops forever
+>   on its confirm prompt.
+> - **cmake 4.2.3 is in emscripten's unsupported-shared-lib window** (it warns
+>   "does not support emscripten shared libraries; use cmake <4.2.0 or >4.3.3" on
+>   every compile probe). **Harmless here** — the wasm kernel links statically, so
+>   `swipl-web` builds fine — but the warnings are loud; don't be alarmed. Only a
+>   concern if you later need actual emscripten shared modules.
 
 Use the in-tree `scripts/configure wasm` profile — do **not** hand-roll the
 `emcmake cmake …` line, and do **not** pass `-DSWIPL_NATIVE_FRIEND`. The build is
@@ -194,9 +209,12 @@ list ships `json` for the same reason. **Tabling is a core engine feature, not a
 package — available.** Nothing the solver needs is on the "missing under WASM"
 list (threads, socket, ssl, crypto, process, …). The CLI layer (`optparse`,
 `argv`, `halt/1`) is simply not used in the browser.
-> Cheap validation regardless: run `use_module(library(http/json)),
-> json_write_dict(current_output, _{a:1}, [])` under `node src/swipl.js` once —
-> the whole output path (and the app-image load) depends on it.
+> **Confirmed on the 2026-07-05 build:** configure logged `-- Added packages
+> json: Required by package http`, and under `node src/swipl.js`
+> `use_module(library(http/json))` loads and `json_write_dict(current_output,
+> _{grid:null, letter:"A", ok:true}, [])` emits `{"grid":null,"letter":"A","ok":true}`
+> — JSON `null` preserved. The whole output path is verified at the wasm word
+> size (the only residual is the same call *inside the browser*, not node).
 
 ## 5. Code porting — one small seam
 
@@ -295,8 +313,11 @@ Applied in that file alongside this plan:
 
 ## 9. Phased plan
 
-1. Install emsdk 6.0.1 + stage zlib/pcre2 into `$WASM_HOME` (§2 "Dependency
-   staging"); `ninja swipl-web` from our tree; smoke `node src/swipl.js`.
+1. ✅ **DONE 2026-07-05.** Installed emsdk 6.0.1 + staged zlib 1.3.2 / pcre2 10.47
+   into `$WASM_HOME`; `ninja swipl-web` from our tree (three artifacts +
+   `src/swipl.js` node bootstrap); smoked under `node src/swipl.js` — version
+   `10.1.10 for wasm-emscripten`, `http/json` + `json_write_dict` verified. Build
+   dir `~/src/swipl-devel/build.wasm` (gitignored; source tree left at the pin).
 2. Validation gate #2: ladder under node, diff inference counts.
 3. Promote `solve_browser.pl` to an exported `browser.pl`; wire the CLI size/mode
    resolvers; qcompile to `crosswordsmith.qlf` **with `node build.wasm/src/swipl.js`**
