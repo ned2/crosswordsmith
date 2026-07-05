@@ -133,7 +133,16 @@ sources cited inline. Findings that became experiments are cross-referenced.
   it was missing. Build gotchas: `scripts/configure` needs `-y` as its first arg
   (else it hangs on a tty-less confirm prompt); cmake 4.2.0–4.3.3 warns
   "does not support emscripten shared libraries" on every probe but the static
-  wasm kernel builds fine.
+  wasm kernel builds fine. **RAN IN-BROWSER (headless Chrome, same day):** the
+  spike qcompiles a self-contained app qlf (via node/wasm swipl), loads it in a
+  Web Worker, and renders a solved grid. Three Worker-only fixes were required —
+  `self.window=self` shim (SWI's URL helpers assume a browser `window`),
+  absolute-URL `Prolog.consult`, and **JSON-in** (the JS→Prolog binding delivers
+  JS strings as *atoms*, breaking `string`-typed checks — the input-side twin of
+  the null/bool output quirk). In the web image the `library(http/json)` *alias*
+  doesn't resolve (only `library(json)`), so explicit `use_module` warns, but json
+  predicates autoload — so a genuine web/node divergence exists, just not a fatal
+  one. See `docs/plans/wasm-browser-deployment.md` §5/§6.
 - **Gotchas:** `statistics(cputime)` returns walltime under WASM (display
   only; the arrange budget is inference-based so cutoffs are unaffected);
   multiple SWIPL instances leak (no destroy(),

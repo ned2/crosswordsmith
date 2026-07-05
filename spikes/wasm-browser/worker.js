@@ -17,6 +17,13 @@
 // qcompiled app - see README). Falls back to consulting solve_browser.pl if
 // the qlf is absent.
 
+// SWI's WASM URL helpers (e.g. prolog.url_properties, used by consult(URL))
+// reach for a browser `window`, which does not exist inside a Worker — without
+// this shim they throw "window is not defined" and the consult 404s/fails.
+// A Worker's global (self === globalThis) stands in fine: window.location then
+// resolves to this worker's URL. Must run BEFORE importScripts.
+self.window = self;
+
 // Emscripten MODULARIZE output defines the global SWIPL after importScripts.
 importScripts("./swipl-web.js");
 
@@ -38,7 +45,10 @@ function init() {
     Prolog.call("set_prolog_flag(stack_limit, 256 000 000)");
     // Load the app. This .qlf MUST be produced by a same-pointer-size (wasm/node)
     // swipl, not native x86 — see solve_browser.pl / the plan doc.
-    await Prolog.consult("./crosswordsmith.qlf");
+    // Use an ABSOLUTE URL: inside a Worker there is no `window`, so SWI cannot
+    // derive a base URL for a relative consult path (it logs "window is not
+    // defined") and "./crosswordsmith.qlf" would 404. Resolve it ourselves.
+    await Prolog.consult(new URL("./crosswordsmith.qlf", self.location.href).href);
     return Prolog;
   });
   return ready;
@@ -59,10 +69,14 @@ self.onmessage = async (ev) => {
     // for this app because the layout schema contains JSON null (empty cells),
     // which the dict-binding path would turn into the string "null". See
     // solve_browser.pl for the full rationale.
+    // Pass the input as a JSON STRING, not a JS object: the JS->Prolog binding
+    // turns JS strings into Prolog atoms, which breaks the solver's string
+    // "answer" check. solve_browser_str parses the JSON in Prolog so types land
+    // correctly (strings/numbers/null/bool). Symmetric with the JSON-out path.
     let json = null;
     await Prolog.forEach(
-      "solve_browser_json(In, Json)",
-      { In: msg.input },
+      "solve_browser_str(Payload, Json)",
+      { Payload: JSON.stringify(msg.input) },
       (bindings) => { if (json === null) json = bindings.Json; },
       { engine: true, heartbeat: 50000 }
     );

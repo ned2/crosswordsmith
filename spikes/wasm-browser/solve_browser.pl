@@ -67,6 +67,25 @@ solve_browser_json(InputDict, Json) :-
     with_output_to(atom(Json),
                    crosswordsmith_arrange:arrange_solve(Words, GridLen, Drop, SizeMode)).
 
+% solve_browser_str(+PayloadAtom, -Json)
+% The Worker hands us the input as a single JSON string (JSON.stringify), NOT a
+% JS object. We parse it here so every value lands with the RIGHT Prolog type.
+% Rationale (found the hard way in the browser): the JS->Prolog query-binding
+% path delivers JS strings as ATOMS, so a clue's "answer" fails core's
+% string(RawAnswer) check ("every entry needs a string answer"). That is the
+% exact input-side twin of the output-side quirk where Prolog null/true/false
+% come back as JS strings. Going through JSON both ways is symmetric and
+% translation-proof: json_read_dict yields strings, numbers, null and bools with
+% correct types. (json_read_dict/atom_json_dict autoload from library(json) under
+% wasm even though `use_module(library(http/json))` cannot resolve the compat
+% shim there - see the spike README notes.)
+solve_browser_str(Payload, Json) :-
+    setup_call_cleanup(
+        open_string(Payload, In),
+        json_read_dict(In, InputDict, [default_tag(json)]),
+        close(In)),
+    solve_browser_json(InputDict, Json).
+
 % --- input helpers (spike-simple; production reuses the CLI's resolvers) -----
 
 grid_size(InputDict, GridLen) :-
@@ -97,6 +116,14 @@ browser_selftest :-
         ->  string_length(Json, L),
             format("json path OK: ~w chars~n", [L])
         ;   format("json path FAILED~n", []), fail
+        ),
+        % str path: exactly what the Worker sends (a JSON string, answers as
+        % strings) - proves the JSON-in adapter + json autoload.
+        atom_json_dict(Payload, In, []),
+        ( solve_browser_str(Payload, Json2)
+        ->  string_length(Json2, L2),
+            format("str path OK: ~w chars~n", [L2])
+        ;   format("str path FAILED~n", []), fail
         )
     ;   format("dict path FAILED~n", []), fail
     ).

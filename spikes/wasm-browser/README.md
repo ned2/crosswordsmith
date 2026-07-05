@@ -7,12 +7,18 @@ entry point, called from a Web Worker, rendering a grid in the page.
 
 ## What's here
 
+> ✅ **Validated end-to-end in headless Chrome (2026-07-05):** loading the page,
+> clicking Solve, and rendering a solved 5×5 grid all work — the solver runs in a
+> Web Worker off the main thread. See "Browser gotchas" below for the three
+> Worker-specific fixes that were needed.
+
 | File | Role |
 |---|---|
-| `solve_browser.pl` | file-free entry points: `solve_browser/2` (dict→dict) and `solve_browser_json/2` (dict→JSON atom, the one the worker uses). Loads the project via `load.pl`. |
-| `worker.js` | the SWI-Prolog WASM instance, off the main thread. Input via query binding, output via `JSON.parse` of a JSON atom. |
+| `solve_browser.pl` | file-free entry points: `solve_browser_str/2` (**JSON string → JSON string**, what the worker calls), `solve_browser_json/2` (dict → JSON atom), `solve_browser/2` (dict→dict, illustrative). Loads the project via `load.pl`. |
+| `worker.js` | the SWI-Prolog WASM instance, off the main thread. **JSON in, JSON out.** |
 | `main.js` | page controller; "Stop" = `worker.terminate()` + warm-spare respawn. |
 | `index.html` | minimal UI (words in, grid out). |
+| `probe.html` | throwaway diagnostic page (library resolution / json autoload); handy if the browser path breaks again. |
 
 The Prolog side is testable **today** under native swipl (no build needed):
 
@@ -20,6 +26,38 @@ The Prolog side is testable **today** under native swipl (no build needed):
 swipl -q -g browser_selftest -t halt spikes/wasm-browser/solve_browser.pl
 # dict path OK: gridLength=5, 5 placed words
 # json path OK: 1706 chars
+# str  path OK: 1706 chars
+```
+
+### Browser gotchas (learned the hard way; all fixed in `worker.js`/`solve_browser.pl`)
+
+None of these show up under `node` — they are specific to the browser **Worker**:
+
+1. **`self.window = self`** before `importScripts("./swipl-web.js")`. SWI's wasm
+   URL helpers reach for `window` (absent in a Worker) → `window is not defined`
+   and `consult` fails.
+2. **Absolute URL for `Prolog.consult`** (`new URL("./crosswordsmith.qlf",
+   self.location.href).href`) — no `window` ⇒ no base URL ⇒ relative path 404s.
+3. **JSON in, not a query binding.** The JS→Prolog binding turns JS strings into
+   Prolog **atoms**, so a clue's `answer` fails core's `string` check. The worker
+   sends `JSON.stringify(input)`; `solve_browser_str/2` parses it with
+   `json_read_dict`. Symmetric with the JSON-out path.
+
+Expected non-fatal noise: `source_sink library(http/json) does not exist` warnings
+during qlf load — in the web image the `http/json` *alias* doesn't resolve, but
+`json_write_dict`/`json_read_dict` autoload from `library(json)`, so output works.
+
+### Reproduce the headless browser test
+
+Needs a running server (below) + Playwright driving system Chrome (no browser
+download):
+
+```bash
+mkdir -p /tmp/pwtest && cd /tmp/pwtest && npm init -y >/dev/null
+PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm i playwright
+# then a ~30-line script: chromium.launch({channel:'chrome',headless:true}),
+# goto http://127.0.0.1:8080/, click #solve, wait for #status to match /placed/,
+# read #grid. Expect: "placed 5 words on 5×5" and the RAT/ARC/CAT/TAR/CAR grid.
 ```
 
 ## Building the WASM artifacts (needed for the browser half)

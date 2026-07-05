@@ -1,0 +1,30 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>swipl-web probe</title>
+<script src="./swipl-web.js"></script>
+<pre id="out">running…</pre>
+<script>
+(async () => {
+  const out = [];
+  const log = (s) => { out.push(s); document.getElementById('out').textContent = out.join('\n'); };
+  try {
+    const { prolog } = await SWIPL({ arguments: ["-q"] });
+    const q = (label, goal) => {
+      try {
+        const r = prolog.query(goal).once();
+        log(`${label}: ${JSON.stringify(r)}`);
+      } catch (e) { log(`${label}: THREW ${e}`); }
+    };
+    q("BEFORE exists_source(http/json)", "(exists_source(library('http/json')) -> R=yes ; R=no)");
+    // THE FIX: register ext/json on the library search path so the http/json shim resolves
+    q("register search path", "asserta(user:file_search_path(library, swi('library/ext/json')))");
+    q("AFTER exists_source(http/json)", "(exists_source(library('http/json')) -> R=yes ; R=no)");
+    q("use_module(http/json)", "catch((use_module(library('http/json')),R=ok), E, (term_string(E,S), R=S))");
+    q("json_write_dict avail", "(current_predicate(json_write_dict/3) -> R=yes ; R=no)");
+    q("json roundtrip", "catch((with_output_to(string(S), json_write_dict(current_output,_{g:null,l:\"A\"},[])),R=S), E, (term_string(E,S2),R=S2))");
+  } catch (e) {
+    log("FATAL: " + e);
+  }
+  window.__done = true;
+})();
+</script>

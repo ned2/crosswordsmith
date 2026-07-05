@@ -37,8 +37,9 @@ This is a **low-risk port**. Three facts make it easy:
 
 **Decision summary:** self-build `swipl-web` from our tree (npm can't match our
 commit); ship the app as one `.qlf`; run the solver in a **Web Worker** with
-**input via query binding, output via JSON**; reuse one instance; cancel by
-`worker.terminate()`.
+**JSON in and JSON out**; reuse one instance; cancel by `worker.terminate()`.
+**The spike works end-to-end in headless Chrome** (renders a solved grid); the
+full toolchain, build, and browser round-trip are validated (2026-07-05, §6/§9).
 
 **The one non-obvious subtlety is build *provenance*, not the app.** WASM is
 32-bit, so anything the build "compiles" — the `boot.prc`/library `.qlf` during
@@ -209,23 +210,39 @@ list ships `json` for the same reason. **Tabling is a core engine feature, not a
 package — available.** Nothing the solver needs is on the "missing under WASM"
 list (threads, socket, ssl, crypto, process, …). The CLI layer (`optparse`,
 `argv`, `halt/1`) is simply not used in the browser.
-> **Confirmed on the 2026-07-05 build:** configure logged `-- Added packages
-> json: Required by package http`, and under `node src/swipl.js`
-> `use_module(library(http/json))` loads and `json_write_dict(current_output,
-> _{grid:null, letter:"A", ok:true}, [])` emits `{"grid":null,"letter":"A","ok":true}`
-> — JSON `null` preserved. The whole output path is verified at the wasm word
-> size (the only residual is the same call *inside the browser*, not node).
+> **Confirmed on the 2026-07-05 build** — with one wasm nuance the browser run
+> exposed. Configure logged `-- Added packages json: Required by package http`, so
+> `json` **is** built. But the two runtimes differ on the *file alias*:
+> - Under `node src/swipl.js` (reads the full library tree from disk),
+>   `use_module(library(http/json))` loads and `json_write_dict` round-trips
+>   `{"grid":null,…}` with `null` preserved.
+> - In the **web image** (`swipl-web.data`), `library(json)` resolves but the
+>   compat-shim *alias* `library(http/json)` does **not** — so every app module's
+>   explicit `:- use_module(library(http/json))` **fails with a warning** at qlf
+>   load. It's non-fatal: `json_write_dict`/`json_read_dict` **autoload from
+>   `library(json)`**, so output still works (verified in-browser — the grid
+>   renders). This is the kernel of truth in the review's CRITICAL #2: the
+>   *package* is present and the *predicates* work, but the `http/json` alias has
+>   a web-image resolution gap. Production could silence the noise by importing
+>   `library(json)` directly, or registering the `ext/json` dir on the library
+>   search path before load.
 
 ## 5. Code porting — one small seam
 
 The engine is plain Prolog. File I/O is isolated to two predicates in
 `core.pl` / the CLI: `load_clues/2` (JSON/PL in via `open`+`json_read_dict`) and
-`with_output/2` (results out). Replace both with in-memory I/O. Crucially, use a
-**deliberate asymmetry** (validated in the spike):
+`with_output/2` (results out). Replace both with in-memory I/O. **JSON in, JSON
+out** — the symmetric choice, *corrected from an earlier "input via query
+binding" plan after the browser run disproved it* (see below):
 
-- **Input → query binding.** Pass the JS payload as `Prolog.query(Goal, {In:…})`;
-  the JS object becomes a Prolog dict. `doc_to_words/2` already maps that dict to
-  the internal `Words` list — reuse it verbatim. Clean and lossless.
+- **Input → JSON string, parsed in Prolog.** The tempting path is a query binding
+  (`Prolog.query(Goal, {In:…})`, JS object → Prolog dict). It works on the main
+  thread for simple cases but has a **silent trap the browser exposed**: the
+  JS→Prolog binding delivers JS strings as Prolog **atoms**, so a clue's
+  `answer` fails `doc_to_words/2`'s `string(RawAnswer)` check
+  (`every entry needs a string "answer"`). Instead pass `JSON.stringify(input)`
+  and `json_read_dict/3` it in Prolog: every value lands with the right type
+  (string/number/null/bool). This is the input-side twin of the output quirk.
 - **Output → JSON, not a bound dict.** The layout schema is full of JSON `null`
   (every empty cell) and `across`/`down` values. Per the WASM **reverse**-
   translation table, Prolog's `null`/`true`/`false` atoms come back as the JS
@@ -235,11 +252,11 @@ The engine is plain Prolog. File I/O is isolated to two predicates in
   golden CLI output. Return the JSON as a Prolog **atom** (→ a clean JS string;
   a Prolog string would arrive wrapped as a `Prolog.String` instance).
 
-The spike's `solve_browser.pl` implements both (`solve_browser/2` dict→dict for
-illustration; `solve_browser_json/2` dict→JSON-atom as the one actually used).
-Production should promote this to a proper **exported** `solve_browser/2` in a
-small `browser.pl` module and reuse the CLI's size/mode resolvers. This change is
-**additive** — the CLI/file paths stay for native use.
+The spike's `solve_browser.pl` implements the tolerant path: `solve_browser_str/2`
+(JSON string → JSON string, the one the Worker calls) wraps `solve_browser_json/2`
+(dict → JSON). Production should promote this to a proper **exported**
+`solve_browser/2` in a small `browser.pl` module and reuse the CLI's size/mode
+resolvers. This change is **additive** — the CLI/file paths stay for native use.
 
 ## 6. Runtime architecture
 
@@ -274,6 +291,34 @@ small `browser.pl` module and reuse the CLI's size/mode resolvers. This change i
   one does depend on the heartbeat). `Prolog.Promise.abort()` only cancels goals
   blocked on a JS promise — **useless for a CPU DFS**; don't rely on it.
 
+### Worker gotchas — validated end-to-end in headless Chrome (2026-07-05)
+
+The spike **runs**: headless Chrome loads the page, the Worker instantiates
+`swipl-web`, consults `crosswordsmith.qlf`, and renders a solved 5×5 grid. Three
+Worker-specific fixes were needed — none of which node testing can surface,
+because they are all about the *browser Worker* environment:
+
+- **`self.window = self` before `importScripts("./swipl-web.js")`.** SWI's wasm
+  URL helpers (e.g. `prolog.url_properties`, used by `Prolog.consult(URL)`) reach
+  for a browser `window`, which does **not** exist in a Worker → `ReferenceError:
+  window is not defined` and the consult fails. Aliasing the Worker global as
+  `window` (its `location` then resolves to the worker URL) fixes it.
+- **Absolute URL for `Prolog.consult`.** With no `window`, SWI can't derive a base
+  URL, so a relative `"./crosswordsmith.qlf"` 404s. Pass
+  `new URL("./crosswordsmith.qlf", self.location.href).href`.
+- **JSON in, not a query binding** (see §5) — the JS-string→atom trap.
+
+Non-fatal noise to expect: each app module's `:- use_module(library(http/json))`
+prints `source_sink library(http/json) does not exist` **during qlf load**. In
+the web image the compat-shim *file alias* `library(http/json)` doesn't resolve
+(only `library(json)` does), so the explicit directive fails — but
+`json_write_dict`/`json_read_dict` **autoload from `library(json)`**, so output
+works anyway (the grid renders). Cosmetic; §4 has the detail. The
+`crosswordsmith.qlf` request also shows one `net::ERR_ABORTED` (SWI's consult
+probes then fetches); harmless — the qlf loads and the solve completes.
+
+Reproduce headlessly with Playwright + system Chrome — see the spike README.
+
 ## 7. Risks & the validation gate
 
 Do these before trusting the browser build (or the ratchet as a WASM proxy):
@@ -291,12 +336,13 @@ Do these before trusting the browser build (or the ratchet as a WASM proxy):
 4. **Memory.** Budget conservatively on mobile (~300 MB observed, unconfirmed as
    a hard limit); set `stack_limit` under it (§6); reuse the instance to avoid
    cross-run leak accumulation.
-5. **qlf must be wasm-produced.** Build `crosswordsmith.qlf` with
-   `node build.wasm/src/swipl.js` (same pointer size), then confirm
-   `Prolog.consult(qlf)` loads it under WASM. A native-x86 qlf will **not** load
-   correctly in wasm32 (§6) — do not assume the native validation transfers.
-6. **Output fidelity.** Confirm the `null`/bool-atom → JS-string behaviour from
-   §5 against the real build; it's the reason we chose the JSON output path.
+5. ✅ **qlf must be wasm-produced — DONE.** Built `crosswordsmith.qlf` with
+   `node build.wasm/src/swipl.js`; it loads via `Prolog.consult()` under WASM and
+   is **self-contained** (ran the selftest from a dir with no source reachable,
+   and rendered a grid in-browser). A native-x86 qlf would not have (§6).
+6. ✅ **Output fidelity — DONE (in browser).** `json_write_dict` → `JSON.parse`
+   preserved JSON `null` for empty cells; the headless-Chrome grid rendered
+   correctly. Input fidelity too: JSON-in (§5) fixed the JS-string→atom trap.
 
 ## 8. Corrections owed to `docs/research/swi-vm-wasm-performance.md`
 
@@ -318,12 +364,17 @@ Applied in that file alongside this plan:
    `src/swipl.js` node bootstrap); smoked under `node src/swipl.js` — version
    `10.1.10 for wasm-emscripten`, `http/json` + `json_write_dict` verified. Build
    dir `~/src/swipl-devel/build.wasm` (gitignored; source tree left at the pin).
-2. Validation gate #2: ladder under node, diff inference counts.
-3. Promote `solve_browser.pl` to an exported `browser.pl`; wire the CLI size/mode
-   resolvers; qcompile to `crosswordsmith.qlf` **with `node build.wasm/src/swipl.js`**
-   (same pointer size — not native swipl).
-4. Wire the Worker harness (spike): one solve round-trip, tune `heartbeat`,
-   `terminate()` cancel; run gates #1, #5, #6.
+2. Validation gate #2: ladder under node, diff inference counts. *(still open)*
+3. ✅ **DONE 2026-07-05 (spike level).** `qcompile`d the app to
+   `crosswordsmith.qlf` **with `node build.wasm/src/swipl.js`**; verified
+   self-contained (loads with no source reachable). *Still to productionise:*
+   promote `solve_browser.pl` → an exported `browser.pl`, reuse the CLI size/mode
+   resolvers (the spike takes size/mode straight from the payload).
+4. ✅ **DONE 2026-07-05 (spike level).** Worker harness runs end-to-end in
+   **headless Chrome** — one solve round-trip renders a grid; gates #5, #6 passed.
+   Fixes folded in: `window` shim, absolute-URL consult, JSON-in (§6). *Still to
+   do:* tune `heartbeat` against a real (large) search + exercise `terminate()`
+   cancel under load (gate #1).
 5. Only then: the real UI.
 
 ---
