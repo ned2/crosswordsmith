@@ -1407,3 +1407,84 @@ byte-identity on every rung).
 - **Deferred proposals (results doc §h, not adopted):** artifact-mode
   bench-manifest rungs and an artifact file-size drift tripwire — revisit
   if/when F-H2 masks land in the artifact (schema v2).
+
+### F-H2 — bitset counting via artifact v2, masks opt-in — ACCEPTED (merged 2cb7c0f)
+
+- **Where:** branch experiment/f-h2-bitset-count @ a2248bd (build) +
+  0aa13ca (adjudicated follow-up: masks opt-in), base 7181337, merged
+  2cb7c0f. fill.pl: candidate_count/5 dispatch (none → ordset kernel
+  unchanged; masks(_) → bignum `/\` chain + popcount), Masks threaded
+  through fill_search/fill_search_inc/recount_crossing as pure state;
+  fill_attempt/8 kept as the pristine ordset seam (bench/test-pinned);
+  artifact schema v2 with masks as an OPTIONAL Meta key; CLI `--masks`
+  on --save-index (default emits NO masks). Phase A instruments in
+  benchmarks/probe_fh2/ (merged — they document the attribution method);
+  results doc benchmarks/results/2026-07-05-f-h2-bitset-count.md.
+- **Phase A gate (pre-registered 20% rule):** on the post-F-H1 engine the
+  counting kernel is 37.8% (g21_full) / 44.1% (g17_50k) / 47.3%
+  (g09_full) of fill-phase wall — decisively past the threshold; build
+  warranted. (P-F1's 59-90% share was correctly treated as stale.)
+- **Result:** masks mode cuts fill-phase wall −24..−33% on the hard
+  rungs (3× reproduced; counts byte-exact); end-to-end −11% (g09_full) /
+  −14% (g17_50k). search_inf collapse is only 1.6-1.8x and is NOT the
+  win (inference-blind kernel — wall is the metric, per the standing
+  note). Default path: v2-no-masks artifact BYTE-IDENTICAL in size to
+  v1, CLI wall equal to ≤1ms interleaved-paired on g21_full/g11_full.
+  Raw path +0.00% both gated layers all 11 rungs; identity 11/11 in all
+  THREE modes (raw / artifact-default / artifact-masks); 214 tests
+  green. All independently re-run by the orchestrator; baseline
+  intentionally unmoved (post-merge history row at 2cb7c0f).
+- **Scoped correction to the F-H2 gate probe verdict above:** "masks
+  shipped in the artifact → construction amortized to ~0 → pure win
+  everywhere" is HALF right: construction amortizes as predicted, but
+  the mask SIZE (+32% artifact) does not — every load pays it (~+0.09s
+  at 172k native, measured in-process fast_read +0.031s vs fill −0.021s
+  on g21). Hence masks are opt-in for search-heavy use, never
+  default-on. The gate's GO stands; its deployment clause is corrected.
+- **Measurement integrity (runner self-caught, on the record):** (1) a
+  post-commit git-stash A/B cycle silently measured version-refusal
+  errors as "v1 timings" — discarded, replaced with a detached
+  measurement worktree + per-sample exit/output checks; (2) the
+  originally reported "+20% g21 end-to-end regression" was ~5x inflated
+  by ~100ms CLI-timer quantization; contemporaneous interleaved pairing
+  puts the true masks-mode cost at +2-3% on g21. Direction unchanged,
+  magnitude corrected in the results doc; the opt-in decision predates
+  and survives the correction.
+- **WASM note:** the gate probe measured the kernel ratio ≥9x under
+  WASM/LibBF at realistic sizes; masks-on is the recommended default for
+  the browser milestone IF fastrw artifacts verify under swipl-wasm
+  (else emit .qlf; schema unchanged).
+
+### Fill campaign — CLOSE-OUT (2026-07-05)
+
+- **Executed to plan:** Phase 0 (bench substrate, 11-rung ladder,
+  byte-identity oracle, two-layer inference ratchet), Phase 1 (P-F1
+  attribution), both do-not-skip gates (P-F1 before experiments; WASM
+  bignum probe before F-H2), and four accepted experiments — F-L1,
+  F-H1, F-L2, F-H2 — every one output-byte-identical, independently
+  verified at adjudication, and ratcheted. F-L3 deprioritized on P-F1
+  evidence (~2.5-5% at stake); F-H3 rescoped and absorbed; F-H4/F-H5
+  closed on mechanism (≤0.6% targets).
+- **Composed end state on the hardest rung (g09_full, 15x15-class
+  search-bound, full ENABLE 172k):** search 34,880,750 → 14,870,446 inf
+  (−57.4%); end-to-end CLI 5.18s (campaign start) → 3.23s raw → 0.87s
+  artifact → ~0.77s artifact+masks. Load-dominated rungs: ~2.5-4s →
+  0.23-0.50s (up to 11x). Warm dictionary load at 172k: 3.47s →
+  1.96s (F-L1) → 0.099s (F-L2 artifact). Both ratchet layers gated at
+  0.5% defend the floors.
+- **Standing residue for future work:** (1) g21_full RSS depth anomaly
+  (+82%, F-H1 entry; assoc-carry mitigation specified); (2) browser
+  milestone: verify fastrw under swipl-wasm or emit .qlf, run the
+  ladder-parity check, then consider masks default-on there; (3)
+  artifact-mode bench rungs + size tripwire (F-L2 §h proposals);
+  (4) latent product bug outside campaign scope: seed+dict overlap can
+  crash unique_key_pairs (found during Phase 0; needs its own ticket).
+- **Process record:** one split-brain incident (duplicate orchestrator
+  from a fork-resumed transcript — contained, adopted-with-corrections,
+  standing one-orchestrator rule); a recurring harness bug (isolation
+  worktrees cut at session-start HEAD) neutralized by base-check-first
+  briefs after catching it three times; the F-H2 runner's self-caught
+  A/B contamination validates the measure-against-a-pinned-worktree
+  rule. Command hygiene that held: `</dev/null` + timeout on every
+  swipl call, absolute paths, agents never touch master or the main
+  checkout, verify state not success messages.

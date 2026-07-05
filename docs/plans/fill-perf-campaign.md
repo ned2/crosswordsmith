@@ -1,10 +1,14 @@
 # Plan: the fill performance campaign
 
-Status: REVIEWED — GO-WITH-CHANGES (red-team review 2026-07-05; all
-amendments folded in below, each marked [RT]). Author: arrange-campaign
-orchestrator. Companion docs: `docs/research/arrange-perf-campaign-2026-07.md`
-(the playbook this reuses), `docs/experiments.md` (ledger; fill entries will
-append there), `docs/research/swi-vm-wasm-performance.md` (WASM cost model).
+Status: EXECUTED 2026-07-05 — campaign complete. Four experiments accepted
+(F-L1, F-H1, F-L2, F-H2 masks-opt-in), all output-byte-identical; g09_full
+end-to-end 5.18s → 0.87s. Full record + close-out (residue, corrections):
+`docs/experiments.md` "Fill campaign" section. Previous status: REVIEWED —
+GO-WITH-CHANGES (red-team review 2026-07-05; all amendments folded in below,
+each marked [RT]). Author: arrange-campaign orchestrator. Companion docs:
+`docs/research/arrange-perf-campaign-2026-07.md` (the playbook this reuses),
+`docs/experiments.md` (ledger; fill entries append there),
+`docs/research/swi-vm-wasm-performance.md` (WASM cost model).
 
 ## Goal
 
