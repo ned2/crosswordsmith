@@ -4,8 +4,9 @@ Status: **strategy / pre-implementation** · Drafted 2026-07-05.
 
 Goal: run the crosswordsmith solver in the browser under SWI-Prolog's WASM
 runtime, at the **same SWI version we build natively**, without regressing the
-CLI. This doc is the strategy; the runnable proof-of-shape is the spike under
-[`spikes/wasm-browser/`](../../spikes/wasm-browser/).
+CLI. This doc is the strategy; the runnable client (promoted from a spike, and
+validated end-to-end in headless Chrome) lives under
+[`wasm/`](../../wasm/) — client, `build/build-wasm.sh`, and headless tests.
 
 Grounded in: our own `swipl-devel` checkout at `~/src/swipl-devel`
 (`git describe` = `V10.1.10-17-gaa6289399`, HEAD 2026-07-01), the version-matched
@@ -317,7 +318,8 @@ works anyway (the grid renders). Cosmetic; §4 has the detail. The
 `crosswordsmith.qlf` request also shows one `net::ERR_ABORTED` (SWI's consult
 probes then fetches); harmless — the qlf loads and the solve completes.
 
-Reproduce headlessly with Playwright + system Chrome — see the spike README.
+Reproduce headlessly with Playwright + system Chrome — `node wasm/test/headless.mjs`
+(see `wasm/README.md`).
 
 ## 7. Risks & the validation gate
 

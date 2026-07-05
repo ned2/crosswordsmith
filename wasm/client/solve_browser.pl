@@ -1,28 +1,32 @@
-% solve_browser.pl - SPIKE: a file-free browser entry point for `arrange`.
+% solve_browser.pl - file-free browser entry points for `arrange`.
 %
-% Throwaway exploration for the WASM/browser milestone (see
-% docs/plans/wasm-browser-deployment.md). It demonstrates the two documented
-% JS<->Prolog I/O patterns without touching the filesystem:
+% The Prolog side of the WASM browser client (see wasm/README.md and
+% docs/plans/wasm-browser-deployment.md). Runs the solver with NO filesystem I/O.
+% Still spike-grade: production promotes this to an exported `browser.pl` module
+% (see the "NB" below and plan §9).
 %
-%   solve_browser/2       InputDict  -> ResultDict   (query-binding round-trip;
-%                                                      the RECOMMENDED pattern)
-%   solve_browser_json/2  InputDict  -> JSON string  (byte-identical to the CLI
-%                                                      output; the safe fallback)
+% Three entry points; the Worker calls solve_browser_str/2:
 %
-% In the browser these are called as, e.g.
-%     Prolog.query("solve_browser(In, Out)",
-%                  {In: {clues:[{answer:"CAT"}, ...], size:5}}).once().Out
-% where the JS object becomes a Prolog dict on the way in and the Prolog dict
-% comes back as a JS object (SWI's WASM data translation, §13.2.3). No `open/3`,
-% no MEMFS, no json_read_dict-from-file.
+%   solve_browser_str/2   JSON string -> JSON string   (what the Worker calls)
+%   solve_browser_json/2  InputDict   -> JSON string    (dict in, JSON out)
+%   solve_browser/2       InputDict   -> ResultDict      (dict in, dict out; illustrative)
+%
+% JSON IN, JSON OUT is the right pattern for THIS app - learned the hard way in
+% the browser. The tempting "query binding" round-trip (pass a JS object straight
+% in, get a JS object back via SWI's WASM data translation, §13.2.3) is LOSSY in
+% BOTH directions here: JS strings arrive as Prolog ATOMS (breaking core's
+% string("answer") check) and Prolog null/true/false come back as the JS strings
+% "null"/"true"/"false" (corrupting the layout schema's empty cells). Going
+% through JSON both ways lands every value with the right type and stays
+% byte-identical to the golden CLI output. No open/3, no MEMFS, no
+% json_read_dict-from-file either way.
 %
 % NB (spike scope): this reaches into module internals as `Module:Pred(...)`
 % (doc_to_words/2, arrange_best_layout/5, arrange_diag_layout_dict/5 are not
-% exported). The PRODUCTION version should add a proper exported
-% `solve_browser/2` to a small `browser.pl` module (or core) so the public
-% API is explicit - see the plan doc. Grid size and mode are taken straight
-% from the input dict here; the CLI's --max-size cropping / fragment / seed
-% machinery is intentionally out of scope for the spike.
+% exported). The PRODUCTION version should add a proper exported entry point to a
+% small `browser.pl` module (or core) so the public API is explicit - see plan
+% §9. Grid size and mode are taken straight from the input dict here; the CLI's
+% --max-size cropping / fragment / seed machinery is intentionally not wired in.
 
 % Load the whole implementation via load.pl, resolved relative to this file so
 % it works from any cwd and under `node src/swipl.js` in the WASM build tree.
@@ -78,7 +82,7 @@ solve_browser_json(InputDict, Json) :-
 % translation-proof: json_read_dict yields strings, numbers, null and bools with
 % correct types. (json_read_dict/atom_json_dict autoload from library(json) under
 % wasm even though `use_module(library(http/json))` cannot resolve the compat
-% shim there - see the spike README notes.)
+% shim there - see wasm/README.md "Browser gotchas".)
 solve_browser_str(Payload, Json) :-
     setup_call_cleanup(
         open_string(Payload, In),
@@ -101,7 +105,7 @@ drop_contract_of(InputDict, Drop) :-
     ( get_dict(bestEffort, InputDict, true) -> Drop = best_effort ; Drop = strict ).
 
 % --- self-test (native swipl): proves the file-free round-trip ---------------
-% Run:  swipl -g browser_selftest -t halt spikes/wasm-browser/solve_browser.pl
+% Run:  swipl -g browser_selftest -t halt wasm/client/solve_browser.pl
 
 browser_selftest :-
     In = _{ clues: [ _{answer:"CAT"}, _{answer:"CAR"}, _{answer:"ARC"},

@@ -152,7 +152,8 @@ sources cited inline. Findings that became experiments are cross-referenced.
 ## Standing recommendations for the WASM milestone (outside this campaign)
 
 The full strategy now lives in `docs/plans/wasm-browser-deployment.md` (with a
-runnable spike under `spikes/wasm-browser/`). In brief:
+runnable client under `wasm/` — client, `build/build-wasm.sh`, headless tests —
+validated end-to-end in headless Chrome). In brief:
 
 1. Build `swipl-web` **from our own tree** (`~/src/swipl-devel`, exact-version
    parity — the pin already has the setjmp fix); qlf-only, `WASM_EXCEPTIONS` OFF.
