@@ -1092,3 +1092,66 @@ byte-identity on every rung).
   interactive toplevel; timeout prefixes; one rung per invocation). The
   inherited harness itself was sound — it reproduced the orchestrator's
   independently measured load counts exactly.
+
+### P-F1 — fill attribution probe (load stages, search internals, backtrack shape) — MEASUREMENT
+
+- **Where:** branch probe/p-f1-attribution (base a178923, commit 0329b2f;
+  never merges): benchmarks/probe_f1/*.pl +
+  benchmarks/results/2026-07-05-p-f1-attribution.md. NO product-code
+  change; check_fill_baseline PASS +0.00% on all 11 rungs (core and
+  --heavy) with the probe modules loaded beside the engine.
+- **Load:** the normalize parse loop is 72.9-76.0% of load_inf at
+  10k/50k/172k (the pre-registered "build_index >60%" REFUTED at
+  19.4-22.8%); stage sums reconcile to the whole at a flat -121 inf
+  (<=0.008%). Inside the loop, the include/3 yall lambda
+  ([C]>>char_type(C,alpha), fill.pl:131) costs ~19.2M of ENABLE's 26.6M —
+  a named-helper rewrite is output-identical, ~-53% load_inf, ~-1.2s wall.
+  Inference-BLIND C walls found: build_index keysort 1.15s at ~0 inf;
+  ~1.2s GC residue visible only in the un-staged whole.
+- **Waste:** the ladder grids (lights 3-5) cannot use 92-98% of ENABLE
+  words / 96-99% of index triples, but realistic 3-15-light grids waste
+  only ~2.5%/4.6% (lengths >=16) — slot-length filtering is
+  ladder-inflated; size it against real grids, not the bench masks.
+- **Search:** ord_intersection counting is 59-90% of search_inf on all
+  four probe rungs; select_mrv's full per-node recount is 79.5-85.6%;
+  candidate MATERIALIZATION is 0.24-0.63% — the plan's ranked gap #1
+  REFUTED (its rank came from a wall-clock micro-bench measuring a real
+  cost in the wrong currency for where it sits in the tree);
+  member/memberchk/unify <=0.5%. Equivalence: term-identical output on
+  every instrumented run; profiler port counts match the counters exactly;
+  two misattribution classes caught (LCO hides the ordset walk from
+  self-time; inference counts hide length/2 = 28.5% of g17_50k profiled
+  wall). Wall medians stay FIRST-CLASS beside the inference gate.
+- **Backtrack:** the Phase-0 inversion is a node-count effect: thin
+  dictionaries multiply nodes faster than they shrink per-node cost
+  (sq04 47.5x nodes x 0.31x inf/node = 14.6x; g17 17.1x x 0.45x = 7.7x).
+  Refinement of the hypothesis: abundant dictionaries shrink trees but do
+  NOT make them backtrack-free — g09_full churns 9,961 nodes with 99.7%
+  of placements unwound in a depth-17-24 thrash band. Dead ends are
+  discovered by the RECOUNT (candidate medians collapse to 0-1 after
+  early depths), not by trying words — further concentrating value in the
+  counting path.
+- **Orchestrator decisions (2026-07-05, at adjudication):**
+  1. Campaign order RESTRUCTURED: Phase 3 leads (dict_load is 58-84% of
+     end-to-end on 10/11 rungs). First experiment F-P3-L1: named-helper
+     rewrite of the normalize lambda (dispatched).
+  2. Phase 2 order: F-H1 (incremental counts; attacks the 79.5-85.6%
+     recount) -> F-H2 (bitset counting; attacks the 59-90% intersection;
+     WASM bignum gate probe dispatched in parallel) -> F-H3 RESCOPED to
+     bucket/index access infrastructure only.
+  3. F-H4 and F-H5 CLOSED on mechanism: their targets (used-list scans,
+     candidate materialization) measure <=0.6% of search_inf — no
+     experiment can pay there. Revisit only if a later change makes
+     materialization hot again.
+  4. load_inf gating: decide promotion from reported to gated when the
+     first Phase 3 win is recorded.
+- **Process notes:** the probe's first worktree was provisioned 10 commits
+  stale (pre-merge) and then deleted mid-session — the brief's base check
+  caught it before any measurement (the arrange campaign's stale-worktree
+  lesson paying off); recovered by cutting probe/p-f1-attribution from
+  a178923. A transient untracked file (benchmarks/probe_p_f1.pl, a
+  foreign alternative probe implementation) appeared in the new worktree
+  mid-session and was gone by adjudication; never committed or used.
+  The probe briefly switched the MAIN checkout's branch (restored, refs
+  identical, zero content change) — future briefs say: never touch the
+  main checkout.
