@@ -126,9 +126,23 @@ read_file_lines(File, Lines) :-
     split_string(Str, "\n", "\r \t", Parts),
     exclude(==(""), Parts, Lines).
 
+% NB first-order on purpose: an include([C]>>char_type(C,alpha), ...) filter
+% pays the yall meta-call + lambda copy PER CHARACTER (this module never
+% imports library(yall), so the lambda is not compile-expanded): ~12 inf/char
+% = 19.4M of full ENABLE's 26.6M dict-load inferences (P-F1 attribution).
+% alpha_chars/2 makes the identical char_type(C, alpha) decision per char at
+% ~2.2 inf/char (F-L1: load_inf 26.60M -> 10.72M at 172k, output-identical).
 normalize_word(Line, Letters) :-
     string_upper(Line, U), string_chars(U, Cs),
-    include([C]>>char_type(C, alpha), Cs, Letters).
+    alpha_chars(Cs, Letters).
+
+alpha_chars([], []).
+alpha_chars([C|Cs], Letters) :-
+    (   char_type(C, alpha)
+    ->  Letters = [C|Rest]
+    ;   Letters = Rest
+    ),
+    alpha_chars(Cs, Rest).
 
 build_index(DictByLen, Index) :-
     findall(k(Len, P, Ch)-Idx,
