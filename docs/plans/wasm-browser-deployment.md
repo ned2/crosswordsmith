@@ -553,6 +553,110 @@ Minimal/Full split above governs the order of work* once *it unparks.)*
 
 ---
 
+## 10. Audit findings (2026-07-05)
+
+Four read-only review agents audited the wasm build on distinct lenses — build
+workflow, runtime correctness (JS↔Prolog boundary), architecture, and test-suite
+validity. ~39 raw findings, deduped below. Verdict: the core architecture is sound
+and honestly documented; the issues clustered in test integrity, a few defects in
+recently-touched code, and build reproducibility. No live correctness bug on the
+shipped happy path. The four highest-value items were fixed the same day; the rest
+is tracked debt (mostly already owned by §9.1).
+
+### 10.1 Fixed in this pass
+
+- **`yield_probe.mjs` had no assertions** — it printed `PATH BROKEN`/`NOT cancelled`
+  but always exited 0, so the "gate #1 certified" claim rested on a probe that
+  could not fail. Now each of T1/T2/T3 asserts and the process exits 1 on failure
+  (T2 gates completion `placed==36` + main-thread drift `< 200ms`; T3 distinguishes
+  result-*before* vs *after* terminate, fixing a latent logic bug where any result
+  was counted as "not cancelled").
+- **`stackLimit` was raw-interpolated into the eval'd Prolog goal** (`worker.js`) —
+  an injection seam and type-fragile (float/`1e21`/string → type-error instead of
+  solving). Now bound as a query variable (`Limit`) and validated to a positive
+  integer, falling back to the 256MB default otherwise.
+- **`main.js` "warm spare" was a no-op that also leaked a worker per action** — the
+  spare was never warmed (worker only instantiates SWIPL inside the `solve` branch),
+  and `ensureActive()` re-spawned+orphaned a worker on every Solve. Now `worker.js`
+  has a `warm` message that runs `init()`, `main.js` posts it to the spare, and
+  `ensureActive()` spawns at most one worker per call and never orphans one. (Fixing
+  this surfaced — and the assertion-ified headless test caught — a warm/solve message
+  race that had `main.js` render a stray reply as `error: undefined`; `main.js` now
+  ignores non-`result`/`error` replies.)
+- **`mode:"max"` was reachable through `arrange_solve/4` but untested and documented
+  (in 3 places) as "not wired in"** — `size_mode/2` now throws
+  `browser_max_mode_unsupported` for `max` until §9.1 Part B wires and golden-tests
+  it; the 3 doc/comment sites were corrected to match.
+
+### 10.2 Tracked debt — productionization (folds into §9.1)
+
+- **Per-request state-reset invariant is genuinely absent** (3 of 4 reviewers
+  converged). `search_seed/1` & `check_target_override/1` are instance-global and
+  survive the `{engine:true}` engine — but the browser path never writes them today
+  (grep-confirmed: only the CLI script calls the setters), so this is *latent, not a
+  live bug*. Must land the unconditional reset (§9.1 "‼️ Mandatory invariant")
+  **before** Part C wires a `seed`/`checkTarget` key, not after. A reminder comment
+  is owed in `solve_browser.pl`.
+- **Generic `"no layout (search failed)"` swallows the real failure reason** (written
+  to `user_error`, lost in the browser). §9.1's error-channel refactor
+  (`throw(error(browser_…, _))`) already scopes this; ensure it lands *before* the
+  resolver-lifting in Part B (the CLI resolvers `fail` via `cli_error/1` rather than
+  throw, so lifting them first would silently widen this conflation).
+- **CLI resolver logic is hand-duplicated** in `solve_browser.pl`
+  (`grid_size`/`size_mode`/`drop_contract_of`) — small today, drift hazard as it
+  grows; §9.1 Part B unifies it against the CLI's resolvers.
+
+### 10.3 Tracked debt — build reproducibility & supply-chain (`build-wasm.sh`)
+
+- **swipl-devel *submodules* are unpinned** (HIGH). The HEAD guard checks only the
+  superproject sha, but the wasm build compiles `packages/{pcre,http,json,clib,…}`,
+  which are submodules; `git checkout <pin>` doesn't update them and the guard never
+  inspects their SHAs. Two runs can compile different sources with zero signal. Add a
+  `git submodule status` assertion (gated by `SWIPL_ALLOW_CHECKOUT` since it mutates
+  the shared tree), and fail loudly on a dirty submodule.
+- **zlib tarball has no integrity check and a rotating URL** (HIGH) —
+  `curl -sL zlib.net/… | tar` (no `--fail`, no sha256; `zlib.net` moves old releases
+  to `/fossils/`). Future 404 breakage + supply-chain exposure. Pin the fossils URL,
+  add `sha256sum -c`, use `curl -fsSL`.
+- **Pin guard ignores working-tree dirtiness** — a dirty tree at the right sha builds
+  modified sources while reporting success; also assert `git status --porcelain`
+  empty.
+- **Test toolchain not reproducible** — `package-lock.json` is gitignored, Playwright
+  is `^1.55`, README uses `npm install`. Commit the lockfile, pin exact, use `npm ci`.
+- **No artifact provenance / cache-busting** — the qlf/wasm/data/js carry no build id
+  tying them together; a redeploy that changes one and long-caches the rest "loads
+  and misbehaves" (the docs' own warning). Stamp a build manifest + content-hash the
+  filenames before any CDN deploy.
+- Lower: emsdk repo cloned unpinned; no `emcc --version` assertion after activation;
+  not standalone-CI-runnable (assumes a pre-existing `~/src/swipl-devel`); zlib branch
+  re-extracts over a possibly-dirty source dir (pcre2 branch `rm -rf`s first).
+
+### 10.4 Tracked debt — test-suite hardening
+
+- **No wasm output-*correctness* assertion** — `golden_parity` proves byte-identity
+  *natively only*; `headless.mjs` only checks the status contains `placed`. A
+  wasm-specific serialization/layout corruption that still places N words slips
+  through both. Add a wasm-side golden diff (`node build.wasm/src/swipl.js` running
+  `solve_browser_str` vs the native golden bytes).
+- **Same-worker determinism / state-reset is untested** — solve A then B on the reused
+  worker and assert B equals B-in-isolation. This is the regression lock for the
+  §10.2 reset invariant; add it *with* that invariant.
+- **`heavy-capped` 300KB constant is fragile** — the active fill-perf ratchet could
+  drop peak stack below it (→ false failure) or the error could fire before the search
+  proper (→ pass for the wrong reason). Size the cap off a measured peak; tighten the
+  regex from `exceeded` to `resource_error(stack)`.
+- **No CI entry point** — `npm test` runs only the weakest gate; the strong gates are
+  prose-only manual scripts needing a hand-started server on :8080. Add a `test:all`
+  that boots/checks a server and aggregates exit codes; wire `golden_parity.sh` into
+  `run_tests.sh`. The 36-word HEAVY set is inline-duplicated in two probes (drift from
+  the certified fixture) — load it from `fixtures/ladder_15x15_36w.pl`.
+- **Missing edge-case coverage** — lowercase/unicode answers, empty-clues, duplicate
+  answers (should throw → clean `{type:error}`, untested), concurrent solves on one
+  worker (worker trusts the page to serialize — it isn't self-protecting), cancel
+  mid-render.
+
+---
+
 ## Sources
 
 - Build doc (stale, use with care): https://www.swi-prolog.org/build/WebAssembly.md

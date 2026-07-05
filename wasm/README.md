@@ -175,8 +175,11 @@ and you get a 200), and the solve returns correct results.
 
 - Reaches module internals (`Module:Pred`); production adds a proper exported
   `solve_browser/2` in a small `browser.pl`.
-- Grid size/mode read straight from the input dict; the CLI's `--max-size`
-  crop / fragment / seed machinery is not wired in.
+- Grid size read straight from the input dict; the CLI's `--max-size` crop /
+  fragment / seed machinery is not wired in. Only `mode:"fixed"` is supported —
+  `mode:"max"` is reachable through `arrange_solve/4` but not golden-tested, so
+  `size_mode/2` rejects it (`browser_max_mode_unsupported`) until plan §9.1 Part B
+  wires and tests it.
 - `heartbeat: 50000` in `worker.js` — validated *not* load-bearing (gate #1: the
   Worker isolates the UI, `terminate()` cancels), so this is a harmless default,
   not a tuning risk. Left caller-overridable via `msg.heartbeat`.

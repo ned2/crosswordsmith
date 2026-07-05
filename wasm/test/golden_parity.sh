@@ -9,8 +9,9 @@
 # browser entry (doc_to_words + solve_browser_json). Both dispatch the identical
 # arrange_solve/4, so byte-identical output ⇔ the two input adapters agree.
 #
-# Covers what the spike actually exposes: fixed grid + strict/best-effort. (max
-# size / seed / fragment are not wired in the spike - see plan §9.1.)
+# Covers what the spike actually exposes: fixed grid + strict/best-effort.
+# (mode:"max" is rejected by size_mode/2 until it is wired + tested; seed /
+# fragment are not wired in the spike - see plan §9.1.)
 #
 # Run: wasm/test/golden_parity.sh   (exit 0 = all cases byte-identical)
 set -euo pipefail

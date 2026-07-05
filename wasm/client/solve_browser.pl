@@ -25,8 +25,10 @@
 % (doc_to_words/2, arrange_best_layout/5, arrange_diag_layout_dict/5 are not
 % exported). The PRODUCTION version should add a proper exported entry point to a
 % small `browser.pl` module (or core) so the public API is explicit - see plan
-% §9. Grid size and mode are taken straight from the input dict here; the CLI's
-% --max-size cropping / fragment / seed machinery is intentionally not wired in.
+% §9. Grid size is taken straight from the input dict; the CLI's --max-size
+% cropping, fragment and seed machinery are not wired in - and `mode:"max"` is
+% rejected outright by size_mode/2 (below) so an untested-but-reachable crop path
+% can't ship. Only mode:"fixed" (the default) is supported.
 
 % Load the whole implementation via load.pl, resolved relative to this file so
 % it works from any cwd and under `node src/swipl.js` in the WASM build tree.
@@ -63,6 +65,14 @@ solve_browser(InputDict, ResultDict) :-
 % side preserves null/bool fidelity and stays byte-identical to the golden CLI
 % output. (Return an ATOM, not a string: an atom -> a clean JS String, whereas
 % a Prolog string comes back wrapped as a Prolog.String instance.)
+%
+% ‼️ STATE-RESET INVARIANT (owed before any state-bearing key is added): this does
+% NO per-request reset. It is safe ONLY because no `seed`/`checkTarget`/`verbose`
+% key is read here, so the reused instance's search_seed/1 & check_target_override/1
+% stay unset across solves ({engine:true} does NOT clear those module globals). The
+% instant such a key is wired in, add an unconditional reset at the TOP of this
+% predicate (set_search_seed(-1), set_check_target(-1), set_verbose(false)) and a
+% same-worker determinism test - see plan §9.1 / §10.2.
 solve_browser_json(InputDict, Json) :-
     crosswordsmith_core:doc_to_words(InputDict, Words),
     grid_size(InputDict, GridLen),
@@ -99,7 +109,16 @@ grid_size(InputDict, GridLen) :-
     ).
 
 size_mode(InputDict, Mode) :-
-    ( get_dict(mode, InputDict, M), memberchk(M, [fixed, max]) -> Mode = M ; Mode = fixed ).
+    ( get_dict(mode, InputDict, M)
+    ->  ( M == max
+        ->  % --max-size cropping IS reachable through arrange_solve/4, but it is
+            % not golden-tested against the CLI yet (plan §9.1 Part B). Reject it
+            % explicitly rather than silently shipping an unverified path.
+            throw(error(browser_max_mode_unsupported, _))
+        ;   Mode = fixed        % 'fixed' (or any unknown mode) -> fixed
+        )
+    ;   Mode = fixed
+    ).
 
 drop_contract_of(InputDict, Drop) :-
     ( get_dict(bestEffort, InputDict, true) -> Drop = best_effort ; Drop = strict ).

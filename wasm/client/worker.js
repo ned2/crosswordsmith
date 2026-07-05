@@ -63,6 +63,13 @@ self.onmessage = async (ev) => {
   // (gate #1 finding, see below), so a ping sent mid-search is queued until the
   // solve finishes. To cancel a running solve, main.js uses worker.terminate().
   if (msg.type === "ping") { self.postMessage({ type: "pong", id: msg.id }); return; }
+  // Pre-warm: instantiate SWIPL + consult the qlf NOW (the ~2MB wasm fetch +
+  // instantiate + qlf load), so a later solve on this worker skips that cost.
+  // main.js posts this to the standby spare right after spawning it. init() is
+  // memoized, so the eventual solve reuses this same instance. Runs no search, so
+  // it can't interleave with one, and posts nothing back (a stray reply would land
+  // in the page's per-solve onmessage; main.js also ignores non-result/error).
+  if (msg.type === "warm") { await init(); return; }
   if (msg.type !== "solve") return;
   try {
     await init();
@@ -75,10 +82,14 @@ self.onmessage = async (ev) => {
     // stack_limit; it defaults to 1GB (measured). Setting it on the parent (or at
     // init) leaves the actual search running with a 1GB limit - above a mobile
     // browser's ~300MB ceiling, so the tab could abort before the limit ever fires.
-    // Prepending it to the query applies it in the engine that runs the search, and
-    // because the engine is thrown away each solve the value can't leak forward.
-    // 256MB default; caller-overridable via msg.stackLimit.
-    const stackLimit = msg.stackLimit || 256000000;
+    // The limit rides in the goal as a BOUND variable (Limit), NOT string-concat'd,
+    // so a caller-supplied value can neither inject Prolog nor arrive as the wrong
+    // type; and because the engine is thrown away each solve it can't leak forward.
+    // Validate to a POSITIVE INTEGER: a float/string/0/NaN would type-error
+    // set_prolog_flag and abort the whole solve, so fall back to the default.
+    // 256MB default; caller-overridable via a positive-integer msg.stackLimit.
+    const stackLimit = Number.isInteger(msg.stackLimit) && msg.stackLimit > 0
+      ? msg.stackLimit : 256000000;
 
     // forEach runs the search asynchronously with the yield mechanism (every
     // `heartbeat` inferences), and engine:true gives each solve a throwaway engine
@@ -101,8 +112,8 @@ self.onmessage = async (ev) => {
     const heartbeat = msg.heartbeat || 50000;
     let json = null;
     await Prolog.forEach(
-      "set_prolog_flag(stack_limit, " + stackLimit + "), solve_browser_str(Payload, Json)",
-      { Payload: JSON.stringify(msg.input) },
+      "set_prolog_flag(stack_limit, Limit), solve_browser_str(Payload, Json)",
+      { Payload: JSON.stringify(msg.input), Limit: stackLimit },
       (bindings) => { if (json === null) json = bindings.Json; },
       { engine: true, heartbeat }
     );

@@ -12,12 +12,19 @@
 // The heavy word set is fixtures/ladder_15x15_36w.pl (36 words, 15x15,
 // satisfiable; ~38.3M inferences, parity-certified). Prereq: server for
 // wasm/client on $URL (default http://127.0.0.1:8080/) + Playwright in wasm/test.
-// Run: node wasm/test/yield_probe.mjs
+// Run: node wasm/test/yield_probe.mjs  (exit 0 = all three gates pass; each of
+// T1/T2/T3 asserts and a failure makes the process exit 1).
 
 import { chromium } from 'playwright';
 
 const URL = process.env.URL || 'http://127.0.0.1:8080/';
 const SEARCH_INF = 38275505;
+// Responsiveness gate: gate #1 measured 0ms main-thread drift (the Worker isolates
+// the UI). Anything near the search's multi-second wall would mean the main thread
+// was blocked; 200ms is a generous margin that still catches that regression.
+const DRIFT_MAX_MS = 200;
+// terminate() is a synchronous thread kill; gate #1 measured it returns in ~0ms.
+const TERMINATE_MAX_MS = 500;
 const WORDS = ['DFAD','FCC','FCB','BEED','CBED','AFCC','DED','DEF','BFF','BCD','DBED','CDF',
   'FFCC','CCD','EAB','FCF','EAA','EFAF','ABFA','BBEF','FFE','EFEE','ABCB','EFD','DACA','FAFB',
   'ACA','CBF','DEAA','AFBF','AEFD','EADF','EDDE','CEF','CADF','FDD'];
@@ -28,6 +35,9 @@ const page = await browser.newPage();
 const pageLogs = [];
 page.on('pageerror', e => pageLogs.push(`[pageerror] ${e.message}`));
 await page.goto(URL, { waitUntil: 'load' });
+
+const fails = [];   // each entry: a human-readable reason this run failed
+const check = (cond, reason) => { if (!cond) fails.push(reason); };
 
 // Shared page-side helper source: make a worker and warm it (load wasm+qlf, so
 // later timing excludes load). Returned as a string spliced into each evaluate.
@@ -54,7 +64,9 @@ const t1 = await page.evaluate(async ({ HELPERS }) => {
   w.terminate();
   return { sent: 5, pongs };
 }, { HELPERS });
-console.log(`T1 idle ping/pong: sent ${t1.sent}, got ${t1.pongs}  -> ${t1.pongs === t1.sent ? 'path works' : 'PATH BROKEN'}`);
+const t1ok = t1.pongs === t1.sent;
+check(t1ok, `T1: idle ping/pong broken (sent ${t1.sent}, got ${t1.pongs})`);
+console.log(`T1 idle ping/pong: sent ${t1.sent}, got ${t1.pongs}  -> ${t1ok ? 'PASS' : 'FAIL (path broken)'}`);
 
 // T2 - heavy search: completion + main-thread responsiveness + mid-search worker
 // servicing, swept over heartbeat (last value >> total inferences = no-yield control).
@@ -90,27 +102,53 @@ for (const hb of [10000, 50000, 500000, 2000000000]) {
     for (let i = 1; i < ticks.length; i++) driftMax = Math.max(driftMax, Math.abs((ticks[i] - ticks[i - 1]) - 50));
     return { solveMs: Math.round(solveMs), placed, err, driftMax: Math.round(driftMax), midPongs, ticks: ticks.length };
   }, { HELPERS, WORDS, hb });
+  check(r.err === null && r.placed === 36,
+    `T2: heavy search did not complete at heartbeat ${hb} (placed=${r.placed}, err=${r.err})`);
+  check(r.driftMax < DRIFT_MAX_MS,
+    `T2: main-thread drift ${r.driftMax}ms >= ${DRIFT_MAX_MS}ms at heartbeat ${hb} (UI blocked)`);
   const note = r.err ? `ERROR ${r.err}` : (hb >= SEARCH_INF ? 'no-yield control' : '');
   console.log(`  ${String(hb).padStart(11)}  ${String(r.solveMs).padStart(7)}  ${String(r.placed).padStart(6)}  ${String(r.driftMax + 'ms').padStart(12)}  ${String(r.midPongs).padStart(14)}   ${note}`);
 }
 
 // T3 - terminate() as cancel: start the heavy search, terminate at 800ms, then
-// watch for 3s. A prompt cancel means NO result arrives after terminate.
+// watch for 3s. `resultPhase` records WHEN (relative to terminate) a result first
+// arrived: 'after' => terminate did not cancel; 'before' => the search finished
+// before we could cancel (inconclusive - too fast to test); null => cancelled
+// promptly (the pass case). This distinction matters because a faster machine or a
+// perf win could finish the search under 800ms and make a naive "any result" flag
+// misreport a working cancel as a failure.
 const t3 = await page.evaluate(async ({ HELPERS, WORDS }) => {
   eval(HELPERS);
   const w = await makeWarmWorker(50000);
-  let resultAfterTerminate = false, killMs = 0;
+  let resultPhase = null, terminated = false, killMs = 0;
   const start = performance.now();
-  w.onmessage = (ev) => { if (ev.data.type === 'result' || ev.data.type === 'error') resultAfterTerminate = true; };
+  w.onmessage = (ev) => {
+    if ((ev.data.type === 'result' || ev.data.type === 'error') && resultPhase === null)
+      resultPhase = terminated ? 'after' : 'before';
+  };
   w.postMessage({ type: 'solve', input: payload(WORDS, { size: 15, best: false }), heartbeat: 50000 });
   await new Promise(r => setTimeout(r, 800));
-  const t0 = performance.now(); w.terminate(); killMs = Math.round(performance.now() - t0);
+  const t0 = performance.now(); w.terminate(); terminated = true; killMs = Math.round(performance.now() - t0);
   await new Promise(r => setTimeout(r, 3000));   // the search would need ~4s more to finish
-  return { terminateReturnedMs: killMs, resultAfterTerminate, watchedMs: Math.round(performance.now() - start) };
+  return { terminateReturnedMs: killMs, resultPhase, watchedMs: Math.round(performance.now() - start) };
 }, { HELPERS, WORDS });
+const t3cancelled = t3.resultPhase === null;
+check(t3cancelled, t3.resultPhase === 'after'
+  ? 'T3: terminate() did NOT cancel - a result arrived after terminate'
+  : `T3: search finished before the 800ms terminate (inconclusive - resultPhase=${t3.resultPhase}); lower heartbeat/raise word count`);
+check(t3.terminateReturnedMs < TERMINATE_MAX_MS,
+  `T3: terminate() took ${t3.terminateReturnedMs}ms (>= ${TERMINATE_MAX_MS}ms)`);
 console.log(`\nT3 terminate() cancel @800ms: terminate() returned in ${t3.terminateReturnedMs}ms, ` +
-  `result after terminate = ${t3.resultAfterTerminate} (watched ${t3.watchedMs}ms)  -> ` +
-  `${t3.resultAfterTerminate ? 'NOT cancelled' : 'cancelled promptly'}`);
+  `resultPhase=${t3.resultPhase} (watched ${t3.watchedMs}ms)  -> ` +
+  `${t3cancelled ? 'PASS (cancelled promptly)' : 'FAIL'}`);
 
 if (pageLogs.length) { console.log('\nPAGE:'); console.log(pageLogs.join('\n')); }
 await browser.close();
+
+if (fails.length) {
+  console.log(`\ngate #1 FAILED (${fails.length}):`);
+  for (const f of fails) console.log(`  - ${f}`);
+  process.exit(1);
+}
+console.log('\ngate #1 OK (T1 ping, T2 completion+responsiveness, T3 prompt cancel)');
+process.exit(0);

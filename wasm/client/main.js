@@ -1,21 +1,31 @@
 // main.js - SPIKE: page controller. Keeps the SWI-Prolog instance in a Worker
 // (worker.js) so the UI never blocks, and implements "Stop" as terminate() +
-// respawn. A warm spare worker is kept ready so the next Solve starts instantly
-// instead of paying the wasm fetch/instantiate + qlf-load cost again.
+// respawn. A warm standby worker is kept ready - it has already fetched +
+// instantiated the wasm and consulted the qlf (via a "warm" message) - so the
+// Solve after a Stop starts without paying that ~2MB load cost again.
 
 const $ = (id) => document.getElementById(id);
 
 let active = null;   // the worker currently running a solve (or idle+ready)
-let spare = null;    // a pre-warmed standby worker
+let spare = null;    // a warmed standby worker (SWIPL+qlf already loaded)
 
 function spawn() {
   return new Worker("./worker.js");
 }
 
-// Ensure `active` exists; promote the spare if we have one, then re-arm a spare.
+// Spawn a worker AND tell it to pre-load SWIPL+qlf now, so a later solve is fast.
+function spawnWarm() {
+  const w = spawn();
+  w.postMessage({ type: "warm" });
+  return w;
+}
+
+// Ensure `active` exists (promoting the already-warmed spare if we have one) and
+// keep exactly ONE warmed spare on standby. Spawns at most one worker per call and
+// never orphans one, so repeated Solve clicks don't leak workers.
 function ensureActive() {
-  if (!active) active = spare || spawn();
-  spare = spawn();               // warm the next one in the background
+  if (!active) { active = spare || spawnWarm(); spare = null; }
+  if (!spare) spare = spawnWarm();
   return active;
 }
 
@@ -60,8 +70,10 @@ $("solve").onclick = () => {
       renderGrid(msg.output);
       $("status").textContent =
         `placed ${msg.output.words.length} words on ${msg.output.gridLength}×${msg.output.gridLength}`;
-    } else {
+    } else if (msg.type === "error") {
       $("status").textContent = "error: " + msg.message;
+    } else {
+      return;   // ignore non-terminal replies (e.g. a warmed/pong from this worker)
     }
     $("solve").disabled = false;
     $("stop").disabled = true;
@@ -72,10 +84,10 @@ $("solve").onclick = () => {
 $("stop").onclick = () => {
   if (active) active.terminate();     // hard-cancel a CPU-bound DFS
   active = null;
-  ensureActive();                      // promote/re-arm so the next Solve is warm
+  ensureActive();                      // promote the warmed spare + re-arm one
   setBusy(false);
   $("status").textContent = "stopped";
 };
 
-// Warm the first instance up front so the first Solve is responsive.
+// Warm the first instance (and its spare) up front so the first Solve is fast.
 ensureActive();
