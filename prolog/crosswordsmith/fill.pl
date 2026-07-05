@@ -203,14 +203,114 @@ index_set(Len, P, Ch, Index, S) :-
 % candidates (most-constrained-first; ties broken by lowest start cell, for
 % determinism), try each candidate (in dictionary order), unify it into the grid
 % (binding the crossing cells), and recurse. Used answers are not repeated.
-fill_search([], _DictByLen, _Index, _Used) :- !.
+% F-H1 (incremental candidate counts). A slot's candidate count is a pure
+% function of its cells' binding state, and placing a word binds ONLY the
+% previously-free cells of the placed slot. So instead of recounting EVERY
+% unfilled slot at EVERY node (select_mrv's per-node full recount, measured at
+% 79.5-85.6% of search_inf in P-F1), carry the per-slot counts as backtrack-
+% restored threaded state: after a placement recount EXACTLY the slots that
+% cross a NEWLY-BOUND cell of the placed word; every other count carries over
+% unchanged. Backtracking restores the previous counts for free (pure threaded
+% state - the caller's structure is untouched, and the carried terms are built
+% by unification, never findall/copy, so the shared crossing variables survive).
+%
+% EQUIVALENCE (the tree is preserved node-for-node):
+%  (1) COUNTS EXACT BY CONSTRUCTION. The initial counts are a full candidate_count
+%      per slot; after each placement, a slot whose cells did not change keeps its
+%      exact count (candidate_count is a pure function of the cells' binding state)
+%      and a slot crossing a newly-bound cell is recounted with the same
+%      candidate_count/4. Counts NEVER read Used (the \+ memberchk(Word, Used)
+%      filter is try-time only, below), so they are exact regardless of which
+%      words are already placed.
+%  (2) SAME SELECTION. select_min_count picks the minimum c(Count, Start, Dir) in
+%      standard order - byte-identical to select_mrv's sort(0, @=<, ...) + head.
+%      Start+Dir uniquely identify a slot, so this is a total order: no genuine
+%      ties, and the winner is independent of the carried list's order.
+%  (3) SAME WINNER MATERIALIZATION. The winner's candidate list is built by the
+%      same candidates/4.
+%  (4) COMPLETED SLOTS STAY IN THE SET. A slot fully bound by crossings (count 0
+%      or 1) is NOT dropped, so a 0-count dead slot is still selected first (it
+%      has the lowest count) and fails the branch exactly as today.
 fill_search(Slots, DictByLen, Index, Used) :-
-    select_mrv(Slots, DictByLen, Index, slot(_, _, _, Vars), Rest, Cands),
+    maplist(slot_with_count(DictByLen, Index), Slots, Counted),
+    fill_search_inc(Counted, DictByLen, Index, Used).
+
+% Pair each slot with its current candidate count, keeping the ORIGINAL slot
+% term (shared cell variables intact - no reconstruction, no copy). This is the
+% one full per-slot recount, paid once at the root; thereafter it is incremental.
+slot_with_count(DictByLen, Index, Slot, cnt(Count, Slot)) :-
+    Slot = slot(_, _, _, Vars),
+    candidate_count(Vars, DictByLen, Index, Count).
+
+% Counted is a list of cnt(Count, Slot). Select the min-count slot, place a word,
+% recount only the crossings the placement disturbed, recurse on the rest.
+fill_search_inc([], _DictByLen, _Index, _Used) :- !.
+fill_search_inc(Counted, DictByLen, Index, Used) :-
+    select_min_count(Counted, cnt(_, Best), Rest),
+    Best = slot(_, _, BestCells, BestVars),
+    newly_bound_cells(BestCells, BestVars, NewCells),   % free cells, PRE-placement
+    candidates(BestVars, DictByLen, Index, Cands),
     member(Word, Cands),
     \+ memberchk(Word, Used),
-    Vars = Word,                          % unify into the shared cell variables
-    fill_search(Rest, DictByLen, Index, [Word|Used]).
+    BestVars = Word,                      % unify into the shared cell variables
+    recount_crossing(Rest, NewCells, DictByLen, Index, Rest1),
+    fill_search_inc(Rest1, DictByLen, Index, [Word|Used]).
 
+% Winner = the cnt/2 with the minimum c(Count, Start, Dir) in standard order
+% (Count, then Start, then Dir; all ground). This reproduces select_mrv's
+% sort(0, @=<, ...)+head+once(select) exactly. Rest is the other cnt/2s with
+% their order + term-sharing preserved (mirrors once(select(Best, Slots, Rest))).
+select_min_count([H|T], Min, Rest) :-
+    min_count_walk(T, H, Min),
+    Min = cnt(_, slot(MStart, MDir, _, _)),
+    remove_slot(MStart, MDir, [H|T], Rest).
+
+min_count_walk([], Best, Best).
+min_count_walk([X|Xs], Best0, Best) :-
+    ( count_le(Best0, X) -> Best1 = Best0 ; Best1 = X ),
+    min_count_walk(Xs, Best1, Best).
+
+% Best0 stays iff its (Count, Start, Dir) key is @=< X's - the same key order
+% select_mrv's sort/4 imposes on the c/3 terms.
+count_le(cnt(C0, slot(S0, D0, _, _)), cnt(C1, slot(S1, D1, _, _))) :-
+    c(C0, S0, D0) @=< c(C1, S1, D1).
+
+% Drop the winning slot by its ground (Start, Dir) key, compared with == so no
+% variable is bound. Preserves the order and term-sharing of the remaining cnt/2s.
+remove_slot(MStart, MDir, [cnt(_, slot(S, D, _, _))|T], Rest) :-
+    S == MStart, D == MDir, !, Rest = T.
+remove_slot(MStart, MDir, [X|T], [X|Rest]) :-
+    remove_slot(MStart, MDir, T, Rest).
+
+% The placed slot's cells that were still FREE before placement - exactly the
+% cells this placement newly binds. Its already-bound cells are unchanged, so
+% crossings through them cannot change count. Cells and Vars are positionally
+% aligned (slot_vars/3). NewCells is a plain list of ground cell NUMBERS: the
+% crossing test is by cell identity, so no cell variable is ever copied.
+newly_bound_cells([], [], []).
+newly_bound_cells([Cell|Cs], [Var|Vs], New) :-
+    ( var(Var) -> New = [Cell|New1] ; New = New1 ),
+    newly_bound_cells(Cs, Vs, New1).
+
+% Recount EXACTLY the carried slots that cross a newly-bound cell; carry every
+% other count unchanged. cnt(Count, Slot) keeps the ORIGINAL Slot term (shared
+% cell variables survive - no findall/copy). A crossing is a shared cell NUMBER
+% (ground), so detection needs no variable comparison.
+recount_crossing([], _NewCells, _DictByLen, _Index, []).
+recount_crossing([cnt(C0, Slot)|T], NewCells, DictByLen, Index, [cnt(C1, Slot)|T1]) :-
+    Slot = slot(_, _, Cells, Vars),
+    ( shares_cell(Cells, NewCells)
+    ->  candidate_count(Vars, DictByLen, Index, C1)
+    ;   C1 = C0 ),
+    recount_crossing(T, NewCells, DictByLen, Index, T1).
+
+shares_cell([C|_], NewCells) :- memberchk(C, NewCells), !.
+shares_cell([_|Cs], NewCells) :- shares_cell(Cs, NewCells).
+
+% select_mrv/6 is RETAINED as the reference selector: the white-box tests
+% (tests/fill.plt R6/P13) call it directly, and it documents the exact selection
+% rule fill_search_inc reproduces incrementally. It is no longer on the engine's
+% hot path (fill_search_inc drives the search).
 % Pick the slot with the fewest current candidates (>=0); deterministic
 % tie-break: lowest start cell, then direction. Recovering the slot by BOTH
 % start AND direction is load-bearing when a cell begins an across and a down
