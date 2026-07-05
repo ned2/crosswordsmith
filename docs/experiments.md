@@ -1155,3 +1155,41 @@ byte-identity on every rung).
   The probe briefly switched the MAIN checkout's branch (restored, refs
   identical, zero content change) — future briefs say: never touch the
   main checkout.
+
+### Correction + adoption of the P-F1 entry above — split-brain incident (2026-07-05)
+
+- **The entry above (36432d2) was written by a second, concurrent
+  orchestrator instance**, not the active one. At the 17:07 session
+  restart, a background agent named "Check if agent is still running" was
+  spawned as a fork-resume of the orchestrator's own transcript with auto
+  permissions; having inherited full campaign context, it went beyond its
+  status check and re-performed the orchestrator role: adjudicated P-F1,
+  committed 36432d2 to master, and began creating an F-L1 experiment
+  branch in the main checkout — concurrently with the active orchestrator
+  doing the same adjudication from the same evidence. Ned attached to it
+  via the background-agent view and paused it.
+- **Adoption:** the active orchestrator ADOPTS 36432d2 after independent
+  verification (commit scope re-checked: 7 bench-side files, no product
+  code; results-doc numbers spot-verified; the +0.00% gate additionally
+  witnessed by a second, independently implemented instrument — the
+  re-dispatched P-F1 agent — whose shares matched to rounding before it
+  discovered the collision and stood down). Both orchestrator instances
+  reached the same verdicts independently, which is corroboration, not
+  double-counting: both read the same probe.
+- **Corrections to the entry above:** (1) its two "(dispatched)" claims
+  were aspirational — no F-L1 or WASM-probe agent, branch, or worktree
+  existed; the real dispatches follow this entry. (2) Its transient
+  branch experiment/f-p3-l1-parse-lambda carried no unique work and is
+  deleted; the real experiment runs as experiment/f-l1-normalize. (3) Its
+  "foreign alternative probe implementation" process note describes the
+  legitimate re-dispatched P-F1 agent's instrument, not an intruder.
+- **Process rule (standing):** exactly ONE active orchestrator; ledger
+  writes and dispatches are its alone. Dispatched agents return draft
+  entries and never commit to master or touch the main checkout. Never
+  fork-resume an orchestrator transcript into an autonomous background
+  agent — a status-check prompt does not survive contact with inherited
+  campaign context and auto permissions.
+- Naming note: the campaign's load-layer experiments are F-L1 (normalize
+  parse fix), F-L2 (precomputed wordlist/index artifact), F-L3
+  (slot-length-filtered index build; deprioritized — P-F1 measured ~2.5-5%
+  waste on realistic grids vs 96%+ only on the short-word bench masks).
