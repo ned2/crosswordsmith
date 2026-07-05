@@ -1,42 +1,61 @@
 ---
 name: experiment-campaign
-description: Run an experiment-driven, goal-oriented research campaign (e.g. performance optimization) as an orchestrator dispatching agents. Use when asked to systematically improve a measurable property of a system through hypotheses, probes, and ratcheted experiments — "push the efficiency of X", "run an optimization campaign", "experiment-driven research on Y".
+description: Run an experiment-driven, goal-oriented research campaign (e.g. performance optimization) as an orchestrator dispatching agents — for sustained campaigns that warrant multiple dispatched experiments and a regression ratchet, NOT one-off optimizations. Use when asked to systematically improve a measurable property of a code system through hypotheses, probes, and ratcheted experiments ("run an optimization campaign over X", "systematically push Y's performance").
 ---
 
 # Experiment campaign: orchestrated, measured, ratcheted
 
 A reusable process for improving a measurable property of a system through
-dispatched experiments, distilled from the crosswordsmith arrange campaign
-(2026-07: −71..84% search cost, byte-identical output, ~10 experiments/probes;
-see `docs/research/arrange-perf-campaign-2026-07.md` and `docs/experiments.md`
-for the worked example and its post-mortem lessons).
+dispatched experiments. Provenance: the crosswordsmith arrange campaign
+(2026-07: −71..84% search cost, byte-identical output, ~10 experiments + 3
+probes; worked example and post-mortem in
+`docs/research/arrange-perf-campaign-2026-07.md` and `docs/experiments.md`).
 
-## Prerequisites — build these FIRST if absent (they are phase 0, not optional)
+Companion files (read at point of use, not up front):
+- `brief-template.md` — the 8-part experiment-brief checklist (read before
+  EVERY dispatch).
+- `acceptance-checklist.md` — the accept/reject ritual (read at every
+  adjudication).
 
-1. **A deterministic, machine-independent metric** to hill-climb (e.g.
-   inference counts, instruction counts, node expansions — not wall time).
-2. **An identity oracle** proving behavior didn't change (golden outputs
-   byte-compared; stronger oracles held in reserve — see Verification).
-3. **A ratchet**: per-workload baseline file + check that fails on regression
-   past a tolerance and re-records on accepted wins, plus an append-only
-   history ledger. Workloads = a cost ladder spanning ~3 orders of magnitude,
-   covering the axes the algorithm behaves differently on (size, density...).
-   Exclude budget-saturating / near-cliff workloads — they flip on any change.
+## Phase 0 — the measurement substrate (adapt to the domain; build if absent)
+
+1. **A trackable metric.** Prefer a deterministic, machine-independent proxy
+   (instruction/inference/op counts, node expansions) where one exists —
+   exact metrics make every later step cheaper. Where the goal is inherently
+   noisy (latency, throughput), substitute a statistical protocol: fixed
+   warmup, N trials, median + characterized spread, and treat sub-noise
+   "wins" as null results.
+2. **An equivalence check matched to the output.** Byte-identical goldens
+   where output is deterministic; property-based or tolerance equivalence
+   where it is not. This is what makes it safe to move fast with agents.
+3. **A ratchet**: per-workload baseline + a check that fails on regression
+   past a tolerance SET ABOVE CHARACTERIZED NOISE, re-records on accepted
+   wins, and appends to an over-time history ledger.
+4. **A workload ladder** spanning the scales the system actually runs at,
+   along its MEASURED cost axes (let the first probe tell you what drives
+   cost; don't guess the axes). Every rung must be a stable ratchet target,
+   not a coin flip: confirm across seeds/instances. Exclude MARGINAL
+   near-saturation cases (they flip on any change) but keep cases that pass
+   ROBUSTLY across seeds — those are the envelope guards that protect wins.
 
 ## Roles and dispatch
 
-- **Orchestrator (you)**: chief scientist. Deep code understanding, hypothesis
-  generation, brief writing, adjudication, ledger. Do not run experiments
-  inline; your context is for judgment and synthesis.
+- **Orchestrator (you)**: do not run experiments inline — your context is
+  for code understanding (done yourself, not delegated), hypothesis
+  generation, brief writing, adjudication, and the ledger.
 - **Experiment agents** (strong coding model, isolated worktree, one per
-  experiment): implement + measure + verify + commit on a branch. Never merge
-  themselves; never re-record the baseline.
-- **Research agents** (cheaper model): online/literature sweeps, returning
-  ranked candidates with sources. Distill results into durable docs
-  immediately — research that lives only in a conversation is lost.
-- **Probe agents**: measurement-only dispatches (instrumentation, envelope
-  mapping, premise checks). Cheapest and highest-ROI class — a probe that
+  experiment): implement + measure + verify + commit on a branch. Never
+  merge themselves; never re-record the baseline.
+- **Research agents** (cheaper model): literature/online sweeps returning
+  ranked candidates with sources; distill into durable docs immediately.
+- **Probe agents** (cheaper model unless the instrumentation is invasive):
+  measurement-only dispatches. Cheapest, highest-ROI class — a probe that
   kills a big refactor before it is built pays for the whole campaign.
+- **Recovery**: an agent that stalls, exhausts budget, or returns an
+  unusable/contradictory packet is resumed with "re-read your own edits,
+  don't assume they landed" or re-dispatched from the last good base —
+  never partially trusted. A confused packet usually means the brief
+  under-specified; fix the brief, not just the agent.
 
 Parallelism rule: research + probes may run alongside experiments, but never
 run two candidate changes to the same code concurrently — serial composition
@@ -44,15 +63,20 @@ is what keeps attribution honest.
 
 ## Campaign lifecycle
 
-1. **Understand**: read the target code fully yourself. Play the plan back to
-   the user before starting (goal, roles, stop criterion).
+1. **Understand + plan playback**: read the target code fully yourself, then
+   play the plan back to the user (goal, roles, stop criterion, how involved
+   they want to be mid-campaign) before starting.
 2. **Probe before building**: no experiment is dispatched until its premise
-   has a measurement behind it (where does the cost actually go? does the
-   assumed structure exist?). Re-probe when a surprise lands.
-3. **Experiment loop** (serial): dispatch → adjudicate → accept/reject →
-   ratchet → ledger → next. Follow surprises: an outsized win means your cost
-   model was wrong — spawn the sequel hypothesis AND a probe re-validating
-   any earlier conclusion the surprise casts doubt on.
+   has a measurement behind it — and a probe doesn't only falsify premises,
+   it NOMINATES the next hypotheses by showing where cost actually lives.
+   Beware profiler misattribution: inclusive/cumulative frames blame
+   callers; confirm the hot line by self-time or a targeted micro-bench
+   before optimizing it.
+3. **Experiment loop** (serial): dispatch (per `brief-template.md`) →
+   adjudicate (per `acceptance-checklist.md`) → ratchet → ledger → next.
+   Follow surprises: an outsized win means your cost model was wrong — spawn
+   the sequel hypothesis AND a probe re-validating any earlier conclusion
+   the surprise casts doubt on.
 4. **Close-out**: an envelope/impact probe answering the user's actual goal
    in product terms, then a campaign summary as a durable doc.
 5. **New domain?** If the campaign moves to a structurally different system,
@@ -61,64 +85,30 @@ is what keeps attribution honest.
    or measured numbers), assume the author is pattern-matching from the last
    campaign, and that "a review that just agrees is a failed review".
 
-## The experiment brief (every dispatch includes ALL of these)
-
-1. **Base check first**: the exact commit the worktree must show, what to do
-   if stale (merge from the main checkout), and a signature feature to verify
-   exists. (Three stale-base incidents in one campaign; silent corruption of
-   results otherwise.)
-2. **Context pointers**: the ledger section and any research docs to read.
-3. **Hypothesis + mechanism**: what to change and WHY it should pay.
-4. **Soundness reasoning — with a verify order**: include your worked
-   argument, and explicitly instruct the agent to verify it in code rather
-   than trust it. Orchestrator soundness sketches have been wrong before; the
-   brief must license the agent to overturn you.
-5. **Known traps**: forward every hazard learned in prior experiments that
-   could bite this one, verbatim.
-6. **Pre-registered expectation** + explicit permission for null results:
-   "expected X; a null/negative result is legitimate — report it straight, do
-   not force a win." Calibrates the agent and makes surprises legible.
-7. **Validation protocol**: tests green, identity oracle byte-identical
-   (never regenerate goldens; stop and report any diff), ratchet check
-   against the CURRENT baseline with the expected reference numbers inlined,
-   no baseline re-record, commit on a named branch.
-8. **Deliverable contract**: a lettered list — per-workload results table,
-   design decisions, identity status, files/commit/branch, risks, verdict
-   recommendation, and a draft ledger entry in house style. Decision-ready
-   packets make adjudication cheap.
-
-## Acceptance ritual (fixed, serial)
-
-merge branch → full test suite → ratchet re-record → ledger entry (adapted
-from the agent's draft, with COMPOSED numbers measured against the current
-baseline, not the agent's standalone numbers if bases diverged) → commit.
-Rejections get ledger entries too, with the measured mechanism — a rejection
-without a recorded reason will be re-litigated later. Never merge a rejected
-branch for its docs; write the entry on the main branch and reference the
-branch commit.
-
 ## Verification escalates with win size
 
-Default: identity oracle + ratchet. For an implausibly large win, escalate
-before accepting: full-behavior equivalence (e.g. complete search-tree
-solution counts across all modes), byte-identity on every workload, and the
-non-default code paths (seeded/alternative modes). A big win should raise
-suspicion first, celebration second. Also: verify tooling side effects — after
-any state-changing tool run, check the state itself, not the success message
-(the campaign found its own ratchet silently dropping new entries while
-logging "recorded").
+Default: equivalence check + ratchet. For an implausibly large win, escalate
+before accepting: stronger behavioral equivalence (e.g. full search-tree
+solution counts across all modes, in the reference campaign), identity on
+every workload, and the non-default code paths. A big win should raise
+suspicion first. Also: verify tooling side effects — after any state-changing
+tool run, check the state itself, not the success message (the reference
+campaign found its own ratchet silently dropping new entries while logging
+"recorded").
 
 ## Closing avenues and pausing
 
 - Avenues close on **mechanism, not fatigue**: each closure cites a
-  measurement (a hit rate, a diagnostic, a falsified premise). "We tried
-  things and they stopped working" is not a closure.
-- Scope verdicts precisely: "this SEAM is exhausted" is not "this CATEGORY is
-  exhausted". If an earlier measurement still points somewhere, the search is
-  not done — the biggest win of the reference campaign came after two
-  premature "mined out" declarations, from exactly where the first probe had
-  been pointing all along.
+  measurement (a hit rate, a diagnostic, a falsified premise).
+- Scope verdicts precisely: "this SEAM is exhausted" is not "this CATEGORY
+  is exhausted". If an earlier measurement still points somewhere, the
+  search is not done — the reference campaign's biggest win came after two
+  premature "mined out" declarations, from exactly where the first probe
+  had been pointing.
 - Corrections are APPENDED to the ledger, never rewritten into history.
+- Weigh campaign cost: dispatching strong-model agents is expensive; stop
+  for economic reasons when the remaining candidate wins are worth less
+  than the tokens to find them, and SAY that's why.
 - The pause is legitimate when every remaining avenue ends in either a
   measured dead-end or a named revisit trigger.
 
@@ -132,8 +122,9 @@ force it either way.
 
 ## Durable artefacts (as you go, not at the end)
 
-- `docs/experiments.md` (or equivalent): one entry per accept/reject/probe,
-  at decision time.
-- `docs/research/`: distilled research sweeps; campaign summary at close-out
+- An experiments ledger: one entry per accept/reject/probe, at decision
+  time, rejections included WITH the measured mechanism (an unrecorded
+  rejection will be re-litigated later).
+- Research docs: distilled sweeps; campaign summary at close-out
   (interventions, intuitions, impact, lessons).
-- Plans for new campaigns: `docs/plans/`, red-teamed before execution.
+- Plans for new campaigns: written as docs, red-teamed before execution.
