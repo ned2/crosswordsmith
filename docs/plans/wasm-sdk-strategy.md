@@ -563,6 +563,16 @@ fact-gated, RNG residue never read); the `cli_error → fail_with` channel never
 throws; `doc_to_words/2` unexported, `mask_white_cells/3` exported, `lint_run/5`
 pure, Exolve emits text, `fragment_dict_words/3` pure — all confirmed.
 
+**Implementation finding (2026-07-06, arrange slice):** cross-VM *seeded* equality
+is impossible by construction: `set_random(seed(N))` seeds GMP's RNG natively but
+SWI's builtin RNG under the `USE_GMP=OFF` wasm build — the same seed draws a
+different sequence (verified: first `random/1` after `seed(42)` is 0.7846… native
+vs 0.3745… wasm). OQ-8's "engine-build-scoped reproducibility" is therefore a hard
+fact, not a caution. Locked accordingly in `wasm/test/value_golden.sh`: the seed
+seam natively (dispatch == CLI, one VM), and under wasm determinism (seed twice
+identical), perturbation (seeded ≠ seedless — an ignored seed can't fake it), and
+provenance; `crosswordsmith.d.ts` documents the scope on `seed`.
+
 ---
 
 ## Sources
