@@ -1358,3 +1358,52 @@ byte-identity on every rung).
 - **Phase 2 status:** F-H1 done. F-H2 (bitset counting, gate GO) remains
   scoped to the F-L2 artifact design per the gate probe's binding
   condition. F-H3 rescoped to infra; F-H4/F-H5 closed on mechanism.
+
+### F-L2 — precomputed index artifact — ACCEPTED (merged 540a2ce)
+
+- **Where:** branch experiment/f-l2-index-artifact @ c23ec1c (3 commits,
+  base f9e5a83), merged to master 540a2ce. prolog/crosswordsmith/fill.pl
+  (fill_save_index/2, fill_load_index/4, fill_solve_index/5; fill_solve
+  refactored into shared fill_prepare + fill_place_and_emit so both
+  modes run the identical engine); CLI `fill --save-index FILE` (build)
+  and `fill --index FILE` (consume), mutually exclusive, raw path
+  unchanged; new artifact-mode oracle
+  benchmarks/check_fill_identity_artifact.sh; +8 plunit tests (212
+  total). Results doc benchmarks/results/2026-07-05-f-l2-index-artifact.md.
+- **What:** the dictionary parse + index build is a pure function of the
+  frozen dict file; serialize the EXACT runtime terms (DictByLen + assoc
+  Index — AVL shape preserved, loaded == built proven at 10k/50k/172k)
+  once via `fill --save-index`, and load them back in ~0.1s instead of
+  recomputing ~2s per invocation. Artifact term fill_index(Version,
+  Meta, DictByLen, Index); Meta carries dict_sha256 / swi_version /
+  provenance and is the F-H2 extension point (masks = new Meta key under
+  a Version bump). Loader REFUSES (clear fill_index_* errors, no silent
+  rebuild) on missing/unreadable/malformed/version/SWI/hash mismatch.
+- **Format bake-off (measured at 172k, warm):** fastrw 0.099s / 4 inf /
+  14.6MB beat .qlf-of-fact 0.269s / 710 inf / 15.5MB; build cost fastrw
+  0.2s vs qcompile 9.3s; no qlf clause-size limit at 172k. SHIPPED
+  fastrw; .qlf documented as the WASM-aligned alternative (localized
+  swap, schema unchanged).
+- **Result:** warm artifact load ~20x the post-F-L1 raw load at 172k
+  (1.96s → 0.099s). End-to-end CLI (raw → --index): sq04_full 2530→230ms
+  (11x), g11_full_seed 2520→240ms, g17_full 2620→410ms, g21_full
+  2850→500ms, g09_full 3220→870ms (3.7x — search-dominated, least gain,
+  as expected). Orchestrator smoke: g11a full-ENABLE 2.70s → 0.40s,
+  output byte-identical (cmp).
+- **Gates:** raw path +0.00% on BOTH gated layers, all 11 rungs
+  (baseline intentionally UNMOVED — nothing to ratchet; post-merge
+  history row logged at 540a2ce with counts identical to baseline).
+  Identity 11/11 in BOTH raw and artifact modes against the same pinned
+  fill_identity.sha256 (the cross-mode equivalence gate). Tests green on
+  branch and merged master. All independently re-run by the orchestrator.
+- **Honest-metric note:** artifact-mode load_inf ≈ 4 (C-level fastrw) —
+  WALL is the metric for artifact mode; the inference collapse is a
+  measurement blind spot, not the win. The 11 raw rungs remain the
+  inference-gated floor.
+- **Risks:** fastrw's binary format is SWI-version-bound → the artifact
+  is a build-time cache, not a distribution format; embedded swi_version
+  + refusal handles it. Browser milestone must verify fastrw under
+  swipl-wasm or emit .qlf instead (schema unchanged either way).
+- **Deferred proposals (results doc §h, not adopted):** artifact-mode
+  bench-manifest rungs and an artifact file-size drift tripwire — revisit
+  if/when F-H2 masks land in the artifact (schema v2).
