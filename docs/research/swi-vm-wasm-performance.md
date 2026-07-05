@@ -56,11 +56,17 @@ sources cited inline. Findings that became experiments are cross-referenced.
 
 - **Slowdown vs native:** ~4x (2022 self-report), regressed toward ~10x with
   newer Emscripten, fixed Sept-2025 by moving `setjmp()`/`longjmp()` off the
-  hot VM path (swipl-devel `7b4b138ba`), back to ~2.7-3x. **Our pinned
-  10.1.10 predates that fix** — build the WASM target from a post-fix
-  checkout even while native stays pinned (WASM-build-specific; doesn't
-  touch the native pin).
-  https://swi-prolog.discourse.group/t/wasm-performance/9320
+  hot VM path (swipl-devel `7b4b138ba`, 2025-09-29), back to ~2.7-3x.
+  **CORRECTION (2026-07-05):** our native pin is NOT the bare 10.1.10 tag — it
+  is `V10.1.10-17-gaa6289399` (commit 2026-07-01), and
+  `git merge-base --is-ancestor 7b4b138ba aa6289399` confirms **the pin already
+  contains the fix.** So building the WASM target *from our own tree* gives the
+  fast path automatically; no separate post-fix checkout is needed. (Earlier
+  text here assumed the bare tag and wrongly said the pin predates the fix.)
+  Do NOT enable `WASM_EXCEPTIONS` chasing more speed: it is an *alternative* to
+  this fix (`-fwasm-exceptions`), ~30% slower, and superseded — leave it OFF.
+  https://swi-prolog.discourse.group/t/wasm-performance/9320 · see
+  `docs/plans/wasm-browser-deployment.md`
 - **Backtracking is disproportionately expensive under WASM**: the
   setjmp/longjmp emulation sits exactly on the backtracking/exception
   control path a DFS exercises. Tree-size reductions pay more than
@@ -86,9 +92,13 @@ sources cited inline. Findings that became experiments are cross-referenced.
 - **Missing under WASM:** threads (`--disable-mt`; use multiple async
   engines on one core), ~21 libraries (socket, ssl, crypto, process,
   archive, bdb, janus, ...). GMP optional; LibBF fallback has considerably
-  worse rational arithmetic (irrelevant to arrange's integer arithmetic).
-  Tabling/CLP(FD): no evidence they're disabled (unconfirmed either way) —
-  verify before depending on tabling (relevant to E-H3's tabling variant).
+  worse rational arithmetic (irrelevant to arrange's integer arithmetic; the
+  WASM build sets `USE_GMP=OFF` as standard). **Tabling is available** (a core
+  engine feature, not a package — CORRECTED 2026-07-05 from "unconfirmed"; the
+  emscripten package set is `clpqr plunit chr clib http semweb pcre utf8proc`
+  and `library(http/json)` resolves via a 2025 compat shim to the standalone
+  `json` package). A smoke test is still worth it before depending on tabling
+  (E-H3's variant), but it is not disabled.
   https://swi-prolog.discourse.group/t/notes-on-building-swi-prolog-for-webassembly-wasm/9488
 - **Long searches block the browser event loop**: auto-yield happens only at
   the exit port ("recursive loops that call no other predicates only exit
@@ -97,8 +107,12 @@ sources cited inline. Findings that became experiments are cross-referenced.
   (`Prolog.call("set_prolog_flag(stack_limit, N)")`), not Emscripten flags.
 - **Build flags that matter:** `-s STACK_SIZE=1048576
   -s STACK_OVERFLOW_CHECK=1` (default 64k Emscripten stack has caused
-  crashes), `-DVMI_FUNCTIONS=ON` (">10% faster"), `ALLOW_MEMORY_GROWTH=1`,
-  Release build. https://swi-prolog.discourse.group/t/wasm-updates/6516
+  crashes), `ALLOW_MEMORY_GROWTH=1`, `WASM_BIGINT`, `LZ4`, Release build.
+  **CORRECTED 2026-07-05:** these are already the in-tree defaults in
+  `cmake/EmscriptenTargets.cmake` — no manual tuning. And **drop the old
+  `-DVMI_FUNCTIONS=ON` (">10% faster")** advice: the tree now forces
+  `DEFAULT_VMI_FUNCTIONS OFF` under `if(EMSCRIPTEN)`, so leave it at the
+  default. https://swi-prolog.discourse.group/t/wasm-updates/6516
 - **Gotchas:** `statistics(cputime)` returns walltime under WASM (display
   only; the arrange budget is inference-based so cutoffs are unaffected);
   multiple SWIPL instances leak (no destroy(),
@@ -107,6 +121,14 @@ sources cited inline. Findings that became experiments are cross-referenced.
 
 ## Standing recommendations for the WASM milestone (outside this campaign)
 
-1. Build the browser target from post-setjmp-fix swipl-devel; qlf-only.
+The full strategy now lives in `docs/plans/wasm-browser-deployment.md` (with a
+runnable spike under `spikes/wasm-browser/`). In brief:
+
+1. Build `swipl-web` **from our own tree** (`~/src/swipl-devel`, exact-version
+   parity — the pin already has the setjmp fix); qlf-only, `WASM_EXCEPTIONS` OFF.
 2. Validate ladder inference-count parity under Node/swipl-wasm once.
-3. Set heartbeat + stack_limit at init; single engine instance, reused.
+3. Set heartbeat + stack_limit at init; single instance, reused; per-solve
+   throwaway engine (`forEach({engine:true})`).
+4. Input via query binding; output via JSON (`json_write_dict` + `JSON.parse`),
+   not a bound dict — Prolog `null`/bool atoms come back as JS strings.
+5. Run the solver in a Web Worker; cancel via `worker.terminate()`.

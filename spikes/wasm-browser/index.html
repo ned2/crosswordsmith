@@ -1,0 +1,32 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>crosswordsmith - WASM spike</title>
+<style>
+  body { font: 14px/1.5 system-ui, sans-serif; margin: 2rem; max-width: 720px; }
+  textarea { width: 100%; height: 8rem; font-family: monospace; }
+  button { font-size: 1rem; padding: .4rem .9rem; margin-right: .5rem; }
+  #grid { font-family: monospace; font-size: 1.4rem; letter-spacing: .35rem;
+          white-space: pre; line-height: 1.35; margin-top: 1rem; }
+  #status { color: #666; }
+  .cell-block { color: #bbb; }
+</style>
+
+<h1>crosswordsmith &mdash; browser spike</h1>
+<p>Words (one per line). The solver runs in a Web Worker.</p>
+<textarea id="words">CAT
+CAR
+ARC
+RAT
+TAR</textarea>
+<p>
+  Grid size <input id="size" type="number" value="5" min="3" max="21" style="width:4rem">
+  <label><input id="best" type="checkbox" checked> best-effort</label>
+</p>
+<p>
+  <button id="solve">Solve</button>
+  <button id="stop" disabled>Stop</button>
+  <span id="status">idle</span>
+</p>
+<div id="grid"></div>
+
+<script src="./main.js"></script>
