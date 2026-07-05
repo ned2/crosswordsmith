@@ -70,7 +70,9 @@ sources cited inline. Findings that became experiments are cross-referenced.
 - **Backtracking is disproportionately expensive under WASM**: the
   setjmp/longjmp emulation sits exactly on the backtracking/exception
   control path a DFS exercises. Tree-size reductions pay more than
-  inference-count parity suggests.
+  inference-count parity suggests. (The arrange perf campaign reached the same
+  conclusion from the other side — it valued its search-inference cuts as "doubly
+  valuable under WASM" for exactly this reason; `docs/experiments.md`.)
 - **Inference-count portability — NOW CERTIFIED (2026-07-05).** The concern was
   that the same program *might* yield different counts under WASM (GC/setjmp
   overhead is invisible to counts, but indexing-driven choicepoint survival could
@@ -83,7 +85,11 @@ sources cited inline. Findings that became experiments are cross-referenced.
   wall-per-inference constant changed.* The ratchet is a valid WASM proxy.
   Reproduce: `wasm/test/inference_parity.pl` (measures the exact bench boundary —
   `call_time` around `arrange_best_layout/6`, no `once/1` — without pulling
-  `library(process)`, which is absent under WASM).
+  `library(process)`, which is absent under WASM). Independently corroborated by
+  the fill campaign's F-H2 wasm-bignum probe
+  (`benchmarks/results/2026-07-05-f-h2-gate-probe.md`, run on this spike's own wasm
+  build): its counting-kernel and mask `build_inf` counts are bit-identical
+  native↔wasm on a different (arithmetic/list/bignum) workload class.
 - **Startup:** `.qlf` is the documented fast path — `qcompile/2` with
   `include(user)` produces a single file loadable via `Prolog.consult()`
   from a URL. Author-measured: ~20x faster loading than source, ~50%
@@ -96,9 +102,12 @@ sources cited inline. Findings that became experiments are cross-referenced.
   https://www.swi-prolog.org/pldoc/man?section=wasm-consult
 - **Missing under WASM:** threads (`--disable-mt`; use multiple async
   engines on one core), ~21 libraries (socket, ssl, crypto, process,
-  archive, bdb, janus, ...). GMP optional; LibBF fallback has considerably
-  worse rational arithmetic (irrelevant to arrange's integer arithmetic; the
-  WASM build sets `USE_GMP=OFF` as standard). **Tabling is available** (a core
+  archive, bdb, janus, ...). GMP optional; the LibBF fallback is slower for BOTH
+  rational and integer-*bignum* arithmetic — the fill campaign's F-H2 wasm probe
+  measured LibBF integer bignum at ~3-14× GMP (limb-linear). Still irrelevant to
+  *arrange* (small machine ints, no bignum; the WASM build sets `USE_GMP=OFF` as
+  standard) — but material if fill's `--masks` bignum bitsets are ever brought to
+  the browser. **Tabling is available** (a core
   engine feature, not a package — CORRECTED 2026-07-05 from "unconfirmed"; the
   emscripten package set is `clpqr plunit chr clib http semweb pcre utf8proc`
   and `library(http/json)` resolves via a 2025 compat shim to the standalone

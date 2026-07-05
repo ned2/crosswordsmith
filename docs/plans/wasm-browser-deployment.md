@@ -657,6 +657,45 @@ is tracked debt (mostly already owned by §9.1).
 
 ---
 
+## 11. Fill perf campaign — relevance to this build (2026-07-05)
+
+Reviewed the parallel fill perf campaign (F-L1/F-L2/F-H1/F-H2, merged to master)
+for anything touching the wasm build, ahead of bringing this branch into main.
+
+- **The merge is clean for the browser path.** The campaign's engine changes are
+  entirely in `prolog/crosswordsmith/fill.pl` (+ the `crosswordsmith` CLI,
+  `benchmarks/`, `tests/`); it never touches `core.pl`/`arrange.pl`, which are
+  byte-identical between this branch and master. So the browser's `arrange_solve/4`
+  path, the `ladder_15x15_36w` fixture / `SEARCH_INF`, gate #2 native↔wasm parity,
+  and the golden-parity bytes are all unaffected — **no recalibration on merge.**
+  (The arrange `E-*` campaign — tabling, `mrv_inc` — predates our fork and is
+  already in this build.) Conflict surface with our branch: **zero** (disjoint
+  file sets: our 19 `wasm/**`+docs vs their 43 fill/CLI/bench/test/docs).
+- **One merge caveat handled:** merged `fill.pl` adds load-time
+  `use_module(library(sha))` + `library(fastrw)` (F-L2 artifact I/O), and the
+  browser qlf folds `fill.pl` via `load.pl` + `include(user)`. Both libraries were
+  verified to load under the `swipl-web` build, so the qlf rebuild survives the
+  merge. (The browser never *calls* fill; this is only about the qlf compiling.)
+- **The F-H2 wasm-bignum gate probe corroborates our cost model.** Run on this
+  spike's own wasm build, it independently confirmed inference portability
+  native↔wasm (a second workload class), the ~2× post-setjmp-fix load penalty, and
+  that backtracking-heavy work is where wasm hurts. One refinement folded into
+  `swi-vm-wasm-performance.md`: LibBF's penalty is not rational-only — integer
+  bignum also pays ~3-14× vs GMP (limb-linear); still irrelevant to arrange (no
+  bignum), material only if fill's masks come to the browser.
+- **Forward items — when *fill* is browserified (NOT needed for the arrange spike):**
+  1. **Index-artifact carrier:** F-L2 ships a `fastrw` index artifact whose binary
+     format is SWI-version-bound and unverified end-to-end under swipl-wasm. The
+     campaign already names **`.qlf` as the WASM-aligned fallback** (schema
+     unchanged) — matches our qlf approach. Verify `fastrw`-under-wasm round-trips,
+     or emit `.qlf`.
+  2. **Bignum masks (F-H2 `--masks`):** the bitset kernel is ≥9× even under LibBF,
+     so masks-on is the recommended browser default — BUT never build masks at load
+     (~36% of wasm `load_wall`); ship them precomputed in the artifact. General
+     lesson: heavy load-time construction is disproportionately costly under wasm.
+
+---
+
 ## Sources
 
 - Build doc (stale, use with care): https://www.swi-prolog.org/build/WebAssembly.md
