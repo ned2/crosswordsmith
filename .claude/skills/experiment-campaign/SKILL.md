@@ -40,6 +40,12 @@ Companion files (read at point of use, not up front):
 
 ## Roles and dispatch
 
+Known-good model mapping from the reference campaign (2026-07; update as
+model families evolve, but keep the TIER logic): orchestrator = the most
+capable/cost-heavy tier (Fable), experiment agents = the strongest coding
+tier below it (Opus 4.8), research + probe agents = the fast/cheap tier
+(Sonnet 5).
+
 - **Orchestrator (you)**: do not run experiments inline — your context is
   for code understanding (done yourself, not delegated), hypothesis
   generation, brief writing, adjudication, and the ledger.
