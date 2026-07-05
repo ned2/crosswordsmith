@@ -54,7 +54,12 @@ run(['dispatch'|Files]) :-
 word_clue([A, M], _{answer: S, meta: M}) :- !, atom_string(A, S).
 word_clue([A], _{answer: S}) :- atom_string(A, S).
 
+% Dispatch on the request's own verb — exactly what the Worker does (it binds
+% request.verb as the forEach Verb variable).
 dispatch_file(F) :-
     read_file_to_string(F, Payload, []),
-    browser_dispatch(arrange, Payload, Json),
+    atom_json_dict(Payload, Req, [default_tag(json)]),
+    get_dict(verb, Req, VerbS),
+    atom_string(Verb, VerbS),
+    browser_dispatch(Verb, Payload, Json),
     format("~w~n", [Json]).

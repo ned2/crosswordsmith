@@ -7,14 +7,16 @@
 % from the JSON contract; it never runs the solver.
 %
 % Exports: lint_solve/4 (CLI seam), lint_run/5 (stockgrid's validator),
-% lint_known_profile/1 (CLI validation), lint_load/3 (deliberate API).
-% Internals are reached by tests as crosswordsmith_lint:Pred(...).
+% lint_known_profile/1 (CLI + browser validation), lint_load/3 (deliberate
+% API), lint_dict_layout/3 (the file-free layout seam — browser.pl's params
+% path). Internals are reached by tests as crosswordsmith_lint:Pred(...).
 
 :- module(crosswordsmith_lint,
           [ lint_solve/4,
             lint_run/5,
             lint_known_profile/1,
-            lint_load/3
+            lint_load/3,
+            lint_dict_layout/3
           ]).
 
 :- use_module(library(http/json)).

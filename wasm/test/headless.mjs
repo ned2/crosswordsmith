@@ -138,10 +138,31 @@ const r = await page.evaluate(async ({ HEAVY }) => {
     };
   }
 
+  // lint + export ride the same spine: arrange -> lint the result -> export it
+  {
+    const a = await cw.arrange(toy());
+    const lint = await cw.lint({ layout: a.result, profile: 'american' });
+    const ipuz = await cw.export({ layout: a.result, to: 'ipuz' });
+    const exolve = await cw.export({ layout: a.result, to: 'exolve' });
+    const badProfile = await cw.lint({ layout: a.result, profile: 'bogus' });
+    out.lintExport = {
+      lintOk: lint.status === 'success'
+        && ['PASS', 'WARN', 'FAIL'].includes(lint.result.verdict)
+        && lint.result.words.length === 5,
+      verbEcho: lint.verb === 'lint' && ipuz.verb === 'export',
+      ipuzOk: ipuz.status === 'success' && ipuz.result.version === 'http://ipuz.org/v2',
+      exolveOk: exolve.status === 'success' && exolve.result.format === 'text'
+        && exolve.result.body.startsWith('exolve-begin'),
+      badProfileTyped: badProfile.status === 'error' && badProfile.error.type === 'validation',
+    };
+  }
+
   // capabilities: engine-sourced
   const caps = await cw.capabilities();
   out.capabilities = {
     hasArrange: caps.verbs.includes('arrange'),
+    hasLint: caps.verbs.includes('lint'),
+    hasExport: caps.verbs.includes('export'),
     swipl: caps.engine.swipl,
   };
 
@@ -175,8 +196,15 @@ check(r.cancelInflight.cancelled && r.cancelInflight.recovered,
 check(r.cancelInflight.promptMs >= 0 && r.cancelInflight.promptMs < 1500,
       'in-flight abort is prompt', `${r.cancelInflight.promptMs}ms`);
 
+console.log('\nlint + export (the spine generalises):');
+check(r.lintExport.lintOk && r.lintExport.verbEcho, 'arrange -> lint composition', JSON.stringify(r.lintExport));
+check(r.lintExport.ipuzOk, 'export to ipuz (v2 document)');
+check(r.lintExport.exolveOk, 'export to exolve ({format:"text", body})');
+check(r.lintExport.badProfileTyped, 'bad profile -> typed validation');
+
 console.log('\ncapabilities:');
-check(r.capabilities.hasArrange, 'engine-sourced verb list', JSON.stringify(r.capabilities));
+check(r.capabilities.hasArrange && r.capabilities.hasLint && r.capabilities.hasExport,
+      'engine-sourced verb list', JSON.stringify(r.capabilities));
 
 console.log('\nseed hygiene:');
 check(r.seedHygiene, 'randomSeed() ∈ [0, 1e9] integers');

@@ -214,6 +214,19 @@ export async function createCrosswordsmith(options = {}) {
       return request("arrange", input, opts);
     },
 
+    // Validate a layout (an arrange result) against a house-style profile.
+    // Always a success envelope when the input is well-formed: a FAIL verdict
+    // lives INSIDE the report — it is an answer, not an error.
+    lint(input, opts = {}) {
+      return request("lint", input, opts);
+    },
+
+    // Transform a layout to ipuz (result = the ipuz JSON document) or Exolve
+    // (result = {format:"text", body}).
+    export(input, opts = {}) {
+      return request("export", input, opts);
+    },
+
     // Engine-sourced, fresh each call (OQ-4): the verb list the loaded qlf
     // actually answers for, plus engine provenance.
     capabilities() {

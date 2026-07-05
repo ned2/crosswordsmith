@@ -24,7 +24,9 @@
 % Adding a verb = one dispatch/3 clause (+ classifier rows if it introduces new
 % outcome tags) — never new message wiring. `arrange` is the first verb;
 % `capabilities` rides along so the JS facade's capabilities() is
-% engine-sourced, not a JS hardcode that lies after a qlf swap (OQ-4).
+% engine-sourced, not a JS hardcode that lies after a qlf swap (OQ-4); `lint`
+% and `export` (strategy §6 phases 2–3) prove the spine generalises: both are
+% pure layout transforms — no engine, no seed, success-only happy paths.
 
 :- module(crosswordsmith_browser,
           [ browser_dispatch/3
@@ -39,6 +41,16 @@
 :- use_module(crosswordsmith(arrange),
               [ arrange_outcome/5,
                 set_check_target/1
+              ]).
+:- use_module(crosswordsmith(lint),
+              [ lint_dict_layout/3,
+                lint_run/5,
+                lint_known_profile/1
+              ]).
+:- use_module(crosswordsmith(export),
+              [ export_layout_dict/2,
+                layout_to_ipuz/2,
+                layout_to_exolve/2
               ]).
 
 % browser_dispatch(+Verb:atom, +Payload, -JsonEnvelope:atom)
@@ -119,6 +131,10 @@ envelope_verb(Verb, VerbA) :- term_to_atom(Verb, VerbA).
 dispatch(_Verb, invalid(Err), thrown(Err)) :- !.   % request never parsed
 dispatch(arrange, Req, Outcome) :- !,
     arrange_browser(Req, Outcome).
+dispatch(lint, Req, lint_report(Report)) :- !,
+    lint_browser(Req, Report).
+dispatch(export, Req, exported(Doc)) :- !,
+    export_browser(Req, Doc).
 dispatch(capabilities, _Req, capabilities(Caps)) :- !,
     engine_capabilities(Caps).
 dispatch(Verb, _Req, thrown(error(unknown_verb(Verb), _))).
@@ -207,10 +223,81 @@ guard_seed_drop(_, _).
 apply_seed(none).
 apply_seed(seed(N)) :- set_search_seed(N).
 
+% --- the lint verb (strategy §6 phase 2) ---------------------------------------
+% Params: layout (a canonical arrange result), profile (required — same domain
+% as the CLI's --profile), allowAsymmetry (default false). The report dict IS
+% the success result: a FAIL verdict is still a successful lint (the CLI's
+% verdict-as-exit-code is a shell convention, not part of the answer).
+% lint_dict_layout/3 owns the layout validation and throws the lint_* formals
+% (mapped below), so a malformed layout gets a typed validation envelope.
+lint_browser(Req, Report) :-
+    request_params(Req, Params),
+    resolve_layout(Params, Layout),
+    resolve_profile(Params, Profile),
+    resolve_allow_asymmetry(Params, Allow),
+    lint_dict_layout(Layout, GridLen, PlacedWords),
+    lint_run(PlacedWords, GridLen, Profile, Allow, Report).
+
+% --- the export verb (strategy §6 phase 3) --------------------------------------
+% Params: layout + to ("ipuz" | "exolve"). Shape validation goes through the
+% SAME export_layout_dict/2 the CLI's file load uses (no drifting twin). ipuz
+% is itself a JSON document -> the result verbatim; Exolve is plain text ->
+% wrapped as {format:"text", body} (§6) since an envelope result must be JSON.
+export_browser(Req, Doc) :-
+    request_params(Req, Params),
+    resolve_layout(Params, Layout0),
+    resolve_export_to(Params, To),
+    export_layout_dict(Layout0, Layout),
+    export_transform(To, Layout, Doc).
+
+export_transform(ipuz, Layout, Ipuz) :-
+    layout_to_ipuz(Layout, Ipuz).
+export_transform(exolve, Layout, _{format: text, body: Body}) :-
+    layout_to_exolve(Layout, Body).
+
+% Shared by lint + export: the layout param must be present and a JSON object;
+% finer shape checks belong to the verb's own gate (lint_dict_layout/3,
+% export_layout_dict/2) so the browser stays a thin adapter.
+resolve_layout(Params, Layout) :-
+    (   get_dict(layout, Params, L)
+    ->  (   is_dict(L)
+        ->  Layout = L
+        ;   throw(error(bad_layout(L), _))
+        )
+    ;   throw(error(missing_layout, _))
+    ).
+
+resolve_profile(Params, Profile) :-
+    (   get_dict(profile, Params, P0)
+    ->  (   string(P0), atom_string(P, P0), lint_known_profile(P)
+        ->  Profile = P
+        ;   throw(error(bad_profile(P0), _))
+        )
+    ;   throw(error(missing_profile, _))
+    ).
+
+resolve_allow_asymmetry(Params, Allow) :-
+    (   get_dict(allowAsymmetry, Params, A)
+    ->  (   A == true  -> Allow = true
+        ;   A == false -> Allow = false
+        ;   throw(error(bad_allow_asymmetry(A), _))
+        )
+    ;   Allow = false
+    ).
+
+resolve_export_to(Params, To) :-
+    (   get_dict(to, Params, T0)
+    ->  (   T0 == "ipuz"   -> To = ipuz
+        ;   T0 == "exolve" -> To = exolve
+        ;   throw(error(bad_to(T0), _))
+        )
+    ;   throw(error(missing_to, _))
+    ).
+
 % --- the capabilities verb -----------------------------------------------------
 % Engine-sourced (OQ-4): the verb list comes from the loaded engine, so a stale
 % cached qlf answers for itself instead of a JS constant lying about it.
-engine_capabilities(_{ verbs: [arrange, capabilities],
+engine_capabilities(_{ verbs: [arrange, lint, export, capabilities],
                        engine: _{ swipl: Swipl } }) :-
     current_prolog_flag(version_data, swi(Major, Minor, Patch, _)),
     format(atom(Swipl), "~w.~w.~w", [Major, Minor, Patch]).
@@ -227,6 +314,10 @@ outcome_envelope(Verb, Id, placed(Dict), Env) :- !,
 outcome_envelope(Verb, Id, best_effort(Dict), Env) :- !,
     success_envelope(Verb, Id, Dict, Env).
 outcome_envelope(Verb, Id, capabilities(Dict), Env) :- !,
+    success_envelope(Verb, Id, Dict, Env).
+outcome_envelope(Verb, Id, lint_report(Dict), Env) :- !,
+    success_envelope(Verb, Id, Dict, Env).
+outcome_envelope(Verb, Id, exported(Dict), Env) :- !,
     success_envelope(Verb, Id, Dict, Env).
 % budget_exceeded is synthesised from the not_proven ATOM — the engine already
 % separates budget from infeasible (arrange_best_layout/6); there is no throw.
@@ -278,6 +369,21 @@ thrown_type(bad_mode(_),            validation).
 thrown_type(bad_seed(_),            validation).
 thrown_type(bad_best_effort(_),     validation).
 thrown_type(seed_with_best_effort,  validation).
+thrown_type(bad_layout(_),          validation).
+thrown_type(missing_layout,         validation).
+thrown_type(bad_profile(_),         validation).
+thrown_type(missing_profile,        validation).
+thrown_type(bad_allow_asymmetry(_), validation).
+thrown_type(bad_to(_),              validation).
+thrown_type(missing_to,             validation).
+% lint's own layout gate (lint.pl, hooks alongside) + export's shape gate
+thrown_type(lint_no_grid_length,        validation).
+thrown_type(lint_no_words_array,        validation).
+thrown_type(lint_invalid_word(_),       validation).
+thrown_type(lint_invalid_direction(_),  validation).
+thrown_type(lint_no_cells(_),           validation).
+thrown_type(lint_invalid_cell(_, _),    validation).
+thrown_type(export_invalid_layout,      validation).
 thrown_type(syntax_error(_),        validation).    % request JSON didn't parse
 thrown_type(resource_error(_),      resource_exhausted).
 thrown_type(unknown_verb(_),        unknown_verb).
@@ -318,8 +424,22 @@ prolog:error_message(bad_best_effort(V)) -->
     [ 'bestEffort must be true or false (got ~q)'-[V] ].
 prolog:error_message(seed_with_best_effort) -->
     [ 'seed perturbs the strict search only; not compatible with bestEffort' ].
+prolog:error_message(bad_layout(V)) -->
+    [ 'layout must be a JSON object (a canonical arrange result; got ~q)'-[V] ].
+prolog:error_message(missing_layout) -->
+    [ 'requires "layout": a canonical arrange result' ].
+prolog:error_message(bad_profile(V)) -->
+    [ 'unknown profile ~q; choose toc, blocked-uk, american, or barred-ximenean'-[V] ].
+prolog:error_message(missing_profile) -->
+    [ 'requires "profile": toc, blocked-uk, american, or barred-ximenean' ].
+prolog:error_message(bad_allow_asymmetry(V)) -->
+    [ 'allowAsymmetry must be true or false (got ~q)'-[V] ].
+prolog:error_message(bad_to(V)) -->
+    [ 'unknown format ~q; choose ipuz or exolve'-[V] ].
+prolog:error_message(missing_to) -->
+    [ 'requires "to": ipuz or exolve' ].
 prolog:error_message(unknown_verb(V)) -->
-    [ 'unknown verb ~q; this engine supports: arrange, capabilities'-[V] ].
+    [ 'unknown verb ~q; this engine supports: arrange, lint, export, capabilities'-[V] ].
 prolog:error_message(unsupported_version(V)) -->
     [ 'unsupported envelope version ~q; this engine speaks v1'-[V] ].
 

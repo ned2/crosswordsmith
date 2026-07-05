@@ -56,6 +56,20 @@ emit "$TMP/req_toc_max.json"    fixtures/toc_demo.pl         '{"size":25,"mode":
 emit "$TMP/req_toy_strict.json" "$TMP/toy_clues.json"        '{"size":5}'
 emit "$TMP/req_toy_be.json"     "$TMP/toy_clues.json"        '{"size":5,"bestEffort":true}'
 
+# lint/export requests take a LAYOUT, not clues: embed the committed arrange
+# golden — the same input `make regen-goldens` feeds the CLI.
+python3 - "$TMP" <<'PY'
+import json, sys
+tmp = sys.argv[1]
+layout = json.load(open("tests/golden/arrange_bundled_17_fixed.json"))
+def req(name, verb, params):
+    json.dump({"v": 1, "id": "vg", "verb": verb, "params": params},
+              open(f"{tmp}/req_{name}.json", "w"))
+req("lint_toc", "lint",   {"layout": layout, "profile": "toc"})
+req("exp_ipuz", "export", {"layout": layout, "to": "ipuz"})
+req("exp_exolve", "export", {"layout": layout, "to": "exolve"})
+PY
+
 echo "== building CLI references (native) =="
 ./crosswordsmith arrange --input fixtures/bundled_17_clues.pl --size 17            > "$TMP/ref_b17.json"      2>/dev/null
 ./crosswordsmith arrange --input fixtures/bundled_17_clues.pl --size 17 --seed 42  > "$TMP/ref_b17_seed.json" 2>/dev/null
@@ -74,6 +88,7 @@ node "$WASM_SWIPL" -q wasm/test/value_golden.pl -- dispatch \
   "$TMP/req_b17.json" "$TMP/req_b17_seed.json" \
   "$TMP/req_b17.json" "$TMP/req_b17_seed.json" \
   "$TMP/req_toy_strict.json" "$TMP/req_toy_be.json" "$TMP/req_toc_max.json" \
+  "$TMP/req_lint_toc.json" "$TMP/req_exp_ipuz.json" "$TMP/req_exp_exolve.json" \
   > "$TMP/envelopes.jsonl" 2>"$TMP/wasm.err" || {
     echo "value-golden FAILED: wasm dispatch errored" >&2
     cat "$TMP/wasm.err" >&2
@@ -86,7 +101,7 @@ import json, sys
 tmp = sys.argv[1]
 
 envs = [json.loads(l) for l in open(f"{tmp}/envelopes.jsonl") if l.strip()]
-assert len(envs) == 7, f"expected 7 envelopes, got {len(envs)}"
+assert len(envs) == 10, f"expected 10 envelopes, got {len(envs)}"
 
 def ref(name):
     return json.load(open(f"{tmp}/ref_{name}.json"))
@@ -97,10 +112,11 @@ def check(cond, name):
     if not cond: fails.append(name)
 
 for e in envs:
-    check(e.get("status") == "success" and e.get("v") == 1 and e.get("verb") == "arrange",
-          f"envelope well-formed ({e.get('status')})")
+    check(e.get("status") == "success" and e.get("v") == 1,
+          f"envelope well-formed ({e.get('verb')}: {e.get('status')})")
 
-b17, b17_seed, b17_again, b17_seed_again, toy_strict, toy_be, toc_max = envs
+(b17, b17_seed, b17_again, b17_seed_again,
+ toy_strict, toy_be, toc_max, lint_toc, exp_ipuz, exp_exolve) = envs
 
 check(b17["result"] == ref("b17"),               "wasm result == CLI (bundled-17, seedless)")
 check(toc_max["result"] == ref("toc_max"),       "wasm result == CLI (toc-demo, max crop)")
@@ -124,6 +140,16 @@ check(b17_seed["result"]["diagnostics"]["arrange"].get("seed") == 42,
       "seed provenance in diagnostics")
 check("seed" not in b17["result"]["diagnostics"]["arrange"],
       "no seed provenance on the seedless result")
+
+# lint + export (strategy §6 phases 2-3): pure transforms, so wasm results
+# must deep-equal the COMMITTED goldens directly.
+check(lint_toc["result"] == json.load(open("tests/golden/lint_bundled_17_toc.json")),
+      "wasm lint result == committed CLI golden (toc)")
+check(exp_ipuz["result"] == json.load(open("tests/golden/export_bundled_17.ipuz")),
+      "wasm export result == committed ipuz golden")
+check(exp_exolve["result"]["format"] == "text"
+      and exp_exolve["result"]["body"] == open("tests/golden/export_bundled_17.exolve").read(),
+      "wasm export body == committed exolve golden (byte-equal text)")
 
 sys.exit(1 if fails else 0)
 PY

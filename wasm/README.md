@@ -53,8 +53,20 @@ are a discriminated envelope (strategy §4):
            | "unknown_verb" | "unsupported_version" | "internal", "message": "…" } }
 ```
 
-Arrange params (DEC-6): `size` (default 15), `mode` (`"fixed"` | `"max"` tight
-crop), `bestEffort`, `seed` (integer ≥ 0; not combinable with `bestEffort`).
+Verbs on the spine: **arrange**, **lint**, **export**, **capabilities**
+(`fill` is deliberately not browserified yet — strategy §6 phase 4).
+
+- **arrange** params (DEC-6): `size` (default 15), `mode` (`"fixed"` | `"max"`
+  tight crop), `bestEffort`, `seed` (integer ≥ 0; not combinable with
+  `bestEffort`).
+- **lint** params: `layout` (a canonical arrange result), `profile`
+  (`toc` | `blocked-uk` | `american` | `barred-ximenean`, required),
+  `allowAsymmetry` (default false). The report is the success result — a FAIL
+  verdict is an answer, not an error (the CLI's verdict-as-exit-code is a
+  shell convention).
+- **export** params: `layout` + `to` (`"ipuz"` → the ipuz v2 JSON document
+  itself; `"exolve"` → `{format:"text", body}`).
+
 "Cancelled" is a JS-side `CancelledError` rejection, never an envelope — a
 terminated worker posts nothing.
 
@@ -113,8 +125,9 @@ swipl -g browser_selftest -t halt wasm/client/solve_browser.pl
 **WASM value golden + same-instance determinism (node, no browser)** — the
 same requests through `browser_dispatch/3` under the REAL wasm VM must
 deep-equal the CLI's output (DEC-8: value-equality after parse, not bytes;
-covers seedless / `seed:42` / the `max` crop / strict / best-effort, all
-through ONE reused instance so the per-request reset is proven under wasm):
+covers seedless / `seed:42` / the `max` crop / strict / best-effort / lint /
+both export formats, all through ONE reused instance so the per-request reset
+is proven under wasm):
 
 ```bash
 wasm/test/value_golden.sh          # WASM_SWIPL=… to point at the build tree
@@ -140,8 +153,8 @@ node wasm/test/golden_type_check.mjs
 **Headless browser (SDK end-to-end)** — drives `client/harness.html` through
 the real facade: smoke render, envelope echo + typed validation, seed
 determinism, overlapping-call concurrency (id routing), queued + in-flight
-cancel (CancelledError + warm-spare recovery), engine-sourced capabilities.
-Needs the server above running:
+cancel (CancelledError + warm-spare recovery), the arrange → lint → export
+composition, engine-sourced capabilities. Needs the server above running:
 
 ```bash
 node wasm/test/headless.mjs
@@ -215,8 +228,9 @@ request from SWI's URL consult — the qlf still loads, and results are correct.
 
 ## Scope / open items (strategy §8)
 
-- Verbs beyond `arrange` + `capabilities` (lint → export → fill) are additive
-  dispatch clauses on the same spine — strategy §6.
+- `fill` is the one unbrowserified verb (strategy §6 phase 4 — hard: dict
+  delivery, memory ceiling, fastrw-under-wasm). `lint` and `export` landed
+  2026-07-06 as additive dispatch clauses, proving the spine generalises.
 - npm packaging (asset-copy step, dual exports map, licensing manifest) is
   deferred: the SDK is consumed in-repo (OQ-1 decision 2026-07-06; OQ-5/OQ-6
   gate the publish).

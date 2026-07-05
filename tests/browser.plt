@@ -82,6 +82,19 @@ bt_cli_exit(Args, Code) :-
                    [stdout(null), stderr(null), process(PID)]),
     process_wait(PID, exit(Code)).
 
+% lint/export both take a canonical layout; the committed arrange golden is
+% the shared input — exactly what `make regen-goldens` feeds the CLI to
+% produce the lint/export goldens, so deep-equality against those locks the
+% browser path to the CLI byte-for-value.
+bt_layout(Layout) :-
+    bt_golden('tests/golden/arrange_bundled_17_fixed.json', Layout).
+
+bt_lint(Params, Env) :-
+    bt_dispatch(lint, _{v: 1, id: "t-l", verb: "lint", params: Params}, Env).
+
+bt_export(Params, Env) :-
+    bt_dispatch(export, _{v: 1, id: "t-e", verb: "export", params: Params}, Env).
+
 % load_clues/2 dispatches on the file extension, so the temp file must be .json.
 bt_with_toy_input(Goal) :-
     tmp_file(bt_clues, Base),
@@ -172,8 +185,10 @@ test(huge_integer_seed_accepted) :-
 
 % --- protocol errors ---------------------------------------------------------
 
+% `fill` is deliberately NOT on the spine yet (strategy §6 phase 4) — it makes
+% the perfect unknown-verb exemplar until it lands.
 test(unknown_verb_typed) :-
-    bt_dispatch(lint, _{v: 1, id: "t-1", verb: "lint", params: _{}}, Env),
+    bt_dispatch(fill, _{v: 1, id: "t-1", verb: "fill", params: _{}}, Env),
     bt_error(Env, "unknown_verb").
 test(unsupported_version_typed) :-
     bt_toy_params(P),
@@ -344,6 +359,110 @@ test(cli_parity_accepts, [forall(bt_parity_accept(_Name, CliArgs, Mut))]) :-
     bt_arrange(P, Env),
     bt_success_result(Env, _).
 
+% --- the lint + export verbs (strategy §6 phases 2-3) --------------------------
+% Pure layout transforms on the spine: no engine, no seed, success-only happy
+% paths (a FAIL verdict is still a successful lint — the CLI's verdict-as-exit-
+% code is a shell convention, not part of the answer).
+
+% Value parity: the browser report deep-equals the committed CLI golden
+% (generated from the same arrange golden by `make regen-goldens`).
+test(lint_value_parity_toc_golden) :-
+    bt_layout(Layout),
+    bt_lint(_{layout: Layout, profile: "toc"}, Env),
+    get_dict(verb, Env, "lint"),
+    bt_success_result(Env, R),
+    bt_golden('tests/golden/lint_bundled_17_toc.json', Golden),
+    R == Golden.
+
+% ipuz is itself a JSON document, so the result IS the ipuz object.
+test(export_ipuz_value_parity_golden) :-
+    bt_layout(Layout),
+    bt_export(_{layout: Layout, to: "ipuz"}, Env),
+    bt_success_result(Env, R),
+    bt_golden('tests/golden/export_bundled_17.ipuz', Golden),
+    R == Golden.
+
+% Exolve is plain text -> {format:"text", body}; body byte-equals the CLI's
+% stdout (the golden file).
+test(export_exolve_value_parity_golden) :-
+    bt_layout(Layout),
+    bt_export(_{layout: Layout, to: "exolve"}, Env),
+    bt_success_result(Env, R),
+    get_dict(format, R, "text"),
+    get_dict(body, R, Body),
+    read_file_to_string('tests/golden/export_bundled_17.exolve', GoldenText, []),
+    Body == GoldenText.
+
+% allowAsymmetry is honoured (echoed in the report + the report differs from
+% the strict-symmetry golden, whose symmetry rule WARNs on this layout).
+test(lint_allow_asymmetry_honoured) :-
+    bt_layout(Layout),
+    bt_lint(_{layout: Layout, profile: "toc", allowAsymmetry: true}, Env),
+    bt_success_result(Env, R),
+    get_dict(allowAsymmetry, R, true),
+    bt_golden('tests/golden/lint_bundled_17_toc.json', Golden),
+    R \== Golden.
+
+% The composition the SDK exists for: arrange -> lint the result -> export it,
+% all in one instance, each result feeding the next verb verbatim.
+test(arrange_lint_export_composition) :-
+    bt_toy_params(P),
+    bt_arrange(P, AEnv),
+    bt_success_result(AEnv, Layout),
+    bt_lint(_{layout: Layout, profile: "american"}, LEnv),
+    bt_success_result(LEnv, Report),
+    get_dict(verdict, Report, V),
+    memberchk(V, ["PASS", "WARN", "FAIL"]),
+    get_dict(summary, Report, _),
+    bt_export(_{layout: Layout, to: "exolve"}, EEnv),
+    bt_success_result(EEnv, X),
+    get_dict(body, X, Body),
+    once(sub_string(Body, 0, _, _, "exolve-begin")).
+
+% Malformed lint/export params -> typed validation envelopes, never bare-fail.
+test(lint_export_param_fuzz) :-
+    bt_layout(Layout),
+    forall(member(V-P,
+        [ lint-_{profile: "toc"},                          % layout absent
+          lint-_{layout: 42, profile: "toc"},              % layout not an object
+          lint-_{layout: Layout},                          % profile absent
+          lint-_{layout: Layout, profile: "bogus"},        % unknown profile
+          lint-_{layout: Layout, profile: 7},              % profile wrong type
+          lint-_{layout: Layout, profile: "toc", allowAsymmetry: "yes"},
+          export-_{to: "ipuz"},                            % layout absent
+          export-_{layout: Layout},                        % to absent
+          export-_{layout: Layout, to: "pdf"},             % unknown format
+          export-_{layout: _{}, to: "ipuz"}                % fails the shape gate
+        ]),
+        ( bt_dispatch(V, _{v: 1, id: "f-le", verb: V, params: P}, Env),
+          bt_error(Env, "validation") )).
+
+% lint's own layout gate (lint_dict_layout/3's lint_* formals) maps to typed
+% validation envelopes with the project's hook-rendered messages.
+test(lint_layout_gate_fuzz) :-
+    forall(member(L,
+        [ _{},                                                     % no gridLength
+          _{gridLength: 5},                                        % no words array
+          _{gridLength: 5, words: [_{direction: "across"}]},       % word: no answer
+          _{gridLength: 5, words: [_{answer: "CAT"}]},             % word: no direction
+          _{gridLength: 5, words: [_{answer: "CAT", direction: "diagonal", cells: [[0, 0]]}]},
+          _{gridLength: 5, words: [_{answer: "CAT", direction: "across"}]},  % no cells
+          _{gridLength: 5, words: [_{answer: "CAT", direction: "across",
+                                     cells: [[9, 9], [0, 1], [0, 2]]}]}      % cell off-grid
+        ]),
+        ( bt_lint(_{layout: L, profile: "toc"}, Env),
+          bt_error(Env, "validation") )).
+
+% Resolver parity with the CLI binary: the same rejections reject there.
+test(cli_parity_lint_export_rejects) :-
+    forall(member(Args,
+        [ [lint, '--profile', bogus, 'tests/golden/arrange_bundled_17_fixed.json'],
+          [lint, 'tests/golden/arrange_bundled_17_fixed.json'],
+          [export, '--to', pdf, 'tests/golden/arrange_bundled_17_fixed.json'],
+          [export, 'tests/golden/arrange_bundled_17_fixed.json']
+        ]),
+        ( bt_cli_exit(Args, Code), Code =\= 0 )).
+
 % --- the capabilities verb (engine-sourced, OQ-4) -----------------------------
 
 test(capabilities_engine_sourced) :-
@@ -351,6 +470,8 @@ test(capabilities_engine_sourced) :-
     bt_success_result(Env, R),
     get_dict(verbs, R, Verbs),
     memberchk("arrange", Verbs),
+    memberchk("lint", Verbs),
+    memberchk("export", Verbs),
     get_dict(engine, R, E),
     get_dict(swipl, E, Swipl),
     string(Swipl).

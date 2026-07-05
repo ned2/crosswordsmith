@@ -10,12 +10,14 @@
 % rides in meta.clue. Nothing is invented (AC-EXP-3): a missing clue is empty.
 % Zero project dependencies (it only needs JSON + lists).
 %
-% Exports: export_solve/2 is the CLI seam; the layout_to_*/2 transforms and
-% answer_enumeration/2 are deliberate library API. Everything else is
-% internal — tests reach internals as crosswordsmith_export:Pred(...).
+% Exports: export_solve/2 is the CLI seam; export_layout_dict/2 is the
+% file-free shape gate (browser.pl's params path); the layout_to_*/2
+% transforms and answer_enumeration/2 are deliberate library API. Everything
+% else is internal — tests reach internals as crosswordsmith_export:Pred(...).
 
 :- module(crosswordsmith_export,
           [ export_solve/2,
+            export_layout_dict/2,
             layout_to_ipuz/2,
             layout_to_exolve/2,
             answer_enumeration/2
@@ -29,6 +31,11 @@
 % --- load + validate a canonical layout --------------------------------------
 export_load(File, Dict) :-
     setup_call_cleanup(open(File, read, S), json_read_dict(S, Dict0), close(S)),
+    export_layout_dict(Dict0, Dict).
+
+% The shape gate, factored file-free so the browser path validates through the
+% SAME predicate the CLI does (no duplicated validation to drift).
+export_layout_dict(Dict0, Dict) :-
     (   is_dict(Dict0),
         get_dict(gridLength, Dict0, N), integer(N), N > 0,
         get_dict(grid, Dict0, Rows), is_list(Rows),

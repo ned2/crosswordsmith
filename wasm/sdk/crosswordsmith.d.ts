@@ -85,6 +85,72 @@ export interface Layout {
   diagnostics: { arrange: ArrangeDiagnostics };
 }
 
+// --- lint (design-spec §8.1; strategy §6 phase 2) -----------------------------
+
+export type LintProfile = "toc" | "blocked-uk" | "american" | "barred-ximenean";
+export type LintSeverity = "PASS" | "WARN" | "FAIL";
+
+export interface LintInput {
+  /** A canonical layout — feed an arrange success `result` straight in. */
+  layout: Layout;
+  /** Required: the house-style rule profile (same domain as the CLI's
+   *  --profile). */
+  profile: LintProfile;
+  /** Relax the symmetry rule to advisory (the CLI's --allow-asymmetry).
+   *  Default false. */
+  allowAsymmetry?: boolean;
+}
+
+export interface LintResult {
+  rule: string;
+  severity: LintSeverity;
+  /** Present only on WARN/FAIL: what tripped, human-readable. */
+  detail?: string;
+}
+
+export interface LintWordReport {
+  number: number;
+  direction: "across" | "down";
+  answer: string;
+  results: LintResult[];
+}
+
+/** The report IS the success result — a FAIL verdict is still a successful
+ *  lint (the CLI's verdict-as-exit-code is a shell convention). */
+export interface LintReport {
+  profile: string;
+  allowAsymmetry: boolean;
+  /** Worst severity across all rule results. */
+  verdict: LintSeverity;
+  summary: { pass: number; warn: number; fail: number };
+  grid: LintResult[];
+  words: LintWordReport[];
+}
+
+// --- export (design-spec §8.2; strategy §6 phase 3) ---------------------------
+
+export interface ExportInput {
+  /** A canonical layout — feed an arrange success `result` straight in. */
+  layout: Layout;
+  /** ipuz: the result is the ipuz v2 JSON document itself (onward to
+   *  .puz/.jpz/PDF via off-the-shelf tooling). exolve: the result is
+   *  {format:"text", body} — Exolve plain text (round-trips to Exet). */
+  to: "ipuz" | "exolve";
+}
+
+/** ipuz v2 crossword document. An external spec — typed openly on purpose;
+ *  the engine emits at least these members. */
+export interface IpuzDocument {
+  version: string;
+  kind: string[];
+  [key: string]: unknown;
+}
+
+export interface ExolveText {
+  format: "text";
+  body: string;
+}
+
 // --- the response envelope (wasm-sdk-strategy §4) ----------------------------
 
 export type FailureReason = "no_interlock" | "grid_too_small" | "unplaceable_words";
@@ -119,6 +185,8 @@ export type Envelope<V extends string, R> =
   | { v: 1; id: string | null; verb: V; status: "error"; error: CwError };
 
 export type ArrangeEnvelope = Envelope<"arrange", Layout>;
+export type LintEnvelope = Envelope<"lint", LintReport>;
+export type ExportEnvelope<R = IpuzDocument | ExolveText> = Envelope<"export", R>;
 
 export interface Capabilities {
   /** The verbs the LOADED engine answers for (engine-sourced, OQ-4). */
@@ -141,18 +209,30 @@ export interface CreateOptions {
   heartbeat?: number;
 }
 
-export interface ArrangeOptions {
+export interface RequestOptions {
   /** Abort the request: a queued request is dequeued; an in-flight one
    *  hard-kills its worker (terminate + warm-spare promote). Either way the
    *  promise rejects with CancelledError. */
   signal?: AbortSignal;
 }
 
+/** @deprecated alias kept from the arrange-only slice; use RequestOptions. */
+export type ArrangeOptions = RequestOptions;
+
 export interface Crosswordsmith {
   /** Solve one arrange request. All three envelope statuses RESOLVE —
    *  discriminate on res.status; a legitimate "no layout" is a failure, not
    *  a rejection. Rejects only with CancelledError or a transport Error. */
-  arrange(input: ArrangeInput, opts?: ArrangeOptions): Promise<ArrangeEnvelope>;
+  arrange(input: ArrangeInput, opts?: RequestOptions): Promise<ArrangeEnvelope>;
+  /** Validate a layout against a house-style profile. Well-formed input
+   *  always resolves to a success envelope carrying the report. */
+  lint(input: LintInput, opts?: RequestOptions): Promise<LintEnvelope>;
+  /** Transform a layout to ipuz or Exolve. The result type follows `to`. */
+  export(input: ExportInput & { to: "ipuz" },
+         opts?: RequestOptions): Promise<ExportEnvelope<IpuzDocument>>;
+  export(input: ExportInput & { to: "exolve" },
+         opts?: RequestOptions): Promise<ExportEnvelope<ExolveText>>;
+  export(input: ExportInput, opts?: RequestOptions): Promise<ExportEnvelope>;
   /** Fresh engine round-trip (never a JS constant). */
   capabilities(): Promise<Capabilities>;
   readonly version: { sdk: string; engine: { swipl: string } };

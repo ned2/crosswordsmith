@@ -380,6 +380,11 @@ lifetime.
 After arrange, **lint is the cheapest second verb** — a good proof the spine
 generalises before fill.
 
+*(Phases 2–3 landed 2026-07-06: `lint` and `export` are dispatch clauses on the
+spine — thin resolvers over `lint_dict_layout/3`+`lint_run/5` and
+`export_layout_dict/2`+`layout_to_*/2` — golden-locked native and wasm against
+the committed CLI goldens. `fill` is the only unbrowserified verb.)*
+
 ---
 
 ## 7. The arrange-first slice (next PR)
@@ -480,22 +485,26 @@ being intact — confirm first.
 **Open:**
 - **OQ-1:** SDK package boundary — in-repo `wasm/sdk/` + npm publish, or an in-repo
   module the app imports directly.
-- **OQ-2:** `seed` in `params` vs `meta` (leaning `params`).
+- **OQ-2 — decided (2026-07-06):** `seed` lives in `params` (landed with the
+  arrange slice).
 - **OQ-3:** fill's `fastrw`-index vs `.qlf` carrier under wasm (measurement, Phase 4).
-- **OQ-4 [RT]:** `version` provenance (SDK vs engine vs qlf are three things) and
-  making `capabilities()` **engine-sourced**, not a JS hardcode that lies after a
-  qlf swap.
+- **OQ-4 [RT] — mostly landed (2026-07-06):** `capabilities()` is engine-sourced (a
+  `capabilities` verb on the spine) and `cw.version = {sdk, engine}`; the remaining
+  piece — a qlf build-hash in the capabilities reply — lands with OQ-7 at packaging.
 - **OQ-5 [RT]:** CI qlf rebuild reproducibility (deployment §10.3 "not standalone-CI-
   runnable") + the asset-copy-into-tarball / package-size step.
 - **OQ-6 [RT]:** redistribution licensing manifest (SWI runtime BSD; future UKACD dict
   verbatim).
 - **OQ-7 [RT]:** stale-qlf param drift mitigation — engine echoes honoured params
   and/or JS↔qlf version assert at init (§4.1).
-- **OQ-8 [RT]:** a **layout-variety probe** before selling "regenerate" — the
-  perturbation only reorders the strict search and then takes best-by-reward, so
-  many seeds may collapse to the same grid; and reproducibility is *engine-build-
-  scoped*, not durable across an SDK upgrade (record the engine build with a shared
-  seed as provenance).
+- **OQ-8 [RT] — RESOLVED (2026-07-06):** both halves closed. (a) Variety probed:
+  50 consecutive seeds → **20 distinct** layouts (bundled-17, 6 words / 17×17),
+  **50/50 distinct** (toc-demo, 25×25), 8 distinct (toy 5-word / 5×5 — a tiny
+  solution space owns few layouts); no pathological collapse, "regenerate" is
+  honest. (b) Reproducibility: the engine now **owns a portable PRNG** (splitmix64
+  — see the §10 implementation finding), so a seed reproduces the same layout on
+  every build/platform; the remaining scope is engine-*version* (heuristic changes
+  re-map seeds — record `cw.version.engine` alongside a kept seed).
 
 ---
 
