@@ -400,6 +400,10 @@ fill_opts_spec(
        longflags([seeds]),                   help('seed words to pin (a partial-layout fragment, JSON)')],
       [opt(dict),  type(atom),    default(''), meta('FILE'),
        longflags([dict]),                    help('word list, one per line (default: a small bundled sample; real fills: --dict UKACD18)')],
+      [opt(save_index), type(atom), default(''), meta('FILE'),
+       longflags(['save-index']),            help('build a reusable index artifact from --dict, write it to FILE, and exit (no grid/fill; skips the parse+index tax on later fills)')],
+      [opt(index), type(atom),    default(''), meta('FILE'),
+       longflags([index]),                   help('fill using a prebuilt index artifact (from --save-index) instead of parsing --dict; also pass --dict to verify the artifact matches that dictionary')],
       [opt(verbose), type(boolean), default(false),
        longflags([verbose]),                 help('report the success summary (grid, filled slots) on stderr; failures print regardless')],
       [opt(out),   type(atom),    default(''), meta('FILE'),
@@ -425,16 +429,45 @@ Fills a legal blocked grid from a word list, seeds pinned. Output is a canonical
 layout (composes with lint/export). Exit is non-zero, naming the unfillable~n\c
 slot(s), when no complete fill exists.~n~n~w", [Help]).
 
+% Three modes, chosen by --save-index / --index (mutually exclusive), following
+% arrange's mutually-exclusive-flag house pattern:
+%   --save-index FILE  : BUILD an index artifact from --dict, write FILE, exit
+%                        (no --grid, no fill).
+%   --index FILE       : CONSUME a prebuilt artifact instead of parsing --dict
+%                        (--grid required; --dict, if given, verifies the hash).
+%   (neither)          : the raw text-dict path, byte-for-byte unchanged.
 fill_dispatch(Opts, Positional) :-
     ( Positional == [] -> true ; fill_err('takes only flags (got ~w)'-[Positional]) ),
+    memberchk(save_index(SaveIdx), Opts),
+    memberchk(index(UseIdx), Opts),
+    memberchk(verbose(Verbose), Opts),
+    set_verbose(Verbose),
+    ( SaveIdx \== '', UseIdx \== ''
+    ->  fill_err('--save-index and --index are mutually exclusive (build the artifact, then fill with it)')
+    ;   SaveIdx \== ''
+    ->  fill_build_index(SaveIdx, Opts)
+    ;   fill_run_dispatch(UseIdx, Opts) ).
+
+% BUILD mode: no grid, no fill. Serialize the index built from --dict (or the
+% bundled sample) to the artifact file. --out/--seeds/--grid are ignored here.
+fill_build_index(SaveIdx, Opts) :-
+    memberchk(dict(Dict0), Opts), ( Dict0 == '' -> default_dict(Dict) ; Dict = Dict0 ),
+    fill_save_index(Dict, SaveIdx),
+    verbose_report("fill: wrote index artifact ~w from ~w~n", [SaveIdx, Dict]).
+
+% FILL mode (raw or artifact-consuming): --grid required.
+fill_run_dispatch(UseIdx, Opts) :-
     memberchk(grid(Grid), Opts),
     ( Grid \== '' -> true ; fill_err('requires --grid FILE (a stock-grid mask)') ),
     memberchk(seeds(Seeds0), Opts), ( Seeds0 == '' -> Seeds = none ; Seeds = Seeds0 ),
-    memberchk(dict(Dict0), Opts),   ( Dict0 == ''  -> default_dict(Dict) ; Dict = Dict0 ),
-    memberchk(verbose(Verbose), Opts),
-    set_verbose(Verbose),
+    memberchk(dict(Dict0), Opts),
     memberchk(out(OutFile), Opts),
-    with_output(OutFile, fill_solve(Grid, Seeds, Dict, fixed)).
+    (   UseIdx \== ''
+    ->  % CONSUME: --dict, if explicitly given, verifies the artifact's hash.
+        ( Dict0 == '' -> DictCheck = none ; DictCheck = Dict0 ),
+        with_output(OutFile, fill_solve_index(Grid, Seeds, UseIdx, DictCheck, fixed))
+    ;   ( Dict0 == '' -> default_dict(Dict) ; Dict = Dict0 ),
+        with_output(OutFile, fill_solve(Grid, Seeds, Dict, fixed)) ).
 
 % The default dictionary is the small bundled sample, resolved relative to the
 % script directory (real fills pass --dict <UKACD18>).
