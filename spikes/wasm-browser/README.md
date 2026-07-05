@@ -27,16 +27,16 @@ swipl -q -g browser_selftest -t halt spikes/wasm-browser/solve_browser.pl
 Prereq: **emsdk 6.0.1** (SWI's current CI pin) — not yet installed on this box.
 
 ```bash
-# 1. toolchain
-git clone https://github.com/emscripten-core/emsdk ~/wasm/emsdk
-cd ~/wasm/emsdk && ./emsdk install 6.0.1 && ./emsdk activate 6.0.1 && source ./emsdk_env.sh
-# also build wasm-side zlib (+pcre2) under ~/wasm — copy the steps from
-# npm-swipl-wasm/docker/Dockerfile.
+# 1. toolchain (WASM_HOME=$HOME/wasm is exported as the staging prefix)
+git clone https://github.com/emscripten-core/emsdk $WASM_HOME/emsdk
+cd $WASM_HOME/emsdk && ./emsdk install 6.0.1 && ./emsdk activate 6.0.1 && source ./emsdk_env.sh
+# stage wasm-side deps (zlib mandatory, pcre2) into $WASM_HOME — exact commands
+# in docs/plans/wasm-browser-deployment.md § "Dependency staging".
 
 # 2. build swipl-web from OUR pinned source tree (exact-version parity)
 cd ~/src/swipl-devel && mkdir -p build.wasm && cd build.wasm
 emcmake cmake -DCMAKE_TOOLCHAIN_FILE=$EMSDK/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake \
-  -DCMAKE_FIND_ROOT_PATH=$HOME/wasm -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_FIND_ROOT_PATH=$WASM_HOME -DCMAKE_BUILD_TYPE=Release \
   -DUSE_GMP=OFF -DINSTALL_QLF=ON -DINSTALL_PROLOG_SRC=OFF -DINSTALL_DOCUMENTATION=OFF \
   -DSWIPL_NATIVE_FRIEND=$HOME/src/swipl-devel/build -G Ninja ..
 ninja swipl-web

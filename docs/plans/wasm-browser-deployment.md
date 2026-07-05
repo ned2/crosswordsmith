@@ -42,29 +42,79 @@ commit); ship the app as one `.qlf`; run the solver in a **Web Worker** with
 
 ## 2. Build — exact-version parity from our tree
 
-`emsdk` is **not yet installed** on this box (`~/wasm/emsdk` absent, no `emcc`);
-`ninja` is present. Adding emsdk is the one real prerequisite.
+`$WASM_HOME` is exported to `$HOME/wasm` (the staging prefix, see below).
+`emsdk` is **not yet installed** on this box (`$WASM_HOME/emsdk` absent, no
+`emcc`); `ninja` is present. Installing emsdk + staging deps is the one real
+prerequisite.
 
 ```bash
 # 0. toolchain — emsdk 6.0.1 (SWI's own CI pin; anything ≥4.0.15 works post-fix,
 #    3.1.37 in the stale official doc is obsolete, emsdk 4.0.0 briefly broke CI)
-git clone https://github.com/emscripten-core/emsdk ~/wasm/emsdk
-cd ~/wasm/emsdk && ./emsdk install 6.0.1 && ./emsdk activate 6.0.1 && source ./emsdk_env.sh
-# build wasm-side zlib (mandatory) + pcre2 (optional) under ~/wasm; copy the
-# exact steps from npm-swipl-wasm/docker/Dockerfile (zlib 1.3.2, pcre2 10.47.0)
+git clone https://github.com/emscripten-core/emsdk $WASM_HOME/emsdk
+cd $WASM_HOME/emsdk && ./emsdk install 6.0.1 && ./emsdk activate 6.0.1 && source ./emsdk_env.sh
 
-# 1. configure + build from OUR source tree
+# 1. stage wasm-side deps into $WASM_HOME — see "Dependency staging" below
+
+# 2. configure + build from OUR source tree
 cd ~/src/swipl-devel && mkdir -p build.wasm && cd build.wasm
 emcmake cmake -DCMAKE_TOOLCHAIN_FILE=$EMSDK/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake \
-  -DCMAKE_FIND_ROOT_PATH=$HOME/wasm -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_FIND_ROOT_PATH=$WASM_HOME -DCMAKE_BUILD_TYPE=Release \
   -DUSE_GMP=OFF -DINSTALL_QLF=ON -DINSTALL_PROLOG_SRC=OFF -DINSTALL_DOCUMENTATION=OFF \
   -DSWIPL_NATIVE_FRIEND=$HOME/src/swipl-devel/build -G Ninja ..
 ninja swipl-web        # or: ninja swipl-web swipl-bundle
 ```
 
-Prefer the in-tree `scripts/configure wasm` profile (it encodes these flags)
-over the **official `WebAssembly.md`, which is ~3 years stale** (still names
-Emscripten 3.1.37, a non-`emcmake` cmake line).
+Prefer the in-tree `scripts/configure wasm` profile (it encodes these flags —
+and defaults `WASM_HOME` to `$HOME/wasm`, writing it into `.envrc`) over the
+**official `WebAssembly.md`, which is ~3 years stale** (still names Emscripten
+3.1.37, a non-`emcmake` cmake line).
+
+### Dependency staging (`$WASM_HOME`)
+
+`$WASM_HOME` is just the **staging prefix** for emscripten-cross-compiled deps:
+the `wasm` profile passes `-DCMAKE_FIND_ROOT_PATH=$WASM_HOME` so CMake's
+`find_package` resolves them there. The path is arbitrary (`export WASM_HOME=…`
+to move it). Using a *separate* prefix rather than the emsdk sysroot is the
+**idiomatic, deliberate** choice — it survives emsdk upgrades and `emcc
+--clear-cache`, and stays reproducible. The `npm-swipl-wasm` reference build
+does exactly this into `/wasm`, so we are matching the canonical convention.
+
+Two facts fix the approach:
+
+- **zlib is mandatory** — SWI core does `find_package(ZLIB REQUIRED)`, resolved
+  via `find_package`. The emscripten built-in *port* (`--use-port=zlib`) is
+  awkward here: ports build lazily at link time and aren't seen by configure-
+  time `find_package` unless you `embuilder build zlib` first. So a manual build
+  into `$WASM_HOME` is the smooth path.
+- **pcre2 has no emscripten port at all** — manual build (or a package manager)
+  regardless.
+
+Least-friction path = mirror npm/SWI, building both into `$WASM_HOME` (versions
+per `npm-swipl-wasm/build-config.json`; confirm exact tags at build time):
+
+```bash
+# zlib 1.3.2 — autotools
+cd $WASM_HOME && curl -sL https://zlib.net/zlib-1.3.2.tar.gz | tar xz
+cd zlib-1.3.2 && emconfigure ./configure --static --prefix=$WASM_HOME
+EMCC_CFLAGS=-Wno-deprecated-non-prototype emmake make && emmake make install
+
+# pcre2 10.47 — cmake; JIT off (no JIT under wasm)
+cd $WASM_HOME && git clone --depth 1 --branch pcre2-10.47 https://github.com/PCRE2Project/pcre2
+cd pcre2 && mkdir build && cd build
+emcmake cmake -DCMAKE_INSTALL_PREFIX=$WASM_HOME -DPCRE2GREP_SUPPORT_JIT=OFF -G Ninja ..
+ninja && ninja install
+```
+
+pcre2 is only pulled by the `pcre` package; it *could* be dropped by overriding
+the WASM package list, but toggles are per-set (no clean per-package flag), so
+building it is simpler than trimming for a first build. Other WASM-set packages
+(`utf8proc`, `clib`, `http`, `json`, …) need no external deps.
+
+Landscape, for the record: **ports** (zero-install but zlib-only-here +
+`find_package` friction), **manual prefix** (this; sysroot-vs-separate — we use
+separate), and **package managers** (emscripten-forge ships both zlib & pcre2;
+vcpkg's `wasm32-emscripten` is community/flaky; Conan viable) — the last is
+overkill for two deps.
 
 **Flag decisions:**
 
@@ -204,8 +254,8 @@ Applied in that file alongside this plan:
 
 ## 9. Phased plan
 
-1. Install emsdk 6.0.1 + wasm zlib/pcre2; `ninja swipl-web` from our tree; smoke
-   `node src/swipl.js`.
+1. Install emsdk 6.0.1 + stage zlib/pcre2 into `$WASM_HOME` (§2 "Dependency
+   staging"); `ninja swipl-web` from our tree; smoke `node src/swipl.js`.
 2. Validation gate #2: ladder under node, diff inference counts.
 3. Promote `solve_browser.pl` to an exported `browser.pl`; wire the CLI size/mode
    resolvers; qcompile to `crosswordsmith.qlf`.
