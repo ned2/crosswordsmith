@@ -289,6 +289,18 @@ resolvers. This change is **additive** — the CLI/file paths stay for native us
   `abort()`s the tab (uncatchable) instead of throwing a recoverable
   `resource_error(stack)` first. This logical limit is separate from the 1 MB C
   `STACK_SIZE`. Keep a warm spare worker so respawn-after-Stop is instant.
+  **⚠️ Corrected 2026-07-05 (wasm/test/error_probe.mjs):** the cap MUST be set
+  *inside* the `forEach` goal — a `{engine:true}` throwaway engine does **not**
+  inherit the parent engine's `stack_limit`; it defaults to **1 GB** (measured). So
+  setting it at init / via `Prolog.call` on the parent is a **no-op for the actual
+  search** (the original spike's bug): the search ran with a 1 GB limit, above a
+  mobile browser's ~300 MB ceiling — precisely the tab-abort risk this bullet warns
+  of. Fix: prepend `set_prolog_flag(stack_limit, N),` to the query so it applies in
+  the search engine (and, since the engine is discarded each solve, can't leak
+  forward). Verified: a 300 KB cap turns the ~38 M search into a recoverable
+  `resource_error(stack)` and the worker still solves the next request; the 256 MB
+  default completes it. The guard mechanism is real — it was just wired to the
+  wrong engine.
 - **Cancellation:** `worker.terminate()` is the hard Stop — a thread kill that is
   **independent of yielding** (it does not need a heartbeat or a cooperative
   check), and **gate #1 measured it prompt** (0 ms to call, search killed, no late

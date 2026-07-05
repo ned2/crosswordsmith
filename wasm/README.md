@@ -130,6 +130,24 @@ responsive, and `worker.terminate()` is the only working cancel — so the heart
 is not load-bearing (kept at 50000, a few-% throughput tax, no UX cost). Full
 write-up in plan §7 gate #1.
 
+**Error / robustness paths** — the unhappy paths headless.mjs doesn't touch. Each
+case runs in a fresh worker, then re-solves a good request on the SAME worker
+(liveness = recoverable, not a dead tab). Needs the server running:
+
+```bash
+node wasm/test/error_probe.mjs
+# PASS throw:missing-size          — solve throws → {type:error}; worker survives
+# PASS fail:infeasible-strict      — search fails → "no layout"; worker survives
+# PASS heavy-default-completes     — ~38M search under the 256MB cap → result(36)
+# PASS heavy-capped-recoverable    — same search @300KB cap → recoverable resource_error(stack)
+```
+
+Finding (folded into `worker.js` + plan §6): the stack cap **must be set inside the
+`forEach` goal**. A `{engine:true}` search engine does *not* inherit the parent's
+`stack_limit` (defaults to 1GB) — so the spike's init-time cap never constrained the
+search. Now prepended to the query, an over-budget search throws a **recoverable**
+`resource_error(stack)` (worker keeps working) instead of a heap-growth tab abort.
+
 ## Browser gotchas (fixed in `client/worker.js` + `client/solve_browser.pl`)
 
 None of these show up under `node` — they are specific to the browser **Worker**:

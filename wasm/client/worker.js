@@ -38,11 +38,13 @@ function init() {
     locateFile: (file) => new URL("./" + file, self.location.href).href,
   }).then(async (module) => {
     Prolog = module.prolog;
-    // Prolog stacks are heap-backed and grow with the wasm heap
-    // (ALLOW_MEMORY_GROWTH). Keep the limit UNDER the memory budget (~256MB, not
-    // 1GB) so a runaway search throws a recoverable resource_error(stack) rather
-    // than growing the heap until the browser abort()s the tab uncatchably.
-    Prolog.call("set_prolog_flag(stack_limit, 256 000 000)");
+    // NB: the search's stack cap is NOT set here. Prolog stacks are heap-backed and
+    // grow with the wasm heap (ALLOW_MEMORY_GROWTH), so an over-large limit lets a
+    // runaway grow the heap until the browser abort()s the tab uncatchably - we want
+    // a recoverable resource_error(stack) first. But the search runs in a per-solve
+    // {engine:true} engine that does NOT inherit this parent engine's stack_limit
+    // (it defaults to 1GB - measured), so capping it here would be a no-op for the
+    // search. The cap is applied INSIDE the forEach goal instead (see onmessage).
     // Load the app. This .qlf MUST be produced by a same-pointer-size (wasm/node)
     // swipl, not native x86 — see solve_browser.pl / the plan doc.
     // Use an ABSOLUTE URL: inside a Worker there is no `window`, so SWI cannot
@@ -64,6 +66,20 @@ self.onmessage = async (ev) => {
   if (msg.type !== "solve") return;
   try {
     await init();
+
+    // Cap the logical stack UNDER the memory budget so a runaway search throws a
+    // recoverable resource_error(stack) instead of growing the wasm heap until the
+    // browser abort()s the tab (plan §6; verified by wasm/test/error_probe.mjs).
+    // CRUCIAL: the cap MUST be set INSIDE the forEach goal below, not on this parent
+    // engine - a {engine:true} throwaway engine does NOT inherit the parent's
+    // stack_limit; it defaults to 1GB (measured). Setting it on the parent (or at
+    // init) leaves the actual search running with a 1GB limit - above a mobile
+    // browser's ~300MB ceiling, so the tab could abort before the limit ever fires.
+    // Prepending it to the query applies it in the engine that runs the search, and
+    // because the engine is thrown away each solve the value can't leak forward.
+    // 256MB default; caller-overridable via msg.stackLimit.
+    const stackLimit = msg.stackLimit || 256000000;
+
     // forEach runs the search asynchronously with the yield mechanism (every
     // `heartbeat` inferences), and engine:true gives each solve a throwaway engine
     // so per-run state doesn't accumulate on the reused instance.
@@ -85,7 +101,7 @@ self.onmessage = async (ev) => {
     const heartbeat = msg.heartbeat || 50000;
     let json = null;
     await Prolog.forEach(
-      "solve_browser_str(Payload, Json)",
+      "set_prolog_flag(stack_limit, " + stackLimit + "), solve_browser_str(Payload, Json)",
       { Payload: JSON.stringify(msg.input) },
       (bindings) => { if (json === null) json = bindings.Json; },
       { engine: true, heartbeat }
