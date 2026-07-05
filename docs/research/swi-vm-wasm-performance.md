@@ -113,6 +113,18 @@ sources cited inline. Findings that became experiments are cross-referenced.
   `-DVMI_FUNCTIONS=ON` (">10% faster")** advice: the tree now forces
   `DEFAULT_VMI_FUNCTIONS OFF` under `if(EMSCRIPTEN)`, so leave it at the
   default. https://swi-prolog.discourse.group/t/wasm-updates/6516
+- **Word-size provenance (NEW 2026-07-05, adversarial review).** WASM is 32-bit;
+  two build-time artifacts must be produced by a *same-pointer-size* Prolog and
+  are easy to get wrong: (a) **no `-DSWIPL_NATIVE_FRIEND`** pointing at our x86-64
+  build — a friend must match the *target* pointer size, so a 64-bit friend emits
+  a mismatched `boot.prc`/`.qlf`; leave it unset and let the wasm binary self-
+  bootstrap under node (`cmake/Ports.cmake`: "compatible ⇒ same pointer size").
+  (b) The **app `.qlf` must be built with the wasm swipl** (`node
+  build.wasm/src/swipl.js -g "qcompile(...)"`), not native `swipl`; qlf encodes
+  word-sized instruction variants/offsets and the load check is
+  version+VM-signature only (word-size-independent), so a native x86 qlf loads-
+  and-misbehaves rather than failing cleanly. Native qlf validation proves 64→64
+  packaging only, not the crossing.
 - **Gotchas:** `statistics(cputime)` returns walltime under WASM (display
   only; the arrange budget is inference-based so cutoffs are unaffected);
   multiple SWIPL instances leak (no destroy(),

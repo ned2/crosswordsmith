@@ -31,10 +31,13 @@ function init() {
     locateFile: (file) => new URL("./" + file, self.location.href).href,
   }).then(async (module) => {
     Prolog = module.prolog;
-    // Give Prolog room; these are heap-backed and grow with the wasm heap
-    // (ALLOW_MEMORY_GROWTH is on by default in the build).
-    Prolog.call("set_prolog_flag(stack_limit, 1 000 000 000)");
-    // Load the app. Production: one precompiled .qlf fetched from a URL.
+    // Prolog stacks are heap-backed and grow with the wasm heap
+    // (ALLOW_MEMORY_GROWTH). Keep the limit UNDER the memory budget (~256MB, not
+    // 1GB) so a runaway search throws a recoverable resource_error(stack) rather
+    // than growing the heap until the browser abort()s the tab uncatchably.
+    Prolog.call("set_prolog_flag(stack_limit, 256 000 000)");
+    // Load the app. This .qlf MUST be produced by a same-pointer-size (wasm/node)
+    // swipl, not native x86 — see solve_browser.pl / the plan doc.
     await Prolog.consult("./crosswordsmith.qlf");
     return Prolog;
   });

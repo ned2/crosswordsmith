@@ -40,6 +40,15 @@ commit); ship the app as one `.qlf`; run the solver in a **Web Worker** with
 **input via query binding, output via JSON**; reuse one instance; cancel by
 `worker.terminate()`.
 
+**The one non-obvious subtlety is build *provenance*, not the app.** WASM is
+32-bit, so anything the build "compiles" — the `boot.prc`/library `.qlf` during
+bootstrap, and our app `.qlf` — must be produced by a *same-pointer-size* Prolog.
+That means: no native "friend" build (let the wasm binary self-bootstrap under
+node), and produce `crosswordsmith.qlf` with the wasm build's `node src/swipl.js`,
+not native `swipl`. This is the one place the "version parity is free" framing
+can mislead — parity of *source* is free; word-size compatibility is a separate
+constraint. (Adversarial review, 2026-07-05, caught this; §2/§6.)
+
 ## 2. Build — exact-version parity from our tree
 
 `$WASM_HOME` is exported to `$HOME/wasm` (the staging prefix, see below).
@@ -48,26 +57,33 @@ commit); ship the app as one `.qlf`; run the solver in a **Web Worker** with
 prerequisite.
 
 ```bash
-# 0. toolchain — emsdk 6.0.1 (SWI's own CI pin; anything ≥4.0.15 works post-fix,
-#    3.1.37 in the stale official doc is obsolete, emsdk 4.0.0 briefly broke CI)
+# 0. toolchain — emsdk 6.0.1 (the version npm-swipl-wasm pins in build-config.json;
+#    swipl-devel itself has NO wasm CI job, so this is not attested in-tree — smoke-
+#    test it. ≥4.0.15 works post-fix; 3.1.37 in the stale official doc is obsolete;
+#    emsdk 4.0.0 briefly broke swipl-wasm CI.)
 git clone https://github.com/emscripten-core/emsdk $WASM_HOME/emsdk
 cd $WASM_HOME/emsdk && ./emsdk install 6.0.1 && ./emsdk activate 6.0.1 && source ./emsdk_env.sh
 
 # 1. stage wasm-side deps into $WASM_HOME — see "Dependency staging" below
 
-# 2. configure + build from OUR source tree
-cd ~/src/swipl-devel && mkdir -p build.wasm && cd build.wasm
-emcmake cmake -DCMAKE_TOOLCHAIN_FILE=$EMSDK/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake \
-  -DCMAKE_FIND_ROOT_PATH=$WASM_HOME -DCMAKE_BUILD_TYPE=Release \
-  -DUSE_GMP=OFF -DINSTALL_QLF=ON -DINSTALL_PROLOG_SRC=OFF -DINSTALL_DOCUMENTATION=OFF \
-  -DSWIPL_NATIVE_FRIEND=$HOME/src/swipl-devel/build -G Ninja ..
-ninja swipl-web        # or: ninja swipl-web swipl-bundle
+# 2. pin the source to our exact commit, then configure via the in-tree profile
+cd ~/src/swipl-devel && git checkout aa6289399      # detached — else a later pull drifts HEAD
+mkdir -p build.wasm && cd build.wasm
+../scripts/configure wasm    # sets toolchain, CMAKE_FIND_ROOT_PATH=$WASM_HOME, USE_GMP=OFF,
+                             # INSTALL_PROLOG_SRC=OFF, Release, and NO native friend
+ninja swipl-web              # or: ninja swipl-web swipl-bundle
 ```
 
-Prefer the in-tree `scripts/configure wasm` profile (it encodes these flags —
-and defaults `WASM_HOME` to `$HOME/wasm`, writing it into `.envrc`) over the
-**official `WebAssembly.md`, which is ~3 years stale** (still names Emscripten
-3.1.37, a non-`emcmake` cmake line).
+Use the in-tree `scripts/configure wasm` profile — do **not** hand-roll the
+`emcmake cmake …` line, and do **not** pass `-DSWIPL_NATIVE_FRIEND`. The build is
+two-stage: a Prolog of the **same pointer size** must generate `boot.prc` + the
+library `.qlf`, and the profile's no-friend path runs the freshly-built wasm
+binary under the node emulator to do exactly that (`cmake/Ports.cmake`,
+`cmake/EmscriptenTargets.cmake`). Our native `~/src/swipl-devel/build` is x86-64
+(8-byte pointers) — pointing a friend at it would make a 64-bit swipl emit the
+wasm32 target's boot/qlf: a silent word-size mismatch. The node bootstrap is
+slower but correct. (Prefer all this over the **official `WebAssembly.md`, which
+is ~3 years stale** — Emscripten 3.1.37, a non-`emcmake` line.)
 
 ### Dependency staging (`$WASM_HOME`)
 
@@ -120,10 +136,10 @@ overkill for two deps.
 
 | Flag | Setting | Why |
 |---|---|---|
-| `USE_GMP` | **OFF** | LibBF bignums; the WASM norm. arrange/fill are integer-only, so the weaker LibBF rational arithmetic is irrelevant. |
-| `INSTALL_QLF` / `INSTALL_PROLOG_SRC` | **ON / OFF** | qlf-only image → smaller `.data`, no source tracing. |
+| `USE_GMP` | **OFF** (profile sets it) | LibBF bignums; the WASM norm. arrange/fill are integer-only, so the weaker LibBF rational arithmetic is irrelevant. |
+| `INSTALL_QLF` / `INSTALL_PROLOG_SRC` | **ON / OFF** | qlf-only image → smaller `.data`, no source tracing. `INSTALL_QLF=ON` is the global default (don't pass it); the profile sets `INSTALL_PROLOG_SRC=OFF`. |
 | `WASM_EXCEPTIONS` | **OFF (default)** | *Alternative* to the setjmp fix, ~30% slower; superseded by the fix already in our pin (§8). Not additive. |
-| `SWIPL_NATIVE_FRIEND` | our native build dir | Skips the slow node-emulator bootstrap (the build is inherently two-stage: a node/native swipl generates `boot.prc`+`.qlf`, then those are preloaded into the browser target). Friend must be the **same commit**. |
+| `SWIPL_NATIVE_FRIEND` | **do NOT set** | A friend must match the *target* pointer size (wasm32 = 4 bytes); our native build is x86-64 = 8 bytes, so a friend would emit a mismatched `boot.prc`/`.qlf`. Leave unset → the profile bootstraps boot/qlf by running the wasm binary under node (`cmake/Ports.cmake` "compatible ⇒ same pointer size"). |
 | stack/mem link flags | in-tree defaults | `STACK_SIZE=1M`, `STACK_OVERFLOW_CHECK`, `ALLOW_MEMORY_GROWTH`, `WASM_BIGINT`, `LZ4` are already set in `EmscriptenTargets.cmake`. No manual tuning. |
 | `VMI_FUNCTIONS` | **default (OFF for Emscripten)** | The tree forces it off for WASM; the old note's "ON, >10% faster" is stale (§8). |
 
@@ -165,13 +181,22 @@ package subset) match §2, so behaviour parity holds.
 
 The solver's libraries are `http/json`, `apply`, `aggregate`, `ordsets`,
 `lists`, `assoc`, `pairs`, `random`, plus **tabling** (`answer_letters/2`,
-`pair_crossings/3`). The Emscripten package set is
+`pair_crossings/3`). The Emscripten package **set** is
 `clpqr plunit chr clib http semweb pcre utf8proc`; core autoload libs are always
-present; `library(http/json)` resolves via a 2025 compat shim to the standalone
-`json` package. **Tabling is a core engine feature, not a package — available.**
-Nothing the solver needs is on the "missing under WASM" list (threads, socket,
-ssl, crypto, process, …). The CLI layer (`optparse`, `argv`, `halt/1`) is simply
-not used in the browser.
+present. **`json` is not in that literal list, but it is still built:**
+`json` is now its own package (`packages/json/`, with the 2025
+`library(http/json)` compat shim reexporting `library(json)`), and
+`SWIPL_PKG_DEPS_http` includes `json` under `EMSCRIPTEN`
+(`cmake/PackageSelection.cmake`). The build's dependency-resolution fixpoint
+(`check_package_dependencies`, run in a `while(new)` loop) pulls any missing dep
+into the built set, so `http` drags `json` in — and npm-swipl-wasm's own package
+list ships `json` for the same reason. **Tabling is a core engine feature, not a
+package — available.** Nothing the solver needs is on the "missing under WASM"
+list (threads, socket, ssl, crypto, process, …). The CLI layer (`optparse`,
+`argv`, `halt/1`) is simply not used in the browser.
+> Cheap validation regardless: run `use_module(library(http/json)),
+> json_write_dict(current_output, _{a:1}, [])` under `node src/swipl.js` once —
+> the whole output path (and the app-image load) depends on it.
 
 ## 5. Code porting — one small seam
 
@@ -202,8 +227,16 @@ small `browser.pl` module and reuse the CLI's size/mode resolvers. This change i
 
 - **Package** the app as one `crosswordsmith.qlf` via
   `qcompile('…solve_browser.pl', [include(user)])`, loaded with
-  `Prolog.consult(url)`. Validated natively: a 46 KB qlf folds all seven modules
-  and runs standalone (loading raw `.pl` from URLs is explicitly slow).
+  `Prolog.consult(url)` (loading raw `.pl` from URLs is explicitly slow). A 46 KB
+  qlf folds all seven modules and runs standalone — but that was validated in
+  *native x86* swipl, which only proves 64→64. **QLF is word-size-specific** (it
+  encodes word-sized instruction variants and byte offsets, and the load-time
+  check is version+VM-signature only — both word-size-independent, so a
+  mismatched qlf loads-and-misbehaves rather than failing cleanly). So the app
+  qlf **must be produced by a same-pointer-size Prolog** — i.e.
+  `node build.wasm/src/swipl.js -g "qcompile('…/solve_browser.pl',[include(user)]),halt"`
+  (the wasm build's own node binary, with NODERAWFS reaching the app sources by
+  absolute path), **not** native `swipl`.
 - **Off the main thread: Web Worker.** SWI's blessed design is main-thread
   `forEach`+`heartbeat` yielding, but a genuinely CPU-bound multi-second DFS
   still steals main-thread time between paints. The Worker gives a jank-free UI
@@ -211,12 +244,17 @@ small `browser.pl` module and reuse the CLI's size/mode resolvers. This change i
   {engine:true, heartbeat:N})`.
 - **One instance, reused.** There is no `destroy()`; instantiate `SWIPL()` once.
   `{engine:true}` gives each solve a throwaway engine so per-run state doesn't
-  accumulate. Set `stack_limit` generously at init (Prolog stacks are heap-backed
-  and grow with `ALLOW_MEMORY_GROWTH`, separate from the 1 MB C stack). Keep a
-  warm spare worker so respawn-after-Stop is instant.
-- **Cancellation:** `worker.terminate()` (hard) or `Query.close()` at a yield
-  point (cooperative). `Prolog.Promise.abort()` only cancels goals blocked on a
-  JS promise — **useless for a CPU DFS**; don't rely on it.
+  accumulate. Set `stack_limit` **under the memory budget** (~200–256 MB, *not*
+  1 GB): Prolog stacks are heap-backed and grow with `ALLOW_MEMORY_GROWTH`, so an
+  over-large limit lets a runaway search grow the wasm heap until the browser
+  `abort()`s the tab (uncatchable) instead of throwing a recoverable
+  `resource_error(stack)` first. This logical limit is separate from the 1 MB C
+  `STACK_SIZE`. Keep a warm spare worker so respawn-after-Stop is instant.
+- **Cancellation:** `worker.terminate()` is the hard Stop — a thread kill that is
+  **independent of yielding** (it does not need a heartbeat or a cooperative
+  check). `Query.close()` at a yield point is the cooperative alternative (that
+  one does depend on the heartbeat). `Prolog.Promise.abort()` only cancels goals
+  blocked on a JS promise — **useless for a CPU DFS**; don't rely on it.
 
 ## 7. Risks & the validation gate
 
@@ -233,9 +271,12 @@ Do these before trusting the browser build (or the ratchet as a WASM proxy):
 3. **Stack.** 1 MB C stack; Prolog recursion is heap-backed so usually fine, but
    validate the deepest ladder rung. Raise `STACK_SIZE` only if it overflows.
 4. **Memory.** Budget conservatively on mobile (~300 MB observed, unconfirmed as
-   a hard limit); reuse the instance to avoid cross-run leak accumulation.
-5. **qlf under WASM.** Confirm `Prolog.consult(qlf)` folds the modules under WASM
-   as it does natively (it should).
+   a hard limit); set `stack_limit` under it (§6); reuse the instance to avoid
+   cross-run leak accumulation.
+5. **qlf must be wasm-produced.** Build `crosswordsmith.qlf` with
+   `node build.wasm/src/swipl.js` (same pointer size), then confirm
+   `Prolog.consult(qlf)` loads it under WASM. A native-x86 qlf will **not** load
+   correctly in wasm32 (§6) — do not assume the native validation transfers.
 6. **Output fidelity.** Confirm the `null`/bool-atom → JS-string behaviour from
    §5 against the real build; it's the reason we chose the JSON output path.
 
@@ -258,7 +299,8 @@ Applied in that file alongside this plan:
    staging"); `ninja swipl-web` from our tree; smoke `node src/swipl.js`.
 2. Validation gate #2: ladder under node, diff inference counts.
 3. Promote `solve_browser.pl` to an exported `browser.pl`; wire the CLI size/mode
-   resolvers; qcompile to `crosswordsmith.qlf`.
+   resolvers; qcompile to `crosswordsmith.qlf` **with `node build.wasm/src/swipl.js`**
+   (same pointer size — not native swipl).
 4. Wire the Worker harness (spike): one solve round-trip, tune `heartbeat`,
    `terminate()` cancel; run gates #1, #5, #6.
 5. Only then: the real UI.

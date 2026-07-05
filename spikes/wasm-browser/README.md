@@ -24,7 +24,8 @@ swipl -q -g browser_selftest -t halt spikes/wasm-browser/solve_browser.pl
 
 ## Building the WASM artifacts (needed for the browser half)
 
-Prereq: **emsdk 6.0.1** (SWI's current CI pin) — not yet installed on this box.
+Prereq: **emsdk 6.0.1** (the version npm-swipl-wasm pins; swipl-devel has no wasm
+CI job so it isn't attested in-tree) — not yet installed on this box.
 
 ```bash
 # 1. toolchain (WASM_HOME=$HOME/wasm is exported as the staging prefix)
@@ -33,12 +34,15 @@ cd $WASM_HOME/emsdk && ./emsdk install 6.0.1 && ./emsdk activate 6.0.1 && source
 # stage wasm-side deps (zlib mandatory, pcre2) into $WASM_HOME — exact commands
 # in docs/plans/wasm-browser-deployment.md § "Dependency staging".
 
-# 2. build swipl-web from OUR pinned source tree (exact-version parity)
-cd ~/src/swipl-devel && mkdir -p build.wasm && cd build.wasm
-emcmake cmake -DCMAKE_TOOLCHAIN_FILE=$EMSDK/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake \
-  -DCMAKE_FIND_ROOT_PATH=$WASM_HOME -DCMAKE_BUILD_TYPE=Release \
-  -DUSE_GMP=OFF -DINSTALL_QLF=ON -DINSTALL_PROLOG_SRC=OFF -DINSTALL_DOCUMENTATION=OFF \
-  -DSWIPL_NATIVE_FRIEND=$HOME/src/swipl-devel/build -G Ninja ..
+# 2. build swipl-web from OUR pinned commit via the in-tree profile.
+#    Do NOT pass -DSWIPL_NATIVE_FRIEND: the friend must match the TARGET pointer
+#    size (wasm32 = 4 bytes); our native build is x86-64 = 8 bytes, so a friend
+#    would emit a mismatched boot.prc/.qlf. No friend => the wasm binary self-
+#    bootstraps under node (slower, but the only correct path). The profile sets
+#    the toolchain, CMAKE_FIND_ROOT_PATH=$WASM_HOME, USE_GMP=OFF, Release, etc.
+cd ~/src/swipl-devel && git checkout aa6289399     # detached — pin the exact commit
+mkdir -p build.wasm && cd build.wasm
+../scripts/configure wasm
 ninja swipl-web
 
 # 3. drop the three artifacts next to these files
@@ -47,29 +51,42 @@ cp src/swipl-web.js src/swipl-web.wasm src/swipl-web.data <this-dir>/
 
 ## Building the app `.qlf`
 
-Fold the app into one Quick-Load File served alongside the artifacts:
+Fold the app into one Quick-Load File served alongside the artifacts. **QLF is
+word-size-specific**, so the file the browser loads must be produced by the
+*wasm* build's own swipl (run under node), **not** native `swipl` — a native
+x86-64 qlf encodes 64-bit instruction variants/offsets and would load-and-
+misbehave under wasm32 (the load check is version+VM-signature only, both
+word-size-independent). Build it from the wasm tree:
 
 ```bash
-swipl -g "qcompile('spikes/wasm-browser/solve_browser.pl', [include(user)]), halt" -t 'halt(1)'
-cp spikes/wasm-browser/solve_browser.qlf spikes/wasm-browser/crosswordsmith.qlf
+# run the wasm build's node binary; NODERAWFS lets it read the app sources by
+# absolute path. Point it at THIS repo's solve_browser.pl.
+cd ~/src/swipl-devel/build.wasm
+node src/swipl.js -g "qcompile('$OLDPWD/spikes/wasm-browser/solve_browser.pl', [include(user)]), halt" -t 'halt(1)'
+cp src/solve_browser.qlf "$OLDPWD/spikes/wasm-browser/crosswordsmith.qlf"
 ```
 
-> ✅ **Validated natively:** `include(user)` *does* fold all seven modules —
-> a 46 KB `solve_browser.qlf` loaded on its own into a fresh native swipl runs
-> `browser_selftest` cleanly (both paths). Residual gate: confirm
-> `Prolog.consult('./crosswordsmith.qlf')` behaves identically under WASM (it
-> should). Fallback if not: serve the source tree and `consult('./load.pl')`.
+> ✅ **Validated natively (64→64 only):** `include(user)` *does* fold all seven
+> modules — a 46 KB `solve_browser.qlf` loaded on its own into a fresh native
+> swipl runs `browser_selftest` cleanly (both paths). That proves the *packaging*
+> works but **not** the word-size crossing — the residual gate is to produce the
+> qlf with the wasm/node swipl (above) and confirm `Prolog.consult('./crosswordsmith.qlf')`
+> loads it under WASM. Fallback if not: serve the source tree and `consult('./load.pl')`.
 
 ## Running
 
 Serve this directory over HTTP (the worker + `.wasm`/`.data` need real URLs,
-and `.wasm` must be served as `application/wasm`):
+and `.wasm` should be served as `application/wasm`):
 
 ```bash
 python3 -m http.server 8080   # then open http://localhost:8080/
 ```
 
-Single-threaded build ⇒ **no COOP/COEP headers required.**
+Single-threaded build ⇒ **no COOP/COEP headers required.** Caveat: Python's
+`http.server` may not send `Content-Type: application/wasm` for `.wasm` on
+older stdlib versions — SWI's loader uses streaming instantiate, so if the
+browser complains about the MIME type, serve with a dev server that sets it
+(e.g. `npx serve`) or add the mapping.
 
 ## Known spike shortcuts (not production)
 
