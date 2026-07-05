@@ -9,6 +9,8 @@
 % tests/golden/fill_3.json.
 
 :- use_module(library(plunit)).
+:- use_module(library(fastrw)).   % F-L2 tests hand-craft artifacts to prove refusals
+:- use_module(library(assoc)).
 
 % Run a fill and return the across/down answer lists (deterministic).
 do_fill(GridFile, SeedFile, DictFile, Across, Down) :-
@@ -170,6 +172,96 @@ test(fill_deterministic) :-
     do_fill('fixtures/fill_grid_3.json', none, 'fixtures/wordlist_sample.txt', A1, D1),
     do_fill('fixtures/fill_grid_3.json', none, 'fixtures/wordlist_sample.txt', A2, D2),
     A1 == A2, D1 == D2.
+
+% --- F-L2: precomputed index artifact ----------------------------------------
+% Write a temp dict, return its path (the caller deletes it).
+tmp_dict(Text, Path) :- tmp_file_stream(text, Path, S), write(S, Text), close(S).
+tmp_path(Path) :- tmp_file_stream(binary, Path, S), close(S).
+
+% EQUIVALENCE LEMMA (the core F-L2 correctness claim): the DictByLen buckets and
+% the assoc Index reconstructed from a saved artifact are ==-IDENTICAL to a fresh
+% load_dict of the same file. The whole speed-up rests on this, so pin it
+% directly (scaled up to 10k/50k/172k out-of-band by the results-doc harness).
+test(fill_index_roundtrip_identical) :-
+    tmp_dict("CAT\nCOW\nCUB\nDOG\nORE\nWED\nCUBIT\nTOMMY\n", DF), tmp_path(AF),
+    crosswordsmith_fill:fill_save_index(DF, AF),
+    crosswordsmith_fill:load_dict(DF, DBL0, Idx0),
+    crosswordsmith_fill:fill_load_index(AF, none, DBL1, Idx1),
+    delete_file(DF), delete_file(AF),
+    DBL1 == DBL0,
+    Idx1 == Idx0.
+
+% An artifact-mode fill produces the SAME layout as the raw path (the CLI
+% identity oracle proves this on all 11 rungs; this is the unit-level witness).
+test(fill_index_fill_matches_raw) :-
+    tmp_path(AF),
+    crosswordsmith_fill:fill_save_index('fixtures/wordlist_sample.txt', AF),
+    crosswordsmith_fill:fill_grid('fixtures/fill_grid_3.json', _Size, Slots, _),
+    crosswordsmith_fill:fill_load_index(AF, none, DBL, Idx),
+    delete_file(AF),
+    crosswordsmith_fill:fill_attempt(Slots, Slots, DBL, Idx, filled, Numbered, _),
+    findall(A, ( member(W, Numbered), pw_dir(W, across), pw_answer(W, A) ), Across),
+    Across == ['CAT', 'ORE', 'WED'].
+
+% Passing --dict that MATCHES the artifact's source verifies the SHA-256 and
+% loads (integrity check on the happy path).
+test(fill_index_hash_ok_when_dict_matches) :-
+    tmp_dict("CAT\nCOW\nCUB\nDOG\n", DF), tmp_path(AF),
+    crosswordsmith_fill:fill_save_index(DF, AF),
+    crosswordsmith_fill:fill_load_index(AF, DF, _DBL, _Idx),
+    delete_file(DF), delete_file(AF).
+
+% A dict whose bytes differ from the artifact's source is REFUSED (no silent
+% rebuild, no stale fill) - the staleness gate.
+test(fill_index_hash_mismatch_refused,
+     [throws(error(fill_index_hash(_, _, _), _))]) :-
+    tmp_dict("CAT\nCOW\nCUB\nDOG\n", DF1), tmp_dict("CAT\nCOW\nCUB\nDOGS\n", DF2),
+    tmp_path(AF),
+    crosswordsmith_fill:fill_save_index(DF1, AF),
+    setup_call_cleanup(true,
+                       crosswordsmith_fill:fill_load_index(AF, DF2, _, _),
+                       ( delete_file(DF1), delete_file(DF2), delete_file(AF) )).
+
+% An unrecognised SCHEMA version is refused (forward/backward-compat guard; this
+% is also where F-H2's masks bump the version). Hand-craft the artifact so the
+% test does not depend on ever shipping a second version.
+test(fill_index_version_mismatch_refused,
+     [throws(error(fill_index_version(999, _), _))]) :-
+    empty_assoc(E), tmp_path(AF),
+    setup_call_cleanup(open(AF, write, S, [type(binary)]),
+                       fast_write(S, fill_index(999, [swi_version('x')], E, E)),
+                       close(S)),
+    setup_call_cleanup(true,
+                       crosswordsmith_fill:fill_load_index(AF, none, _, _),
+                       delete_file(AF)).
+
+% An artifact built by a different SWI-Prolog (binary format is version-bound)
+% is refused even without --dict.
+test(fill_index_swi_mismatch_refused,
+     [throws(error(fill_index_swi('0.0.0', _), _))]) :-
+    empty_assoc(E), tmp_path(AF),
+    setup_call_cleanup(open(AF, write, S, [type(binary)]),
+                       fast_write(S, fill_index(1, [swi_version('0.0.0'), dict_sha256(x)], E, E)),
+                       close(S)),
+    setup_call_cleanup(true,
+                       crosswordsmith_fill:fill_load_index(AF, none, _, _),
+                       delete_file(AF)).
+
+% A file that is not a fill_index/4 artifact is refused, not misinterpreted.
+test(fill_index_malformed_refused,
+     [throws(error(fill_index_malformed(_), _))]) :-
+    tmp_path(AF),
+    setup_call_cleanup(open(AF, write, S, [type(binary)]),
+                       fast_write(S, not_an_artifact(42)),
+                       close(S)),
+    setup_call_cleanup(true,
+                       crosswordsmith_fill:fill_load_index(AF, none, _, _),
+                       delete_file(AF)).
+
+% A missing artifact file is refused with a clear error.
+test(fill_index_missing_refused,
+     [throws(error(fill_index_missing(_), _))]) :-
+    crosswordsmith_fill:fill_load_index('/nonexistent/f-l2/no.idx', none, _, _).
 
 :- end_tests(fill).
 

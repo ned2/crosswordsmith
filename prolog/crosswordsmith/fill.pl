@@ -17,7 +17,9 @@
 % arrange, core).
 
 :- module(crosswordsmith_fill,
-          [ fill_solve/4
+          [ fill_solve/4,
+            fill_solve_index/5,
+            fill_save_index/2
           ]).
 
 :- use_module(library(http/json)).
@@ -26,6 +28,8 @@
 :- use_module(library(ordsets)).
 :- use_module(library(assoc)).
 :- use_module(library(pairs)).
+:- use_module(library(sha)).        % F-L2: dict-file SHA-256 (artifact integrity)
+:- use_module(library(fastrw)).     % F-L2: fast_write/fast_read artifact I/O
 
 % Slot derivation from a stock-grid mask.
 :- use_module(crosswordsmith(stockgrid),
@@ -372,12 +376,35 @@ fill_attempt(SearchSlots, AllSlots, DictByLen, Index, Budget, Outcome, Numbered,
 % Construct + emit a fill on stdout; report on stderr. Fails (no stdout) on any
 % non-filled outcome (INV-3: report the unfillable slot(s), never silent).
 fill_solve(GridFile, SeedFileOrNone, DictFile, SizeMode) :-
+    fill_prepare(GridFile, SeedFileOrNone, Size, Slots, SearchSlots),
+    load_dict(DictFile, DictByLen, Index),
+    fill_place_and_emit(Size, Slots, SearchSlots, DictByLen, Index, SizeMode).
+
+% Artifact-consuming twin of fill_solve/4 (F-L2): load a prebuilt, verified
+% index artifact instead of parsing a text dictionary, then fill IDENTICALLY.
+% Grid/seed derivation, search, and emit are the shared body below, so the
+% filled layout is byte-for-byte identical to the raw path (proven by the
+% identity oracle in both modes). DictFileOrNone: an atom path checks the
+% artifact's embedded SHA-256; `none` skips that check (version + SWI are
+% always checked). fill_load_index throws a clear error on any mismatch.
+fill_solve_index(GridFile, SeedFileOrNone, IndexFile, DictFileOrNone, SizeMode) :-
+    fill_load_index(IndexFile, DictFileOrNone, DictByLen, Index),
+    fill_prepare(GridFile, SeedFileOrNone, Size, Slots, SearchSlots),
+    fill_place_and_emit(Size, Slots, SearchSlots, DictByLen, Index, SizeMode).
+
+% Grid + seed derivation, shared by both entry points (identical to the raw
+% path's front matter). Slots are ALL slots (emitted); SearchSlots exclude seed
+% pins (what the engine fills).
+fill_prepare(GridFile, SeedFileOrNone, Size, Slots, SearchSlots) :-
     fill_grid(GridFile, Size, Slots, _CellVar),
     ( SeedFileOrNone == none
     ->  SeededKeys = []
     ;   apply_seeds(SeedFileOrNone, Slots, SeededKeys) ),
-    exclude(seeded_slot(SeededKeys), Slots, SearchSlots),
-    load_dict(DictFile, DictByLen, Index),
+    exclude(seeded_slot(SeededKeys), Slots, SearchSlots).
+
+% Search + emit, shared by both entry points. Fails (no stdout) on any
+% non-filled outcome (INV-3): report the unfillable slot(s), never silent.
+fill_place_and_emit(Size, Slots, SearchSlots, DictByLen, Index, SizeMode) :-
     fill_attempt(SearchSlots, Slots, DictByLen, Index, Outcome, Numbered, InputWords),
     (   Outcome == filled
     ->  emit_fill(Numbered, InputWords, Size, SizeMode),
@@ -417,9 +444,132 @@ empty_slots(Slots, DictByLen, Index, Bad) :-
             Bad).
 
 
+% --- precomputed index artifact (F-L2) ---------------------------------------
+% The dictionary parse + index build is a PURE FUNCTION of the frozen dict file
+% and dominates end-to-end latency (P-F1: dict_load is 58-84% of CLI wall on
+% 10/11 rungs; F-L1 cut the parse, leaving the build_index keysort + GC as the
+% inference-blind residue). This serializes the EXACT runtime structures (the
+% DictByLen length buckets + the assoc Index) once, so an interactive fill loads
+% them back instead of recomputing them every invocation. The raw text-dict path
+% (load_dict/build_index) is untouched: this builder CALLS load_dict, and the
+% loader reconstructs terms that are ==-identical to a fresh build.
+%
+% ARTIFACT TERM (versioned + extensible):
+%   fill_index(Version, Meta, DictByLen, Index)
+%     Version - integer artifact-SCHEMA version (fill_index_format_version/1). A
+%               schema change bumps it; the loader refuses an unknown version.
+%     Meta    - a keyed list [Key(Value), ...] carrying integrity + provenance
+%               AND the F-H2 EXTENSION POINT: precomputed bitset masks will slot
+%               in here as an added masks(...) key under a Version bump, so
+%               adding them is not a format break (old readers never look for
+%               the key; new readers gate on Version before using it).
+%       dict_sha256(Hex) - SHA-256 of the source dict file's bytes (staleness)
+%       swi_version(V)   - the SWI-Prolog that built it (binary-format guard)
+%       words(N)         - dictionary word count (informational)
+%       source(Path)     - the dict path as given at build (informational)
+%       built_epoch(E)   - build time, integer seconds (informational)
+%
+% ON-DISK FORMAT: fast_write/fast_read (library(fastrw)) - MEASURED the fastest
+% candidate (F-L2 results doc): ~20x the post-F-L1 warm raw load at 172k, smaller
+% on disk than the .qlf of the equivalent fact, ~0 inferences. fast_read's binary
+% format is SWI-version-bound (documented), so the artifact embeds swi_version
+% and the loader REFUSES a mismatch (rebuild explicitly, never silently).
+
+fill_index_format_version(1).
+
+% BUILD: load_dict the frozen file, then serialize the exact structures + meta.
+% This is the one-off cost (~ current load + a fast_write); the CLI's
+% `fill --save-index FILE` seam calls it.
+fill_save_index(DictFile, OutFile) :-
+    load_dict(DictFile, DictByLen, Index),
+    dict_word_count(DictByLen, NWords),
+    fill_file_sha256(DictFile, Sha),
+    fill_swi_version(Swi),
+    get_time(TF), Epoch is round(TF),
+    fill_index_format_version(Version),
+    Meta = [ dict_sha256(Sha), swi_version(Swi), words(NWords),
+             source(DictFile), built_epoch(Epoch) ],
+    Artifact = fill_index(Version, Meta, DictByLen, Index),
+    setup_call_cleanup(open(OutFile, write, S, [type(binary)]),
+                       fast_write(S, Artifact),
+                       close(S)).
+
+% LOAD: read the artifact, verify schema version + SWI version (+ the dict hash
+% iff a dict path is supplied), and hand back the reconstructed DictByLen +
+% Index. Any integrity failure throws a clear fill_index_* error - no silent
+% rebuild, no fall-through to the raw path.
+fill_load_index(IndexFile, DictFileOrNone, DictByLen, Index) :-
+    ( exists_file(IndexFile) -> true
+    ; throw(error(fill_index_missing(IndexFile), _)) ),
+    catch(fill_read_artifact(IndexFile, Artifact),
+          _ReadErr,
+          throw(error(fill_index_unreadable(IndexFile), _))),
+    ( Artifact = fill_index(Version, Meta, DictByLen0, Index0)
+    -> true
+    ;  throw(error(fill_index_malformed(IndexFile), _)) ),
+    fill_index_format_version(Want),
+    ( Version == Want -> true
+    ; throw(error(fill_index_version(Version, Want), _)) ),
+    fill_swi_version(CurSwi),
+    ( meta_value(Meta, swi_version, ArtSwi), ArtSwi == CurSwi -> true
+    ; meta_value_or(Meta, swi_version, unknown, ArtSwi2),
+      throw(error(fill_index_swi(ArtSwi2, CurSwi), _)) ),
+    ( DictFileOrNone == none
+    -> true
+    ;  fill_file_sha256(DictFileOrNone, CurSha),
+       ( meta_value(Meta, dict_sha256, ArtSha), ArtSha == CurSha -> true
+       ; meta_value_or(Meta, dict_sha256, unknown, ArtSha2),
+         throw(error(fill_index_hash(DictFileOrNone, ArtSha2, CurSha), _)) ) ),
+    DictByLen = DictByLen0, Index = Index0.
+
+fill_read_artifact(IndexFile, Artifact) :-
+    setup_call_cleanup(open(IndexFile, read, S, [type(binary)]),
+                       fast_read(S, Artifact),
+                       close(S)).
+
+% Meta is a keyed list of unary Key(Value) terms (see the artifact term above).
+meta_value(Meta, Key, Value) :- Probe =.. [Key, Value], memberchk(Probe, Meta).
+meta_value_or(Meta, Key, _Default, Value) :- meta_value(Meta, Key, Value), !.
+meta_value_or(_Meta, _Key, Default, Default).
+
+% Word count over the length buckets (same fold run_fill's metadata uses).
+dict_word_count(DictByLen, N) :-
+    assoc_to_values(DictByLen, Buckets),
+    foldl(bucket_len, Buckets, 0, N).
+bucket_len(B, A0, A1) :- length(B, L), A1 is A0 + L.
+
+% SHA-256 of the file's raw bytes - a self-consistent build/verify fingerprint
+% that also matches coreutils sha256sum (encoding(octet) hashes each byte as-is).
+fill_file_sha256(File, Hex) :-
+    setup_call_cleanup(open(File, read, S, [encoding(octet)]),
+                       read_string(S, _, Bytes),
+                       close(S)),
+    sha_hash(Bytes, Digest, [algorithm(sha256), encoding(octet)]),
+    hash_atom(Digest, Hex).
+
+% "Ma.Mi.Pa" - the same version string run_fill.pl records, so the artifact's
+% guard and the bench provenance agree.
+fill_swi_version(Ver) :-
+    current_prolog_flag(version_data, V),
+    ( V = swi(Ma, Mi, Pa, _) -> format(atom(Ver), '~d.~d.~d', [Ma, Mi, Pa]) ; Ver = V ).
+
+
 % --- error messages ----------------------------------------------------------
 :- multifile prolog:error_message//1.
 prolog:error_message(fill_seed_no_slot(A)) -->
     [ 'fill: seed ~q does not match any slot of the grid (check its cells/direction)'-[A] ].
 prolog:error_message(fill_seed_clash(A)) -->
     [ 'fill: seed ~q clashes with another seed at a shared cell'-[A] ].
+% F-L2 index-artifact integrity failures (refuse, never silently rebuild).
+prolog:error_message(fill_index_missing(F)) -->
+    [ 'fill: index artifact ~w not found (build one with `fill --dict DICT --save-index ~w`)'-[F, F] ].
+prolog:error_message(fill_index_unreadable(F)) -->
+    [ 'fill: index artifact ~w could not be read (corrupt, or built by a different SWI-Prolog; rebuild with --save-index)'-[F] ].
+prolog:error_message(fill_index_malformed(F)) -->
+    [ 'fill: index artifact ~w is not a fill_index/4 artifact (rebuild with --save-index)'-[F] ].
+prolog:error_message(fill_index_version(Got, Want)) -->
+    [ 'fill: index artifact schema version ~w is not supported (this build reads version ~w); rebuild with --save-index'-[Got, Want] ].
+prolog:error_message(fill_index_swi(Art, Cur)) -->
+    [ 'fill: index artifact was built by SWI-Prolog ~w but this is ~w (the binary format is version-bound); rebuild with --save-index'-[Art, Cur] ].
+prolog:error_message(fill_index_hash(File, Art, Cur)) -->
+    [ 'fill: index artifact does not match --dict ~w (artifact dict SHA-256 ~w, file ~w); the dictionary changed - rebuild with --save-index'-[File, Art, Cur] ].
