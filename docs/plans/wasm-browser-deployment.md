@@ -405,7 +405,8 @@ Applied in that file alongside this plan:
    `crosswordsmith.qlf` **with `node build.wasm/src/swipl.js`**; verified
    self-contained (loads with no source reachable). *Still to productionise:*
    promote `solve_browser.pl` → an exported `browser.pl`, reuse the CLI size/mode
-   resolvers (the spike takes size/mode straight from the payload).
+   resolvers (the spike takes size/mode straight from the payload). **Scoped
+   predicate-by-predicate in §9.1.**
 4. ✅ **DONE 2026-07-05.** Worker harness runs end-to-end in **headless Chrome** —
    one solve round-trip renders a grid; gates #5, #6 passed. Fixes folded in:
    `window` shim, absolute-URL consult, JSON-in (§6). **Gate #1 also cleared**
@@ -414,6 +415,129 @@ Applied in that file alongside this plan:
    boundary, not the heartbeat, is what isolates the UI), and `worker.terminate()`
    is a prompt cancel. Heartbeat found *not* load-bearing; kept at 50000 (see §7).
 5. Only then: the real UI.
+
+### 9.1 Sub-plan — promote the browser entry to an exported `browser.pl` module
+
+*Stress-tested 2026-07-05: a read-only red-team pass re-verified every claim against
+source and surfaced three correctness gaps (per-request state reset, error channel,
+in-process golden capture) plus missing build/loader wiring — all folded in below.*
+
+Scopes phase-3's productionization tail (item 3). Two concerns in one deliverable:
+**(A) API hygiene** — replace the spike's `Module:Pred` reaches with a declared
+public surface; **(B) resolver reuse** — drive the browser through the *same*
+option-resolution as the CLI so the two can't drift. Nothing here fixes a live bug:
+the worker's JSON path already flows through the **exported** `arrange_solve/4` and
+is byte-identical to golden CLI output for the features it exposes (fixed/max size,
+strict/best-effort). Parity + hygiene, not a fix.
+
+**Architecture (corrected by the review).** The *logic* moves into a new **project
+module `prolog/crosswordsmith/browser.pl`** (`:- module(crosswordsmith_browser,
+[browser_solve_json/2])`), loaded via `load.pl` and folded into the qlf by
+`include(user)`. The client file **`wasm/client/solve_browser.pl` STAYS** as the
+thin worker entry: the worker calls `solve_browser_str/2` **unqualified**
+(worker.js:88) and `build-wasm.sh` qcompiles `solve_browser.pl` by name into
+`crosswordsmith.qlf` (build-wasm.sh:108/110) — so that file keeps
+`solve_browser_str/2`/`_json/2` in `user`, now as **thin adapters delegating to
+`crosswordsmith_browser:browser_solve_json/2`**. Worker and build stay untouched.
+(Renaming the client entry instead would force edits to worker.js, the build script,
+and ~6 README refs — avoid.)
+
+**‼️ Mandatory new invariant — per-request state reset (top gap the review found).**
+Seed and check-target live in **instance-global mutable state** the reused WASM
+instance carries across solves, and `{engine:true}` does **not** clear it:
+`set_search_seed/1` reseeds the global RNG (`set_random(seed(N))`, core.pl) and
+asserts `search_seed/1`; `set_check_target/1` asserts `check_target_override/1`
+(arrange.pl). The CLI is immune only because it's a fresh process **and**
+re-establishes a clean baseline every run (`set_check_target(-1)`,
+`apply_seed_mode(none)→set_search_seed(-1)`). So `browser_solve_json/2` **must reset
+unconditionally at the top of every request** — `set_search_seed(-1)`,
+`set_check_target(-1)`, `set_verbose(false)` — before applying request keys, or one
+user's `seed:42`/`checkTarget:N` leaks into the next seedless solve. The spike has no
+such step; here it is required.
+
+**Error channel — resolvers can't be lifted verbatim.** The CLI resolvers report
+errors via `cli_error/1`, which is **script-local in `crosswordsmith`** and does
+`format(user_error,…), fail` — it neither throws nor halts. So (a) a resolver clause
+moved into a module still calls `cli_error` → **undefined predicate** at runtime;
+(b) even if reachable, a *failing* resolver yields no `forEach` binding, which the
+worker reports as the generic `"no layout (search failed)"` (worker.js:93) with the
+real reason lost to a wasm console. The lift must therefore **refactor error branches
+to `throw(error(browser_…, _))`** (caught by the worker's `try/catch`, worker.js:98,
+→ an error-JSON reply), with the CLI adapter catching-and-`cli_error`-ing to preserve
+today's CLI UX. This refactor is a **prerequisite of Part B**, not an afterthought.
+
+**Part A — the module + public API.**
+
+| predicate | file:line | today | action |
+|---|---|---|---|
+| `arrange_solve/4` | arrange.pl:21 | ✅ exported | reuse as-is (output path already does) |
+| `doc_to_words/2` | core.pl:204 | ❌ internal | **export from core.** It's the JSON-only post-parse mapping (schema→words), *not* the full `load_clues/2` (which also dispatches `.pl` terms) — correct for a JSON-only browser. |
+| `arrange_best_layout/5`, `arrange_diag_layout_dict/5` | arrange.pl | ❌ internal | only the *illustrative* dict path (`solve_browser/2`) uses them — **drop that path** (JSON-in/out is all the browser needs). Nothing else depends on them (arrange uses them internally at 290/392/890; `inference_parity.pl` uses the `/6` arity). |
+
+Dropping the dict path means **`browser_selftest` must be updated** — it calls
+`solve_browser/2` first (solve_browser.pl:114), so it is *not* "re-run unchanged".
+
+**Part B — lift the CLI resolvers into a shared module.** All live **script-local in
+`crosswordsmith`**; "reuse" = extract the logic into a module (e.g.
+`crosswordsmith_request`, or `core`/`arrange`), leaving the CLI a thin `Opts`→values
+adapter. Every entry below is **logic-pure but errors via `cli_error`** — i.e. each
+needs the error-channel refactor above before it can be shared:
+
+| resolver | `crosswordsmith` line | nature | split action |
+|---|---|---|---|
+| `resolve_size_flags/4` | 234–237 | logic-pure; err→cli_error | move + export; browser calls directly |
+| `validate_size_flag/2`, `resolve_size/2` | 226–228, 241–243 | logic-pure; err→cli_error | move + export (positive-int / default-15 guards) |
+| `drop_contract/2` | 165–171 | reads `Opts` | split: pure `drop_of(Strict,Best,Drop)` + CLI adapter |
+| `seed_mode/3` | 194–197 | logic-pure; err→cli_error | move + export |
+| `validate_seed/1`, `guard_seed_combos/4` | 187–189, 203–210 | logic-pure; err→cli_error | move + export |
+| `apply_seed_mode/1` | 214–219 | state-setting **+ side effects** | delegates to core's exported `set_search_seed/1`·`set_shuffle_seed/1`, but its `shuffle` clause also `verbose_report`s to `user_error` and the fresh seed needs surfacing to JS, not stderr — prefer calling the two core setters directly and returning the seed in the result over moving the wrapper |
+| `set_check_target/1`, `validate_check_target/1` | arrange (exported) / 178–180 | mixed | `set_check_target/1` exported already; move `validate_check_target/1` |
+| `load_fragment/3` | arrange.pl:538 (exported) | **file I/O** | pure core genuinely is `fragment_dict_words/3` (open+read wraps it); add in-memory `load_fragment_dict/3` (JSON text→dict→`fragment_dict_words/3`) — the exact `doc_to_words`-vs-`load_clues` split. Export `fragment_dict_words/3` if needed. |
+| `reconcile_fragment_size/3` | arrange (exported) | pure (throws on mismatch) | reuse as-is |
+| `arrange_action/8` | 247–268 | **not pure** — file I/O (`with_output`, `load_fragment`) + `cli_error` | mirror as `browser_action/…`: swap `with_output`→`with_output_to(atom(...))`, `load_fragment`→`load_fragment_dict`, `cli_error`→throw; routes plain/fragment/candidates/enumerate |
+
+**Part C — input schema growth.** `browser_solve_json/2`'s dict gains optional keys
+mapping 1:1 to CLI flags, each defaulting to today's behaviour when absent (**after**
+the mandatory reset above): `maxSize` (↔ `--max-size`, exclusive with `size`),
+`fragment` (a fragment **dict**, not a path), `seed`/`shuffle`, `checkTarget`,
+`candidates`, `enumerate`. Absent ⇒ current fixed-size / strict path. (Fragment
+sub-dicts arrive already-parsed — watch `default_tag` consistency vs the CLI's
+file-read path; `fragment_dict_words/3` is tag-agnostic, but assert it in Part D.)
+
+**Part D — verification (parity gate).** Prove `browser_solve_json/2` output === the
+golden arrange bytes for the *same* request. **Capture golden IN-PROCESS**, not by
+shelling to the CLI: `wasm/test/inference_parity.pl` deliberately avoids
+`library(process)`, `with_output/2` has **no `-`→stdout case** (`--out -` writes a
+file literally named `-`), and loading the `crosswordsmith` script fires its
+`:- initialization(main)`→`halt`. So the harness (load via `load.pl`, no `process`)
+diffs the browser JSON atom against a sibling `with_output_to(string(Golden),
+arrange_solve(Words,Grid,Drop,Mode))` (+ the fragment/candidates/enumerate variants).
+Matrix: {fixed, max} × {strict, best-effort} × {no-seed, seed N, fragment} on a
+couple of ladder fixtures — **skip the `best-effort × seed` cells**
+(`guard_seed_combos/4` rejects them by design; assert they error instead).
+Byte-identical across the valid matrix = done. Also re-run the (updated)
+`browser_selftest` + `wasm/test/headless.mjs`.
+
+**Build & loader wiring (don't forget).** Adding the module means **`load.pl`** gains
+`:- use_module(crosswordsmith(browser)).` (after arrange, load.pl:26+) so
+`browser_solve_json/2` is defined at qcompile time and folded into the qlf.
+**`build-wasm.sh` and `worker.js` stay as-is** *because* the client entry keeps its
+`solve_browser.pl` name and `solve_browser_str/2`/`_json/2` in `user`. A later rename
+of the client entry would require updating build-wasm.sh:108/110, worker.js:88, and
+the `wasm/README.md` refs together.
+
+**Cut lines (incremental landing).** *Minimal* = Part A only, **keeping** the local
+size/mode/drop helpers (moved into `browser.pl`; the "delete, superseded by B" step
+waits for B): a new module + one `core` export + one `load.pl` line — **low
+conflict** (no shared *logic*, and the `crosswordsmith` script untouched), so it can
+land on the first post-rebase pass. *Full* = A+B+C+D: CLI feature parity, incl. the
+error-channel refactor and per-request reset. **Only Part B is genuinely
+conflict-heavy** (surgery on the `crosswordsmith` script + `cli_error`); schedule Full
+behind the real UI (item 5), which is what actually needs fragments/seeds.
+
+*(This whole sub-plan is doc-only regardless: the branch is parked by decision until
+the fill campaign quiets and this branch rebases — see §1/the branch status. The
+Minimal/Full split above governs the order of work* once *it unparks.)*
 
 ---
 
