@@ -58,8 +58,11 @@ browser_dispatch(Verb, Payload, JsonEnvelope) :-
           Outcome = thrown(Err)),
     envelope_verb(Verb, VerbA),
     outcome_envelope(VerbA, Id, Outcome, Envelope),
+    % width(0): a single-line wire envelope — nothing downstream reads the
+    % bytes (JSON.parse both ways, DEC-8), so pretty-printing only costs
+    % transport size and breaks line-oriented harnesses.
     with_output_to(atom(JsonEnvelope),
-                   json_write_dict(current_output, Envelope)).
+                   json_write_dict(current_output, Envelope, [width(0)])).
 
 % --- per-request state reset (strategy §3.2) ---------------------------------
 % Unconditionally clear the ONLY three mutable module globals before every

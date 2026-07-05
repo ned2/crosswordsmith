@@ -1,0 +1,81 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>crosswordsmith SDK harness</title>
+<!--
+  harness.html - the minimal SDK consumer. NOT a product UI (the spike demo was
+  retired with the old worker protocol): this page exists so (a) the browser
+  smoke path stays testable end-to-end through the real SDK facade
+  (wasm/test/headless.mjs drives it) and (b) a human can open it to eyeball the
+  engine. Serve the wasm/ directory as the web root (sdk/ and client/ are
+  siblings):  ( cd wasm && python3 -m http.server 8080 )
+  then open http://localhost:8080/client/harness.html
+
+  ?noauto  - don't boot/solve on load (raw-worker probes use the page only as
+             a same-origin host and must not pay for idle SDK workers).
+  window.harness = { boot(), cw, ready, randomSeed, CancelledError } is the
+  hook the headless tests drive the facade through.
+-->
+<style>
+  body { font: 14px/1.4 system-ui, sans-serif; margin: 2rem; }
+  #grid { font: 16px/1.3 ui-monospace, monospace; letter-spacing: .2em; }
+</style>
+<h1>crosswordsmith SDK harness</h1>
+<div id="status">booting…</div>
+<pre id="grid"></pre>
+<script type="module">
+  import { createCrosswordsmith, randomSeed, CancelledError }
+    from "../sdk/crosswordsmith.mjs";
+
+  const $ = (id) => document.getElementById(id);
+
+  const harness = {
+    randomSeed,
+    CancelledError,
+    cw: null,
+    ready: null,
+    boot() {
+      if (!harness.ready) {
+        harness.ready = createCrosswordsmith().then((cw) => {
+          harness.cw = cw;
+          return cw;
+        });
+      }
+      return harness.ready;
+    },
+  };
+  window.harness = harness;
+
+  const renderGrid = (layout) =>
+    layout.grid
+      .map((row) => row.map((c) => (c === null ? "·" : c.letter)).join(" "))
+      .join("\n");
+
+  if (!new URLSearchParams(location.search).has("noauto")) {
+    (async () => {
+      try {
+        const cw = await harness.boot();
+        $("status").textContent =
+          `engine ready (swipl ${cw.version.engine.swipl}, sdk ${cw.version.sdk}) — solving…`;
+        const res = await cw.arrange({
+          clues: [{ answer: "CAT" }, { answer: "CAR" }, { answer: "ARC" },
+                  { answer: "RAT" }, { answer: "TAR" }],
+          size: 5,
+        });
+        if (res.status === "success") {
+          $("grid").textContent = renderGrid(res.result);
+          $("status").textContent =
+            `placed ${res.result.words.length} words on ` +
+            `${res.result.gridLength}×${res.result.gridLength}`;
+        } else if (res.status === "failure") {
+          $("status").textContent = `failure: ${res.detail.reason}`;
+        } else {
+          $("status").textContent = `error: ${res.error.type} — ${res.error.message}`;
+        }
+      } catch (e) {
+        $("status").textContent = `error: ${e}`;
+      }
+    })();
+  } else {
+    $("status").textContent = "noauto (host page for the test probes)";
+  }
+</script>
