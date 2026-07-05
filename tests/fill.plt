@@ -240,8 +240,9 @@ test(fill_index_version_mismatch_refused,
 test(fill_index_swi_mismatch_refused,
      [throws(error(fill_index_swi('0.0.0', _), _))]) :-
     empty_assoc(E), tmp_path(AF),
+    % version 2 (current schema) so the SWI gate is reached, not the version gate.
     setup_call_cleanup(open(AF, write, S, [type(binary)]),
-                       fast_write(S, fill_index(1, [swi_version('0.0.0'), dict_sha256(x)], E, E)),
+                       fast_write(S, fill_index(2, [swi_version('0.0.0'), dict_sha256(x)], E, E)),
                        close(S)),
     setup_call_cleanup(true,
                        crosswordsmith_fill:fill_load_index(AF, none, _, _),
@@ -262,6 +263,62 @@ test(fill_index_malformed_refused,
 test(fill_index_missing_refused,
      [throws(error(fill_index_missing(_), _))]) :-
     crosswordsmith_fill:fill_load_index('/nonexistent/f-l2/no.idx', none, _, _).
+
+% --- F-H2: v2 bitset masks (bignum counting; masks OPT-IN via --masks) --------
+% The whole F-H2 correctness claim: for EVERY bound pattern, popcount of the mask
+% AND-chain equals the length of the ordset intersection. A masks-mode v2
+% artifact (fill_save_index/3 with masks(true)) must carry masks
+% (Masks = masks(_)), and mask_count/4 must agree with index_intersection/4 +
+% length on a broad deterministic sample at 10k. If these ever diverged the MRV
+% counts would differ and the filled grid could change.
+test(fill_index_v2_mask_count_matches_ordset) :-
+    tmp_path(AF),
+    crosswordsmith_fill:fill_save_index('fixtures/dict/enable_10k.txt', AF, [masks(true)]),
+    crosswordsmith_fill:fill_load_index(AF, none, _DBL, Idx, Masks),
+    delete_file(AF),
+    Masks = masks(MA),                       % a masks-mode artifact MUST carry masks
+    findall(L-B, sample_pattern(L, B), Patterns),
+    Patterns = [_|_],                        % non-empty sample
+    forall( member(Len-Bound, Patterns),
+            ( crosswordsmith_fill:index_intersection(Bound, Len, Idx, OrdI),
+              length(OrdI, OrdN),
+              crosswordsmith_fill:mask_count(Bound, Len, MA, MaskN),
+              OrdN =:= MaskN ) ).
+
+% The DEFAULT v2 build (fill_save_index/2, no --masks) carries NO masks: the
+% loader hands back Masks == none and counting runs the ordset kernel - the
+% candidate_count/5 `none` clause agrees with the /4 reference on both branches
+% (all-unbound and bound), and an artifact-mode fill completes. This pins the
+% no-size-tax default path (the F-H2 follow-up's shipping shape).
+test(fill_index_v2_default_no_masks_counts_via_ordsets) :-
+    tmp_path(AF),
+    crosswordsmith_fill:fill_save_index('fixtures/wordlist_sample.txt', AF),
+    crosswordsmith_fill:fill_load_index(AF, none, DBL, Idx, Masks),
+    delete_file(AF),
+    Masks == none,                           % default v2 MUST NOT carry masks
+    % `all` branch and bound branch agree with the /4 reference kernel
+    length(Free, 3),
+    crosswordsmith_fill:candidate_count(Free, DBL, Idx, NAll),
+    crosswordsmith_fill:candidate_count(Free, DBL, Idx, Masks, NAll),
+    Bound = ['C', _, _],
+    crosswordsmith_fill:candidate_count(Bound, DBL, Idx, NB),
+    crosswordsmith_fill:candidate_count(Bound, DBL, Idx, Masks, NB),
+    NB =:= 2,
+    % and a no-masks artifact-mode fill completes on the ordset kernel
+    crosswordsmith_fill:fill_grid('fixtures/fill_grid_3.json', _Size, Slots, _),
+    crosswordsmith_fill:fill_attempt(Slots, Slots, DBL, Idx, filled, Numbered, _),
+    findall(A, ( member(W, Numbered), pw_dir(W, across), pw_answer(W, A) ), Across),
+    Across == ['CAT', 'ORE', 'WED'].
+
+% Deterministic bound patterns, lengths 3-6: single-bound cells over a letter
+% spread (incl. rare Q/Z -> often empty intersections) and 0-anchored two-cell
+% patterns. Covers the all-idx branch, dead cells (mask 0), and multi-cell chains.
+sample_pattern(Len, [P-C]) :-
+    member(Len, [3,4,5,6]), between(0, 5, P), P < Len,
+    member(C, ['A','E','I','O','S','T','R','N','Q','Z']).
+sample_pattern(Len, [0-C0, P1-C1]) :-
+    member(Len, [4,5,6]), between(1, 5, P1), P1 < Len,
+    member(C0, ['S','C','T','B']), member(C1, ['A','E','O']).
 
 :- end_tests(fill).
 

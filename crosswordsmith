@@ -402,6 +402,8 @@ fill_opts_spec(
        longflags([dict]),                    help('word list, one per line (default: a small bundled sample; real fills: --dict UKACD18)')],
       [opt(save_index), type(atom), default(''), meta('FILE'),
        longflags(['save-index']),            help('build a reusable index artifact from --dict, write it to FILE, and exit (no grid/fill; skips the parse+index tax on later fills)')],
+      [opt(masks), type(boolean), default(false),
+       longflags([masks]),                   help('with --save-index: also embed bitset counting masks (faster fill phase for search-heavy grids / WASM; ~32% bigger artifact that loads slower - skip for quick interactive fills)')],
       [opt(index), type(atom),    default(''), meta('FILE'),
        longflags([index]),                   help('fill using a prebuilt index artifact (from --save-index) instead of parsing --dict; also pass --dict to verify the artifact matches that dictionary')],
       [opt(verbose), type(boolean), default(false),
@@ -450,9 +452,13 @@ fill_dispatch(Opts, Positional) :-
 
 % BUILD mode: no grid, no fill. Serialize the index built from --dict (or the
 % bundled sample) to the artifact file. --out/--seeds/--grid are ignored here.
+% --masks opts into embedding the F-H2 bitset counting masks (fill-phase wall
+% win for search-heavy grids / WASM at a ~32% artifact-size + load-wall cost;
+% the default artifact stays small and loads fast).
 fill_build_index(SaveIdx, Opts) :-
     memberchk(dict(Dict0), Opts), ( Dict0 == '' -> default_dict(Dict) ; Dict = Dict0 ),
-    fill_save_index(Dict, SaveIdx),
+    memberchk(masks(WithMasks), Opts),
+    fill_save_index(Dict, SaveIdx, [masks(WithMasks)]),
     verbose_report("fill: wrote index artifact ~w from ~w~n", [SaveIdx, Dict]).
 
 % FILL mode (raw or artifact-consuming): --grid required.

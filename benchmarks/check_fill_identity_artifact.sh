@@ -19,6 +19,11 @@
 #
 #   benchmarks/check_fill_identity_artifact.sh          # CHECK: diff, exit 0/1
 #
+# FILL_SAVE_INDEX_FLAGS (env, optional): extra flags for the artifact build.
+# FILL_SAVE_INDEX_FLAGS=--masks proves identity with the F-H2 bitset counting
+# masks ACTIVE (the bignum count kernel); unset/empty exercises the default
+# no-masks v2 artifact (the ordset kernel). Both must match the same manifest.
+#
 # </dev/null so a load error can never park swipl at an stdin-blocking toplevel.
 
 set -u
@@ -42,13 +47,15 @@ seen="$(mktemp)"
 trap 'rm -rf "$artdir" "$seen"' EXIT
 
 # Build one artifact per distinct dict (cache keyed by a slugged dict path).
+# FILL_SAVE_INDEX_FLAGS (word-split on purpose) selects the artifact flavour.
 artifact_for() {
     local dict="$1"
     local slug art
     slug="$(printf '%s' "$dict" | tr -c 'A-Za-z0-9' '_')"
     art="$artdir/$slug.idx"
     if [ ! -f "$art" ]; then
-        if ! "$CLI" fill --dict "$dict" --save-index "$art" </dev/null 2>/dev/null; then
+        # shellcheck disable=SC2086
+        if ! "$CLI" fill --dict "$dict" --save-index "$art" ${FILL_SAVE_INDEX_FLAGS:-} </dev/null 2>/dev/null; then
             echo "check_fill_identity_artifact: FAILED to build artifact for $dict" >&2
             return 1
         fi
