@@ -19,7 +19,8 @@
 :- module(crosswordsmith_fill,
           [ fill_solve/4,
             fill_solve_index/5,
-            fill_save_index/2
+            fill_save_index/2,
+            fill_save_index/3
           ]).
 
 :- use_module(library(http/json)).
@@ -542,20 +543,23 @@ empty_slots(Slots, DictByLen, Index, Bad) :-
 %     Version - integer artifact-SCHEMA version (fill_index_format_version/1). A
 %               schema change bumps it; the loader refuses an unknown version.
 %     Meta    - a keyed list [Key(Value), ...] carrying integrity + provenance
-%               AND, since schema v2 (F-H2), the precomputed bitset masks under a
-%               masks(...) key (the realized extension point the F-L2 design
-%               reserved; the Version bump 1->2 makes it a clean break - v1
-%               artifacts are refused, never misread).
+%               AND, since schema v2 (F-H2), OPTIONALLY the precomputed bitset
+%               masks under a masks(...) key (the realized extension point the
+%               F-L2 design reserved; the Version bump 1->2 makes it a clean
+%               break - v1 artifacts are refused, never misread).
 %       dict_sha256(Hex) - SHA-256 of the source dict file's bytes (staleness)
 %       swi_version(V)   - the SWI-Prolog that built it (binary-format guard)
 %       words(N)         - dictionary word count (informational)
 %       source(Path)     - the dict path as given at build (informational)
 %       built_epoch(E)   - build time, integer seconds (informational)
-%       masks(MaskAssoc) - [v2] assoc k(Len,Pos,Char) -> bignum; bit i set iff
-%                          bucket index i is in Index's ordset for that key. The
-%                          F-H2 counting kernel AND-folds + popcounts these instead
-%                          of ord_intersection'ing the ordsets (wall win, count
-%                          identical). Built ONLY here (amortized), never at load.
+%       masks(MaskAssoc) - [v2, OPTIONAL - `--save-index --masks` only] assoc
+%                          k(Len,Pos,Char) -> bignum; bit i set iff bucket index
+%                          i is in Index's ordset for that key. The F-H2 counting
+%                          kernel AND-folds + popcounts these instead of
+%                          ord_intersection'ing the ordsets (wall win, count
+%                          identical). Built ONLY here (amortized), never at
+%                          load; absent -> the loader hands back Masks = none and
+%                          counting stays on the ordset kernel (no size/load tax).
 %
 % ON-DISK FORMAT: fast_write/fast_read (library(fastrw)) - MEASURED the fastest
 % candidate (F-L2 results doc): ~20x the post-F-L1 warm raw load at 172k, smaller
@@ -563,27 +567,42 @@ empty_slots(Slots, DictByLen, Index, Bad) :-
 % format is SWI-version-bound (documented), so the artifact embeds swi_version
 % and the loader REFUSES a mismatch (rebuild explicitly, never silently).
 
-% Schema version 2 (F-H2): the Meta list now also carries a masks(MaskAssoc) key
-% (precomputed bignum bitsets for the counting kernel). The version bump is a hard
-% break - a v1 artifact (or any Version != 2) is refused by the loader with the
-% existing rebuild message. Masks are built ONLY here (the amortized --save-index
-% step - the gate probe's binding condition), never at load or fill time.
+% Schema version 2 (F-H2): the Meta list MAY carry a masks(MaskAssoc) key
+% (precomputed bignum bitsets for the counting kernel). Masks are OPTIONAL within
+% v2: the default build omits them (F-H2 follow-up finding - masks inflate the
+% artifact ~32% and tax EVERY load ~+30% fast_read wall, a net end-to-end LOSS on
+% load-dominated fills), and `--save-index --masks` opts in for search-heavy /
+% WASM deployments where the 23-29% fill-phase win outweighs the load tax. The
+% loader accepts both shapes (absent key -> ordset kernel). The version bump is a
+% hard break - a v1 artifact (or any Version != 2) is refused by the loader with
+% the existing rebuild message. Masks are built ONLY here (the amortized
+% --save-index step - the gate probe's binding condition), never at load or fill.
 fill_index_format_version(2).
 
-% BUILD: load_dict the frozen file, derive the parallel bitset masks FROM the
-% ordset Index (so popcount agreement is by construction), then serialize the
-% exact structures + meta. This is the one-off cost (~ current load + a mask
-% build + a fast_write); the CLI's `fill --save-index FILE` seam calls it.
+% BUILD: load_dict the frozen file and serialize the exact structures + meta.
+% This is the one-off cost (~ current load + a fast_write); the CLI's
+% `fill --save-index FILE` seam calls it. /2 = the default build (no masks).
 fill_save_index(DictFile, OutFile) :-
+    fill_save_index(DictFile, OutFile, []).
+
+% /3: Options is a keyed list; masks(true) additionally derives the parallel
+% bitset masks FROM the ordset Index (so popcount agreement is by construction)
+% and embeds them as the masks(...) Meta key. Any other Options content is
+% ignored (same permissive convention as Meta itself).
+fill_save_index(DictFile, OutFile, Options) :-
     load_dict(DictFile, DictByLen, Index),
-    build_masks(Index, MaskAssoc),
     dict_word_count(DictByLen, NWords),
     fill_file_sha256(DictFile, Sha),
     fill_swi_version(Swi),
     get_time(TF), Epoch is round(TF),
     fill_index_format_version(Version),
-    Meta = [ dict_sha256(Sha), swi_version(Swi), words(NWords),
-             source(DictFile), built_epoch(Epoch), masks(MaskAssoc) ],
+    Meta0 = [ dict_sha256(Sha), swi_version(Swi), words(NWords),
+              source(DictFile), built_epoch(Epoch) ],
+    (   memberchk(masks(true), Options)
+    ->  build_masks(Index, MaskAssoc),
+        append(Meta0, [masks(MaskAssoc)], Meta)
+    ;   Meta = Meta0
+    ),
     Artifact = fill_index(Version, Meta, DictByLen, Index),
     setup_call_cleanup(open(OutFile, write, S, [type(binary)]),
                        fast_write(S, Artifact),

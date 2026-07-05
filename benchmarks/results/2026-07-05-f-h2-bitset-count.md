@@ -183,13 +183,16 @@ for the paired comparison:
 |------|----------------:|----------------:|:--------------------:|
 | g09_full (172k art) | 910ms | 709ms | **−22%** (search-dominated → clear win) |
 | g17_50k (50k art)   | 710ms | 611ms | **−14%** (win; small artifact) |
-| g21_full (172k art) | 510ms | 611ms | **+20% SLOWER** (load-dominated + tiny fill) |
+| g21_full (172k art) | 510ms | 611ms | **+20% SLOWER** (load-dominated + tiny fill) [CORRECTED below: true net ≈ +2-3%; CLI-timer quantization] |
 
 **The size tax is the story.** On g21_full the fill phase is ~0.07s of a ~0.5s
 CLI; the bignum kernel saves ~0.02s but the +32% mask-bearing artifact costs
-~+0.09s per load (fast_read +0.031s plus GMP allocation/GC of ~4.7MB of bignums).
-Net end-to-end LOSS. On search-dominated rungs (g09/g17_50k) the fill saving
-exceeds the load tax → net win.
+more on every load (fast_read +0.031s at 172k). Net end-to-end LOSS — though
+the follow-up's paired re-measurement corrects the magnitude to ~+10-16ms
+(~+2-3%), not +20% (see "Measurement correction" in the follow-up section: this
+host's CLI wall is ~100ms-quantized and g21's true delta straddles a quantum
+boundary). On search-dominated rungs (g09/g17_50k) the fill saving exceeds the
+load tax → net win.
 
 ---
 
@@ -197,12 +200,15 @@ exceeds the load tax → net win.
 
 1. **The gate probe's "artifact masks = pure win everywhere" is REFUTED for
    load-dominated rungs.** Construction amortizes to build time (confirmed), but
-   the mask BYTES do not: every `--index` load pays for a +32% artifact (~+0.09s
-   at 172k incl. GMP alloc). So end-to-end artifact-mode wall REGRESSES on
+   the mask BYTES do not: every `--index` load pays for a +32% artifact
+   (fast_read +0.031s at 172k). So end-to-end artifact-mode wall REGRESSES on
    load-dominated rungs (the ladder majority: the small-grid `*_full` rungs all
    load the 172k artifact and have sub-0.1s fill phases) and WINS only on the
    search-dominated rungs (g09_full, g17_50k, and g15-class). Masks are amortized
    in COMPUTE, not in LOAD SIZE — the correction this experiment supplies.
+   (Magnitude corrected in the follow-up section: the g21 regression is
+   ~+10-16ms ≈ +2-3%, not +20% — CLI-timer quantization inflated the original
+   reading; direction unchanged.)
 2. **RSS.** g21_full's F-H1 RSS anomaly is unrelated; the bignum masks add ~4.7MB
    resident to the loaded artifact at 172k (reporting-only, never gated).
 3. **No inference regression anywhere** (raw +0.00%); the artifact-mode
@@ -231,7 +237,7 @@ shipping policy is the open question for the orchestrator).
   is HOLD/REJECT-as-default; the fill-phase kernel itself is sound and worth
   keeping.
 
-### Draft ledger entry
+### Draft ledger entry (superseded by the follow-up variant below)
 
 > ### F-H2 — bitset counting via artifact v2 — ACCEPT-WITH-CONDITION (masks not default)
 >
@@ -250,3 +256,129 @@ shipping policy is the open question for the orchestrator).
 > g17_50k −14%) but REGRESSES load-dominated (g21 +20%).** The gate probe's
 > "artifact masks = pure win everywhere" holds for construction, fails for load
 > size. Recommend masks opt-in / WASM-scoped, not default-on.
+
+---
+
+## FOLLOW-UP VARIANT — masks optional within v2 (adjudicated; strict bar)
+
+The orchestrator adopted ACCEPT-WITH-CONDITION and authorized exactly one
+follow-up: make masks OPTIONAL within schema v2 — default build has no masks
+(no size tax, no regression anywhere), `--masks` opts in for search-heavy /
+WASM deployments. Pre-declared bar: (1) default v2 == v1 in size/load/CLI wall,
+(2) masks mode retains the fill-phase win, (3) raw +0.00% both layers,
+(4) identity 11/11 in three modes, (5) suite green + a no-masks-default test,
+(6) 3x reproduction. All six met; evidence below.
+
+### Change
+
+- `fill_save_index/3` (new export): `masks(true)` in Options embeds the masks
+  Meta key; `fill_save_index/2` = `/3` with `[]` (default: NO masks). Masks are
+  still derived from the ordsets, still build-time only.
+- Loader unchanged in shape: `fill_load_index/5` already returns `masks(_)` iff
+  the key is present, else `none` → ordset kernel. v2-without-masks is a valid
+  artifact; v1 files still refuse with the rebuild message (policy unchanged).
+- CLI: new boolean `--masks` (help names the search-heavy/WASM use case and the
+  size/load cost), passed as `masks(Bool)` to `fill_save_index/3`. House style
+  (optparse boolean, longflags, same spec list).
+- Tests: the mask-equivalence test now builds with `masks(true)`; NEW test
+  `fill_index_v2_default_no_masks_counts_via_ordsets` pins the default shape
+  (Masks == none; /5 `none` kernel agrees with the /4 reference on both
+  branches; artifact-mode fill completes). 214 passed / 0 failed.
+- `check_fill_identity_artifact.sh`: optional `FILL_SAVE_INDEX_FLAGS` env is
+  word-split into the build command (empty = default no-masks build; `--masks`
+  = masks-active build). Default invocation unchanged.
+
+### Bar 1 — default v2 == v1 (no regression on the default path): **MET**
+
+- **Size: byte-identical** to v1 at all three scales (CLI builds):
+  918,301 / 4,292,988 / 14,602,276 bytes (10k/50k/172k) — the default Meta has
+  exactly the v1 keys; only the Version integer differs.
+- **Load wall (fast_read, median of 5, 3 batches): within noise** —
+  172k: v1 0.1020-0.1069s vs default-v2 0.1013-0.1086s; 50k: 0.0308-0.0329 vs
+  0.0306-0.0325; 10k: 0.0068-0.0070 vs 0.0068-0.0072 (deltas ≤2%, both signs).
+- **End-to-end CLI wall (paired, interleaved batches, 7-sample medians, 3
+  batches, exit + output checked every sample): identical to ≤1ms** —
+  g21_full: v1 511/511/511ms vs default-v2 511/511/510ms;
+  g11_full: v1 412/411/413ms vs default-v2 412/412/413ms. Zero failures.
+- Default build time ≈ v1 build time (2.6s vs 2.4s at 172k in-process, no mask
+  step; the delta is run-to-run load_dict variance, the mask step is absent).
+
+### Bar 2 — masks mode retains the fill-phase win: **MET**
+
+Kernel ablation re-run 3x on artifacts built by the NEW `--masks` path:
+fill-phase wall −24.1/−24.7/−25.9% (g09_full), −29.6/−30.5/−32.7% (g17_50k),
+−29.2/−29.5/−30.4% (g21_full); `search_inf` EXACTLY reproduced every run
+(9,244,437 / 8,102,307 / 1,006,317); equivalence IDENTICAL every run. Nothing
+lost in the refactor.
+
+### Bar 3 — raw path: **MET**
+
+`check_fill_baseline.pl --heavy` after the follow-up: exit 0, PASS, every rung
++0.00% on BOTH `search_inf` and `load_inf` (the only non-zero rows are the
+informational cmd_wall/rss lines, never gated).
+
+### Bar 4 — identity 11/11 in THREE modes: **MET**
+
+1. **Raw**: `benchmarks/check_fill_identity.sh` — 11/11 OK.
+2. **Artifact-default (no masks)**: `benchmarks/check_fill_identity_artifact.sh`
+   (no env) — builds default v2, ordset kernel — 11/11 OK.
+3. **Artifact-masks**: `FILL_SAVE_INDEX_FLAGS=--masks
+   benchmarks/check_fill_identity_artifact.sh` — builds masks v2, bignum kernel
+   active — 11/11 OK. All against the same pinned `fill_identity.sha256`.
+
+### Bar 5 — suite green: **MET** (214 passed / 0 failed; goldens + CLI contracts OK)
+
+### Bar 6 — 3x reproduction: **MET**
+
+Ablation 3x (counts byte-exact, above); paired CLI medians 3 interleaved
+batches per rung (bar 1 and the masks-mode table below); fast_read 3 batches.
+
+### Measurement correction (honesty note on the earlier +20% figure)
+
+The paired re-measurement exposed ~100ms quantization in this host's CLI wall
+(samples cluster tightly at ~510/611/712/813/913ms; g21_full v1 is bimodal
+across the 510/611 boundary between sessions). Contemporaneous interleaved
+pairing (3 batches, 7 samples):
+
+| rung | v1 CLI | masks-v2 CLI | net |
+|------|-------:|-------------:|:----|
+| g09_full | 913/913/912ms | 813/812/813ms | **−100ms (−11%)** win |
+| g17_50k  | 713/712/712ms | 613/613/612ms | **−100ms (−14%)** win |
+| g21_full | 611/613/612ms (bimodal 510-613) | 613/612/612ms | **~equal at quantum resolution** |
+
+The g21_full masks-mode net is truly **≈ +10-16ms (~+2-3%)** — from in-process
+components: fast_read +0.031s (172k masks) minus fill-phase −0.021s — not the
++20% the original session's quantized CLI timer suggested (v1 landed in the
+510ms quantum, v2 in the 611ms one). The DIRECTION stands (masks are a net
+end-to-end loss on load-dominated rungs — the size tax exceeds the tiny fill
+win), the magnitude is corrected on the record. Fine-grained deltas in this doc
+rest on the in-process measurements (fast_read + ablation), not the CLI quanta.
+The default-off decision is unaffected either way: default v2 is exactly v1.
+
+### Revised verdict + draft ledger entry
+
+**ACCEPT (kernel + optional masks).** The default path is provably untaxed
+(byte-identical size, identical CLI wall, +0.00% inference); the opt-in delivers
+a reproducible 24-33% fill-phase wall win where fills are search-heavy.
+
+> ### F-H2 — bitset counting via artifact v2 (masks opt-in) — ACCEPTED
+>
+> Bignum `/\`+popcount counting kernel, shipped as OPTIONAL precomputed masks in
+> the schema-v2 index artifact: `fill --save-index` (default) emits v2 WITHOUT
+> masks — byte-identical size to v1 (918,301/4,292,988/14,602,276 at
+> 10k/50k/172k), load + end-to-end CLI wall within noise of v1 (g21_full/g11_full
+> medians equal to ≤1ms, paired interleaved) — and `--masks` opts in for
+> search-heavy/WASM fills. Counting dispatches on the loaded context: masks(_) →
+> `/\`+popcount, none → the unchanged ordset kernel; enumeration stays on
+> ordsets. Phase-A re-attribution gate (post-F-H1): counting = 37.8-47.3% of
+> fill-phase wall, PASS ≥20% on all three hard rungs. Masks mode: fill-phase
+> wall −24-33% (3x, counts exact: g09 14.87M→9.24M, g17_50k 13.77M→8.10M, g21
+> 1.85M→1.01M; inference collapse is measurement-blind, wall is the metric);
+> end-to-end −11%/−14% on g09_full/g17_50k, ~+2-3% on load-dominated g21_full
+> (the +32% artifact-size load tax; original +20% figure corrected — CLI timer
+> quantization). Mask-construction tax 0.76-0.78s at 172k, build-time only
+> (matches the gate probe). Raw path +0.00% BOTH layers, 11/11; identity 11/11
+> in raw, artifact-default, and artifact-masks modes; 214 tests green incl.
+> mask==ordset equivalence + default-no-masks pins. Gate-probe correction
+> stands on the ledger: artifact masks amortize CONSTRUCTION, not LOAD SIZE —
+> hence opt-in, never default-on.
