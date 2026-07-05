@@ -20,6 +20,7 @@ run_suite :-
     consult('tests/export.plt'),
     consult('tests/stockgrid.plt'),
     consult('tests/fill.plt'),
+    consult('tests/browser.plt'),
     % summary(S) gives us the counts AND stops run_tests/2 from failing on
     % its own, so we control the exit code explicitly from the dict. Note:
     % run_tests/2 and the summary/1 option are undocumented in the SWI 10.0.2

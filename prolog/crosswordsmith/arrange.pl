@@ -22,6 +22,9 @@
             arrange_fragment_solve/5,
             arrange_candidates_solve/5,
             arrange_enumerate_solve/2,
+            % the browser/WASM envelope seam (no emit, tagged outcome) —
+            % crosswordsmith_browser is its consumer
+            arrange_outcome/5,
             load_fragment/3,
             reconcile_fragment_size/3,
             set_check_target/1,
@@ -457,6 +460,45 @@ arrange_solve(Words, GridLen, strict, SizeMode) :-
     arrange_strict_solve(Words, GridLen, SizeMode).
 arrange_solve(Words, GridLen, best_effort, SizeMode) :-
     arrange_best_effort_solve(Words, GridLen, SizeMode).
+
+% arrange_outcome(+Words, +GridLen, +Drop, +SizeMode, -Outcome)
+% The browser/WASM envelope seam (wasm-sdk-strategy §3, DEC-7): same search as
+% arrange_solve/4 but EMITS NOTHING and NEVER FAILS — it returns a tagged
+% outcome carrying the diagnostics-bearing layout dict, so the caller
+% (crosswordsmith_browser) can wrap every result in a discriminated envelope
+% instead of collapsing the non-happy paths into a bare fail. Tags:
+%   placed(Dict)       strict search placed a full interlock
+%   not_proven         the inference budget elapsed first (feasibility open)
+%   infeasible(Bad)    strict search completed with no full placement; Bad =
+%                      the genuinely-uncrossable answers ([] = interlock/size)
+%   best_effort(Dict)  best-effort placement (drops ride
+%                      Dict.diagnostics.arrange.dropped)
+%   nothing_placeable  best-effort could not place a single word
+% Throws duplicate_answer(_) like the solve seams; Dict is built by
+% arrange_diag_layout_dict/5 (identical to the emitted payload, framed by
+% SizeMode) but never written, so the envelope nests it as a live dict (DEC-8).
+arrange_outcome(Words, GridLen, strict, SizeMode, Outcome) :-
+    !,
+    check_unique_answers(Words),
+    arrange_best_layout(Words, GridLen, Numbered, _Reward, Outcome0),
+    (   Outcome0 == placed
+    ->  % once/1: arrange_layout_dict/5's fixed|max clauses leave a spurious
+        % choicepoint (no arg-4 indexing); the dict is single-valued.
+        once(arrange_diag_layout_dict(Numbered, Words, GridLen, SizeMode, Dict)),
+        Outcome = placed(Dict)
+    ;   Outcome0 == not_proven
+    ->  Outcome = not_proven
+    ;   unplaceable_words(Words, Bad),
+        Outcome = infeasible(Bad)
+    ).
+arrange_outcome(Words, GridLen, best_effort, SizeMode, Outcome) :-
+    !,
+    check_unique_answers(Words),
+    (   arrange_best_effort(Words, GridLen, Numbered, _Reward, _NP, _Dropped)
+    ->  once(arrange_diag_layout_dict(Numbered, Words, GridLen, SizeMode, Dict)),
+        Outcome = best_effort(Dict)
+    ;   Outcome = nothing_placeable
+    ).
 
 
 % ===========================================================================

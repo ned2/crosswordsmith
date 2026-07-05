@@ -28,3 +28,4 @@
 :- use_module(crosswordsmith(export)).
 :- use_module(crosswordsmith(stockgrid)).
 :- use_module(crosswordsmith(fill)).
+:- use_module(crosswordsmith(browser)).

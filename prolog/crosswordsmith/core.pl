@@ -17,6 +17,8 @@
           [ % I/O + emit
             with_output/2,
             load_clues/2,
+            % the file-free JSON-document input seam (browser.pl's params path)
+            doc_to_words/2,
             emit_json/3,
             set_verbose/1,
             verbose_report/2,
