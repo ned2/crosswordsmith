@@ -1,7 +1,8 @@
 # Plan: the fill performance campaign
 
-Status: DRAFT (pending critical review). Author: arrange-campaign orchestrator,
-2026-07-05. Companion docs: `docs/research/arrange-perf-campaign-2026-07.md`
+Status: REVIEWED — GO-WITH-CHANGES (red-team review 2026-07-05; all
+amendments folded in below, each marked [RT]). Author: arrange-campaign
+orchestrator. Companion docs: `docs/research/arrange-perf-campaign-2026-07.md`
 (the playbook this reuses), `docs/experiments.md` (ledger; fill entries will
 append there), `docs/research/swi-vm-wasm-performance.md` (WASM cost model).
 
@@ -9,144 +10,172 @@ append there), `docs/research/swi-vm-wasm-performance.md` (WASM cost model).
 
 Make `fill` (Flavour-B dictionary fill of a blocked stock grid, `fill.pl`)
 fast enough for interactive use at realistic scale — 15x15/21x21 grids against
-10k-100k-word dictionaries — both as a native CLI and in the browser via WASM,
-using the same measure-first, byte-identity-gated, ratcheted methodology that
-took arrange down 71-84%.
+10k-100k-word dictionaries — native CLI and browser/WASM, using the
+measure-first, byte-identity-gated, ratcheted methodology from the arrange
+campaign.
 
-## Why there is headroom (assessment, 2026-07-05)
+## Strategic thesis [RT — reframed after empirical refutation]
+
+Fill is NOT arrange. An empirical probe (red-team review) showed fill is
+**search-tree-bound and heavy-tailed**: a trivial open 5x5 against a 500-word
+dictionary saturates a 50M-inference budget; every cell is doubly constrained
+and candidates come from a huge pool, so backtracking is deep and
+content-dependent (the opposite of arrange's shallow-retreat, counting-
+dominated profile). Consequences, stated up front rather than as risks:
+
+- **Per-node wins buy latency on completing instances, never completion.**
+  Halving node cost on a heavy-tail instance just hits the budget cap at 2x
+  the nodes (arrange's P2/P3 decoupling, more severe here — and WASM makes
+  backtracking disproportionately expensive on top).
+- **The determinism charter freezes the tree.** Fill's candidate count is
+  "words matching this slot's bound cells" — deliberately ignoring crossing
+  consistency. True forward-checking/AC pruning would change counts, change
+  MRV selection, and change output: off-limits. So no shippable lever in
+  this campaign reduces the node count of a heavy-tail instance; the
+  envelope lever for fill (like arrange) is a future randomized-restart
+  product feature, out of scope here.
+- Therefore this campaign's honest deliverable is: **fast completion of the
+  completable regime** (and cheap proof of infeasibility), measured on a
+  ladder of instances that complete deterministically.
+
+## Why there is headroom
 
 Fill shares only the periphery with arrange (pw/8 records, numbering, emit,
-fragment seeds, stockgrid masks). Its search core is separate and pre-dates
-the campaign's lessons, except one it already embodies: the shared-cell-
-variable grid (crossings by unification, undo by trail) is the E-H2-native
-design. The identified gaps:
+seeds, stockgrid masks); its search core pre-dates the campaign's lessons,
+except the shared-cell-variable grid, which is already the unification-native
+design. The gaps, ranked by measured evidence [RT]:
 
-1. **No incremental counting.** `select_mrv/6` recomputes candidate counts
-   for EVERY unfilled slot at EVERY node. Binding a word only constrains
-   slots crossing the filled slot; all other counts are provably unchanged —
-   and unlike arrange's over-estimate carry-forward, carried counts here
-   would be EXACT, so the tree and output stay identical by construction.
-2. **Ordset/list machinery at dictionary scale.** Candidate counting does
-   `ord_intersection` over integer ordsets that scale with dictionary size;
-   the literature-standard alternative (this IS the well-studied
-   dictionary-fill problem) is bitset intersection: one unbounded integer
-   per (len,pos,char) index set, `/\` to intersect, `popcount` for the MRV
-   count. Candidate materialization walks `nth0` over list buckets
-   (O(bucket) per candidate); buckets should be compound terms read by
-   `arg/3`.
-3. **Dictionary load is an every-invocation startup tax** (read, normalize,
-   sort, full positional index over all lengths — including lengths the
-   grid has no slot for). WASM roughly triples it.
+1. **Candidate materialization is O(bucket x candidates) per node** —
+   `candidates/4` walks a linear `nth0` per candidate over list buckets
+   (fill.pl:161-164). Measured: 30 candidates over a 5,000-word bucket =
+   1.42 ms/op; the 200-candidate/50k case timed out at micro-bench reps.
+   Likely the dominant search cost at dictionary scale.
+2. **MRV counting does `ord_intersection` at dictionary scale** every node
+   for every unfilled slot. Bigint AND + popcount measured 250-600x faster
+   for the count at 5k-50k-word scale.
+3. **No incremental counting** — `select_mrv/6` recounts EVERY unfilled slot
+   at EVERY node; only slots sharing a newly-bound cell can change.
+4. **Everything is recomputed for the winning slot too** — the full
+   candidate list is materialized before `member/2` + used-word rejection
+   discard most of it (the E-H9 "don't materialize what you'll discard"
+   lesson).
+5. **Dictionary load is an every-invocation startup tax** (full positional
+   index over all lengths, even lengths the grid lacks). WASM ~triples it.
 
-## Constraints (inherited from the arrange campaign charter)
+## Constraints (inherited)
 
-- Deterministic output is a product requirement. All perf work must be
-  order-preserving: same candidate enumeration order, same MRV tie-breaks,
-  byte-identical output. Output-changing ideas escalate to the orchestrator.
-- The ratchet is strict: relative tolerance (0.5%), zero regressions, no
-  input-size-dependent switches or magic constants.
-- Inference counts are the tracked metric (machine-independent, WASM-proxy).
+- Deterministic, byte-identical output; order-preserving changes only;
+  output-changing ideas escalate to the orchestrator.
+- Strict ratchet (relative 0.5%, zero regressions, no input-size switches).
+- Inference counts are the tracked metric; budget-saturating rungs are
+  excluded from the ratchet (they flip on any change).
 
-## Phase 0 — benchmarking build-out (blocking; nothing exists today)
+## Phase 0 — benchmarking build-out (blocking)
 
-Fill's only fixtures are a 3x3 toy grid and a 26-word list; the bench
-machinery (`workloads.pl`, `run_arrange.pl`, `check_baseline.pl`) is
-arrange-only. Deliverables:
+Fill has no bench: a 3x3 toy grid, a 26-word list. Deliverables:
 
-- **Stock-grid fixtures**: legal blocked masks (pass `stockgrid_validate`)
-  at 9x9, 15x15, 21x21 with realistic block density/symmetry; a small
-  deterministic generator or hand-authored masks committed under fixtures/.
-- **Benchmark dictionaries**: a seeded deterministic generator (analogous to
-  `gen_mesh_fixture.py`) producing wordlists at ~5k and ~50k words with
-  roughly natural letter/length distributions. Rationale: license-clean,
-  reproducible, tunable difficulty. (Open question for review: is synthetic
-  letter distribution realistic enough for fill difficulty, which is
-  dictionary-structure-dependent? Fallback: vendor a public-domain list,
-  e.g. ENABLE, as one rung.)
-- **`benchmarks/run_fill.pl`** mirroring run_arrange: command-layer wall/rss
-  AND in-process `fill_attempt` inferences under `call_time`, with a THIRD
-  measured layer fill has that arrange lacks: `load_dict` cost, reported
-  separately from search (so a search win is never masked by load noise and
-  vice versa).
-- **Workload manifest + ratchet**: a fill ladder (grid size x dictionary
-  size x seed density) spanning ~0.1M to ~100M search inferences, chosen by
-  measured cost like the arrange ladder; `fill_baseline.json`; extend
-  `check_baseline.pl` (parameterize the runner+baseline paths) rather than
-  fork it. Same warmup discipline (arrange found a fixed ~7.6k cold/warm
-  JIT wobble; verify fill's equivalent).
-- **A scale golden**: at least one 15x15 fill golden locking byte-identity
-  (the 3x3 golden exercises nothing).
-- Acceptance: counts reproduce at +0.00% across repeated runs; budget-
-  saturating rungs excluded from the ratchet (the P2 lesson: near-cliff
-  marginal instances flip on any change).
+- **Stock-grid fixtures**: legal masks (pass `stockgrid_validate`) at 9x9,
+  15x15, 21x21, realistic block density/symmetry.
+- **Dictionaries** [RT — inverted from draft]: vendor a REAL public-domain
+  wordlist (ENABLE/SCOWL family) as the PRIMARY rung dictionary — fill
+  difficulty is crossing-completion structure, which random synthetic words
+  do not model (they inter-complete far too rarely; this is what saturated
+  the 5x5 probe). A seeded synthetic generator is a SIZE-SCALING knob only.
+  Byte-freeze whatever is committed (load-layer counts depend on exact
+  bytes). ASCII-only for now: `normalize_word`'s `char_type(alpha)` +
+  `string_upper` are locale/Unicode-fragile (fill.pl:129-131) — note at the
+  fixture level, fix out of scope.
+- **Fixture traps** [RT]: `\+ memberchk(Word, Used)` forbids the same word
+  across AND down (fill.pl:196) — planted fixtures must have asymmetric
+  solutions and respect the no-duplicate rule.
+- **`benchmarks/run_fill.pl`**: FOUR attribution buckets [RT]: command
+  (process), dict-load (`inproc` on `load_dict/3`), search (`inproc` on the
+  budget-explicit `fill_attempt/8` with pre-loaded dict), and grid/slot
+  derivation (`fill_grid/4`) either as its own bucket or explicitly inside
+  "rest" — never silently absorbed. The seams already exist (fill.pl:243,
+  :114, :53).
+- **Budget story** [RT]: bench drives `fill_attempt/8` (budget-explicit);
+  the /7 arity hardcodes `fill_budget(800_000_000)` (fill.pl:46) with NO
+  command-layer override — add a `--budget` CLI hook (or reconcile the
+  hardcode with arrange's shipped 500M) as a small pre-campaign fix.
+- **Ratchet** [RT — fork, don't parameterize]: `check_fill_baseline.pl` +
+  `fill_baseline.json` forked from the arrange ratchet. The coupling is the
+  schema, not paths: fill wants TWO measured layers (search_inf gated;
+  load_inf reported, gate-decision explicit) and different rung semantics.
+  Keep the two ratchets independent.
+- **Ladder**: grid x dictionary x seed-density rungs spanning ~0.1M-100M
+  search inferences, chosen by measured cost. Expect this to be Phase 0's
+  hardest problem [RT]: the proven-fast/saturates cliff is steep and
+  dictionary-content-dependent; every rung must complete deterministically
+  with headroom (the arrange P2 lesson, harder here).
+- **A scale golden** (15x15 fill) locking byte-identity.
+- Acceptance: +0.00% reproduction across repeated runs; warmup/JIT wobble
+  characterized as in arrange.
 
-## Phase 1 — instrumentation probe P-F1 (before any optimization)
+## Phase 1 — instrumentation probe P-F1 (gate: no experiment is built first)
 
-The arrange campaign's highest-ROI step. Measure on the new ladder:
-- Inference attribution: dictionary load vs search; within search, the
-  select_mrv recount share vs candidate materialization vs unification.
-- Backtrack profile: fill may backtrack far more than arrange (dictionary-
-  scale branching factors); if so, tree-shape techniques are NOT dead here
-  the way P1 killed them for arrange — value ordering is off-limits
-  (determinism), but the cost balance decides F-H1 vs F-H2 priority.
-- Fan-out stats: slots per grid, candidates per slot over time, index-set
-  sizes at each dictionary scale.
+- Attribution: load vs slot-derivation vs search; within search,
+  materialization (`candidates/4`) vs counting (`ord_intersection`) vs
+  unification vs used-list scans. [RT: the review's micro-benches predict
+  materialization leads; P-F1 confirms on real rungs.]
+- Backtrack profile per rung (depth, churn) — quantifies the heavy-tail
+  thesis on the actual ladder.
+- Fan-out stats: slots, candidates/slot over time, index-set sizes per
+  dictionary scale.
 
-## Phase 2 — the experiments (serial, ratcheted, byte-identity-gated)
+## Phase 2 — experiments (serial, ratcheted, byte-identity-gated; order set by P-F1)
 
-- **F-H1 — incremental candidate counts** (the inc_count port): carry
-  per-slot counts in threaded state; recount only slots sharing a cell with
-  the just-filled slot. Soundness note recorded up front: `Used`-word
-  exclusion happens at try time, NOT count time, in the current code — the
-  port must preserve that exactly (counts that ignore Used), or the tree
-  changes. Expected: large win on grids with many slots.
-- **F-H2 — bitset dictionary index**: ordsets -> unbounded-integer bitmasks;
-  count = popcount(mask), candidates = ascending bit iteration (same order
-  as the ascending ordset -> order-preserving). Verify popcount/1 is an
-  arithmetic function in pinned SWI 10.1.10 and measure GMP bigint AND/
-  popcount cost at 50k-word scale before building the full change.
-- **F-H3 — buckets as compound terms** (arg/3 candidate lookup); may fold
-  into F-H2.
-- **F-H4 — Used as a set** (order-preserving; same accept/reject).
-- Sequence F-H1 vs F-H2 by P-F1's attribution; measure separately even if
-  both look certain (the E-H9 attribution discipline).
+- **F-H3 — buckets as compound terms + O(1) candidate access** [RT —
+  promoted to lead candidate]: replace list buckets + per-candidate `nth0`
+  with `arg/3` on compound-term buckets. Expected: the largest win at
+  dictionary scale.
+- **F-H5 — lazy candidate generation for the selected slot** [RT — new]:
+  generate candidates on backtracking from the index instead of
+  materializing the full list `member/2` will mostly discard. Must preserve
+  enumeration order exactly.
+- **F-H1 — incremental candidate counts**: carry per-slot counts in
+  threaded state; recount exactly the slots sharing a NEWLY-BOUND cell with
+  the just-placed word — INCLUDING slots thereby completed by crossings,
+  which stay in the counted set (a 0-count completed slot must remain
+  selectable so MRV fails the branch; dropping it diverges) [RT — sharpened
+  wording]. Counts never read `Used` (try-time only, fill.pl:196), so
+  carried counts are exact and the tree is preserved by construction.
+- **F-H2 — bitset index for COUNTING ONLY** [RT — scope cut]: bigint per
+  (len,pos,char) index set; count = `popcount(A /\ B)` (measured 250-600x
+  on the count). Candidate ENUMERATION stays on ordsets/buckets — bit
+  iteration measured ~7x SLOWER than an ordset walk (each `lsb` rescans the
+  bignum, each clear allocates). Keep both representations or convert only
+  the winning mask. GATE [RT]: measure bignum AND+popcount under
+  WASM/LibBF (GMP is optional there) BEFORE building — this is the one
+  change most likely to be a native win and a WASM loss. Distinction from
+  arrange's rejected E-H8 letter bitmask, recorded so the ledger doesn't
+  look self-contradicting: E-H8 gated a cheap O(len) check with ~2-14% hit
+  rates; F-H2 replaces the EXPENSIVE O(dictionary) intersection itself,
+  with a measured 250-600x kernel speedup — different economics entirely.
+- **F-H4 — Used as a set** (O(placed x wordlen) memberchk per try today;
+  compounds on deep trees).
 
 ## Phase 3 — startup + WASM posture
 
 - Slot-length-filtered index build (only lengths the mask has); lazy
-  per-length building if attribution supports it.
+  per-length build if attribution supports it.
 - Dictionary-load strategy for the browser (precompiled artifact aligned
-  with the .qlf plan in the WASM research doc). Measured by the load layer
-  added in Phase 0.
+  with the .qlf plan). Measured by the load bucket from Phase 0.
+- If P-F1 shows load_dict > ~50% of end-to-end latency at realistic scale,
+  Phase 3 outranks Phase 2 for perceived performance.
 
 ## Explicit non-goals
 
-- Envelope/completability work (restarts etc.) — latency campaign only.
-- Any change to fill's output or its infeasible/not_proven semantics.
-- Real-dictionary curation beyond what benchmarking needs.
-
-## Risks / open questions (for the critical review)
-
-1. Synthetic-dictionary realism (letter distribution drives crossing
-   compatibility, which drives both difficulty and index-set shapes).
-2. Fill's difficulty distribution is unmapped — the ladder may need
-   seed-pinning density as a difficulty knob, not just size; heavy tails
-   may make deterministic rungs hard to pick (arrange P2's lesson).
-3. Is per-node recounting actually dominant at dictionary scale, or does
-   ord_intersection so dominate that F-H2 must go first? (P-F1 answers.)
-4. Does fill_search's `\+ memberchk(Word, Used)` interact with any planned
-   change in a tree-visible way?
-5. How much of end-to-end fill latency is load_dict at realistic scale? If
-   >50%, Phase 3 outranks Phase 2 for perceived performance.
-6. bigint bitset cost model under WASM (GMP is optional there; LibBF
-   fallback has worse bignum performance per the WASM research doc) — a
-   native-only win that regresses WASM would be a bad trade; needs a
-   WASM-side sanity check before F-H2 ships.
+- Envelope/completability work (restarts, AC-strength pruning — both
+  output-changing or out of scope; see thesis).
+- Any change to fill's output or infeasible/not_proven semantics.
+- Unicode/locale hardening of dictionary normalization (noted, deferred).
 
 ## Execution model
 
-Same as the arrange campaign: orchestrator adjudicates; one Opus agent per
+As the arrange campaign: orchestrator adjudicates; one Opus agent per
 phase/experiment in an isolated worktree (verify base commit first — three
 stale-worktree incidents last campaign); serial composition against
 re-recorded baselines; every accept/reject gets an experiments.md entry;
-research findings land as durable docs.
+research findings land as durable docs. Two do-not-skip gates from the
+review: P-F1 before any experiment; WASM bignum measurement before F-H2.
