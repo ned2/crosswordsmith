@@ -38,25 +38,43 @@ Companion files (read at point of use, not up front):
    near-saturation cases (they flip on any change) but keep cases that pass
    ROBUSTLY across seeds — those are the envelope guards that protect wins.
 
-## Roles and dispatch
+## Roles, model classes, and dispatch
 
-Known-good model mapping from the reference campaign (2026-07; update as
-model families evolve, but keep the TIER logic): orchestrator = the most
-capable/cost-heavy tier (Fable), experiment agents = the strongest coding
-tier below it (Opus 4.8), research + probe agents = the fast/cheap tier
-(Sonnet 5).
+Four agent roles. The three DISPATCHED roles are parameters of this
+workflow: each has a default model class below, and the user may override
+any of them when invoking the skill. The orchestrator's model is NOT a
+parameter — it is whatever model the skill was invoked on, and the process
+assumes a frontier-class model there; if you are running on a lower tier,
+flag the mismatch to the user before starting rather than proceeding
+silently. The orchestrator may adapt a dispatched role's model class
+mid-campaign when evidence warrants (e.g. a run-and-tabulate probe needing
+no code changes can drop a tier), but must REPORT the change to the user.
+
+| Role | Default model class |
+|---|---|
+| Orchestrator / chief scientist | frontier (e.g. Fable/Mythos class) — fixed at invocation |
+| Experiment runners | strong (e.g. highest available Opus) |
+| Probes | strong (e.g. highest available Opus) |
+| Research | balanced (e.g. highest available Sonnet) |
+
+The class logic, for when you adapt: assign by consequence and
+detectability of error. Experiments and probes default strong because their
+failure modes are silent — an experiment writes code with subtle soundness
+traps, and a wrong probe number steers the whole campaign with nothing
+downstream to catch it. Research defaults balanced because its claims are
+cross-checked against the code before being acted on.
 
 - **Orchestrator (you)**: do not run experiments inline — your context is
   for code understanding (done yourself, not delegated), hypothesis
   generation, brief writing, adjudication, and the ledger.
-- **Experiment agents** (strong coding model, isolated worktree, one per
-  experiment): implement + measure + verify + commit on a branch. Never
-  merge themselves; never re-record the baseline.
-- **Research agents** (cheaper model): literature/online sweeps returning
-  ranked candidates with sources; distill into durable docs immediately.
-- **Probe agents** (cheaper model unless the instrumentation is invasive):
-  measurement-only dispatches. Cheapest, highest-ROI class — a probe that
-  kills a big refactor before it is built pays for the whole campaign.
+- **Experiment runners** (isolated worktree, one per experiment): implement
+  + measure + verify + commit on a branch. Never merge themselves; never
+  re-record the baseline.
+- **Probes**: measurement-only dispatches (instrumentation, envelope
+  mapping, premise checks). Highest-ROI class — a probe that kills a big
+  refactor before it is built pays for the whole campaign.
+- **Research**: literature/online sweeps returning ranked candidates with
+  sources; distill into durable docs immediately.
 - **Recovery**: an agent that stalls, exhausts budget, or returns an
   unusable/contradictory packet is resumed with "re-read your own edits,
   don't assume they landed" or re-dispatched from the last good base —

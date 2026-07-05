@@ -69,14 +69,19 @@ Lay out crossword grids, validate them against house-style rules, and export~n\c
 them to standard interchange formats. Output is diffable and deterministic~n\c
 by default; it builds grids, not clues.~n~n\c
 Usage: crosswordsmith <verb> [options]~n~n\c
-Build a grid - two ways in, chosen by what you already have:~n~n\c
-  arrange   Have the words, need a grid?   Interlock them into one.~n\c
-  fill      Have the grid, need the words? Fill it from a dictionary.~n~n\c
-Work with a grid - arrange and fill each produce a layout:~n~n\c
-  lint      Validate a layout against a house-style rule profile.~n\c
-  export    Convert a layout to a shareable format (ipuz or Exolve).~n~n\c
+Verbs that build a grid - two ways in, chosen by what you already have:~n~n\c
+~w~n\c
+~w~n~n\c
+Verbs that work on a grid - arrange and fill each produce a layout:~n~n\c
+~w~n\c
+~w~n~n\c
 Run `crosswordsmith <verb> --help` for a verb's options.~n",
-           []).
+    % Verb lines are ~w atoms so their 4-space indent survives: an inline
+    % `~n\c` continuation would otherwise swallow the next line's leading space.
+    [ '    arrange   Have the words, need a grid?   Interlock them into one.',
+      '    fill      Have the grid, need the words? Fill it from a dictionary.',
+      '    lint      Validate a layout against a house-style rule profile.',
+      '    export    Convert a layout to a shareable format (ipuz or Exolve).' ]).
 
 
 % --- the `arrange` verb -----------------------------------------------------
