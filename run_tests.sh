@@ -80,6 +80,12 @@ check_golden "export exolve" \
 check_golden "fill 3x3" \
     tests/golden/fill_3.json \
     ./crosswordsmith fill --grid fixtures/fill_grid_3.json --dict fixtures/wordlist_sample.txt
+# Scale golden (fill bench Phase 0): a 15x15 stock grid filled from full ENABLE.
+# Locks byte-identity of a realistic-scale fill (~10.7M search inferences, a few
+# seconds CLI). Stdout byte-compared; stderr (the --verbose summary path) discarded.
+check_golden "fill 15 bench" \
+    tests/golden/fill_15_bench.json \
+    ./crosswordsmith fill --grid fixtures/fill_grid_15a.json --dict fixtures/dict/enable1.txt
 
 echo
 echo "=== CLI exit-code contract (AC-LINT-2) ==="
