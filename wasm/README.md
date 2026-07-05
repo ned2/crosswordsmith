@@ -81,6 +81,18 @@ swipl -q -g browser_selftest -t halt wasm/client/solve_browser.pl
 # str  path OK: 1706 chars
 ```
 
+**Golden parity (native)** — locks the core contract: the browser entry produces
+**byte-identical** output to the CLI's `arrange` verb for the same request. Feeds one
+clue set two ways (JSON `--input` to the real `crosswordsmith` binary vs a JSON
+payload to `solve_browser_json/2`) and diffs; covers what the spike exposes
+(fixed grid × strict/best-effort). No build/browser/server:
+
+```bash
+wasm/test/golden_parity.sh
+# PASS  toy-strict (size 5 --strict) — 1709 bytes identical
+# PASS  toy-best-effort (size 5 --best-effort) — 1706 bytes identical
+```
+
 The browser path is tested headlessly (Playwright drives **system Chrome** — no
 browser download). Needs the server above running:
 

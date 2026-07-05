@@ -103,10 +103,13 @@ cp "$BUILD_DIR/src/swipl-web.data" "$CLIENT_DIR/"
 # load-and-misbehave under wasm32. include(user) folds all seven project modules
 # into one self-contained file (no source tree needed at runtime). NODERAWFS lets
 # node read the sources by absolute path.
+# NB: qcompile writes the .qlf ALONGSIDE ITS SOURCE — i.e. $CLIENT_DIR/solve_browser.qlf
+# (basename from the source, independent of CWD) — so rename it in place. (Earlier
+# recipes cp'd from $BUILD_DIR/src, which never existed; caught by a clean rebuild.)
 log "4. qcompile -> $CLIENT_DIR/crosswordsmith.qlf"
 node "$BUILD_DIR/src/swipl.js" \
   -g "qcompile('$CLIENT_DIR/solve_browser.pl', [include(user)]), halt" \
   -t 'halt(1)'
-cp "$BUILD_DIR/src/solve_browser.qlf" "$CLIENT_DIR/crosswordsmith.qlf"
+mv "$CLIENT_DIR/solve_browser.qlf" "$CLIENT_DIR/crosswordsmith.qlf"
 
 log "done — serve wasm/client/ (see wasm/README.md) and open the page."
