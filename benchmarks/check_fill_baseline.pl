@@ -12,11 +12,14 @@
 %                regression_tolerance_pct (relative, default 0.5%) FAILS the
 %                check (exit 1); a drop past it is a WIN. Deterministic and
 %                machine-independent (same count native or under WASM).
-%   load_inf   - the load_dict/3 dictionary-load inference count. REPORTED with
-%                its delta but NEVER gates. Gate decision: load_inf stays
-%                informational until Phase 3 decides otherwise (it is the
-%                startup-tax metric that Phase 3 will attack; gating it now
-%                would block Phase 2 search experiments on an orthogonal axis).
+%   load_inf   - the load_dict/3 dictionary-load inference count. GATED since
+%                the F-L1 acceptance (2026-07-05, baseline recorded at 16452de):
+%                Phase 3 took the scheduled promotion decision - load is the
+%                dominant end-to-end term (P-F1) and now carries recorded wins
+%                worth defending (F-L1 -59.7%), and F-H2's measured mask-
+%                construction tax lands exactly here. Same tolerance and
+%                swi-version-downgrade semantics as search_inf; either layer
+%                regressing fails the check independently.
 %
 % wall/rss are printed as informational deltas and never fail the check. If the
 % running SWI-Prolog differs from the baseline's, a search_inf regression is
@@ -121,8 +124,8 @@ do_check(Baseline, Doc, Fails, Wins) :-
     format("search_inf (GATED):~n"),
     format("~w~t~18|~t~w~14+~t~w~14+~t~w~11+   ~w~n",
            ['rung', 'baseline', 'measured', 'delta', 'status']),
-    foldl(check_row(WL, Tol, VMatch), Results, 0-0, Fails-Wins),
-    load_section(WL, Results),
+    foldl(check_row(WL, Tol, VMatch), Results, 0-0, F0-W0),
+    load_section(WL, Tol, VMatch, Results, F0-W0, Fails-Wins),
     report_unmeasured(WL, Results),
     info_section(WL, Results, HMatch).
 
@@ -158,21 +161,28 @@ kind_label(ok,              'ok').
 kind_label(regression,      'REGRESSION').
 kind_label(regression_warn, 'regress? (swi-ver)').
 
-% load_inf: reported with its delta, NEVER gates (Phase 3 owns the decision).
-load_section(WL, Results) :-
-    format("~nload_inf (informational until Phase 3 decides otherwise):~n"),
-    format("~w~t~18|~t~w~14+~t~w~14+~t~w~11+~n",
-           ['rung', 'baseline', 'measured', 'delta']),
-    forall(member(Row, Results), load_row(WL, Row)).
+% load_inf: GATED since the F-L1 acceptance (Phase 3's scheduled promotion
+% decision) - same classify/tolerance machinery as search_inf, accumulating
+% into the same fail/win totals so either layer defends independently.
+load_section(WL, Tol, VMatch, Results, Acc0, Acc) :-
+    format("~nload_inf (GATED; promoted at F-L1 acceptance):~n"),
+    format("~w~t~18|~t~w~14+~t~w~14+~t~w~11+   ~w~n",
+           ['rung', 'baseline', 'measured', 'delta', 'status']),
+    foldl(load_row(WL, Tol, VMatch), Results, Acc0, Acc).
 
-load_row(WL, Row) :-
+load_row(WL, Tol, VMatch, Row, F0-W0, F1-W1) :-
     get_dict(rung, Row, Rung),
     get_dict(load_inf, Row, Meas),
     ( find_baseline(WL, Rung, Spec), get_dict(load_inf, Spec, Base)
     ->  ( Base =:= 0 -> Delta = 0.0 ; Delta is (Meas - Base) / Base * 100.0 ),
-        signed(Delta, DStr),
-        format("~w~t~18|~t~D~14+~t~D~14+~t~w%~11+~n", [Rung, Base, Meas, DStr])
-    ;   format("~w~t~18|~t~w~14+~t~D~14+~t~w~11+~n", [Rung, '(none)', Meas, '-']) ).
+        classify(Delta, Tol, VMatch, Kind),
+        kind_counts(Kind, DF, DW), F1 is F0 + DF, W1 is W0 + DW,
+        signed(Delta, DStr), kind_label(Kind, Label),
+        format("~w~t~18|~t~D~14+~t~D~14+~t~w%~11+   ~w~n",
+               [Rung, Base, Meas, DStr, Label])
+    ;   F1 = F0, W1 = W0,
+        format("~w~t~18|~t~w~14+~t~D~14+~t~w~11+   ~w~n",
+               [Rung, '(none)', Meas, '-', 'NEW (not in baseline)']) ).
 
 % A rung in the baseline that this run did not measure (e.g. heavy rungs on a
 % core-only run). Informational - never a failure.
@@ -251,7 +261,7 @@ new_rung_spec(Row, _{ search_inf:      Row.search_inf_med,
                       grid_inf:        Row.grid_inf,
                       cmd_wall_med_ms: Row.cmd_wall_med_ms,
                       cmd_rss_med_kib: Row.cmd_rss_med_kib,
-                      info_only:       ["load_inf", "grid_inf", "cmd_wall_med_ms", "cmd_rss_med_kib"],
+                      info_only:       ["grid_inf", "cmd_wall_med_ms", "cmd_rss_med_kib"],
                       grid_file:       Row.grid_file,
                       dict_file:       Row.dict_file,
                       seeds:           Row.seeds,
@@ -284,7 +294,7 @@ result_for(Results, Key, Row) :-
 report_result(Fails, Wins) :-
     ( Fails > 0
     ->  format("~nRESULT: FAIL  (~d regression(s), ~d win(s))~n", [Fails, Wins]),
-        format("A gated rung's search_inf rose past tolerance. If intentional,~n"),
+        format("A gated rung's search_inf or load_inf rose past tolerance. If intentional,~n"),
         format("re-baseline with `make bench-fill-record` and review the diff.~n")
     ;   Wins > 0
     ->  format("~nRESULT: PASS  (~d improvement(s), 0 regressions)~n", [Wins]),
