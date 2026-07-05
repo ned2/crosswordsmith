@@ -1304,3 +1304,57 @@ byte-identity on every rung).
   defending; F-H2's measured construction-tax risk lands exactly in
   load; determinism is proven (runner's 3× md5-identical count tables +
   orchestrator reproduction). Implemented as a separate infra commit.
+
+### F-H1 — incremental candidate counts for MRV — ACCEPTED (merged 9b1d34c)
+
+- **Where:** branch experiment/f-h1-inc-counts @ 1724d8f (base d38a649),
+  merged to master 9b1d34c. prolog/crosswordsmith/fill.pl: fill_search/4
+  now drives fill_search_inc/4 (carried cnt(Count,Slot) list +
+  select_min_count/remove_slot/newly_bound_cells/recount_crossing);
+  select_mrv/6 retained unchanged as the reference selector (white-box
+  test pins R6/P13 call it directly; it documents the selection rule the
+  incremental drive reproduces). Results doc
+  benchmarks/results/2026-07-05-f-h1-inc-counts.md.
+- **What + mechanism:** per-slot candidate counts carried as backtrack-
+  restored threaded state; after each placement, recount EXACTLY the
+  slots crossing a newly-bound cell (measured crossings/slot: min 3 /
+  mean ~3.8 / max 5, vs slot lists up to 154) — replacing select_mrv's
+  per-node full recount (79.5-85.6% of search_inf per P-F1). Tree
+  preserved node-for-node: counts exact by construction (candidate_count
+  is a pure function of cell binding state and never reads Used —
+  try-time only), identical min c(Count,Start,Dir) selection (Start+Dir
+  unique ⇒ total order, no genuine ties), same winner materialization,
+  completed 0-count slots retained so dead branches fail exactly as
+  before. Affected detection by ground cell NUMBER identity — no shared
+  crossing variable inspected or copied (the findall trap structurally
+  avoided).
+- **Result (composed == standalone; master did not move between base and
+  merge):** search_inf down on ALL 11 rungs, −21.66% (sq04_50k) to
+  −57.37% (g09_full, the top rung 34,880,750 → 14,870,446); deep/dense
+  rungs cut hardest (g21_full −43.96%, g11_full_seed −40.01%). load_inf
+  +0.00% on all 11 (gated since F-L1 — first experiment to pass under
+  the promoted gate). cmd_wall down on every rung; g17_50k −40.65% wall
+  vs −29.86% search_inf — the predicted extra inference-blind win from
+  deleting C-native length/2 bucket walks. Identity 11/11 OK, 204 tests
+  green, 3× reproduced (runner) + independently re-run by the
+  orchestrator on the branch (all three gates) and on merged master.
+  Baseline re-recorded at 9b1d34c.
+- **Expectation vs outcome:** pre-registered −30..−70% on deep rungs;
+  g09_full −57.4% and g21_full −44.0% in-band, g17_50k −29.9% at the
+  edge. Win correctly bounded below the naive ~85% by the untouched
+  winner-path candidates/4 (12.7-17.8% per P-F1) + the O(|Rest|)
+  affected-detection scan.
+- **Anomaly (accepted, ledgered):** cmd_rss +82% on g21_full ONLY
+  (278 → ~507 MiB, stable across runs, reproduced by the orchestrator).
+  Correlates with backtrack DEPTH (g21_full depth 153; g09_full depth 31
+  does not move): per-placement rebuild of the counted-list spine raises
+  global-stack high-water under deep backtracking. Bounded, not a leak;
+  RSS is reporting-only by Phase 0 design. Standing mitigation if the
+  Phase 3/WASM posture needs footprint: (Start,Dir)-keyed assoc carry
+  (O(log n) path-copy) — a redesign requiring full re-validation; do NOT
+  fold it into an unrelated change.
+- **Variant:** cnt/2 term-reuse for unaffected slots — search_inf
+  byte-identical, RSS unmoved; reverted for the simpler diff.
+- **Phase 2 status:** F-H1 done. F-H2 (bitset counting, gate GO) remains
+  scoped to the F-L2 artifact design per the gate probe's binding
+  condition. F-H3 rescoped to infra; F-H4/F-H5 closed on mechanism.
