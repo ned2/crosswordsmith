@@ -1,0 +1,11 @@
+{
+  "generated_note":"FILL ladder ratchet baseline. search_inf is the GATED metric: warm fill_attempt/8 search inferences over the fill cost ladder (benchmarks/fill_workloads.pl). Deterministic and machine-independent (same count native or under WASM). load_inf (dict-load inferences) and grid_inf are recorded per rung but are INFORMATIONAL - the gate decision is: load_inf stays reporting-only until Phase 3 decides otherwise. `make bench-fill-check` reports per-rung deltas and fails only on a search_inf regression; `make bench-fill-record` ratchets after an accepted win. Add BENCH_ARGS=--heavy for the tail rungs. wall/rss are host-specific and informational only. Only the pinned SWI-Prolog version reproduces these exact counts. Regenerate: make bench-fill-record BENCH_ARGS=--heavy.",
+  "host":"unrecorded",
+  "metric":"search_inf",
+  "mode":"ratchet",
+  "regression_tolerance_pct":0.5,
+  "swi_prolog":"unrecorded",
+  "tool":"crosswordsmith-fill-bench",
+  "workloads": {
+  }
+}
