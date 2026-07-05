@@ -148,8 +148,8 @@ crosswordsmith                                                              # â†
 ### 5.2 Exit codes (LOCKED)
 | Code | Meaning |
 |---|---|
-| `0` | Success: a layout/report was produced (for `lint`, PASS or WARN only). |
-| non-zero | Failure: unplaceable input under `--strict`, unsatisfiable fragment, lint FAIL, malformed input, or bare/`--help` invocation. |
+| `0` | Success: a layout/report was produced (for `lint`, PASS or WARN only), or an explicit `--help`/`-h`/`help` request (usage to stdout â€” GNU/POSIX convention). |
+| non-zero | Failure: unplaceable input under `--strict`, unsatisfiable fragment, lint FAIL, malformed input, or a bare/unknown-verb invocation (usage to stderr). |
 
 A non-zero exit with `--out` MUST NOT write a partial output file.
 

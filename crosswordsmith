@@ -37,7 +37,7 @@ main :-
 % (malformed input, fragment conflict, ...) propagates and is rendered by the
 % error_message//1 hooks with a non-zero exit, per the spec's exit-code table.
 cli([]) :- !, usage(user_error), fail.                       % AC-CLI-1: bare -> usage, non-zero
-cli([H|_]) :- help_flag(H), !, usage(user_output), fail.     % --help -> usage, non-zero (§5.2)
+cli([H|_]) :- help_flag(H), !, usage(user_output).           % explicit --help/-h/help -> stdout, exit 0 (GNU/POSIX)
 cli([Verb|Args]) :- verb(Verb), negation_flag(Args, Bad), !, % R9: reject --no-<x>
     format(user_error,
            "crosswordsmith ~w: unknown flag `~w` (boolean flags are not \c
@@ -64,14 +64,18 @@ negation_flag(Args, Bad) :-
 
 usage(S) :-
     format(S,
-"crosswordsmith - deterministic crossword layout engine (design-spec §5)~n~n\c
+"crosswordsmith - a deterministic crossword grid toolkit~n~n\c
+Lay out crossword grids, validate them against house-style rules, and export~n\c
+them to standard interchange formats. Output is diffable and deterministic~n\c
+by default; it builds grids, not clues.~n~n\c
 Usage: crosswordsmith <verb> [options]~n~n\c
-Verbs:~n\c
-  arrange   arrange a closed set of words into a layout (Flavour A)~n\c
-  lint      validate a layout against a profile          (Flavour B)~n\c
-  export    convert a layout to ipuz v2 / Exolve          (Flavour B)~n\c
-  fill      grid-first open-dictionary auto-fill          (Flavour B)~n~n\c
-Each verb has a --help (e.g. `crosswordsmith arrange --help`).~n",
+Build a grid - two ways in, chosen by what you already have:~n~n\c
+  arrange   Have the words, need a grid?   Interlock them into one.~n\c
+  fill      Have the grid, need the words? Fill it from a dictionary.~n~n\c
+Work with a grid - arrange and fill each produce a layout:~n~n\c
+  lint      Validate a layout against a house-style rule profile.~n\c
+  export    Convert a layout to a shareable format (ipuz or Exolve).~n~n\c
+Run `crosswordsmith <verb> --help` for a verb's options.~n",
            []).
 
 
@@ -95,7 +99,7 @@ arrange_opts_spec(
       [opt(enumerate),   type(boolean), default(false),
        longflags([enumerate]),                    help('count every feasible full placement instead of emitting a layout')],
       [opt(check_target), type(integer), default(-1), meta('N'),
-       longflags(['check-target']),               help('lower the per-word checking target to <= N (default ceil(L/2); the reachability escape hatch)')],
+       longflags(['check-target']),               help('lower the per-word checking target to <= N (default ceil(L/2); loosen it when strict placement is otherwise unreachable)')],
       [opt(seed),        type(integer), default(-1), meta('N'),
        longflags([seed]),                         help('perturb the strict search with RNG seed N (>=0) for a reproducible pseudo-random layout; omit for the deterministic layout')],
       [opt(shuffle),     type(boolean), default(false),
@@ -114,7 +118,7 @@ arrange_cli(Args) :-
           _Err,
           (cli_error('could not parse options'), fail)),
     (   memberchk(help(true), Opts)
-    ->  arrange_usage(user_output), fail
+    ->  arrange_usage(user_output)
     ;   Positional \== []
     ->  cli_error('unexpected argument(s) ~w (every input is a flag; pass the grid via --size)'-[Positional])
     ;   arrange_dispatch(Opts)
@@ -293,7 +297,7 @@ lint_cli(Args) :-
           _Err,
           (lint_err('could not parse options'), fail)),
     (   memberchk(help(true), Opts)
-    ->  lint_usage(user_output), fail
+    ->  lint_usage(user_output)
     ;   lint_dispatch(Opts, Positional)
     ).
 
@@ -347,7 +351,7 @@ export_cli(Args) :-
           _Err,
           (export_err('could not parse options'), fail)),
     (   memberchk(help(true), Opts)
-    ->  export_usage(user_output), fail
+    ->  export_usage(user_output)
     ;   export_dispatch(Opts, Positional)
     ).
 
@@ -386,9 +390,9 @@ fill_opts_spec(
     [ [opt(help),  type(boolean), default(false),
        shortflags([h]), longflags([help]),  help('show these fill options')],
       [opt(grid),  type(atom),    default(''), meta('FILE'),
-       longflags([grid]),                    help('REQUIRED: the grid template (a §8.3 black-square mask)')],
+       longflags([grid]),                    help('REQUIRED: the grid template (a black-square mask; stock grids in grids/)')],
       [opt(seeds), type(atom),    default(''), meta('FILE'),
-       longflags([seeds]),                   help('seed words to pin (a fragment, §6.6)')],
+       longflags([seeds]),                   help('seed words to pin (a partial-layout fragment, JSON)')],
       [opt(dict),  type(atom),    default(''), meta('FILE'),
        longflags([dict]),                    help('word list, one per line (default: a small bundled sample; real fills: --dict UKACD18)')],
       [opt(verbose), type(boolean), default(false),
@@ -403,7 +407,7 @@ fill_cli(Args) :-
           _Err,
           (fill_err('could not parse options'), fail)),
     (   memberchk(help(true), Opts)
-    ->  fill_usage(user_output), fail
+    ->  fill_usage(user_output)
     ;   fill_dispatch(Opts, Positional)
     ).
 
@@ -411,7 +415,7 @@ fill_usage(S) :-
     fill_opts_spec(Spec),
     opt_help(Spec, Help),
     format(S,
-"Usage: crosswordsmith fill --grid <mask.json> [--seeds <frag.json>] [--dict <words>]~n~n\c
+"Usage: crosswordsmith fill --grid <mask> [--seeds <frag>] [--dict <words>]~n~n\c
 Fills a legal blocked grid from a word list, seeds pinned. Output is a canonical~n\c
 layout (composes with lint/export). Exit is non-zero, naming the unfillable~n\c
 slot(s), when no complete fill exists.~n~n~w", [Help]).
