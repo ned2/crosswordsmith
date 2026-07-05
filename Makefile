@@ -116,3 +116,41 @@ bench-history:
 BENCH_STRATEGIES ?=
 bench-matrix:
 	swipl -q benchmarks/run_matrix.pl -- $(BENCH_STRATEGIES)
+
+# --- fill product bench + ratchet (campaign/fill Phase 0) ---------------------
+# Product benchmark for `fill`: four attribution buckets per ladder rung -
+# command (end-to-end CLI), dict_load (load_dict/3), grid (fill_grid/4), and
+# search (fill_attempt/8, FRESH slots per sample) - over the rungs in
+# benchmarks/fill_workloads.pl. Compare on search_inf/load_inf (deterministic,
+# machine-independent); wall/rss are reporting-only. Core rungs by default.
+#   make bench-fill
+#   make bench-fill BENCH_ARGS=--heavy
+#   make bench-fill BENCH_FORMAT=csv BENCH_ARGS="--fixture g11"
+.PHONY: bench-fill bench-fill-check bench-fill-record bench-fill-log bench-fill-history
+bench-fill:
+	swipl -q benchmarks/run_fill.pl -- --format $(BENCH_FORMAT) $(BENCH_ARGS)
+
+# Fill performance ratchet: diff each rung's search_inf against
+# benchmarks/fill_baseline.json. search_inf GATES (a rise past tolerance fails,
+# exit 1); load_inf is REPORTED but informational until Phase 3 decides
+# otherwise. NOT on the `make test` path.
+#   make bench-fill-check
+#   make bench-fill-check BENCH_ARGS=--heavy
+bench-fill-check:
+	swipl -q benchmarks/check_fill_baseline.pl $(BENCH_ARGS)
+
+# Ratchet the fill baseline to the currently-measured numbers (accept a win /
+# intentional change) and append to benchmarks/fill_history.jsonl. After ANY
+# record, read fill_baseline.json back and verify every rung is present.
+#   make bench-fill-record BENCH_ARGS=--heavy
+bench-fill-record:
+	swipl -q benchmarks/check_fill_baseline.pl --record $(BENCH_ARGS)
+
+# Append the current fill measurement to fill_history.jsonl WITHOUT moving the
+# baseline.
+bench-fill-log:
+	swipl -q benchmarks/check_fill_baseline.pl --log $(BENCH_ARGS)
+
+# Render the recorded fill history as a per-rung trend (reads the ledger only).
+bench-fill-history:
+	swipl -q benchmarks/check_fill_baseline.pl --history
