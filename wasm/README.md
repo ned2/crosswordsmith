@@ -9,10 +9,12 @@ for the VM cost model.
 > ✅ **Validated end-to-end in headless Chrome (2026-07-05):** load the page,
 > click Solve, a solved 5×5 grid renders — the solver runs off the main thread
 > and calls the **same `arrange_solve/4`** the CLI's `arrange` verb calls (only
-> the output sink differs). Promoted from a `spikes/` spike to this maintained
-> layout the same day; the client code is still spike-grade pending the
-> productionization items in plan §9 (an exported `browser.pl`, CLI resolver
-> reuse, heartbeat tuning).
+> the output sink differs). Both validation gates cleared: **#2** inference parity
+> (native↔wasm) and **#1** a real ~38M-inference search completing in-browser with
+> the UI responsive and a prompt `terminate()` cancel. Promoted from a `spikes/`
+> spike to this maintained layout the same day; the client code is still
+> spike-grade pending the productionization items in plan §9 (an exported
+> `browser.pl`, CLI resolver reuse).
 
 ## Layout
 
@@ -99,6 +101,23 @@ node ~/src/swipl-devel/build.wasm/src/swipl.js -q wasm/test/inference_parity.pl 
 diff /tmp/nat.csv /tmp/wasm.csv && echo "parity OK"     # (drop --heavy for just the 5 fast core rungs)
 ```
 
+**Large-search responsiveness + cancel (gate #1)** — drives a real ~38.3M-inference
+search (`ladder_15x15_36w`) in headless Chrome and checks it (a) completes, (b)
+keeps the page responsive, (c) is cancellable. Needs the server above running:
+
+```bash
+node wasm/test/yield_probe.mjs
+# T1 idle ping/pong: path works
+# T2 heavy search: completes (placed 36), main-thread drift 0ms at every heartbeat,
+#    0 mid-search pongs (the worker can't service messages mid-solve, any heartbeat)
+# T3 terminate() cancel @800ms: cancelled promptly
+```
+
+Finding: the **Worker boundary** (not the heartbeat) is what keeps the UI
+responsive, and `worker.terminate()` is the only working cancel — so the heartbeat
+is not load-bearing (kept at 50000, a few-% throughput tax, no UX cost). Full
+write-up in plan §7 gate #1.
+
 ## Browser gotchas (fixed in `client/worker.js` + `client/solve_browser.pl`)
 
 None of these show up under `node` — they are specific to the browser **Worker**:
@@ -116,6 +135,11 @@ None of these show up under `node` — they are specific to the browser **Worker
 Expected non-fatal noise: `source_sink library(http/json) does not exist` warnings
 during qlf load — in the web image the `http/json` *alias* doesn't resolve, but
 `json_write_dict`/`json_read_dict` autoload from `library(json)`, so output works.
+The warnings cite `solve_browser.pl` / `core.pl` source locations *baked into the
+qlf* (provenance for error messages) — not live fetches; the qlf is self-contained
+(`include(user)`). You may also see a `crosswordsmith.qlf … net::ERR_ABORTED` line:
+a cancelled duplicate request from SWI's URL consult — the qlf still loads (curl it
+and you get a 200), and the solve returns correct results.
 
 ## Known shortcuts (client is still spike-grade — plan §9 productionizes)
 
@@ -123,5 +147,6 @@ during qlf load — in the web image the `http/json` *alias* doesn't resolve, bu
   `solve_browser/2` in a small `browser.pl`.
 - Grid size/mode read straight from the input dict; the CLI's `--max-size`
   crop / fragment / seed machinery is not wired in.
-- `heartbeat: 50000` in `worker.js` is a guess — tune against a real (large)
-  search (the auto-yield-starvation risk in plan §7).
+- `heartbeat: 50000` in `worker.js` — validated *not* load-bearing (gate #1: the
+  Worker isolates the UI, `terminate()` cancels), so this is a harmless default,
+  not a tuning risk. Left caller-overridable via `msg.heartbeat`.

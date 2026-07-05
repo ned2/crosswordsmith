@@ -40,7 +40,10 @@ This is a **low-risk port**. Three facts make it easy:
 commit); ship the app as one `.qlf`; run the solver in a **Web Worker** with
 **JSON in and JSON out**; reuse one instance; cancel by `worker.terminate()`.
 **The spike works end-to-end in headless Chrome** (renders a solved grid); the
-full toolchain, build, and browser round-trip are validated (2026-07-05, §6/§9).
+full toolchain, build, and browser round-trip are validated (2026-07-05, §6/§9),
+and **both validation gates are certified**: gate #2 inference parity (§7) and
+gate #1 large-search responsiveness + cancel (§7 — the Worker isolates the UI, and
+`terminate()` cancels; the heartbeat turned out not to be load-bearing).
 
 **The one non-obvious subtlety is build *provenance*, not the app.** WASM is
 32-bit, so anything the build "compiles" — the `boot.prc`/library `.qlf` during
@@ -288,9 +291,14 @@ resolvers. This change is **additive** — the CLI/file paths stay for native us
   `STACK_SIZE`. Keep a warm spare worker so respawn-after-Stop is instant.
 - **Cancellation:** `worker.terminate()` is the hard Stop — a thread kill that is
   **independent of yielding** (it does not need a heartbeat or a cooperative
-  check). `Query.close()` at a yield point is the cooperative alternative (that
-  one does depend on the heartbeat). `Prolog.Promise.abort()` only cancels goals
-  blocked on a JS promise — **useless for a CPU DFS**; don't rely on it.
+  check), and **gate #1 measured it prompt** (0 ms to call, search killed, no late
+  result). The cooperative `Query.close()` alternative is *not reachable* in this
+  single-worker design: gate #1 showed a running solve does **not** service the
+  worker's incoming messages at any heartbeat (the yield cooperates among Prolog
+  engines, not the JS message queue), so there is no way to *tell* the worker to
+  close the query mid-search. `terminate()` is therefore the only practical cancel.
+  `Prolog.Promise.abort()` only cancels goals blocked on a JS promise — **useless
+  for a CPU DFS**; don't rely on it.
 
 ### Worker gotchas — validated end-to-end in headless Chrome (2026-07-05)
 
@@ -325,11 +333,27 @@ Reproduce headlessly with Playwright + system Chrome — `node wasm/test/headles
 
 Do these before trusting the browser build (or the ratchet as a WASM proxy):
 
-1. **Auto-yield starvation — top risk.** Yield fires at the *exit port*, so a
-   tight DFS calling only built-ins can run to completion without yielding. The
-   `heartbeat` knob (inference-counted, default 10k) is the primary mitigation
-   and composes with arrange's inference-based budget. **Verify** the arrange/
-   fill search actually yields under a low heartbeat; tune the spike's `50000`.
+1. ✅ **Auto-yield starvation — RESOLVED, and the framing was wrong (2026-07-05).**
+   Measured a real ~38.3M-inference search (`ladder_15x15_36w`) in headless Chrome
+   via `wasm/test/yield_probe.mjs`, sweeping `heartbeat` 10k→2e9. Findings:
+   - **The search completes correctly in-browser** (36 words placed, ~5 s, 256 MB
+     stack held) — the yield path scales far past the 5-word toy.
+   - **The page's main thread stays perfectly responsive throughout** — main-thread
+     `setInterval` drift `0 ms` at *every* heartbeat, *including the no-yield
+     control*. Responsiveness comes from running the search in a **Web Worker (off
+     the UI thread)**, **not** from the heartbeat. The heartbeat is *not*
+     load-bearing here; the no-yield control even ran ~3 % faster.
+   - **The heartbeat does not let the worker service its own messages mid-search**
+     (0 mid-search pongs at every heartbeat, 10k included): the yield cooperates
+     among *Prolog engines*, it does not drain the *worker's JS message queue*. So
+     you cannot gracefully cancel a running solve by posting it a message.
+   - **Cancellation is `worker.terminate()`** — measured prompt (0 ms to call, the
+     search is killed, no late result), which is exactly what `main.js` already
+     does. `Prolog.abort()` would only interrupt `await/2` points, not a pure DFS.
+
+   Net: the "top risk" is fully mitigated by the **Worker + `terminate()`**
+   architecture already in place. `heartbeat: 50000` is kept as a mild, harmless
+   default (a few % throughput tax, no UX cost) and left caller-overridable.
 2. ✅ **Inference-count parity — CERTIFIED (2026-07-05).** Ran the full arrange
    ladder (all 12 rungs, 9×9/15×15/21×21, ~28k–38.5M inferences) under both native
    `swipl` and the wasm `node src/swipl.js`, measuring the same search-layer count
@@ -382,11 +406,13 @@ Applied in that file alongside this plan:
    self-contained (loads with no source reachable). *Still to productionise:*
    promote `solve_browser.pl` → an exported `browser.pl`, reuse the CLI size/mode
    resolvers (the spike takes size/mode straight from the payload).
-4. ✅ **DONE 2026-07-05 (spike level).** Worker harness runs end-to-end in
-   **headless Chrome** — one solve round-trip renders a grid; gates #5, #6 passed.
-   Fixes folded in: `window` shim, absolute-URL consult, JSON-in (§6). *Still to
-   do:* tune `heartbeat` against a real (large) search + exercise `terminate()`
-   cancel under load (gate #1).
+4. ✅ **DONE 2026-07-05.** Worker harness runs end-to-end in **headless Chrome** —
+   one solve round-trip renders a grid; gates #5, #6 passed. Fixes folded in:
+   `window` shim, absolute-URL consult, JSON-in (§6). **Gate #1 also cleared**
+   (`wasm/test/yield_probe.mjs`): a real ~38.3M-inference search completes
+   in-browser with the UI fully responsive (main-thread drift 0 ms — the Worker
+   boundary, not the heartbeat, is what isolates the UI), and `worker.terminate()`
+   is a prompt cancel. Heartbeat found *not* load-bearing; kept at 50000 (see §7).
 5. Only then: the real UI.
 
 ---

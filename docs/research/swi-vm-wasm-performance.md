@@ -110,6 +110,16 @@ sources cited inline. Findings that became experiments are cross-referenced.
   when all is done") — mitigate with `set_prolog_flag(heartbeat, N)`.
   Stack limits are set at runtime from JS
   (`Prolog.call("set_prolog_flag(stack_limit, N)")`), not Emscripten flags.
+  **MEASURED, and refined 2026-07-05 (gate #1, `wasm/test/yield_probe.mjs`):** this
+  concern applies to running the solver on the **main thread**. In our design the
+  solver runs in a **Web Worker**, so a real ~38.3M-inference search leaves the
+  page's main thread *fully* responsive (measured drift 0 ms) *regardless of
+  heartbeat* — the Worker boundary, not the heartbeat, does the isolation. The
+  heartbeat's `forEach` yield cooperates among Prolog engines but does **not** drain
+  the worker's own JS message queue, so a running solve services no messages at any
+  heartbeat; cancellation is `worker.terminate()` (measured prompt). Net: in the
+  Worker architecture the heartbeat is not load-bearing (a few-% throughput tax, no
+  UX gain) — kept as a mild default, not a tuning risk.
 - **Build flags that matter:** `-s STACK_SIZE=1048576
   -s STACK_OVERFLOW_CHECK=1` (default 64k Emscripten stack has caused
   crashes), `ALLOW_MEMORY_GROWTH=1`, `WASM_BIGINT`, `LZ4`, Release build.
@@ -164,8 +174,10 @@ validated end-to-end in headless Chrome). In brief:
    parity — the pin already has the setjmp fix); qlf-only, `WASM_EXCEPTIONS` OFF.
 2. ✅ Validate ladder inference-count parity under Node/swipl-wasm once —
    **DONE, all 12 rungs byte-identical native↔wasm** (`wasm/test/inference_parity.pl`).
-3. Set heartbeat + stack_limit at init; single instance, reused; per-solve
-   throwaway engine (`forEach({engine:true})`).
+3. ✅ Set stack_limit at init (~256MB, under the memory budget); single instance,
+   reused; per-solve throwaway engine (`forEach({engine:true})`). Heartbeat is
+   optional — gate #1 found it *not* load-bearing in the Worker design (§7); a
+   mild default (50000) is fine.
 4. **JSON in, JSON out** (`json_read_dict` in, `json_write_dict` + `JSON.parse`
    out) — a bound dict is lossy BOTH ways: JS strings arrive as Prolog *atoms*
    (breaking `string` checks), and Prolog `null`/bool atoms come back as JS

@@ -56,29 +56,39 @@ function init() {
 
 self.onmessage = async (ev) => {
   const msg = ev.data || {};
+  // Idle liveness probe (health check for a crashed worker). NB: it is answered
+  // only when the worker is IDLE - a running solve does NOT service new messages
+  // (gate #1 finding, see below), so a ping sent mid-search is queued until the
+  // solve finishes. To cancel a running solve, main.js uses worker.terminate().
+  if (msg.type === "ping") { self.postMessage({ type: "pong", id: msg.id }); return; }
   if (msg.type !== "solve") return;
   try {
     await init();
-    // forEach runs asynchronously with the yield mechanism, so the worker's
-    // own message loop stays live (it can see a future terminate promptly) and
-    // the search is cancellable at heartbeat boundaries. engine:true gives each
-    // solve a throwaway engine so per-run state does not accumulate on the one
-    // reused instance. Tune heartbeat down if a tight DFS starves the loop.
-    // Input goes in as a query binding (JS object -> Prolog dict, clean and
-    // lossless). Output comes back as a JSON atom we JSON.parse here - faithful
-    // for this app because the layout schema contains JSON null (empty cells),
-    // which the dict-binding path would turn into the string "null". See
-    // solve_browser.pl for the full rationale.
-    // Pass the input as a JSON STRING, not a JS object: the JS->Prolog binding
-    // turns JS strings into Prolog atoms, which breaks the solver's string
-    // "answer" check. solve_browser_str parses the JSON in Prolog so types land
-    // correctly (strings/numbers/null/bool). Symmetric with the JSON-out path.
+    // forEach runs the search asynchronously with the yield mechanism (every
+    // `heartbeat` inferences), and engine:true gives each solve a throwaway engine
+    // so per-run state doesn't accumulate on the reused instance.
+    //
+    // gate #1 finding (wasm/test/yield_probe.mjs, plan §7): the heartbeat yield
+    // cooperates among Prolog engines but does NOT drain this worker's JS message
+    // queue - so a running solve can't service pings or a "cancel" message at ANY
+    // heartbeat (measured: 0 mid-search pongs at 10k..2e9). The UI stays responsive
+    // regardless, because the search runs in this Worker, OFF the page's main
+    // thread (measured main-thread drift 0ms). So the heartbeat is not load-bearing
+    // here - it costs a few % throughput for no UX gain; 50k is a mild, harmless
+    // default. Cancellation is worker.terminate() (prompt hard kill; see main.js),
+    // not in-worker messaging. Caller may override heartbeat via msg.heartbeat.
+    //
+    // JSON in (not a query binding): the JS->Prolog binding delivers JS strings as
+    // Prolog atoms, breaking the solver's string "answer" check; solve_browser_str
+    // parses the JSON in Prolog so types land right. Symmetric with the JSON-out
+    // path (the layout schema's null/bool survive json_write_dict + JSON.parse).
+    const heartbeat = msg.heartbeat || 50000;
     let json = null;
     await Prolog.forEach(
       "solve_browser_str(Payload, Json)",
       { Payload: JSON.stringify(msg.input) },
       (bindings) => { if (json === null) json = bindings.Json; },
-      { engine: true, heartbeat: 50000 }
+      { engine: true, heartbeat }
     );
     if (json === null) {
       self.postMessage({ type: "error", message: "no layout (search failed)" });
