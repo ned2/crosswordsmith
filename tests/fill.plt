@@ -240,8 +240,9 @@ test(fill_index_version_mismatch_refused,
 test(fill_index_swi_mismatch_refused,
      [throws(error(fill_index_swi('0.0.0', _), _))]) :-
     empty_assoc(E), tmp_path(AF),
+    % version 2 (current schema) so the SWI gate is reached, not the version gate.
     setup_call_cleanup(open(AF, write, S, [type(binary)]),
-                       fast_write(S, fill_index(1, [swi_version('0.0.0'), dict_sha256(x)], E, E)),
+                       fast_write(S, fill_index(2, [swi_version('0.0.0'), dict_sha256(x)], E, E)),
                        close(S)),
     setup_call_cleanup(true,
                        crosswordsmith_fill:fill_load_index(AF, none, _, _),
@@ -262,6 +263,36 @@ test(fill_index_malformed_refused,
 test(fill_index_missing_refused,
      [throws(error(fill_index_missing(_), _))]) :-
     crosswordsmith_fill:fill_load_index('/nonexistent/f-l2/no.idx', none, _, _).
+
+% --- F-H2: v2 bitset masks (bignum counting) ---------------------------------
+% The whole F-H2 correctness claim: for EVERY bound pattern, popcount of the mask
+% AND-chain equals the length of the ordset intersection. A v2 artifact must
+% carry masks (Masks = masks(_)), and mask_count/4 must agree with
+% index_intersection/4 + length on a broad deterministic sample at 10k. If these
+% ever diverged the MRV counts would differ and the filled grid could change.
+test(fill_index_v2_mask_count_matches_ordset) :-
+    tmp_path(AF),
+    crosswordsmith_fill:fill_save_index('fixtures/dict/enable_10k.txt', AF),
+    crosswordsmith_fill:fill_load_index(AF, none, _DBL, Idx, Masks),
+    delete_file(AF),
+    Masks = masks(MA),                       % a v2 artifact MUST carry masks
+    findall(L-B, sample_pattern(L, B), Patterns),
+    Patterns = [_|_],                        % non-empty sample
+    forall( member(Len-Bound, Patterns),
+            ( crosswordsmith_fill:index_intersection(Bound, Len, Idx, OrdI),
+              length(OrdI, OrdN),
+              crosswordsmith_fill:mask_count(Bound, Len, MA, MaskN),
+              OrdN =:= MaskN ) ).
+
+% Deterministic bound patterns, lengths 3-6: single-bound cells over a letter
+% spread (incl. rare Q/Z -> often empty intersections) and 0-anchored two-cell
+% patterns. Covers the all-idx branch, dead cells (mask 0), and multi-cell chains.
+sample_pattern(Len, [P-C]) :-
+    member(Len, [3,4,5,6]), between(0, 5, P), P < Len,
+    member(C, ['A','E','I','O','S','T','R','N','Q','Z']).
+sample_pattern(Len, [0-C0, P1-C1]) :-
+    member(Len, [4,5,6]), between(1, 5, P1), P1 < Len,
+    member(C0, ['S','C','T','B']), member(C1, ['A','E','O']).
 
 :- end_tests(fill).
 

@@ -187,11 +187,55 @@ nth0_of(Words, I, W) :- nth0(I, Words, W).
 % build that select_mrv/6 otherwise ran for every unfilled slot at every search
 % node. |Indices| == |maplist(nth0_of(Words), Indices)| by construction (every
 % index into Words is valid), so the count is identical to length(Cands).
+%
+% F-H2 (bitset counting via artifact v2). candidate_count/5 dispatches on a
+% threaded Masks context (see the search below): `none` keeps the ordset kernel
+% (raw text mode and every non-artifact / v1-shaped path - byte-identical); a
+% masks(MaskAssoc) context (present ONLY in a v2 artifact) counts the SAME slot
+% with bignum `/\` chains + popcount over per-(len,pos,char) bit masks. The masks
+% are derived FROM these very ordsets at --save-index time (bit i == bucket index
+% i), so popcount(chain) == |ord_intersection(chain)| for every pattern by
+% construction. Enumeration (candidates/4) stays on ordsets everywhere; only the
+% count seam changes. candidate_count/4 is the ordset reference retained for the
+% white-box tests (P3) and select_mrv/6.
 candidate_count(Vars, DictByLen, Index, Count) :-
+    candidate_count(Vars, DictByLen, Index, none, Count).
+
+% ORDSET kernel (Masks == none): identical work to the pre-F-H2 candidate_count/4.
+% The leading cut commits once the `none` context is matched (none and masks(_)
+% are disjoint, so this changes no answer) and keeps the predicate deterministic -
+% the reference selector select_mrv/6 must leave no choicepoint (P13). A cut is
+% not a logical inference, so the `none` path stays inference-identical.
+candidate_count(Vars, DictByLen, Index, none, Count) :-
+    !,
     slot_bucket(Vars, DictByLen, Index, Words, Sel),
     ( Sel == all -> length(Words, Count)
     ; Sel = idx(Indices), length(Indices, Count)
     ).
+% BIGNUM kernel (Masks == masks(MaskAssoc), v2 artifact mode). Mirrors
+% slot_bucket's branch structure EXACTLY - the `all` branch (no cell bound) still
+% counts the whole length bucket; the idx branch AND-folds the bound cells' masks
+% and popcounts. No ord_intersection is computed on this path (that is the win).
+candidate_count(Vars, DictByLen, _Index, masks(MaskAssoc), Count) :-
+    length(Vars, Len),
+    findall(P-V, ( nth0(P, Vars, V), nonvar(V) ), Bound),
+    ( Bound == []
+    ->  ( get_assoc(Len, DictByLen, Words) -> length(Words, Count) ; Count = 0 )
+    ;   mask_count(Bound, Len, MaskAssoc, Count)
+    ).
+
+% popcount(AND over the bound cells' masks). Mirrors index_intersection/4: the
+% first bound cell seeds the accumulator, the rest AND into it; an absent key is
+% mask 0 (mirrors index_set's `S = []`), so a dead cell zeroes the chain and the
+% count is 0 - exactly as ord_intersection with [] yields the empty set.
+mask_count([P0-Ch0|Rest], Len, MaskAssoc, Count) :-
+    mask_set(Len, P0, Ch0, MaskAssoc, M0),
+    foldl(mask_and(Len, MaskAssoc), Rest, M0, MAnd),
+    Count is popcount(MAnd).
+mask_and(Len, MaskAssoc, P-Ch, Acc, Acc1) :-
+    mask_set(Len, P, Ch, MaskAssoc, M), Acc1 is Acc /\ M.
+mask_set(Len, P, Ch, MaskAssoc, M) :-
+    ( get_assoc(k(Len, P, Ch), MaskAssoc, M0) -> M = M0 ; M = 0 ).
 
 index_intersection([P-Ch|Rest], Len, Index, Indices) :-
     index_set(Len, P, Ch, Index, S0),
@@ -235,21 +279,27 @@ index_set(Len, P, Ch, Index, S) :-
 %  (4) COMPLETED SLOTS STAY IN THE SET. A slot fully bound by crossings (count 0
 %      or 1) is NOT dropped, so a 0-count dead slot is still selected first (it
 %      has the lowest count) and fails the branch exactly as today.
-fill_search(Slots, DictByLen, Index, Used) :-
-    maplist(slot_with_count(DictByLen, Index), Slots, Counted),
-    fill_search_inc(Counted, DictByLen, Index, Used).
+% Masks is the F-H2 counting context threaded down the whole search: `none` (raw
+% text / v1 artifact - ordset kernel, byte-identical to pre-F-H2) or
+% masks(MaskAssoc) (a v2 artifact - bignum popcount kernel). Threading a ground
+% atom/compound through the recursion adds ZERO inferences (SWI clause indexing
+% dispatches candidate_count/5 with no penalty), so the `none` path is
+% inference-identical to the pre-F-H2 engine.
+fill_search(Slots, DictByLen, Index, Masks, Used) :-
+    maplist(slot_with_count(DictByLen, Index, Masks), Slots, Counted),
+    fill_search_inc(Counted, DictByLen, Index, Masks, Used).
 
 % Pair each slot with its current candidate count, keeping the ORIGINAL slot
 % term (shared cell variables intact - no reconstruction, no copy). This is the
 % one full per-slot recount, paid once at the root; thereafter it is incremental.
-slot_with_count(DictByLen, Index, Slot, cnt(Count, Slot)) :-
+slot_with_count(DictByLen, Index, Masks, Slot, cnt(Count, Slot)) :-
     Slot = slot(_, _, _, Vars),
-    candidate_count(Vars, DictByLen, Index, Count).
+    candidate_count(Vars, DictByLen, Index, Masks, Count).
 
 % Counted is a list of cnt(Count, Slot). Select the min-count slot, place a word,
 % recount only the crossings the placement disturbed, recurse on the rest.
-fill_search_inc([], _DictByLen, _Index, _Used) :- !.
-fill_search_inc(Counted, DictByLen, Index, Used) :-
+fill_search_inc([], _DictByLen, _Index, _Masks, _Used) :- !.
+fill_search_inc(Counted, DictByLen, Index, Masks, Used) :-
     select_min_count(Counted, cnt(_, Best), Rest),
     Best = slot(_, _, BestCells, BestVars),
     newly_bound_cells(BestCells, BestVars, NewCells),   % free cells, PRE-placement
@@ -257,8 +307,8 @@ fill_search_inc(Counted, DictByLen, Index, Used) :-
     member(Word, Cands),
     \+ memberchk(Word, Used),
     BestVars = Word,                      % unify into the shared cell variables
-    recount_crossing(Rest, NewCells, DictByLen, Index, Rest1),
-    fill_search_inc(Rest1, DictByLen, Index, [Word|Used]).
+    recount_crossing(Rest, NewCells, DictByLen, Index, Masks, Rest1),
+    fill_search_inc(Rest1, DictByLen, Index, Masks, [Word|Used]).
 
 % Winner = the cnt/2 with the minimum c(Count, Start, Dir) in standard order
 % (Count, then Start, then Dir; all ground). This reproduces select_mrv's
@@ -300,13 +350,13 @@ newly_bound_cells([Cell|Cs], [Var|Vs], New) :-
 % other count unchanged. cnt(Count, Slot) keeps the ORIGINAL Slot term (shared
 % cell variables survive - no findall/copy). A crossing is a shared cell NUMBER
 % (ground), so detection needs no variable comparison.
-recount_crossing([], _NewCells, _DictByLen, _Index, []).
-recount_crossing([cnt(C0, Slot)|T], NewCells, DictByLen, Index, [cnt(C1, Slot)|T1]) :-
+recount_crossing([], _NewCells, _DictByLen, _Index, _Masks, []).
+recount_crossing([cnt(C0, Slot)|T], NewCells, DictByLen, Index, Masks, [cnt(C1, Slot)|T1]) :-
     Slot = slot(_, _, Cells, Vars),
     ( shares_cell(Cells, NewCells)
-    ->  candidate_count(Vars, DictByLen, Index, C1)
+    ->  candidate_count(Vars, DictByLen, Index, Masks, C1)
     ;   C1 = C0 ),
-    recount_crossing(T, NewCells, DictByLen, Index, T1).
+    recount_crossing(T, NewCells, DictByLen, Index, Masks, T1).
 
 shares_cell([C|_], NewCells) :- memberchk(C, NewCells), !.
 shares_cell([_|Cs], NewCells) :- shares_cell(Cs, NewCells).
@@ -363,8 +413,27 @@ fill_attempt(SearchSlots, AllSlots, DictByLen, Index, Budget, Outcome, Numbered,
     % binds Limit = inference_limit_exceeded on the budget path and only re-throws
     % genuine errors. Infeasibility is a search FAILURE (R == exhausted), so a
     % thrown error is a real bug and must surface, not be masked as infeasible.
+    % Ordset entry (Masks == none): fill_search/5 with `none` does byte-identical
+    % work to the pre-F-H2 fill_search/4, so this bench/test seam is inference-
+    % identical. The product artifact path uses fill_attempt_masked/9 below.
     call_with_inference_limit(
-        ( once(fill_search(SearchSlots, DictByLen, Index, [])) -> R = ok ; R = exhausted ),
+        ( once(fill_search(SearchSlots, DictByLen, Index, none, [])) -> R = ok ; R = exhausted ),
+        Budget, Limit),
+    (   Limit == inference_limit_exceeded
+    ->  Outcome = not_proven, Numbered = [], InputWords = []
+    ;   R == ok
+    ->  Outcome = filled, slots_to_layout(AllSlots, Numbered, InputWords)
+    ;   Outcome = infeasible, Numbered = [], InputWords = []
+    ).
+
+% Masks-carrying twin of fill_attempt/8 (product path only - NOT the gated bench
+% seam). Identical control flow; the only difference is the threaded Masks (none
+% for the raw CLI, masks(_) for a v2 artifact). Kept separate so fill_attempt/8
+% above stays byte-identical for the ratchet.
+fill_attempt_masked(SearchSlots, AllSlots, DictByLen, Index, Budget, Masks,
+                    Outcome, Numbered, InputWords) :-
+    call_with_inference_limit(
+        ( once(fill_search(SearchSlots, DictByLen, Index, Masks, [])) -> R = ok ; R = exhausted ),
         Budget, Limit),
     (   Limit == inference_limit_exceeded
     ->  Outcome = not_proven, Numbered = [], InputWords = []
@@ -378,7 +447,7 @@ fill_attempt(SearchSlots, AllSlots, DictByLen, Index, Budget, Outcome, Numbered,
 fill_solve(GridFile, SeedFileOrNone, DictFile, SizeMode) :-
     fill_prepare(GridFile, SeedFileOrNone, Size, Slots, SearchSlots),
     load_dict(DictFile, DictByLen, Index),
-    fill_place_and_emit(Size, Slots, SearchSlots, DictByLen, Index, SizeMode).
+    fill_place_and_emit(Size, Slots, SearchSlots, DictByLen, Index, none, SizeMode).
 
 % Artifact-consuming twin of fill_solve/4 (F-L2): load a prebuilt, verified
 % index artifact instead of parsing a text dictionary, then fill IDENTICALLY.
@@ -387,10 +456,14 @@ fill_solve(GridFile, SeedFileOrNone, DictFile, SizeMode) :-
 % identity oracle in both modes). DictFileOrNone: an atom path checks the
 % artifact's embedded SHA-256; `none` skips that check (version + SWI are
 % always checked). fill_load_index throws a clear error on any mismatch.
+% A v2 artifact carries precomputed bitset Masks; F-H2's bignum counting kernel
+% runs iff Masks == masks(_). A `none` here (no masks in the artifact) transparently
+% falls back to the ordset kernel, so this entry is correct for any artifact shape
+% the loader accepts.
 fill_solve_index(GridFile, SeedFileOrNone, IndexFile, DictFileOrNone, SizeMode) :-
-    fill_load_index(IndexFile, DictFileOrNone, DictByLen, Index),
+    fill_load_index(IndexFile, DictFileOrNone, DictByLen, Index, Masks),
     fill_prepare(GridFile, SeedFileOrNone, Size, Slots, SearchSlots),
-    fill_place_and_emit(Size, Slots, SearchSlots, DictByLen, Index, SizeMode).
+    fill_place_and_emit(Size, Slots, SearchSlots, DictByLen, Index, Masks, SizeMode).
 
 % Grid + seed derivation, shared by both entry points (identical to the raw
 % path's front matter). Slots are ALL slots (emitted); SearchSlots exclude seed
@@ -404,8 +477,18 @@ fill_prepare(GridFile, SeedFileOrNone, Size, Slots, SearchSlots) :-
 
 % Search + emit, shared by both entry points. Fails (no stdout) on any
 % non-filled outcome (INV-3): report the unfillable slot(s), never silent.
-fill_place_and_emit(Size, Slots, SearchSlots, DictByLen, Index, SizeMode) :-
-    fill_attempt(SearchSlots, Slots, DictByLen, Index, Outcome, Numbered, InputWords),
+% Masks threads F-H2's counting context: `none` runs the ordset kernel (raw CLI
+% path - byte-identical to pre-F-H2, exercised by the identity oracle), masks(_)
+% runs the bignum kernel (v2 artifact). The raw branch calls the unchanged
+% fill_attempt/7 so the raw CLI path is untouched; only the artifact branch takes
+% the masked core.
+fill_place_and_emit(Size, Slots, SearchSlots, DictByLen, Index, Masks, SizeMode) :-
+    (   Masks == none
+    ->  fill_attempt(SearchSlots, Slots, DictByLen, Index, Outcome, Numbered, InputWords)
+    ;   fill_budget(B),
+        fill_attempt_masked(SearchSlots, Slots, DictByLen, Index, B, Masks,
+                            Outcome, Numbered, InputWords)
+    ),
     (   Outcome == filled
     ->  emit_fill(Numbered, InputWords, Size, SizeMode),
         length(Numbered, NS),
@@ -459,15 +542,20 @@ empty_slots(Slots, DictByLen, Index, Bad) :-
 %     Version - integer artifact-SCHEMA version (fill_index_format_version/1). A
 %               schema change bumps it; the loader refuses an unknown version.
 %     Meta    - a keyed list [Key(Value), ...] carrying integrity + provenance
-%               AND the F-H2 EXTENSION POINT: precomputed bitset masks will slot
-%               in here as an added masks(...) key under a Version bump, so
-%               adding them is not a format break (old readers never look for
-%               the key; new readers gate on Version before using it).
+%               AND, since schema v2 (F-H2), the precomputed bitset masks under a
+%               masks(...) key (the realized extension point the F-L2 design
+%               reserved; the Version bump 1->2 makes it a clean break - v1
+%               artifacts are refused, never misread).
 %       dict_sha256(Hex) - SHA-256 of the source dict file's bytes (staleness)
 %       swi_version(V)   - the SWI-Prolog that built it (binary-format guard)
 %       words(N)         - dictionary word count (informational)
 %       source(Path)     - the dict path as given at build (informational)
 %       built_epoch(E)   - build time, integer seconds (informational)
+%       masks(MaskAssoc) - [v2] assoc k(Len,Pos,Char) -> bignum; bit i set iff
+%                          bucket index i is in Index's ordset for that key. The
+%                          F-H2 counting kernel AND-folds + popcounts these instead
+%                          of ord_intersection'ing the ordsets (wall win, count
+%                          identical). Built ONLY here (amortized), never at load.
 %
 % ON-DISK FORMAT: fast_write/fast_read (library(fastrw)) - MEASURED the fastest
 % candidate (F-L2 results doc): ~20x the post-F-L1 warm raw load at 172k, smaller
@@ -475,30 +563,60 @@ empty_slots(Slots, DictByLen, Index, Bad) :-
 % format is SWI-version-bound (documented), so the artifact embeds swi_version
 % and the loader REFUSES a mismatch (rebuild explicitly, never silently).
 
-fill_index_format_version(1).
+% Schema version 2 (F-H2): the Meta list now also carries a masks(MaskAssoc) key
+% (precomputed bignum bitsets for the counting kernel). The version bump is a hard
+% break - a v1 artifact (or any Version != 2) is refused by the loader with the
+% existing rebuild message. Masks are built ONLY here (the amortized --save-index
+% step - the gate probe's binding condition), never at load or fill time.
+fill_index_format_version(2).
 
-% BUILD: load_dict the frozen file, then serialize the exact structures + meta.
-% This is the one-off cost (~ current load + a fast_write); the CLI's
-% `fill --save-index FILE` seam calls it.
+% BUILD: load_dict the frozen file, derive the parallel bitset masks FROM the
+% ordset Index (so popcount agreement is by construction), then serialize the
+% exact structures + meta. This is the one-off cost (~ current load + a mask
+% build + a fast_write); the CLI's `fill --save-index FILE` seam calls it.
 fill_save_index(DictFile, OutFile) :-
     load_dict(DictFile, DictByLen, Index),
+    build_masks(Index, MaskAssoc),
     dict_word_count(DictByLen, NWords),
     fill_file_sha256(DictFile, Sha),
     fill_swi_version(Swi),
     get_time(TF), Epoch is round(TF),
     fill_index_format_version(Version),
     Meta = [ dict_sha256(Sha), swi_version(Swi), words(NWords),
-             source(DictFile), built_epoch(Epoch) ],
+             source(DictFile), built_epoch(Epoch), masks(MaskAssoc) ],
     Artifact = fill_index(Version, Meta, DictByLen, Index),
     setup_call_cleanup(open(OutFile, write, S, [type(binary)]),
                        fast_write(S, Artifact),
                        close(S)).
 
+% Derive the mask assoc from the ordset Index: for each k(Len,Pos,Char) key whose
+% value is an ordset of bucket indices, the mask is the bignum with bit i set for
+% every index i in that ordset. Because masks and buckets share index_set's
+% ordering (the masks ARE the ordsets, re-encoded), popcount(mask chain) equals
+% |ord_intersection(set chain)| for every pattern - the F-H2 equivalence, by
+% construction. Same key set as Index, so an absent key means mask 0 (dead cell).
+build_masks(Index, MaskAssoc) :-
+    assoc_to_list(Index, Pairs),
+    maplist(ordset_mask_pair, Pairs, MaskPairs),
+    list_to_assoc(MaskPairs, MaskAssoc).
+ordset_mask_pair(K-Set, K-Mask) :- ordset_to_mask(Set, 0, Mask).
+ordset_to_mask([], M, M).
+ordset_to_mask([I|Is], M0, M) :- M1 is M0 \/ (1 << I), ordset_to_mask(Is, M1, M).
+
 % LOAD: read the artifact, verify schema version + SWI version (+ the dict hash
 % iff a dict path is supplied), and hand back the reconstructed DictByLen +
 % Index. Any integrity failure throws a clear fill_index_* error - no silent
 % rebuild, no fall-through to the raw path.
+% /4: the pre-F-H2 signature, retained for callers/tests that only need the
+% dictionary structures (e.g. the roundtrip identity test). Discards the masks.
 fill_load_index(IndexFile, DictFileOrNone, DictByLen, Index) :-
+    fill_load_index(IndexFile, DictFileOrNone, DictByLen, Index, _Masks).
+
+% /5: also returns the F-H2 counting context - masks(MaskAssoc) if the (v2)
+% artifact carries a masks key, else none (the ordset kernel still works). Every
+% integrity gate (version, SWI, hash) runs BEFORE masks are extracted, so a bad
+% artifact throws exactly as before; masks come off the happy path only.
+fill_load_index(IndexFile, DictFileOrNone, DictByLen, Index, Masks) :-
     ( exists_file(IndexFile) -> true
     ; throw(error(fill_index_missing(IndexFile), _)) ),
     catch(fill_read_artifact(IndexFile, Artifact),
@@ -520,7 +638,8 @@ fill_load_index(IndexFile, DictFileOrNone, DictByLen, Index) :-
        ( meta_value(Meta, dict_sha256, ArtSha), ArtSha == CurSha -> true
        ; meta_value_or(Meta, dict_sha256, unknown, ArtSha2),
          throw(error(fill_index_hash(DictFileOrNone, ArtSha2, CurSha), _)) ) ),
-    DictByLen = DictByLen0, Index = Index0.
+    DictByLen = DictByLen0, Index = Index0,
+    ( meta_value(Meta, masks, MaskAssoc) -> Masks = masks(MaskAssoc) ; Masks = none ).
 
 fill_read_artifact(IndexFile, Artifact) :-
     setup_call_cleanup(open(IndexFile, read, S, [type(binary)]),
