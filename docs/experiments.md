@@ -1193,3 +1193,58 @@ byte-identity on every rung).
   parse fix), F-L2 (precomputed wordlist/index artifact), F-L3
   (slot-length-filtered index build; deprioritized — P-F1 measured ~2.5-5%
   waste on realistic grids vs 96%+ only on the short-word bench masks).
+
+### F-H2 gate probe — bignum AND+popcount under WASM — MEASUREMENT (accepted)
+
+- **Branch/commit:** probe/f-h2-wasm-bignum @ 62dc2b4 (instruments stay
+  branch-only, per P-F1 precedent); results doc copied to master:
+  benchmarks/results/2026-07-05-f-h2-gate-probe.md. No product code, no
+  baseline writes — verified at adjudication.
+- **Verdict: GO on the counting kernel.** The plan's central fear — "the
+  one change most likely to be a native win and a WASM loss" — is
+  REFUTED. Backends confirmed: native = GMP 6, WASM = LibBF (swipl-wasm
+  under node, post-setjmp-fix build). ord_intersection+length vs
+  `A /\ B` + popcount: 438-5152x same-N under WASM (47-3881x native);
+  on REALISTIC pairings from P-F1's measured set-size distribution the
+  worst case is 9x (median-size set × full-ENABLE bucket, WASM) — never
+  near 1, never inverted. LibBF's ~3-14x per-op penalty vs GMP is offset
+  by the ordset VM path's own ~3.6-4.0x WASM slowdown. Red-team's
+  250-600x native anchor reproduced (494x @ N=1000).
+- **The binding condition (the probe's real finding):** bitset mask
+  CONSTRUCTION costs ~18% of load_inf and 27% (native) / 36% (WASM) of
+  load WALL at 172k — not "small" as pre-registered, and worse exactly
+  where latency hurts most. Since load dominates end-to-end (P-F1:
+  58-84% on 10/11 rungs), a naive load-time mask build spends the
+  dominant term to speed the minor one. F-H2 is therefore GO only as:
+  (i) masks shipped inside the Phase-3 precomputed-index artifact (F-L2)
+  — construction amortized to ~0, pure win both runtimes; or (ii) scoped
+  to search-dominated workloads (g17_50k/g09_full class). Never a naive
+  load-time build.
+- **Ratchet implication (orchestrator adjudication):** the bignum kernel
+  is 3 inf/op flat vs 405-96005 — an inference-blind, wall-only win
+  (same class as P-F1's keysort/length findings). When F-H2 is built,
+  search_inf will collapse for the wrong-looking reason while the
+  construction tax lands in load. The charter's gate stays inference-
+  based: load_inf MUST be promoted to gating before or with F-H2
+  (promotion decision already scheduled at first Phase 3 acceptance),
+  with wall medians recorded as corroborating evidence. The probe's
+  "gate on wall" suggestion is adopted in substance, not in mechanism.
+- **Sequencing confirmed:** F-H2 after F-H1 (F-H1 cuts count volume;
+  F-H2 cheapens each remaining count), design folded into the F-L2
+  artifact decision.
+- **Bonus findings:** inference counts verified bit-identical native↔WASM
+  for these kernels (first direct evidence for the ladder's portability
+  premise); docs/research/swi-vm-wasm-performance.md's LibBF dismissal
+  reaches the right conclusion via a non-covering reason (rational vs
+  integer arithmetic scope) — this probe supplies the integer-bignum
+  evidence directly.
+- **Process notes:** the probe's worktree was again cut from stale
+  9751190 (session-start HEAD — now a known harness behavior, third
+  occurrence); the agent self-corrected onto 397615d before the
+  orchestrator's fix arrived and re-verified base. Separately, the
+  resumed F-L1 runner's shell cwd reset to the MAIN checkout and its
+  branch creation briefly switched the main checkout off master (caught
+  with zero content damage; agent relocated to its worktree; master
+  restored). Standing rule extended: resume/fix-up messages must repeat
+  the absolute-path + never-main-checkout discipline, not assume the
+  original brief's context survives a session resume.
