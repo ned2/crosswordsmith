@@ -618,10 +618,14 @@ is tracked debt (mostly already owned by §9.1).
 > **Status 2026-07-06** (Batch 1 supply-chain hardening): the two HIGHs + quick
 > wins are **closed** — guards extracted into `wasm/build/verify-pin.sh` (each
 > unit-testable in ~1s without the ninja build) and called from `build-wasm.sh`;
-> see [`wasm-supply-chain-hardening.md`](./wasm-supply-chain-hardening.md). **Still
-> OPEN (Batch 2, OQ-5-gated — do before any npm/CDN publish, not before):**
-> reproducible test toolchain, artifact-provenance manifest, standalone-CI clone
-> path, and the optional emsdk repo-tag pin.
+> see [`wasm-supply-chain-hardening.md`](./wasm-supply-chain-hardening.md).
+> **Status 2026-07-06, Batch 2 (OQ-5 publish blockers): closed** — provenance
+> manifest + content-hashed names (`wasm/build/stamp-manifest.sh`, worker
+> wiring), standalone-CI clone path (`bootstrap_swipl_src`), committed
+> lockfile + exact Playwright + `npm ci`, and the emsdk repo-tag pin; see
+> [`wasm-supply-chain-batch2.md`](./wasm-supply-chain-batch2.md). Still owed
+> before first real CDN/CI use: one full from-clean build on a cold runner
+> (network-gated; recorded there §5).
 
 - ✅ **CLOSED (Batch 1).** **swipl-devel *submodules* are unpinned** (HIGH). The HEAD
   guard checked only the superproject sha, but the wasm build compiles
@@ -649,16 +653,24 @@ is tracked debt (mostly already owned by §9.1).
   movable with no commit assertion** — `git clone --branch pcre2-10.47` could compile a
   retagged upstream silently. `verify_pcre2_commit` now asserts the clone resolved to
   the pinned `PCRE2_COMMIT`.
-- ⏳ **OPEN (Batch 2).** **Test toolchain not reproducible** — `package-lock.json` is
-  gitignored, Playwright is `^1.55`, README uses `npm install`. Commit the lockfile,
-  pin exact, use `npm ci`.
-- ⏳ **OPEN (Batch 2).** **No artifact provenance / cache-busting** — the qlf/wasm/data/js
-  carry no build id tying them together; a redeploy that changes one and long-caches
-  the rest "loads and misbehaves" (the docs' own warning). Stamp a build manifest +
-  content-hash the filenames before any CDN deploy.
-- ⏳ **OPEN (Batch 2, lower).** emsdk repo cloned unpinned (cosmetic given the `emcc`
-  assert above — optional `--branch "$EMSDK_VERSION"`); not standalone-CI-runnable
-  (assumes a pre-existing `~/src/swipl-devel`).
+- ✅ **CLOSED (Batch 2).** **Test toolchain not reproducible** — `package-lock.json` was
+  gitignored, Playwright `^1.55`, README used `npm install`. Now: lockfile committed
+  (un-ignored), Playwright pinned exact (`1.61.1`), `run_all.sh` preflight + README
+  say `npm ci`.
+- ✅ **CLOSED (Batch 2).** **No artifact provenance / cache-busting** — the qlf/wasm/data/js
+  carried no build id tying them together; a redeploy that changes one and long-caches
+  the rest "loads and misbehaves" (the docs' own warning). Now:
+  `wasm/build/stamp-manifest.sh` (called by `build-wasm.sh` step 5 and `run_all.sh`)
+  writes `build-manifest.json` (buildId, per-artifact sha256, swipl commit + the nine
+  submodule SHAs, toolchain pins from `pins.sh`) and emits `<stem>.<sha256:12><ext>`
+  copies; `worker.js` prefers the hashed names when the manifest is present
+  (unhashed fallback for hand-staged dev dirs).
+- ✅ **CLOSED (Batch 2).** emsdk repo cloned unpinned → fresh clones now
+  `--branch "$EMSDK_VERSION" --depth 1` (cosmetic; the `emcc` assert stays
+  load-bearing). Not standalone-CI-runnable → `bootstrap_swipl_src` in
+  `verify-pin.sh` clones swipl-devel at the pin + inits the WASM submodules when
+  `$SWIPL_SRC` is absent (`SWIPL_REPO_URL` overridable; never mutates a
+  pre-existing tree).
 
 ### 10.4 Tracked debt — test-suite hardening
 

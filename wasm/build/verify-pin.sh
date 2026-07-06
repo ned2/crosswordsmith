@@ -14,8 +14,36 @@
 # EXCLUDES packages/zlib (the SWI library(zlib) binding, not the C zlib the build
 # links — that comes from $WASM_HOME), packages/ssl, and the 30+ submodules that
 # are uninitialised on a normal checkout (asserting on them false-fails on '-').
-WASM_SUBMODULES="packages/chr packages/clib packages/clpqr packages/http \
-packages/json packages/pcre packages/plunit packages/semweb packages/utf8proc"
+# Env-overridable (unset-only, so an intentionally EMPTY override sticks) so
+# bootstrap/guard logic can be unit-tested against a tiny local fake remote
+# (no network, no real swipl-devel clone).
+: "${WASM_SUBMODULES=packages/chr packages/clib packages/clpqr packages/http \
+packages/json packages/pcre packages/plunit packages/semweb packages/utf8proc}"
+
+# bootstrap_swipl_src SRC COMMIT — the cold-runner / standalone-CI path (Batch 2,
+# docs/plans/wasm-supply-chain-batch2.md §2). When SRC does not exist: clone
+# swipl-devel (override the remote with SWIPL_REPO_URL), check out the pin, and
+# init the nine WASM-compiled submodules. NOT shallow — a shallow tip need not
+# contain the pinned commit or the recorded gitlinks. A pre-existing tree is
+# never mutated here (the read-only guards below own it, with their
+# SWIPL_ALLOW_CHECKOUT-gated refusal to move a shared HEAD); a non-git SRC is a
+# loud error rather than a surprise clone-over.
+bootstrap_swipl_src() {
+  local src="$1" want="$2"
+  if [ -e "$src" ]; then
+    if [ ! -d "$src/.git" ]; then
+      echo "ERROR: $src exists but is not a git checkout — refusing to bootstrap over it." >&2
+      echo "  Point SWIPL_SRC elsewhere, or remove it to let this script clone the pin." >&2
+      return 1
+    fi
+    return 0
+  fi
+  echo "  $src absent — cloning swipl-devel @ $want (cold runner)"
+  git clone "${SWIPL_REPO_URL:-https://github.com/SWI-Prolog/swipl-devel.git}" "$src"
+  git -C "$src" checkout "$want"
+  # shellcheck disable=SC2086
+  git -C "$src" submodule update --init -- $WASM_SUBMODULES
+}
 
 # verify_superproject_pin SRC COMMIT — assert SRC's HEAD is the pinned commit.
 # QLF/boot are word-size-specific and this tree is SHARED with other work, so we
