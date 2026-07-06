@@ -499,10 +499,16 @@ slot_to_word(slot(Start, Dir, Cells, Vars),
 % duplicate blew up the emit; see docs/plans/fill-seed-pin-crash-fix.md).
 % Do NOT collapse Vars to an atom (atom_chars): Used holds char LISTS and an
 % atom never matches, silently disabling the dedup. With no seeds,
-% SearchSlots == AllSlots, so Used0 == [] and the search starts as before.
+% SearchSlots == AllSlots: the guard below yields Used0 == [] without the
+% subtract scan, so the benched fill_attempt/8 window stays neutral on unseeded
+% rungs (the seed_used cost lands only on seeded rungs). subtract(X, X, R) would
+% also give R == [], so the fast path is byte-identical, only cheaper.
 seed_used(AllSlots, SearchSlots, Used0) :-
-    subtract(AllSlots, SearchSlots, SeededSlots),
-    maplist(slot_word, SeededSlots, Used0).
+    (   AllSlots == SearchSlots
+    ->  Used0 = []
+    ;   subtract(AllSlots, SearchSlots, SeededSlots),
+        maplist(slot_word, SeededSlots, Used0)
+    ).
 
 slot_word(slot(_, _, _, Vars), Vars).
 
