@@ -233,6 +233,11 @@ Common CLI conventions (§8) apply to all three.
   warning; stdout is never touched by it.
 - **Invent nothing** — enumeration/clue are *derived* where absent, never
   fabricated; nothing puzzle-level (e.g. a placeholder title) is manufactured.
+  **One sanctioned exception (Q5, §14):** a title-less board targeting
+  **Exolve** gains the engine's default `exolve-title: Untitled` at the
+  `convert` boundary (warned on stderr, `-q`-silenceable) — an ecosystem
+  requirement (Exet's Save crashes on a null title), not parity-chasing. The
+  serializers themselves stay invent-nothing; ipuz output invents nothing.
 - **`native → native` is payload-lossless.** The native target holds
   everything metadata-class (per-word `link`/`meta` verbatim, top-level
   `diagnostics` passed through), so D7's drop-when-homeless rule never
@@ -244,12 +249,14 @@ Common CLI conventions (§8) apply to all three.
   only cost is that solving state keyed on the auto-id resets if the puzzle
   is edited, which an invented constant id would not fix anyway.
 - **Engine cross-check** — dropping `link` now matches the engine's own
-  `export`; the sole remaining divergence is that `export` *invents* a default
-  title on **both** targets (`title:"Untitled"` for ipuz, `exolve-title:
-  Untitled` for Exolve — confirmed S4/S5) and `xword` (invent-nothing) emits
-  neither — so v1 asserts **structural** agreement (§11), and byte-parity waits
-  on that title question. (The engine also emits a constant
-  `exolve-id: crosswordsmith-export`; `xword` emits none, see above.)
+  `export`. The engine *invents* a default title on **both** targets
+  (`title:"Untitled"` for ipuz, `exolve-title: Untitled` for Exolve —
+  confirmed S4/S5); since Q5's resolution `xword` matches it on **Exolve
+  only** (the convert-boundary default above), so the title line is
+  byte-identical to the engine's. Remaining divergences: the ipuz title
+  (`xword` emits none) and the engine's constant
+  `exolve-id: crosswordsmith-export` (`xword` emits none, see above) — so the
+  cross-check stays **structural** agreement (§11) plus the exolve title line.
 
 ### 6.3 `render` — visual artefact
 
@@ -383,8 +390,9 @@ Consequences of the table:
 **Deferred escape hatches** (not rejected): (a) **best-effort *structural***
 conversion (crop/flatten with warnings); (b) **uplifting native's model** (add
 title/author, rectangular, styling) so structural conversions stop failing.
-Either, plus a decision on the engine's invented title, would restore engine
-byte-parity (§11).
+The engine's invented title is decided (Q5, §14: matched on Exolve, not ipuz);
+full engine byte-parity now gates on the ipuz title, the engine's whitespace
+style, and its `exolve-id` (§11).
 
 ## 11. Testing
 
@@ -400,11 +408,15 @@ byte-parity (§11).
   **key-order-identical to the engine** (whose output is already fully key-sorted
   at every depth), so `convert`'s native/ipuz output matches the engine's key
   order; residual byte-parity is gated only on the engine's whitespace style +
-  invented title (deferred, §10/§14).
-- **Engine cross-check (structural, not byte)** — the engine's `export` is
-  best-effort (drops `link`, injects a default title), so v1 asserts that
-  `xword`'s ipuz/Exolve *structurally* agrees with `crosswordsmith export`
-  (grid, numbering, clues, enumeration) — not byte-identity. Byte-parity is a
+  its invented ipuz title (the Exolve title divergence closed with Q5, §14;
+  the ipuz side stays deferred, §10).
+- **Engine cross-check (structural + the Q5 title line)** — the engine's
+  `export` is best-effort (drops `link`, injects a default title), so v1
+  asserts that `xword`'s ipuz/Exolve *structurally* agrees with
+  `crosswordsmith export` (grid, numbering, clues, enumeration) — not
+  byte-identity. Since Q5 the Exolve check also asserts the byte-identical
+  `  exolve-title: Untitled` line on both sides; full Exolve byte-parity still
+  gates on the engine's `exolve-id` (§6.2). Byte-parity is a
   best-effort-phase test.
 - **`view`** — render to a string and compare golden snapshots (solved and
   `--blank`). **Exact capture recipe (S3):** `Console(width=<pinned>,
@@ -487,12 +499,18 @@ is the plan; the tracker says where we are.
   raster path is therefore tested by dimensions/magic, not byte-identity.
 - **Rectangular native** — confirmed hard-error (structural, D7); a
   square-padding/uplift option is the deferred best-effort path, not v1.
-- **Engine byte-parity** — reachable once we decide whether `xword` should
+- ~~**Engine byte-parity** — reachable once we decide whether `xword` should
   match the engine's *invented* default title on **both** ipuz (`"Untitled"`)
-  and Exolve (`exolve-title: Untitled`) (currently: no, invent nothing). Until
-  then the cross-check is structural (§11). Note `docs/exet-verification.md`
-  records that Exet's *Save* once crashed on a null title, which is why the
-  engine injects the default — so a downstream Exet re-save of `xword`'s
-  title-less Exolve may hit that (a Phase-2 flag to consider, not a v1 blocker).
+  and Exolve (`exolve-title: Untitled`) (currently: no, invent nothing)~~ —
+  **resolved (2026-07-07)**: match on **Exolve only**. A title-less board
+  targeting Exolve gains the engine's default at the `convert` boundary
+  (warned, `-q`-silenceable; the serializers stay invent-nothing so library
+  round-trips are untouched). Rationale: `docs/exet-verification.md` records
+  Exet's *Save* crashing on a null title — the same evidence that made the
+  engine inject its default — so this is a format-ecosystem requirement, not
+  parity-chasing; it also closes the "Exet re-save of `xword`'s title-less
+  Exolve" flag once considered for Phase 2. ipuz stays invent-nothing (title
+  optional there, no breakage evidence), so full byte-parity remains gated on
+  the ipuz title, the engine's whitespace style, and its `exolve-id` (§11).
 - **Textual scope** (candidate cycling, `--watch`, clue panes) — deferred to
   Phase 4 design.

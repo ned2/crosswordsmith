@@ -213,6 +213,10 @@ def _shade_colour(style: Meta | None) -> str | None:
 # Note: no exolve-id is emitted (invent-nothing). Exolve treats the directive
 # as optional and derives an id from a signature of the grid and clues when
 # absent, so consumers lose nothing but cross-edit state continuity (spec §6.2).
+# The title is also emitted only when present — this serializer never invents
+# one; the Q5 default (`exolve-title: Untitled` for title-less boards, an Exet
+# crash workaround) is injected at the `convert` boundary with a warning, so
+# library round-trips through serialize() stay faithful (convert.py, spec §14).
 def serialize(board: Board) -> str:
     lines = ["exolve-begin"]
     lines.append(f"  exolve-width: {board.width}")

@@ -3,7 +3,9 @@
 Structural failures block and the error names the property + a capable
 target; metadata drops (per-word `link`/`meta`, top-level `diagnostics`)
 warn on stderr and `-q` silences them with stdout byte-identical; round-trips
-are puzzle-lossless; output structurally agrees with the engine's `export`
+are puzzle-lossless (modulo the Q5 exolve title default, which is warned and
+fail-stricts loudly on a native hop); output structurally agrees with the
+engine's `export`
 (fixtures `bundled_17.ipuz.json`/`bundled_17.exolve` are engine exports, and
 `arrange_bundled_17_fixed.json` is the engine's arrange golden verbatim).
 """
@@ -68,6 +70,10 @@ class TestNoFeatureByteIdentity:
     rebus / prefill / shading, so its convert output must stay byte-identical
     as the three gaps land. The goldens were captured before any gap change;
     the new directives/fields must be emitted *only* when the feature is present.
+
+    One intentional post-gap change: the exolve golden gained the Q5 default
+    `exolve-title: Untitled` line (2026-07-07) — title-less boards targeting
+    Exolve get the engine's default at the convert boundary (spec §14 Q5).
     """
 
     def test_no_feature_ipuz_byte_identical(self):
@@ -153,7 +159,11 @@ class TestPrefilledToIpuz:
         src = mini_exolve("C!AB", "A.U", "BUS")
         via, _ = convert_text(src, "ipuz")
         back, _ = convert_text(via, "exolve")
-        assert parse_board(back, "exolve") == parse_board(src, "exolve")
+        # the title-less source gains the Q5 default on the exolve hop — the
+        # ONE sanctioned convert-time addition; everything else round-trips
+        ours = parse_board(back, "exolve")
+        assert ours.meta.pop("title") == "Untitled"
+        assert ours == parse_board(src, "exolve")
 
 
 class TestRebusToExolve:
@@ -248,10 +258,16 @@ class TestRoundTrips:
         assert json.loads(back) == native_without_links(src)
 
     def test_native_exolve_native(self):
+        # post-Q5 the exolve hop injects the default title, so the way back
+        # fail-stricts on it exactly like an engine exolve export does (the
+        # documented native title error, D7/§11) — loud, never silent. The
+        # lossless native round-trip is via ipuz (test above). Real Exolve
+        # files end up titled anyway: Exet's Save requires one.
         src = NATIVE.read_text()
         via, _ = convert_text(src, "exolve")
-        back, _ = convert_text(via, "native")
-        assert json.loads(back) == native_without_links(src)
+        assert "  exolve-title: Untitled\n" in via
+        with pytest.raises(XwordError, match="title"):
+            convert_text(via, "native")
 
     def test_display_answers_reconstructed_from_enumeration(self):
         # the (5,5) hop through ipuz regains "OMEGA POINT", not "OMEGAPOINT"
@@ -281,7 +297,9 @@ class TestRoundTrips:
 
 class TestEngineCrossCheck:
     """§11: structural agreement with `crosswordsmith export` on the same
-    layout; the sole divergence is the engine's invented default title."""
+    layout. Since Q5 the exolve title matches the engine byte-for-byte (the
+    convert boundary injects the same default); the remaining divergences are
+    ipuz's title (invent-nothing there) and the engine's `exolve-id`."""
 
     def _assert_structural_match(self, ours_text: str, engine_text: str, fmt: str):
         ours = parse_board(ours_text, fmt)
@@ -289,7 +307,11 @@ class TestEngineCrossCheck:
         assert (ours.height, ours.width) == (engine.height, engine.width)
         assert ours.grid == engine.grid
         assert ours.words == engine.words  # numbering, clues, enumerations
-        assert engine.meta.get("title") == "Untitled" and "title" not in ours.meta
+        assert engine.meta.get("title") == "Untitled"
+        if fmt == "exolve":  # Q5: same invented default as the engine
+            assert ours.meta.get("title") == "Untitled"
+        else:  # ipuz stays invent-nothing (Q5 resolution)
+            assert "title" not in ours.meta
 
     def test_ipuz_matches_engine_export(self):
         ours, _ = convert_text(NATIVE.read_text(), "ipuz")
@@ -298,6 +320,51 @@ class TestEngineCrossCheck:
     def test_exolve_matches_engine_export(self):
         ours, _ = convert_text(NATIVE.read_text(), "exolve")
         self._assert_structural_match(ours, EXOLVE.read_text(), "exolve")
+        # the title LINE is byte-identical to the engine's (export.pl:235)
+        assert "\n  exolve-title: Untitled\n" in ours
+        assert "\n  exolve-title: Untitled\n" in EXOLVE.read_text()
+
+
+class TestExolveTitleDefault:
+    """Q5 (spec §14, resolved 2026-07-07): a title-less board targeting Exolve
+    gains the engine's default `exolve-title: Untitled` at the convert
+    boundary, with a warning — because Exet's Save crashes on a null title
+    (exet-verification.md). ipuz stays invent-nothing; the library serializer
+    stays faithful (the default is convert-layer only)."""
+
+    def test_titleless_to_exolve_emits_default_and_warns(self):
+        out, warnings = convert_text(mini_exolve("CAB", "A.U", "BUS"), "exolve")
+        assert "\n  exolve-title: Untitled\n" in out  # byte-matches export.pl
+        assert warnings == [
+            "exolve requires a title (Exet's Save crashes without one); "
+            "emitted default 'Untitled'"
+        ]
+
+    def test_titled_board_kept_verbatim_no_warning(self, fixtures):
+        src = (fixtures / "sample_decorated.exolve").read_text()
+        out, warnings = convert_text(src, "exolve")
+        assert "  exolve-title: Decorated Sample" in out
+        assert "Untitled" not in out
+        assert not any("title" in w for w in warnings)
+
+    def test_ipuz_stays_invent_nothing(self):
+        out, warnings = convert_text(NATIVE.read_text(), "ipuz")
+        assert "Untitled" not in out
+        assert not any("title" in w for w in warnings)
+
+    def test_library_serializer_stays_faithful(self):
+        # invent-nothing holds at the format layer: serialize_board() adds no
+        # title; only convert_text() injects the ecosystem default
+        from xword.formats import serialize_board
+
+        board = parse_board(mini_exolve("CAB", "A.U", "BUS"), "exolve")
+        assert "exolve-title" not in serialize_board(board, "exolve")
+
+    def test_cli_warns_on_stderr(self):
+        result = run("convert", "--to", "exolve", str(NATIVE))
+        assert result.returncode == 0
+        assert "exolve requires a title" in result.stderr
+        assert "  exolve-title: Untitled\n" in result.stdout
 
 
 class TestCli:

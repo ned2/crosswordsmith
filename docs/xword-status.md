@@ -85,7 +85,7 @@ on stderr (`-q` silences, stdout untouched); structural engine cross-check.
 | 3 | **D7 metadata drop-and-warn** — per-word `link`/`meta` keys + top-level `diagnostics` dropped on `→ ipuz/exolve` with one stderr warning each; `-q` silences, stdout byte-identical; native target drops nothing | §6.2, §10 | done | `tests/test_convert.py::TestMetadataDrops` + `TestCli` |
 | 4 | **`diagnostics` passthrough** — carried on `Board`, native→native re-emits verbatim (payload-lossless identity, json-output-spec §6.4) | §6.2, §10 | done | fixture `arrange_bundled_17_fixed.json` (engine golden verbatim) in `TestMetadataDrops`/`TestCli` |
 | 5 | **Puzzle-lossless round-trips** — native→ipuz→native and native→exolve→native = source minus `link`; display answers reconstructed from enumeration (`(5,5)` → `"OMEGA POINT"`), grid wins on enum mismatch; exolve→ipuz→exolve keeps bars/circles/unfilled (barred StyleSpec synthesized) + prefill (`!`↔`value`) + rebus (multi-char↔`rebus-cells`) | §10 | done | `tests/test_convert.py::TestRoundTrips` + `TestPrefilledToIpuz` + `TestRebusToExolve` |
-| 6 | **Engine cross-check (structural)** — convert native→ipuz/exolve agrees with `crosswordsmith export` on grid/numbering/clues/enumeration; sole divergence = engine's invented title (Q5) + its constant `exolve-id` (xword emits none — Exolve auto-derives one, spec §6.2) | §11 | done | `tests/test_convert.py::TestEngineCrossCheck` |
+| 6 | **Engine cross-check (structural)** — convert native→ipuz/exolve agrees with `crosswordsmith export` on grid/numbering/clues/enumeration; since Q5 the exolve title line is also byte-identical (both `exolve-title: Untitled`); remaining divergences = the ipuz title (xword emits none) + the engine's constant `exolve-id` (xword emits none — Exolve auto-derives one, spec §6.2) | §11 | done | `tests/test_convert.py::TestEngineCrossCheck` |
 
 ---
 
@@ -132,7 +132,7 @@ cairosvg, so the base suite still runs without the extra).
 | Q2 | HTML styling surface — built-in stylesheet vs `--css` hook | **resolved (Phase 3)**: one built-in inline `<style>` (self-contained + deterministic, D6); a `--css` hook stays a cheap future add |
 | Q3 | SVG glyphs for raster/PDF: `<text>` vs `<path>` | **resolved (Phase 3)**: `<text>` — cairosvg embeds glyph outlines in the PDF regardless (S6); `<path>` / cross-machine raster byte-goldens stay deferred (§11/§14) |
 | Q4 | Rectangular native — confirmed hard-error; square-padding uplift is deferred best-effort | resolved (hard-error); uplift deferred |
-| Q5 | Engine byte-parity — whether `xword` matches the engine's *invented* default title (ipuz `"Untitled"` + `exolve-title: Untitled`) | open (currently: no, invent nothing) |
+| Q5 | Engine byte-parity — whether `xword` matches the engine's *invented* default title (ipuz `"Untitled"` + `exolve-title: Untitled`) | **resolved (2026-07-07)**: match on **Exolve only** — title-less boards gain the engine's default at the `convert` boundary (warned, `-q`-silenceable; serializers stay invent-nothing) because Exet's Save crashes on a null title (§6.2/§14). ipuz stays bare; full byte-parity still gated on ipuz title + whitespace + `exolve-id` |
 | Q6 | Textual scope (candidate cycling, `--watch`, clue panes) | open (Phase 4 design) |
 
 ---
@@ -160,6 +160,6 @@ cairosvg, so the base suite still runs without the extra).
   D6); **Q3** → `<text>` glyphs (cairosvg embeds outlines in the PDF anyway).
 - **Phase 4 (Textual TUI) is next**; Phase 4 + later: deferred, not yet started.
 - **Nothing in progress; nothing blocked.** §14 open questions resolved so far:
-  Q1 (grid geometry), Q2 (HTML styling), Q3 (SVG glyphs). The rest gate Phase 4
-  / later (Q5's title question now only gates engine byte-parity — the
-  structural cross-check is in).
+  Q1 (grid geometry), Q2 (HTML styling), Q3 (SVG glyphs), Q4 (rectangular
+  native), Q5 (engine title: matched on Exolve only, at the convert boundary).
+  Q6 gates Phase 4.

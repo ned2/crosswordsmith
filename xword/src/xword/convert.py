@@ -7,13 +7,23 @@ adds D7's metadata side — native-only annotations (per-word `link`/arbitrary
 dropped by those serializers, and each drop is reported as a warning line the
 CLI prints to stderr (unless `-q`). The native target keeps all of it, so
 native → native is payload-lossless and warns about nothing.
+
+This boundary also owns the ONE sanctioned addition (Q5, spec §14): a
+title-less board targeting Exolve gains the engine's default title, because
+real Exolve consumers require one (Exet's Save crashes on a null title —
+docs/exet-verification.md). The serializers themselves stay invent-nothing.
 """
 
 from __future__ import annotations
 
 from .board import Board
-from .detect import NATIVE
+from .detect import EXOLVE, NATIVE
 from .formats import parse_board, serialize_board
+
+# The engine's invented default (export.pl emits `exolve-title: Untitled`);
+# byte-matching it keeps `convert` output line-identical to `crosswordsmith
+# export` on the title line (spec §11 engine cross-check).
+EXOLVE_DEFAULT_TITLE = "Untitled"
 
 
 def metadata_drop_warnings(board: Board, to_fmt: str) -> list[str]:
@@ -38,7 +48,26 @@ def metadata_drop_warnings(board: Board, to_fmt: str) -> list[str]:
     return warnings
 
 
+def exolve_title_default(board: Board, to_fmt: str) -> list[str]:
+    """Q5 (spec §14, resolved): inject the engine's default title on a
+    title-less board targeting Exolve, and say so with a warning line.
+
+    Exolve-only: Exet's Save crashes on a null title (exet-verification.md),
+    the same evidence that made the engine's `export` inject its default.
+    ipuz stays invent-nothing — `title` is optional there and nothing breaks.
+    Mutates `board.meta` (parse_board built it for this conversion alone).
+    """
+    if to_fmt == EXOLVE and "title" not in board.meta:
+        board.meta["title"] = EXOLVE_DEFAULT_TITLE
+        return [
+            "exolve requires a title (Exet's Save crashes without one); "
+            f"emitted default {EXOLVE_DEFAULT_TITLE!r}"
+        ]
+    return []
+
+
 def convert_text(text: str, to_fmt: str, from_fmt: str | None = None) -> tuple[str, list[str]]:
-    """Convert `text` to `to_fmt`, returning (output, drop warnings)."""
+    """Convert `text` to `to_fmt`, returning (output, warning lines)."""
     board = parse_board(text, from_fmt)
-    return serialize_board(board, to_fmt), metadata_drop_warnings(board, to_fmt)
+    warnings = metadata_drop_warnings(board, to_fmt) + exolve_title_default(board, to_fmt)
+    return serialize_board(board, to_fmt), warnings
