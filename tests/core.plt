@@ -1,4 +1,7 @@
-% tests/crossword.plt - plunit test suite for the shared substrate (core.pl, formerly crossword.pl)
+% tests/core.plt - plunit test suite for the shared substrate (core.pl,
+% formerly crossword.pl; this suite was tests/crossword.plt until the
+% legacy-surface dissolution completed the suite-per-module naming). Also
+% hosts the metrics.pl `quality` block (shared metrics split out of core).
 %
 % These tests assume core.pl has already been consulted into the
 % `user` module (the runner, tests/run_tests.pl, does this before loading
@@ -21,6 +24,20 @@
 
 bundled_words(Words) :-
     load_clues('fixtures/bundled_17_clues.pl', Words).
+
+% The production emit pipeline decomposed onto its exported seams - exactly
+% the composition the legacy crossword/3,4 driver wraps (default_strategy ->
+% check_unique_answers -> find_crossword/6 -> assign_clue_numbers ->
+% emit_json/3; all exported). Emit-shape tests call THIS, not the legacy
+% driver, so production coverage does not route through the research surface
+% (legacy-surface dissolution, docs/plans/legacy-surface-dissolution.md).
+% nondet like the driver: find_crossword/6 backtracks over solutions.
+solve_emit_json(GridLen, Words, StartLoc) :-
+    default_strategy(Strategy),
+    check_unique_answers(Words),
+    find_crossword(Strategy, GridLen, Words, StartLoc, _Grid, Placed),
+    assign_clue_numbers(Placed, Numbered),
+    emit_json(Numbered, Words, GridLen).
 
 
 % Grid geometry
@@ -194,23 +211,11 @@ test(too_small_grid_fails, [fail]) :-
     bundled_words(Words),
     crosswordsmith_core:find_crossword(3, Words, topleft_across, _Grid, _Placed).
 
-% End-to-end: the top-level crossword/3 emits one JSON object describing the
-% solution. Parse it and assert the expected shape. Output is captured both to
-% keep logs clean and to inspect it.
-test(full_pipeline_emits_json) :-
-    bundled_words(Words),
-    with_output_to(string(S), crosswordsmith_core:crossword(17, Words, topleft_across)),
-    atom_json_dict(S, Dict, []),
-    get_dict(gridLength, Dict, 17),
-    get_dict(grid, Dict, Grid), length(Grid, 17),
-    forall(member(Row, Grid), length(Row, 17)),
-    get_dict(words, Dict, WordObjs), length(WordObjs, 6).
-
 % A crossing cell carries BOTH directions, so both links remain reachable (G2).
 % Row 0, col 3 is where OMEGA POINT (across 1) and GNOSTIC GOSPELS (down 2) cross.
 test(crossing_cell_has_both_directions) :-
     bundled_words(Words),
-    with_output_to(string(S), crosswordsmith_core:crossword(17, Words, topleft_across)),
+    with_output_to(string(S), solve_emit_json(17, Words, topleft_across)),
     atom_json_dict(S, Dict, []),
     get_dict(grid, Dict, Grid),
     nth0(0, Grid, Row0),
@@ -221,7 +226,7 @@ test(crossing_cell_has_both_directions) :-
 % Per-word metadata is rejoined verbatim under `meta`.
 test(word_metadata_under_meta) :-
     bundled_words(Words),
-    with_output_to(string(S), crosswordsmith_core:crossword(17, Words, topleft_across)),
+    with_output_to(string(S), solve_emit_json(17, Words, topleft_across)),
     atom_json_dict(S, Dict, []),
     get_dict(words, Dict, WordObjs),
     once(( member(W, WordObjs), get_dict(answer, W, "OMEGA POINT") )),
@@ -229,7 +234,32 @@ test(word_metadata_under_meta) :-
     get_dict(clue, Meta, "Transcending entropy"),
     get_dict(link, Meta, "http://en.wikipedia.org/wiki/Omega_Point").
 
-% The emit-time join requires unique answers; a duplicate is rejected up front.
+% --- RESEARCH-SURFACE GUARDS (legacy crossword/3,4 driver) -------------------
+% The two tests below deliberately still call the INTERNAL legacy driver
+% crosswordsmith_core:crossword/3 - the benchmark-only research surface kept
+% per the de-accretion roadmap's recorded decision (docs/STATUS.md; banner in
+% core.pl). They guard the driver's own glue, which no production seam covers:
+% (a) that the driver resolves default_strategy/1 and runs the uniqueness
+% check BEFORE the search (ordering - re-pointed to check_unique_answers/1
+% alone, that ordering would be unguarded), and (b) the driver's end-to-end
+% emit, so bench-matrix's entry does not rot untested between campaigns.
+% Production emit coverage lives in the solve_emit_json tests above and does
+% NOT route through this surface. docs/plans/legacy-surface-dissolution.md.
+
+% The legacy driver end-to-end: full emitted shape (the re-purposed
+% full_pipeline_emits_json; the production pipeline's full-shape twin is
+% json_pipeline_emits_json below, on solve_emit_json).
+test(research_driver_emits_json) :-
+    bundled_words(Words),
+    with_output_to(string(S), crosswordsmith_core:crossword(17, Words, topleft_across)),
+    atom_json_dict(S, Dict, []),
+    get_dict(gridLength, Dict, 17),
+    get_dict(grid, Dict, Grid), length(Grid, 17),
+    forall(member(Row, Grid), length(Row, 17)),
+    get_dict(words, Dict, WordObjs), length(WordObjs, 6).
+
+% The emit-time join requires unique answers; the DRIVER rejects a duplicate
+% up front - before any search runs (the ordering half of the guard).
 test(duplicate_answer_rejected, [throws(error(duplicate_answer('CAT'), _))]) :-
     crosswordsmith_core:crossword(5, [['CAT', _{}], ['CAT', _{}]], topleft_across).
 
@@ -374,10 +404,10 @@ test(json_absent_meta_is_empty_dict) :-
     dict_pairs(M1, _, []),
     dict_pairs(M2, _, []).
 
-% The JSON-loaded words drive the existing pipeline to a valid JSON solution.
+% The JSON-loaded words drive the production pipeline to a valid JSON solution.
 test(json_pipeline_emits_json) :-
     crosswordsmith_core:read_clues_json('tests/clues.json', Words),
-    with_output_to(string(S), crosswordsmith_core:crossword(17, Words, topleft_across)),
+    with_output_to(string(S), solve_emit_json(17, Words, topleft_across)),
     atom_json_dict(S, Dict, []),
     get_dict(gridLength, Dict, 17),
     get_dict(grid, Dict, Grid), length(Grid, 17),
@@ -428,13 +458,13 @@ test(json_missing_file_throws, [throws(error(existence_error(source_sink, _), _)
 % diff: solver layout depends on input order, which the reduction reshuffles.)
 test(json_output_reduces_to_valid_input) :-
     crosswordsmith_core:read_clues_json('tests/clues.json', Words),
-    with_output_to(string(S1), crosswordsmith_core:crossword(17, Words, topleft_across)),
+    with_output_to(string(S1), solve_emit_json(17, Words, topleft_across)),
     atom_json_dict(S1, Dict, []),
     get_dict(words, Dict, WordObjs),
     maplist(reduce_word, WordObjs, ReducedClues),
     crosswordsmith_core:doc_to_words(_{clues: ReducedClues}, Words2),
     % the reduced output is itself valid input: it re-solves and re-emits JSON
-    with_output_to(string(S2), crosswordsmith_core:crossword(17, Words2, topleft_across)),
+    with_output_to(string(S2), solve_emit_json(17, Words2, topleft_across)),
     atom_json_dict(S2, Dict2, []),
     get_dict(words, Dict2, WordObjs2), length(WordObjs2, 6),
     % the answer set survives the round trip (atoms on both sides)
@@ -485,9 +515,9 @@ test(with_output_stdout_passthrough) :-
 % as the stdout path would produce.
 test(with_output_file_matches_stdout) :-
     crosswordsmith_core:read_clues_json('tests/clues.json', Words),
-    with_output_to(string(StdoutText), crosswordsmith_core:crossword(17, Words, topleft_across)),
+    with_output_to(string(StdoutText), solve_emit_json(17, Words, topleft_across)),
     tmp_file_stream(text, Tmp, S0), close(S0),
-    with_output(Tmp, crosswordsmith_core:crossword(17, Words, topleft_across)),
+    with_output(Tmp, solve_emit_json(17, Words, topleft_across)),
     setup_call_cleanup(open(Tmp, read, S), read_string(S, _, FileText), close(S)),
     delete_file(Tmp),
     FileText == StdoutText,
@@ -500,7 +530,7 @@ test(with_output_no_file_on_failure) :-
     crosswordsmith_core:read_clues_json('tests/clues.json', Words),
     tmp_file_stream(text, Tmp, S0), close(S0),
     delete_file(Tmp),                           % ensure it is absent
-    \+ with_output(Tmp, crosswordsmith_core:crossword(3, Words, topleft_across)),
+    \+ with_output(Tmp, solve_emit_json(3, Words, topleft_across)),
     \+ exists_file(Tmp).
 
 :- end_tests(cli).

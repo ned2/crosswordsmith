@@ -80,8 +80,9 @@
 
 % Numbering + the canonical JSON emit for the filled layout, plus the placed-word
 % record (pw/8) accessor fill uses to recover each answer for the emit metadata.
-% check_unique_answers/1: the emit-boundary unique-answers guard the solve path
-% runs in crossword/4; fill bypasses crossword/4, so emit_fill/4 runs it itself.
+% check_unique_answers/1: the unique-answers guard emit_json/3's metadata join
+% requires; nothing upstream of fill's emit runs it, so emit_fill/4 runs it
+% itself.
 :- use_module(crosswordsmith(core),
               [ assign_clue_numbers/2, check_unique_answers/1, emit_json/3,
                 verbose_report/2, pw_answer/2 ]).
@@ -686,9 +687,10 @@ fill_place_and_emit(Size, Slots, SearchSlots, DictByLen, Index, Masks, SizeMode)
         fail
     ).
 
-% The fill emit boundary. First re-assert the unique-answers invariant the
-% solve path checks in crossword/4 (fill bypasses crossword/4, so without this
-% it never ran here): any duplicate that still reaches emit reports as the
+% The fill emit boundary. First re-assert the unique-answers invariant that
+% emit_json/3's metadata join requires (nothing upstream on fill's pipeline
+% runs check_unique_answers/1, so without this it never ran here): any
+% duplicate that still reaches emit reports as the
 % clean hooked duplicate_answer error (exit 1), never the raw
 % domain_error(unique_key_pairs) from core's answer_meta_assoc/2. Defense in
 % depth only - seed_used/3 + check_unique_seed_answers/1 are the real fixes,
