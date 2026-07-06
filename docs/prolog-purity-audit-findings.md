@@ -1842,3 +1842,8 @@ one-line note`. Update the finding's status line and tick its box above at the s
   growth threshold (global_shifts 7→8, transient RSS blip; globalused byte-identical)
   — documented at the import site. **All 16 med findings are now closed.** Open:
   lows/nits + build-time follow-ups (WASM image load-noise check for C52/C6).
+- **2026-07-06 (rebase + WASM verification)** — branch rebased onto main `7a91e85`
+  (13 commits, no conflicts); full suite + both ratchets green post-rebase. Main's
+  new `make test-wasm` harness run against the rebased tree: **all 4 suites PASS**
+  (value golden wasm≡CLI, golden type lock, headless SDK E2E, worker error paths) —
+  the C52/C6 "verify the library(json) swap in the WASM image" follow-up is closed.
