@@ -318,10 +318,15 @@ class TestEngineCrossCheck:
     on the same layout. After P1 the engine retired its invented ipuz title
     and the constant `exolve-id`, so title/author now agree on both sides
     (ipuz: neither carries one for a title-less layout; exolve: both carry the
-    Q5 `Untitled` default). The residual divergences are cosmetic and left for
-    the byte-parity endgame (Stretch): ipuz JSON whitespace, and the exolve
-    title line's header position — engine emits it right after `exolve-begin`,
-    xword after width/height; same line content, different placement."""
+    Q5 `Untitled` default). The byte-parity endgame (Stretch, 2026-07-07) then
+    reordered `xword`'s Exolve header to lead with title/setter — so **Exolve
+    output is now byte-identical to the engine's** (asserted below). The one
+    residual divergence is ipuz JSON whitespace: the engine emits SWI-Prolog
+    `json_write_dict` house style (tabs, no space after `:`, short dicts
+    inlined) while `xword` emits `json.dumps(indent=2)`. Matching it byte-wise
+    would mean reimplementing that serializer in Python and abandoning `xword`'s
+    own D6/§11 clean-JSON contract, so ipuz parity is asserted *structurally*,
+    by design (spec §14)."""
 
     def _assert_structural_match(self, ours_text: str, engine_text: str, fmt: str):
         ours = parse_board(ours_text, fmt)
@@ -346,12 +351,13 @@ class TestEngineCrossCheck:
     def test_exolve_matches_engine_export(self):
         ours, _ = convert_text(NATIVE.read_text(), "exolve")
         self._assert_structural_match(ours, EXOLVE.read_text(), "exolve")
-        # the title LINE is byte-identical to the engine's (export.pl exolve_title_line/2)
-        assert "\n  exolve-title: Untitled\n" in ours
-        assert "\n  exolve-title: Untitled\n" in EXOLVE.read_text()
         # P1 retired the engine's constant exolve-id — neither side emits one now
         assert "exolve-id" not in ours
         assert "exolve-id" not in EXOLVE.read_text()
+        # Byte-parity endgame (Stretch): with the header reordered to lead with
+        # exolve-title/exolve-setter, xword's Exolve is byte-identical to the
+        # engine's export — the full-file assertion, not just the title line.
+        assert ours == EXOLVE.read_text()
 
 
 class TestExolveTitleDefault:
