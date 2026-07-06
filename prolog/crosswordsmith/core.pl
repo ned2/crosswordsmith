@@ -44,6 +44,9 @@
             assign_words_inc/9,
             find_crossword/6,
             all_crossword/5,
+            % the memo-hygiene seam every top-level search entry runs
+            % (arrange.pl's entries are the out-of-module consumers)
+            reset_search_memos/0,
             % strategy registry
             strategies/1,
             default_strategy/1,
@@ -277,12 +280,75 @@ all_crossword(Strategy, GridLen, Words, StartLoc, Num) :-
                   Num).
 
 
+% reset_search_memos: abolish the two tabled search memos (pair_crossings/3,
+% answer_letters/2) so the next search starts from empty tables.
+%
+% THE SEAM INVARIANT (audit C1/C48): every TOP-LEVEL search entry runs this
+% exactly ONCE on entry, all strategies and paths alike - find_crossword/6
+% below (which crossword/3,4 and all_crossword/5 route through; the benchmark
+% samplers and tests call it directly) and arrange.pl's entry predicates
+% (arrange_best_layout/6, arrange_best_effort/6, arrange_candidates/6,
+% arrange_fragment_strict/6, arrange_fragment_best_effort/7). That restores
+% two properties at once: (a) in-process inference counts are
+% HISTORY-INDEPENDENT - a search's count never depends on which searches ran
+% before it in the same process (the bench ratchet's determinism invariant;
+% previously only the mrv_inc clause abolished, so baseline/greedy counts
+% were call-order-dependent), and (b) table growth in a persistent process
+% (WASM worker, native SDK embedding, this test suite) is BOUNDED to one
+% request's residue, flushed by the next entry's reset, instead of one memo
+% variant per (Letters, PLetters) pair ever seen. WITHIN one entry the memos
+% are deliberately shared (corner sweeps, candidate pools, greedy per-move
+% scoring): never call this from a per-corner/per-candidate loop.
+%
+% abolish_module_tables/1 "removes all tables that belong to predicates in
+% Module" (tabling-preds.md); this module's tabled predicates are exactly the
+% two memos, so the scope is precise - if a table with a DIFFERENT lifecycle
+% ever lands in this module, revisit this call. It is chosen over two
+% abolish_table_subgoals/1 calls on probe evidence (SWI-Prolog 10.1.10): the
+% subgoal form's flush cost VARIES with the residue being flushed (70/74/16
+% inferences after a strict/greedy/no residue), leaking a +-4-inference
+% history signature into every entry's count, while abolish_module_tables/1
+% costs a CONSTANT 67 inferences for any non-empty residue (9 when already
+% empty - only ever a process's very first search, whose count carries
+% one-time JIT/autoload noise anyway), making steady-state entry counts
+% exactly history-independent. Both forms were probe-verified to flush all
+% variants; scoped abolition is preferred over abolish_all_tables/0 so any
+% future table outside this module keeps its own lifecycle. (Test-side trap:
+% current_table/2 VARIANT-matches its goal argument, so an open pattern
+% silently enumerates nothing - census code must enumerate unbound and
+% filter, never pattern-match.) Cost of the flush: the rebuild is ~|Words|^2
+% pairs, negligible against the search it serves; the tabled values are pure
+% functions of the answers' letters, so abolition can never change results -
+% only memory and inference counts.
+% Known measurement floor (probe-verified, irreducible from Prolog): the
+% first tabled call after a reset costs +-2 inferences depending on the SHAPE
+% of the residue the reset destroyed (e.g. whether the previous request ever
+% populated answer_letters/2 - the greedy path does not). So an entry's total
+% count is exact-deterministic given (its input, the predecessor entry's
+% type), and cross-history counts agree to within 4 inferences (~0.002%);
+% the memo WORK itself is exactly history-independent (decomposition probe:
+% identical search counts after a manual pre-reset). Canonicalizing the
+% post-abolish state (dummy seed variants, double abolish) was probed and
+% does NOT remove this - the variance just moves into the seeding calls.
+reset_search_memos :-
+    abolish_module_tables(crosswordsmith_core).
+
 % The driver predicate used to solve the crossword. find_crossword/5 uses the
 % production default strategy (default_strategy/1); find_crossword/6 takes an
 % explicit strategy. The benchmark harness calls /6 directly per strategy.
 find_crossword(GridLen, Words, Loc, Grid, PlacedWords) :-
     default_strategy(Strategy),
     find_crossword(Strategy, GridLen, Words, Loc, Grid, PlacedWords).
+
+% find_crossword/6 is a TOP-LEVEL search entry, so it owns a
+% reset_search_memos/0 seam: exactly one memo reset per external call, ALL
+% strategies alike (see reset_search_memos/0 above). arrange.pl's strict
+% corner sweep deliberately does NOT come through here - it calls the mrv_inc
+% driver (init_gs/start_loc/assign_words_inc) directly under its own
+% entry-level reset, so one arrange request's corners share the memos.
+find_crossword(Strategy, GridLen, Words, Loc, Grid, PlacedWords) :-
+    reset_search_memos,
+    find_crossword_strategy(Strategy, GridLen, Words, Loc, Grid, PlacedWords).
 
 % mrv_inc threads an incremental count cache, so it has its own driver
 % (assign_words_inc/9) rather than sharing the stateless assign_words/9 path.
@@ -291,25 +357,15 @@ find_crossword(GridLen, Words, Loc, Grid, PlacedWords) :-
 % and an unknown strategy FAILS here rather than falling through to the
 % stateless path - require_strategy/1 is the seam that turns an unknown
 % strategy atom into an error, and every CLI/API entry runs it first.
-find_crossword(mrv_inc, GridLen, Words, Loc, Grid, PlacedWords) :-
-    % Reset the per-search crossing memo (see pair_crossings/3): the tabled
-    % (Val,PPos,Pos) sequences are a pure function of two answers' letters and
-    % never change, so they amortize across the millions of nodes in THIS
-    % search - but abolishing at the search boundary keeps each search's
-    % inference count self-contained and order-independent (a warm table
-    % carried across searches/workloads would make counts depend on run order,
-    % breaking the benchmark's determinism invariant). The rebuild is ~|Words|^2
-    % pairs, negligible against the search it serves.
-    abolish_table_subgoals(pair_crossings(_,_,_)),
-    abolish_table_subgoals(answer_letters(_,_)),
+find_crossword_strategy(mrv_inc, GridLen, Words, Loc, Grid, PlacedWords) :-
     init_gs(GridLen, G1),
     start_loc(Loc, GridLen, StartNum, StartDir),
     assign_words_inc(Words, [], none, GridLen, StartNum, StartDir, G1, Grid, PlacedWords).
-find_crossword(baseline, GridLen, Words, Loc, Grid, PlacedWords) :-
+find_crossword_strategy(baseline, GridLen, Words, Loc, Grid, PlacedWords) :-
     find_crossword_stateless(baseline, GridLen, Words, Loc, Grid, PlacedWords).
-find_crossword(mrv, GridLen, Words, Loc, Grid, PlacedWords) :-
+find_crossword_strategy(mrv, GridLen, Words, Loc, Grid, PlacedWords) :-
     find_crossword_stateless(mrv, GridLen, Words, Loc, Grid, PlacedWords).
-find_crossword(mrv_capped, GridLen, Words, Loc, Grid, PlacedWords) :-
+find_crossword_strategy(mrv_capped, GridLen, Words, Loc, Grid, PlacedWords) :-
     find_crossword_stateless(mrv_capped, GridLen, Words, Loc, Grid, PlacedWords).
 
 % Shared driver for the stateless (non-incremental) strategies.
@@ -671,8 +727,8 @@ entry_letters([Word|_], Letters) :-
 % this is a pure function of the atom and is tabled: the mrv_inc counting path
 % (mrv_count/select_inc/inc_count) re-derives a word's letters per node, and the
 % atom_chars + two delete/3 passes are memoized to one lookup after the first.
-% Reset per search alongside pair_crossings/3 (find_crossword), so the inference
-% count stays self-contained across benchmark iterations.
+% Reset alongside pair_crossings/3 by reset_search_memos/0 at every top-level
+% search entry, so inference counts stay self-contained per entry.
 :- table answer_letters/2.
 answer_letters(Word, Letters) :-
     atom_chars(Word, L0),

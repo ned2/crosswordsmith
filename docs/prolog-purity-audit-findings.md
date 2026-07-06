@@ -518,7 +518,7 @@ style-small / stdlib / determinism).
 #### C1 — Table abolition is strategy-local → run-order-dependent inference counts
 `core.pl:280–299` (mrv_inc clause abolishes; `:295-299` generic clause does not) ·
 behaviour preserving (measurement integrity, not output) · flags: perf-relevant (bench
-validity) · **open** · (determinism M1)
+validity) · **fixed 2026-07-06** (see tracker + remediation log) · (determinism M1)
 
 The comment at core.pl:283–289 says the `abolish_table_subgoals` calls exist so "each
 search's inference count [is] self-contained and order-independent" — but only the
@@ -1181,7 +1181,8 @@ else below is single-sourced and probe-backed.
 #### C48 — Unbounded `pair_crossings/3` growth in single-engine embeddings; the shipped Worker is saved by an undocumented engine-privacy accident (C2, concretized & relocated)
 `browser.pl:85–88` (`reset_request_state/0` clears the dynamics, never touches tables);
 tables `core.pl:646` (`pair_crossings/3`), `:595` (`answer_letters/2`); strict-entry
-abolish `core.pl:303–304` · **med** · behaviour preserving · flags: **WASM** · **open**
+abolish `core.pl:303–304` · **med** · behaviour preserving · flags: **WASM** ·
+**fixed 2026-07-06** (see tracker + remediation log)
 · (census F1 + style E5 — the lanes agree; supersedes **C2**; confidence: high,
 empirically verified)
 
@@ -1672,7 +1673,7 @@ Tick as landed. `→ §Cn` links to the finding; X-steps link to
 - [x] serial idle-machine wall A/B for §1d (3 interleaved pairs; tables inline in §1d) — 2026-07-06
 
 **Open — med**
-- [ ] **C1** `med` — table abolition strategy-local; run-order-dependent inference counts → `core.pl:280`
+- [x] **C1** `med` — table abolition strategy-local; run-order-dependent inference counts → `core.pl:280` · *2026-07-06: **fixed** — one `reset_search_memos/0` seam (`abolish_module_tables(crosswordsmith_core)`, tabling-preds.md) at every top-level search entry: `find_crossword/6` (all four strategies) + arrange's five entries; the old per-corner strict abolish consolidated to exactly one reset per external call. Warm==cold locked: in-process strict is 112,642–112,644 inferences regardless of history (pre-fix drift on the same fixture: 11,454 cold vs 4,237 warm baseline). plt lock `arrange:inference_counts_history_independent`; arrange ratchet 12/12 PASS, −0.04%…−10.58% all-WIN (cross-corner memo sharing)*
 - [x] **C2** `med·WASM` — unbounded table growth on greedy path in persistent process → `core.pl:646,595` · *2026-07-06: **concretized & relocated → C48** (browser.pl lane: growth measured 98,184 B → 1,086,840 B → 5,589,120 B over 1/10/50 fresh-vocab dispatches; Worker's engine-privacy dependency probe-verified). Closed here as relocated, **not fixed** — the single open actionable item is C48*
 - [x] **C3** `med·WASM` — browser dynamic-state reset seam missing → `solve_browser.pl:71` · `core.pl:479` · `arrange.pl:101` · ***resolved on main (`browser.pl:85–88` `reset_request_state/0` + browser.plt determinism locks), probe-verified 2026-07-06** incl. externally-poisoned globals; on-entry-reset residue benign + plt-locked. The tabled-memo caveat is NOT covered → C48*
 - [ ] **C4** `med` — no PlDoc/determinism annotations project-wide (or record the convention)
@@ -1688,7 +1689,7 @@ Tick as landed. `→ §Cn` links to the finding; X-steps link to
 - [ ] **C14** `med` — require_strategy message hard-codes the registry → `core.pl:236`
 - [ ] **C15** `med·test` — `assign_word/10` dead arg 7 → `core.pl:665`
 - [ ] **C16** `med·perf` — deprecated `delete/3` letter-normalization → `core.pl:596` · `metrics.pl:56`
-- [ ] **C48** `med·WASM` — unbounded `pair_crossings/3` growth in single-engine embeddings (ex-C2, concretized): abolish-in-reset and/or document the engine-privacy dependency → `browser.pl:85` · `core.pl:646,595` · `wasm/client/worker.js`
+- [x] **C48** `med·WASM` — unbounded `pair_crossings/3` growth in single-engine embeddings (ex-C2, concretized): abolish-in-reset and/or document the engine-privacy dependency → `browser.pl:85` · `core.pl:646,595` · `wasm/client/worker.js` · *2026-07-06: **fixed** via the core seam (C1's `reset_search_memos/0` at every search entry), not abolish-in-reset — 50 fresh-vocab best-effort dispatches now end at 117,888 B / 94 variants (98,184 after 1 → 97,056 after 10; pre-fix 98,184 → 1,086,840 → 5,589,120), bounded at ONE request's residue flushed by the next request's search entry. `reset_request_state/0` deliberately does NOT abolish (it runs on entry, so an abolish there is redundant with the seam and cannot shrink the between-request footprint; browser.pl:79ff documents the residue). The Worker's engine-privacy accident is no longer load-bearing. plt lock `browser:table_growth_bounded_across_dispatches` (also closes that C58 line item)*
 - [ ] **C49** `med` — verb registry triplicated (dispatch clauses / capabilities literal / unknown_verb message) → one `verb/1` fact table → `browser.pl:131,300,441`
 - [ ] **C50** `med·WASM·risk` — export shallow shape gate: gate-passing garbage → mislabelled `internal` envelope or degenerate success → `browser.pl:246` · `export.pl:38`
 - [ ] **C51** `med·WASM` — both wire directions hand-roll `atom_json_dict/3` (ex-C9 pattern) → `browser.pl:98,76`
@@ -1783,3 +1784,41 @@ one-line note`. Update the finding's status line and tick its box above at the s
   relocated); C9's site deleted (pattern → C51, row annotated); C25 half-done and C6
   stale-ref annotated. **16 new findings opened, C48–C63 (5 med · 6 low · 5 nit)**,
   all `open`.
+
+- 2026-07-06 · **C1 + C48** · **fixed (uncommitted)** · — · one memo-hygiene seam,
+  `reset_search_memos/0` (core.pl, exported), run exactly ONCE at every top-level
+  search entry: `find_crossword/6` (now a reset prologue over the enumerated
+  `find_crossword_strategy/6` clauses — ALL strategies, not just mrv_inc) and
+  arrange's five entries (`arrange_best_layout/6`, `arrange_best_effort/6`,
+  `arrange_candidates/6`, `arrange_fragment_strict/6`,
+  `arrange_fragment_best_effort/7`; `arrange_enumerate/3` inherits via
+  all_crossword→find_crossword). The old strict per-corner abolish was consolidated:
+  `construct_one` composes core's mrv_inc driver directly (init_gs/start_loc/
+  assign_words_inc, the construct_from_seed pattern), so one request's corners now
+  SHARE the memos. Abolition predicate: `abolish_module_tables(crosswordsmith_core)`
+  ("remove all tables that belong to predicates in Module", tabling-preds.md) —
+  chosen over 2× `abolish_table_subgoals/1` by probe: its flush cost is constant
+  (67 inf for any non-empty residue) where the subgoal form varies with residue
+  shape (70/74/16), and module scope == exactly the two memos today.
+  **Probe discovery worth keeping:** even so, the FIRST tabled call after a reset
+  costs ±2 inf depending on the destroyed residue's shape (irreducible from Prolog;
+  canonical-seeding and double-abolish probed, variance just relocates) — so counts
+  are exact per (entry, predecessor-type) and cross-history agrees within 4 inf
+  (~0.002%; the defect being fixed was 2.7×). Gates: `./run_tests.sh` ALL TESTS
+  PASSED (goldens byte-identical); arrange ratchet PASS 12/12 incl. --heavy, 9 WINs
+  0 regressions (−10.58%/−5.75%/−6.96%/−8.57%/−3.99% core rungs 08w/12w/25w/28w/32w;
+  −1.79%/−5.33%/−0.33%/−0.14%/−0.04%/−0.67%/−3.88% heavy — the drop is corner-2
+  running warm; `make bench-record` owed after commit); fill ratchet PASS, all rungs
+  exactly +0.00% (fill never touches the memos). C48 growth (12-word fresh-vocab
+  best-effort dispatches, single engine): 98,184 B → 97,056 B → 117,888 B after
+  1/10/50 (pre-fix 98,184 → 1,086,840 → 5,589,120). Warm-vs-cold (C1 acceptance):
+  greedy→strict→strict in one process = 112,644/112,642 inf, fresh-process strict
+  steady = 112,644/112,642 (pre-fix: 116,526/115,397 in-process vs 122,547 fresh).
+  New locks: `arrange:inference_counts_history_independent` (fails pre-fix shape by
+  Δ3,245) + `browser:table_growth_bounded_across_dispatches` (fails pre-fix at 5×
+  bound; closes that C58 line item). browser.pl `reset_request_state/0` deliberately
+  does NOT abolish (entry-time abolish is seam-redundant and cannot shrink the
+  between-request footprint); its comment block rewritten — which also fixed the
+  ":80 only three mutable globals" staleness in passing (C61's comment half; C61's
+  plt/strategy-doc halves stay open). det/steadfastness re-probed on every edited
+  entry: det=true, wrong-bound output fails cleanly.

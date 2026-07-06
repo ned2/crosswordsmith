@@ -69,8 +69,10 @@
                 check_word_fits/5,
                 find_intersecting_word/6,
                 assign_words_inc/9,
-                find_crossword/6,
                 all_crossword/5,
+                % the C1/C48 memo-hygiene seam: run ONCE at each of this
+                % module's top-level search entries (see core.pl)
+                reset_search_memos/0,
                 default_strategy/1,
                 pw_answer/2,
                 pw_cells/2,
@@ -233,6 +235,11 @@ arrange_best_layout(Words, GridLen, Numbered, Reward, Outcome) :-
 % default /5 reads arrange_budget/1; passing a tiny Budget drives the
 % AC-ARR-1c / AC-ARR-10 "not proven within budget" path (tests/arrange.plt).
 arrange_best_layout(Words, GridLen, Budget, Numbered, Reward, Outcome) :-
+    % Top-level search entry: one memo reset per request (core.pl
+    % reset_search_memos/0, C1/C48). The corner sweep below SHARES the
+    % pair_crossings/answer_letters memos - the reset must never fire
+    % per corner (construct_one bypasses find_crossword/6's seam).
+    reset_search_memos,
     arrange_weights(WCap, WTail),
     arrange_corners(Locs),
     construct_corners(Locs, Words, GridLen, WCap, WTail, Budget, Results),
@@ -276,13 +283,26 @@ construct_one(Loc, Words, GridLen, WCap, WTail, Budget, Res) :-
     % bug: let it surface (main/0 reports it, exit 1) rather than be silently
     % reclassified as `exhausted`.
     call_with_inference_limit(
-        ( find_crossword(mrv_inc, GridLen, Words, Loc, _G, P) -> Found = P
+        ( corner_search(Loc, Words, GridLen, P) -> Found = P
         ; Found = none ),
         Budget, Outcome),
     (   Outcome == inference_limit_exceeded -> Res = budget
     ;   Found == none                       -> Res = exhausted
     ;   layout_reward(WCap, WTail, Found, R), Res = ok(R, Found)
     ).
+
+% One strict corner: core's mrv_inc driver composed DIRECTLY (init_gs +
+% start_loc + assign_words_inc, the same primitives construct_from_seed
+% composes for the fragment path), NOT via find_crossword/6 - that entry runs
+% reset_search_memos/0 on every call (it is its own top-level seam), which
+% would flush the memo tables between corners. arrange_best_layout/6 owns
+% this request's single reset; the corners share the memos (C1 consolidation:
+% exactly one reset per external call).
+corner_search(Loc, Words, GridLen, PlacedWords) :-
+    init_gs(GridLen, G1),
+    start_loc(Loc, GridLen, StartNum, StartDir),
+    assign_words_inc(Words, [], none, GridLen, StartNum, StartDir,
+                     G1, _Grid, PlacedWords).
 
 % Construct the best strict layout, emit it (framed by SizeMode) on stdout,
 % report on stderr. On any non-placed outcome: report + fail with no stdout
@@ -340,6 +360,12 @@ word_shares_letter(Entry, Words) :-
 % Best greedy layout on GridLen. The key score(NumPlaced, Reward) compared in
 % standard term order ranks most-placed first, then highest reward.
 arrange_best_effort(Words, GridLen, Numbered, Reward, NumPlaced, Dropped) :-
+    % Top-level search entry: one memo reset per request (core.pl
+    % reset_search_memos/0, C1/C48 - this greedy path never reset before, so
+    % its tables grew without bound in persistent processes and its inference
+    % counts depended on call history). The seed x corner sweep below SHARES
+    % the memos - do not reset per greedy_construct.
+    reset_search_memos,
     arrange_weights(WCap, WTail),
     seed_candidates(Words, Seeds),
     start_locs(Locs),
@@ -698,6 +724,10 @@ construct_from_seed(Remaining, SeededPlaced, SeededGrid, GridLen, AllPlaced) :-
 % seed_from_fragment runs OUTSIDE the budget so conflicts are reported before
 % any search (the §6.6 "validate up front" contract).
 arrange_fragment_strict(Words, Frags, GridLen, Numbered, Reward, Outcome) :-
+    % Top-level search entry: one memo reset per request (core.pl
+    % reset_search_memos/0, C1/C48 - this path reaches assign_words_inc
+    % directly and never reset before).
+    reset_search_memos,
     arrange_weights(WCap, WTail),
     seed_from_fragment(Frags, Words, GridLen, SeededPlaced, SeededGrid, Remaining),
     arrange_budget(Budget),
@@ -730,6 +760,9 @@ construct_fragment_one(Remaining, SeededPlaced, SeededGrid, GridLen, Budget, Res
 % starting (Placed, Grid), and only ever drops from Remaining - the pins are
 % never dropped (AC-FRAG-3 holds under drop too).
 arrange_fragment_best_effort(Words, Frags, GridLen, Numbered, Reward, NumPlaced, Dropped) :-
+    % Top-level search entry: one memo reset per request (core.pl
+    % reset_search_memos/0, C1/C48).
+    reset_search_memos,
     arrange_weights(WCap, WTail),
     seed_from_fragment(Frags, Words, GridLen, SeededPlaced, SeededGrid, Remaining),
     greedy_loop(Remaining, SeededPlaced, GridLen, SeededGrid, FinalPlaced, DroppedEntries),
@@ -909,6 +942,10 @@ same_pos(K, A1, A2) :- get_assoc(K, A1, P), get_assoc(K, A2, P).
 % Up to K diverse numbered layouts for the word set. Returned =< K; fewer only
 % when fewer >= tau-distinct layouts exist (reported by the solve wrapper).
 arrange_candidates(Words, GridLen, DropContract, K, Numbered, Returned) :-
+    % Top-level search entry: one memo reset per request (core.pl
+    % reset_search_memos/0, C1/C48). The pool's K greedy constructions
+    % SHARE the memos - the reset lives here, never inside the pool sweep.
+    reset_search_memos,
     arrange_candidate_pool(Words, GridLen, DropContract, Pool),
     Pool = [_|_],
     length(Words, Total),
@@ -964,6 +1001,9 @@ fewer >=tau-distinct layouts exist~n",
 % reorder the same search tree). The branch step / legality core are untouched.
 arrange_enumerate(Words, GridLen, Num) :-
     default_strategy(Strat),
+    % No reset_search_memos/0 here: all_crossword/5 runs the count through
+    % find_crossword/6, whose own top-level seam resets once per call -
+    % resetting here too would double-fire (C1: one reset per external call).
     all_crossword(Strat, GridLen, Words, _StartLoc, Num).
 
 % Count + print the enumeration on stdout (a bare integer), as the old CLI did.

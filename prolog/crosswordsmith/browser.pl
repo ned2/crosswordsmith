@@ -77,11 +77,22 @@ browser_dispatch(Verb, Payload, JsonEnvelope) :-
                    json_write_dict(current_output, Envelope, [width(0)])).
 
 % --- per-request state reset (strategy §3.2) ---------------------------------
-% Unconditionally clear the ONLY three mutable module globals before every
-% dispatch: a Worker reuses one Prolog instance across requests and the
-% per-solve {engine:true} engine does NOT clear module dynamics, so a previous
-% request's seed/checkTarget/verbose would otherwise leak forward. All three
-% are reset defensively even though the slice only exposes `seed`.
+% Unconditionally clear the mutable module globals before every dispatch: a
+% Worker reuses one Prolog instance across requests and the per-solve
+% {engine:true} engine does NOT clear module dynamics, so a previous request's
+% seed/checkTarget/verbose would otherwise leak forward. All three setters run
+% defensively even though the slice only exposes `seed`; set_search_seed(-1)
+% also clears core's prng_state/1 (the fourth dynamic fact) transitively.
+%
+% Tabled memos (core's pair_crossings/3 + answer_letters/2) are deliberately
+% NOT abolished here: every arrange search entry runs core's
+% reset_search_memos/0 seam (C48), so a single-engine embedding looping
+% browser_dispatch/3 holds at most ONE request's table residue (~100 KB for a
+% 12-word request), flushed by the next request's search entry - growth is
+% bounded, no longer one memo variant per word pair ever seen. An abolish here
+% would be redundant with that seam, and because this reset runs on ENTRY (not
+% exit) it could not shrink the between-request footprint either. The bound is
+% locked by browser.plt's bounded-growth test.
 reset_request_state :-
     set_search_seed(-1),
     set_check_target(-1),

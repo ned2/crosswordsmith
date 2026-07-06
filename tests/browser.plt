@@ -95,6 +95,39 @@ bt_lint(Params, Env) :-
 bt_export(Params, Env) :-
     bt_dispatch(export, _{v: 1, id: "t-e", verb: "export", params: Params}, Env).
 
+% --- table-memo census (the C48 bounded-growth lock) --------------------------
+% current_table/2 VARIANT-matches its goal argument, so an open pattern like
+% pair_crossings(_,_,_) silently enumerates NOTHING (probe-verified on
+% SWI 10.1.10; see core.pl reset_search_memos/0): enumerate unbound + filter.
+bt_memo_table(Trie) :-
+    current_table(M:G, Trie),
+    M == crosswordsmith_core,
+    functor(G, Name, Arity),
+    memberchk(Name/Arity, [pair_crossings/3, answer_letters/2]).
+
+bt_memo_census(Variants, Bytes) :-
+    aggregate_all(count, bt_memo_table(_), Variants),
+    aggregate_all(sum(S), ( bt_memo_table(T), trie_property(T, size(S)) ),
+                  Bytes).
+
+% Deterministic, globally-unique 5-letter vocabulary per set index (the "user
+% edits their clue list between requests" story: every dispatch presents fresh
+% (Letters, PLetters) pairs to the memo, the worst case for table growth).
+% The first two letters encode SetIdx, so no word ever recurs across sets.
+bt_vocab_word(SetIdx, WIdx, W) :-
+    A is 0'A + SetIdx mod 26,
+    B is 0'A + (SetIdx // 26) mod 26,
+    C is 0'A + WIdx mod 26,
+    D is 0'A + (SetIdx * 3 + WIdx * 5) mod 26,
+    E is 0'A + (SetIdx * 7 + WIdx * 11) mod 26,
+    string_codes(W, [A, B, C, D, E]).
+
+bt_fresh_vocab_params(SetIdx, _{clues: Clues, size: 9, bestEffort: true}) :-
+    numlist(1, 12, Is),
+    maplist(bt_vocab_word(SetIdx), Is, Ws0),
+    sort(Ws0, Ws),                       % dedupe: duplicate answers throw
+    findall(_{answer: W}, member(W, Ws), Clues).
+
 % load_clues/2 dispatches on the file extension, so the temp file must be .json.
 bt_with_toy_input(Goal) :-
     tmp_file(bt_clues, Base),
@@ -299,6 +332,33 @@ test(dispatch_resets_previous_seed) :-
     once(crosswordsmith_core:search_seed(42)),
     bt_arrange(P0, _),
     \+ crosswordsmith_core:search_seed(_).
+
+% The C48 bounded-growth lock: fresh-vocab best-effort dispatches in THIS
+% single engine must not accumulate memo tables. core's reset_search_memos/0
+% seam (run at every search entry) bounds the store at ONE request's residue,
+% flushed by the next request's search entry - pre-fix the greedy path never
+% abolished and this exact scenario grew monotonically (98 KB -> 1.09 MB ->
+% 5.59 MB over 1/10/50 dispatches, ~112 KB per 12-word request; audit C48).
+% Post-fix, the census after dispatch N is single-request scale for every N.
+% The factor-2 margin absorbs vocab-to-vocab residue variation (measured
+% 77-94 variants across 50 distinct sets); pre-fix, five dispatches sit at
+% ~5x and blow through it.
+test(table_growth_bounded_across_dispatches) :-
+    bt_fresh_vocab_params(1, P1),
+    bt_dispatch(arrange, _{v: 1, id: "m-1", verb: "arrange", params: P1},
+                Env1),
+    bt_success_result(Env1, _),
+    bt_memo_census(V1, B1),
+    V1 > 0,
+    forall(between(2, 5, I),
+           ( bt_fresh_vocab_params(I, P),
+             bt_dispatch(arrange,
+                         _{v: 1, id: "m-n", verb: "arrange", params: P},
+                         Env),
+             bt_success_result(Env, _) )),
+    bt_memo_census(V5, B5),
+    assertion(V5 =< 2 * V1),
+    assertion(B5 =< 2 * B1).
 
 % --- native value-parity vs the committed CLI goldens (DEC-8) ----------------
 % The nested `result` is a live dict: correctness is value-equality of the

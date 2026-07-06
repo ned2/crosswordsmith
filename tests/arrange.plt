@@ -18,6 +18,25 @@
 arrange_bundled(Words) :- load_clues('fixtures/bundled_17_clues.pl', Words).
 arrange_toc(Words)     :- load_clues('fixtures/toc_demo.pl', Words).
 
+% statistics(inferences) delta around a deterministically-succeeding goal
+% (once/1-pinned so measuring can never leave the goal's choicepoint behind).
+arrange_inf_delta(Goal, Delta) :-
+    statistics(inferences, I0),
+    once(Goal),
+    statistics(inferences, I1),
+    Delta is I1 - I0.
+
+% One greedy / one strict solve on the bundled fixture with FRESH output
+% variables per call, measured (the C1 history-independence lock's probes).
+greedy_inf(Words, Delta) :-
+    arrange_inf_delta(
+        crosswordsmith_arrange:arrange_best_effort(Words, 17, _, _, _, _),
+        Delta).
+strict_inf(Words, Delta) :-
+    arrange_inf_delta(
+        crosswordsmith_arrange:arrange_best_layout(Words, 17, _, _, _),
+        Delta).
+
 
 :- begin_tests(arrange).
 
@@ -541,6 +560,46 @@ test(seed_cleared_restores_deterministic) :-
     crosswordsmith_arrange:arrange_best_layout(Words, 17, After, _, placed),
     layout_sig(After, SigAfter),
     SigAfter == SigBefore.
+
+% --- C1: in-process inference counts are history-independent ------------------
+% reset_search_memos/0 (core.pl) runs ONCE at every top-level search entry, so
+% a search's inference count cannot inherit table work from whatever ran before
+% it in the same process. Pre-fix, only the strict path abolished: a greedy
+% run left warm pair_crossings/3 memos and later counts drifted by THOUSANDS
+% of inferences (audit C1: 11,454 cold vs 4,237 warm on this very fixture).
+% Locked here with statistics(inferences) deltas. Two irrelevant residuals are
+% probe-documented (see reset_search_memos/0): first calls carry one-time
+% JIT/autoload cost (absorbed by the warmup pair), and the reset's flush of
+% the PREVIOUS entry's residue costs +-2 inferences depending on that
+% residue's shape - so identical (entry, predecessor-type) pairs must agree
+% EXACTLY, and cross-history comparisons must agree within 4 inferences
+% (~0.002%; the pre-fix defect was ~3 orders of magnitude larger).
+test(inference_counts_history_independent) :-
+    arrange_bundled(Words),
+    % warmup: one-time JIT/autoload, discarded (fresh output vars per call -
+    % a reused goal term would carry the first run's bindings forward)
+    greedy_inf(Words, _),
+    strict_inf(Words, _),
+    % measured sequence (predecessor type annotated)
+    greedy_inf(Words, G1),   % greedy after strict
+    strict_inf(Words, S1),   % strict after greedy
+    greedy_inf(Words, G2),   % greedy after strict
+    strict_inf(Words, S2),   % strict after greedy
+    strict_inf(Words, S3),   % strict after strict ("cold": no greedy warmth)
+    strict_inf(Words, S4),   % strict after strict
+    greedy_inf(Words, G3),   % greedy after strict
+    greedy_inf(Words, G4),   % greedy after greedy (pre-fix: warm memo, cheap)
+    greedy_inf(Words, G5),   % greedy after greedy
+    % identical in-process solves yield IDENTICAL deltas
+    assertion(G1 =:= G2),
+    assertion(G1 =:= G3),
+    assertion(S1 =:= S2),
+    assertion(S3 =:= S4),
+    assertion(G4 =:= G5),
+    % cross-history: strict-after-greedy == strict-cold, greedy-after-greedy ==
+    % greedy-after-strict, up to the +-2 residue-flush walk
+    assertion(abs(S1 - S3) =< 4),
+    assertion(abs(G4 - G1) =< 4).
 
 % --shuffle draws a fresh seed from OS entropy but stays RECOVERABLE: it picks a
 % concrete integer N, and re-running with --seed N reproduces the same layout.
