@@ -114,7 +114,7 @@ def convert(
         Optional[Path], Parameter(name=("--out", "-o"), help="Write to FILE instead of stdout.")
     ] = None,
     quiet: Annotated[
-        bool, Parameter(name=("--quiet", "-q"), help="Silence metadata-drop warnings.")
+        bool, Parameter(name=("--quiet", "-q"), help="Silence conversion warnings.")
     ] = False,
 ) -> None:
     """Convert between data formats (any -> any)."""
