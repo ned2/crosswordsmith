@@ -16,6 +16,7 @@
 # Usage:
 #   wasm/build/build-wasm.sh            # full build (verifies the swipl-devel pin)
 #   SWIPL_ALLOW_CHECKOUT=1 …            # allow the script to `git checkout` the pin
+#   SWIPL_ALLOW_DIRTY=1 …               # build despite a dirty swipl-devel tree
 #   WASM_HOME=… SWIPL_SRC=… …          # override locations
 set -euo pipefail
 
@@ -25,7 +26,9 @@ set -euo pipefail
 SWIPL_COMMIT="aa6289399"                     # our pin (V10.1.10-17-g…, 2026-07-01)
 EMSDK_VERSION="6.0.1"                         # npm-swipl-wasm's pin; swipl-devel has no wasm CI
 ZLIB_VERSION="1.3.2"
+ZLIB_SHA256="bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16"
 PCRE2_VERSION="10.47"
+PCRE2_COMMIT="f454e231fe5006dd7ff8f4693fd2b8eb94333429"
 
 # repo root = two levels up from this script (wasm/build/ -> repo root)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -35,6 +38,12 @@ BUILD_DIR="$SWIPL_SRC/build.wasm"
 
 log() { printf '\n\033[1;36m== %s\033[0m\n' "$*"; }
 
+# supply-chain guards (submodule/dirty-tree/pcre2/emcc/pin asserts) live in a
+# sourced helper so each is unit-testable in ~1s without the ~600-step ninja
+# build. See docs/plans/wasm-supply-chain-hardening.md.
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/verify-pin.sh"
+
 # --- 0. toolchain: emsdk -----------------------------------------------------
 log "0. emsdk $EMSDK_VERSION"
 if [ ! -d "$WASM_HOME/emsdk" ]; then
@@ -43,11 +52,24 @@ fi
 ( cd "$WASM_HOME/emsdk" && ./emsdk install "$EMSDK_VERSION" && ./emsdk activate "$EMSDK_VERSION" )
 # shellcheck disable=SC1091
 source "$WASM_HOME/emsdk/emsdk_env.sh"
+# assert the ACTIVE compiler is the pinned one (the load-bearing emsdk guard —
+# activation resolves the toolchain from the version number, not the repo HEAD).
+verify_emcc_version "$EMSDK_VERSION"
 
 # --- 1. stage wasm-side deps into $WASM_HOME --------------------------------
 log "1. deps: zlib $ZLIB_VERSION + pcre2 $PCRE2_VERSION -> $WASM_HOME"
 if [ ! -f "$WASM_HOME/lib/libz.a" ]; then
-  ( cd "$WASM_HOME" && curl -sL "https://zlib.net/zlib-$ZLIB_VERSION.tar.gz" | tar xz
+  # fossils/ is the DURABLE path (the bare /zlib-… path serves only the current
+  # release and 404s once superseded); -f fails on 4xx/5xx instead of saving an
+  # HTML error body; download → sha256sum -c → extract (can't checksum a stream
+  # already piped into tar); rm -rf first so we never extract over a dirty dir.
+  ( cd "$WASM_HOME"
+    rm -rf "zlib-$ZLIB_VERSION"
+    curl -fsSL "https://zlib.net/fossils/zlib-$ZLIB_VERSION.tar.gz" \
+      -o "zlib-$ZLIB_VERSION.tar.gz"
+    echo "$ZLIB_SHA256  zlib-$ZLIB_VERSION.tar.gz" | sha256sum -c -
+    tar xzf "zlib-$ZLIB_VERSION.tar.gz"
+    rm -f "zlib-$ZLIB_VERSION.tar.gz"
     cd "zlib-$ZLIB_VERSION" && emconfigure ./configure --static --prefix="$WASM_HOME"
     EMCC_CFLAGS=-Wno-deprecated-non-prototype emmake make && emmake make install )
 else
@@ -56,6 +78,8 @@ fi
 if [ ! -f "$WASM_HOME/lib/libpcre2-8.a" ]; then
   ( cd "$WASM_HOME" && rm -rf pcre2
     git clone --depth 1 --branch "pcre2-$PCRE2_VERSION" https://github.com/PCRE2Project/pcre2
+    # a tag is movable and carries no commit assertion — pin the resolved commit.
+    verify_pcre2_commit "$WASM_HOME/pcre2" "$PCRE2_COMMIT"
     cd pcre2 && mkdir -p build && cd build
     emcmake cmake -DCMAKE_INSTALL_PREFIX="$WASM_HOME" -DPCRE2GREP_SUPPORT_JIT=OFF -G Ninja ..
     ninja && ninja install )
@@ -65,22 +89,15 @@ fi
 
 # --- 2. build swipl-web from OUR pinned commit ------------------------------
 log "2. swipl-web from $SWIPL_SRC @ $SWIPL_COMMIT"
-# QLF/boot are word-size-specific and this tree is SHARED with other work, so we
-# do NOT silently move HEAD. Verify the pin; only check out if explicitly allowed.
-HEAD_SHA="$(git -C "$SWIPL_SRC" rev-parse HEAD)"
-if ! git -C "$SWIPL_SRC" merge-base --is-ancestor "$SWIPL_COMMIT" HEAD 2>/dev/null \
-   || [ "$(git -C "$SWIPL_SRC" rev-parse "$SWIPL_COMMIT")" != "$HEAD_SHA" ]; then
-  if [ "${SWIPL_ALLOW_CHECKOUT:-0}" = "1" ]; then
-    echo "  checking out $SWIPL_COMMIT (SWIPL_ALLOW_CHECKOUT=1)"
-    git -C "$SWIPL_SRC" checkout "$SWIPL_COMMIT"
-  else
-    echo "ERROR: $SWIPL_SRC is not at $SWIPL_COMMIT (HEAD=$HEAD_SHA)." >&2
-    echo "  This tree may be shared with other work — refusing to move HEAD." >&2
-    echo "  Fix it yourself:  git -C $SWIPL_SRC checkout $SWIPL_COMMIT" >&2
-    echo "  or re-run with:   SWIPL_ALLOW_CHECKOUT=1 $0" >&2
-    exit 1
-  fi
-fi
+# Supply-chain guards (all read-only unless SWIPL_ALLOW_CHECKOUT=1), each in
+# verify-pin.sh so they unit-test in ~1s without the ninja build:
+#  1. superproject at the pin (won't move a shared HEAD unless allowed);
+#  2. clean tree FIRST, so a dirty superproject is caught before submodule checks
+#     (SWIPL_ALLOW_DIRTY=1 overrides for intentional local hacking);
+#  3. the nine WASM-compiled submodules at the superproject's recorded gitlinks.
+verify_superproject_pin "$SWIPL_SRC" "$SWIPL_COMMIT"
+verify_clean_tree "$SWIPL_SRC"
+verify_submodules "$SWIPL_SRC"
 mkdir -p "$BUILD_DIR" && cd "$BUILD_DIR"
 # -y MUST be the first arg (without a tty, configure otherwise loops forever on a
 # "Run Cmake?" prompt). The wasm profile sets the toolchain, USE_GMP=OFF,
