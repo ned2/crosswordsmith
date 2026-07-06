@@ -1696,50 +1696,50 @@ Tick as landed. `→ §Cn` links to the finding; X-steps link to
 - [x] **C52** `med·WASM` — `library(http/json)` alias in the qcompiled module + no explicit import list → `browser.pl:35` · `tests/browser.plt:19` · *fixed 2026-07-06 (7b638a2): `library(json)` + explicit import list in browser.pl and browser.plt; WASM-image load-noise check is a build-time follow-up*
 
 **Open — low**
-- [ ] **C17** `low` — silent-failure exports: lint_run profile / export_solve format / set_search_seed+set_verbose
-- [ ] **C18** `low` — reconcile_fragment_size steadfastness (bogus throw) → `arrange.pl:544`
-- [ ] **C19** `low` — load_clues .pl-path bound-output inconsistency → `core.pl:180`
-- [ ] **C20** `low` — set_shuffle_seed side effects before failure → `core.pl:504`
-- [ ] **C21** `low` — lint_solve emits before verdict binding → `lint.pl:311`
-- [ ] **C22** `low` — unused exports `pw_end/2`, `valid_strategy/1` → `core.pl:47,56`
-- [ ] **C23** `low·perf` — redundant once() post-X6.B4 → `fill.pl:392` · `stockgrid.pl:79`
-- [ ] **C24** `low` — stale comments (10.0.2 pin, word-dicts, gs/2 header, fill export header)
-- [ ] **C25** `low·WASM` — solve_browser module promotion (plan §9) + subjects.pl internals · *2026-07-06: **half done on main** — the module promotion shipped (`browser.pl`; solve_browser.pl is now the thin qcompile root with no internals reach, grep-verified); the `benchmarks/subjects.pl:57` half remains*
-- [ ] **C26** `low·perf` — per-node search_seed dynamic lookup hoist → `core.pl:519`
-- [ ] **C27** `low` — arrange findall-as-map/filter → maplist/exclude (6 sites)
-- [ ] **C28** `low·risk` — greedy argmax sort → strict-@> fold (golden-check)
-- [ ] **C29** `low` — pick_diverse_ length-per-iteration → `arrange.pl:845`
-- [ ] **C30** `low` — seed_candidates negated keys → `sort(1,@>=)` → `arrange.pl:951`
-- [ ] **C31** `low·perf` — init_cell_vars → ord_list_to_assoc → `fill.pl:75`
-- [ ] **C32** `low·perf` — load_dict findall → convlist → `fill.pl:121`
-- [ ] **C33** `low` — artifact-read catch keeps the cause → `fill.pl:641`
-- [ ] **C34** `low·perf` — placed_bbox single fold → `metrics.pl:73`
-- [ ] **C35** `low` — slots_to_layout maplist → `fill.pl:393`
-- [ ] **C36** `low` — empty_slots via candidate_count → `fill.pl:524`
-- [ ] **C37** `low·contract-adjacent` — lint tally → aggregate_all → `lint.pl:302`
-- [ ] **C38** `low` — read-clues loop ×5 → read_file_to_terms/3
-- [ ] **C39** `low·perf` — read_file_lines/sha → read_file_to_string/3 → `fill.pl:129,681`
-- [ ] **C40** `low` — bench harness string-JSON → atom_json_dict/3
-- [ ] **C53** `low` — formal_message → `message_to_string/2` (keep the catch+fallback; pass the error context intact) → `browser.pl:398`
-- [ ] **C54** `low·WASM` — post-classifier tail incl. the final `json_write_dict` outside both catches (never-crash last-step hole) → `browser.pl:64,71–77`
-- [ ] **C55** `low` — duplicate JSON keys → `internal` + leaked dict_create context; add a `thrown_type/2` row → `browser.pl:361`
-- [ ] **C56** `low·WASM` — no upper bound on `size`; a cap beats the device abort() → `browser.pl:176`
-- [ ] **C57** `low` — boolean/enum resolver clauses duplicated intra-file → `browser.pl:189–295`
-- [ ] **C58** `low` — browser.plt gap batch (memory growth, e2e resource path + post-blowout health, dup-key, version pins, unbound-Verb, prng_state, id shapes, det lock, …) → `tests/browser.plt`
+- [x] **C17** `low` — silent-failure exports: lint_run profile / export_solve format / set_search_seed+set_verbose · *fixed 2026-07-06 (085a44c): setters verify-only (already validate-before-mutate); lint_run `domain_error` guard; export_solve `must_be(oneof)` pre-dispatch split (catch-all forbidden — would mislabel designed data failures)*
+- [x] **C18** `low` — reconcile_fragment_size steadfastness (bogus throw) → `arrange.pl:544` · *fixed 2026-07-06 (085a44c): steadfast ITE*
+- [x] **C19** `low` — load_clues .pl-path bound-output inconsistency → `core.pl:180` · *fixed 2026-07-06 (085a44c): `read_file_to_terms/3`, steadfast*
+- [x] **C20** `low` — set_shuffle_seed side effects before failure → `core.pl:504` · *fixed 2026-07-06 (085a44c): validates before any side effect*
+- [x] **C21** `low` — lint_solve emits before verdict binding → `lint.pl:311` · *fixed 2026-07-06 (085a44c): verdict bound before emit; bogus-bound probe now 0 bytes (was 8.5KB)*
+- [x] **C22** `low` — unused exports `pw_end/2`, `valid_strategy/1` → `core.pl:47,56` · *fixed 2026-07-06 (085a44c): de-exported*
+- [x] **C23** `low·perf` — redundant once() post-X6.B4 → `fill.pl:392` · `stockgrid.pl:79` · *fixed 2026-07-06 (085a44c): both once/1 dropped after det probes; WIN −1 inf/rung*
+- [x] **C24** `low` — stale comments (10.0.2 pin, word-dicts, gs/2 header, fill export header) · *fixed 2026-07-06 (085a44c)*
+- [x] **C25** `low·WASM` — solve_browser module promotion (plan §9) + subjects.pl internals · *2026-07-06: **half done on main** — the module promotion shipped (`browser.pl`; solve_browser.pl is now the thin qcompile root with no internals reach, grep-verified); the `benchmarks/subjects.pl:57` half remains* · *fixed 2026-07-06 (085a44c): explicit white-box annotation (the sanctioned alternative); arrange_best_layout/6 export deferred to a future arrange change*
+- [x] **C26** `low·perf` — per-node search_seed dynamic lookup hoist → `core.pl:519` · *fixed 2026-07-06 (085a44c): lookup hoisted to threaded flag; WIN −0.015..−0.064%/rung — recorded*
+- [x] **C27** `low` — arrange findall-as-map/filter → maplist/exclude (6 sites) · *fixed 2026-07-06 (085a44c): 6 sites → maplist/exclude with named helpers; inference-flat*
+- [x] **C28** `low·risk` — greedy argmax sort → strict-@> fold (golden-check) · *fixed 2026-07-06 (085a44c): strict-@> fold; tie-winner verified 3 ways (2363-case probe, goldens, CLI byte A/B); flat*
+- [x] **C29** `low` — pick_diverse_ length-per-iteration → `arrange.pl:845` · *fixed 2026-07-06 (085a44c): countdown arg*
+- [x] **C30** `low` — seed_candidates negated keys → `sort(1,@>=)` → `arrange.pl:951` · *fixed 2026-07-06 (085a44c): `sort(1,@>=)`*
+- [x] **C31** `low·perf` — init_cell_vars → ord_list_to_assoc → `fill.pl:75` · *fixed 2026-07-06 (085a44c): `ord_list_to_assoc`; grid_inf −9.4..−22.9% (informational bucket); gated counts identical*
+- [x] **C32** `low·perf` — load_dict findall → convlist → `fill.pl:121` · *fixed 2026-07-06 (085a44c): `convlist/3`; gated load_inf WIN −1.62% every rung — recorded*
+- [x] **C33** `low` — artifact-read catch keeps the cause → `fill.pl:641` · *fixed 2026-07-06 (085a44c): rethrow carries the original cause*
+- [x] **C34** `low·perf` — placed_bbox single fold → `metrics.pl:73` · *fixed 2026-07-06 (085a44c): one-fold; 500-case equivalence; semidet contract preserved*
+- [x] **C35** `low` — slots_to_layout maplist → `fill.pl:393` · *fixed 2026-07-06 (085a44c): WIN −7 inf/rung*
+- [x] **C36** `low` — empty_slots via candidate_count → `fill.pl:524` · *fixed 2026-07-06 (085a44c): infeasible stderr probe byte-identical*
+- [x] **C37** `low·contract-adjacent` — lint tally → aggregate_all → `lint.pl:302` · *fixed 2026-07-06 (085a44c): `aggregate_all(count)` ×3; golden bytes unmoved*
+- [x] **C38** `low` — read-clues loop ×5 → read_file_to_terms/3 · *fixed 2026-07-06 (085a44c): 4 read-loop sites → `read_file_to_terms/3`*
+- [x] **C39** `low·perf` — read_file_lines/sha → read_file_to_string/3 → `fill.pl:129,681` · *fixed 2026-07-06 (085a44c): `read_file_to_string/3`; SHA identical to coreutils on all 5 dicts; +106 inf constant (0.001%, under gate)*
+- [x] **C40** `low` — bench harness string-JSON → atom_json_dict/3 · *fixed 2026-07-06 (085a44c): 4 harness sites → `atom_json_dict/3`; spot runs byte-identical*
+- [x] **C53** `low` — formal_message → `message_to_string/2` (keep the catch+fallback; pass the error context intact) → `browser.pl:398` · *fixed 2026-07-06 (8b49be9): `message_to_string/2`, catch+fallback kept; 29-formal battery byte-identical*
+- [x] **C54** `low·WASM` — post-classifier tail incl. the final `json_write_dict` outside both catches (never-crash last-step hole) → `browser.pl:64,71–77` · *fixed 2026-07-06 (8b49be9): emit tail inside catch armour with literal-only fallback; 3 forced serialization failures probed*
+- [x] **C55** `low` — duplicate JSON keys → `internal` + leaked dict_create context; add a `thrown_type/2` row → `browser.pl:361` · *fixed 2026-07-06 (8b49be9): `duplicate_key` → validation row; no dict_create leak; nested-dup plt pins*
+- [x] **C56** `low·WASM` — no upper bound on `size`; a cap beats the device abort() → `browser.pl:176` · *fixed 2026-07-06 (8b49be9): size cap (100) → validation error; cap+1 + at-cap tests*
+- [x] **C57** `low` — boolean/enum resolver clauses duplicated intra-file → `browser.pl:189–295` · *fixed 2026-07-06 (8b49be9): `resolve_bool/5`+`resolve_enum/6` over one `enum_value/3` table; behaviour-preserving*
+- [x] **C58** `low` — browser.plt gap batch (memory growth, e2e resource path + post-blowout health, dup-key, version pins, unbound-Verb, prng_state, id shapes, det lock, …) → `tests/browser.plt` · *fixed 2026-07-06 (8b49be9): 8 new plt locks; growth/registry/import gaps already covered by C48/C49/C52 tests*
 
 **Open — nit**
-- [ ] **C41** `nit` — duplicate detection via nextto/3 → `core.pl:909` · `arrange.pl:637`
-- [ ] **C42** `nit` — bits_max_unch_run via clumped/2 (borderline churn) → `metrics.pl:132`
-- [ ] **C43** `nit` — row_string misnamed wrapper → `stockgrid.pl:52`
-- [ ] **C44** `nit` — core.pl cosmetic batch (naming / whitespace / `==`→`=:=` / mrv_count_goal / legacy layout)
-- [ ] **C45** `nit` — arrange nit batch (emit_payload DRY / crossing_weight constant / report near-dupes)
-- [ ] **C46** `nit` — recorded-only stdlib notes (subtract / crypto_file_hash / dict_word_count / verbose_report)
-- [ ] **C47** `nit` — cold RED-convertible cut conversions (optional guard restructures)
-- [ ] **C59** `nit` — protocol leniencies undocumented/unpinned (absent-`v` ⇒ v1, trailing garbage, `v:1.0`, verb field never cross-checked) → `browser.pl:98–125`
-- [ ] **C60** `nit` — unbound `Verb` argument silently dispatches arrange → `browser.pl:132`
-- [ ] **C61** `nit` — ":80 only three mutable globals" stale — `prng_state/1` is a fourth → `browser.pl:80` · `core.pl:512`
-- [ ] **C62** `nit` — `""` answer → `failure/unplaceable` `words:[""]` wire shape (core-lane decision) → core `doc_to_words/2`
-- [ ] **C63** `nit` — browser.pl cosmetic batch (double-convert, header success-arm wording, inert cut, plain-`%` headers) → `browser.pl:345,11,218`
+- [x] **C41** `nit` — duplicate detection via nextto/3 → `core.pl:909` · `arrange.pl:637` · *fixed 2026-07-06 (085a44c): `nextto/3`*
+- [x] **C42** `nit` — bits_max_unch_run via clumped/2 (borderline churn) → `metrics.pl:132` · *wont-fix 2026-07-06: `clumped/2` trades a transparent 5-line fold for RLE + edge-case guard — churn*
+- [x] **C43** `nit` — row_string misnamed wrapper → `stockgrid.pl:52` · *fixed 2026-07-06 (085a44c): `row_chars/2`*
+- [x] **C44** `nit` — core.pl cosmetic batch (naming / whitespace / `==`→`=:=` / mrv_count_goal / legacy layout) · *fixed 2026-07-06 (085a44c) a/b/d/e; **(c) REVERTED on measurement**: `==`→`=:=` cost +3.1–4.1% inf/rung — SWI inlines `==`-vs-constant to a VM instruction, `=:=` is a counted call; deliberate-idiom comments added at both sites*
+- [x] **C45** `nit` — arrange nit batch (emit_payload DRY / crossing_weight constant / report near-dupes) · *fixed 2026-07-06 (085a44c): emit_payload DRY + crossing_weight/1; report near-dupes kept (each encodes a distinct contract)*
+- [x] **C46** `nit` — recorded-only stdlib notes (subtract / crypto_file_hash / dict_word_count / verbose_report) · *wont-fix 2026-07-06: dispositions recorded per finding ((a) subsumed by C27; (b) crypto_file_hash = WASM regression; (d) coherent per INV-3)*
+- [x] **C47** `nit` — cold RED-convertible cut conversions (optional guard restructures) · *fixed 2026-07-06 (085a44c): 4 core cold conversions, ratchet + direct A/B identical; lint.pl remainder declined (cold, optional)*
+- [x] **C59** `nit` — protocol leniencies undocumented/unpinned (absent-`v` ⇒ v1, trailing garbage, `v:1.0`, verb field never cross-checked) → `browser.pl:98–125` · *fixed 2026-07-06 (8b49be9): all 4 leniencies documented at parse_request/2 + `lenient_*` plt pins (document-don't-reject per finding)*
+- [x] **C60** `nit` — unbound `Verb` argument silently dispatches arrange → `browser.pl:132` · *fixed 2026-07-06 (8b49be9): `var(Verb)` guard → unknown_verb envelope; caller var left unbound*
+- [x] **C61** `nit` — ":80 only three mutable globals" stale — `prng_state/1` is a fourth → `browser.pl:80` · `core.pl:512` · *fixed 2026-07-06: browser half by the C1/C48 commit (e9d24b1); core.pl:512 half in 085a44c*
+- [x] **C62** `nit` — `""` answer → `failure/unplaceable` `words:[""]` wire shape (core-lane decision) → core `doc_to_words/2` · *fixed 2026-07-06 (085a44c): decision = KEEP shape-only gate; `''` behaviour probed + documented at entry_to_word; pin tests in crossword.plt + browser.plt*
+- [x] **C63** `nit` — browser.pl cosmetic batch (double-convert, header success-arm wording, inert cut, plain-`%` headers) → `browser.pl:345,11,218` · *fixed 2026-07-06 (8b49be9): cosmetic batch; (d) already satisfied by C4 convention*
 
 ## Remediation log
 
@@ -1847,3 +1847,13 @@ one-line note`. Update the finding's status line and tick its box above at the s
   new `make test-wasm` harness run against the rebased tree: **all 4 suites PASS**
   (value golden wasm≡CLI, golden type lock, headless SDK E2E, worker error paths) —
   the C52/C6 "verify the library(json) swap in the WASM image" follow-up is closed.
+
+- **2026-07-06 (backlog, low/nit batch — FINAL)** — all 42 remaining low/nit rows
+  dispositioned in three parallel lanes (browser `8b49be9`, engine lanes combined
+  `085a44c`): 39 fixed, 2 wont-fix with recorded reasoning (C42, C46), 1 partial
+  revert with a measured negative result (C44c: `==`→`=:=` costs +3.1–4.1%
+  inf/rung — SWI inlines `==`-vs-constant; `=:=` is a counted call). New wins
+  banked: fill load_inf −1.62% every rung (C32 convlist), search_inf −8/rung
+  (C23+C35), arrange −0.015..−0.064%/rung (C26). Gates on the merged tree: suite
+  298 green, goldens 8/8, both ratchets PASS, `make test-wasm` 4/4 suites PASS.
+  **The audit backlog is now fully dispositioned: 63/63 findings closed.**
