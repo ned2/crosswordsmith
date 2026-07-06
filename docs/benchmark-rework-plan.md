@@ -1,6 +1,9 @@
 # Benchmark rework — plan & spec
 
-**Status:** proposed (Phase 0 — this document). No code written yet.
+**Status:** DONE (2026-07-06). Phases 1–3 built (Phase 4 was built *as amended*
+during the arrange campaign — see "Phase 4 — as built"); the Phase-2 fixture
+realism correction and the §11 decisions were closed out last, on branch
+`bench/infra-finish` (see [`plans/bench-infra-finish.md`](./plans/bench-infra-finish.md)).
 Adversarially stress-tested against the codebase; findings folded in (search for
 "stress-test" — the amendments are inline). Verdict: mechanism sound, Phase 1
 safe to start; the corrections are concentrated in Phase-2 workload realism (§6),
@@ -201,6 +204,13 @@ arrange_workload('fixtures/benchmark_14_words.pl', 17, size, 20, 3, placed).
 `bench_fixture/5` stays in `fixtures.pl`, unchanged — it is the *research*
 manifest and has its own consumers (§3).
 
+*[As built the manifest is `arrange_workload/9`:
+`(Fixture, Size, Mode, Iterations, Warmup, Expected, Tier, Gate, Budget)` —
+`Tier` (core|heavy) selects the default vs `--heavy` set, `Gate` (inf|latency)
+encodes the budget-saturation rule below, and `Budget` lets the search layer
+run hard rungs to true completion above the shipped 500 M. See the
+`workloads.pl` header for the authoritative column semantics.]*
+
 **The existing `benchmark_*` fixtures are mostly UNSUITABLE as product
 workloads** (stress-test M1/M2 — the biggest correction to this plan):
 
@@ -287,24 +297,43 @@ neither `fixtures.pl` nor product workloads.)
   byte-identical; `wall` medians differ only by the intended median-def change;
   `solved|no|timeout` gating preserved. `./run_tests.sh` green (unaffected).
 
-**Phase 2 — product bench.**
+**Phase 2 — product bench.** *[DONE]*
 - Add `subjects.pl`, `workloads.pl` (new product manifest), `run_arrange.pl`
   (Layers A+B + breakdown; text/csv/json out). Wire `Expected` vs the sampler's
-  bound `Outcome` (m2). Warmup ≥ 1 on all product rows (m5).
+  bound `Outcome` (m2). Warmup ≥ 1 on all product rows (m5). *[built during the
+  arrange campaign, with the mesh cost ladder as the manifest]*
 - **Author realistic fixtures** — do NOT rely on the `benchmark_*` set for
   product (M1/M2): keep `benchmark_14 @17`, mark `benchmark_16_dense` latency-only
   `iters=1`, drop `benchmark_20/26`, and add a couple of real blocked-13/15
   puzzles. `benchmark_70_mesh @21` is the one usable search-dominated stressor.
+  *[CLOSED 2026-07-06, as amended by the as-built ladder: the realism gap is
+  filled by `fixtures/real_13x13_12w.pl` / `real_15x15_18w.pl` — real ENABLE
+  dictionary words planted on a legal witness (`benchmarks/gen_real_fixture.py`)
+  at the blocked daily sizes, as core rungs. `benchmark_16_dense` runs as a
+  heavy `gate=latency` rung at the SHIPPED 500 M budget (verified: `placed`,
+  count pinned at 500,000,190 ≈ the budget constant). `benchmark_20/26` stay
+  research-only (`fixtures.pl`). `benchmark_14`/`benchmark_70_mesh` were
+  superseded by the ladder, which covers their cost points with planted-witness
+  instances; they too remain research-matrix fixtures. Real-word instances near
+  the density cliff measured wildly instance-noisy (15×15: 12w=1.7M, 14w=85K,
+  16w=853M, 18w=248K warm inf) — anchors are deliberately well-behaved
+  instances, per the same rule as the ladder's envelope guards.]*
 - *Verify:* `arrange_search` inferences reproduce (min==median==mean, warmup≥1);
   `command.wall > search.wall` on non-search-bound cells; `rest` plausible
   (clamped/annotated when A≈B, m3); budget-saturated cells flagged latency-only.
+  *[holds for the final manifest: both real rungs min==median, reproduced across
+  independent runs; `gate=latency` implemented in workloads/run_arrange/
+  check_baseline — a latency rung can neither fail nor win the inference gate]*
 
-**Phase 3 — retire `run_benchmarks.pl`.**
+**Phase 3 — retire `run_benchmarks.pl`.** *[DONE]*
 - Delete the file; repoint `make bench` → `run_arrange.pl`; keep
-  `make bench-matrix` → `run_matrix.pl`.
+  `make bench-matrix` → `run_matrix.pl`. *[done during the arrange campaign]*
 - **Rewrite** the README benchmark section (currently ~L473–507, `BENCH_GRID` /
   `--grid` / strategy examples) — a ~35-line rewrite to the product-bench flags,
   not a one-line repoint. Leave audit/history docs as point-in-time records.
+  *[done during the campaign; residual drift (heavy tier described as "~26 s
+  budget-saturating probes", a dead `--fixture bundled` example, no ratchet
+  paragraph) fixed 2026-07-06]*
 
 **Phase 4 — regression baseline (DEFERRED until Phase 2 numbers are seen).**
 - Commit `benchmarks/baseline.json` (per subject/workload: `inferences` exact +
@@ -349,18 +378,31 @@ bench-matrix:  ## research: strategy × fixture inference matrix (CSV)
 	swipl -q benchmarks/run_matrix.pl -- $(BENCH_STRATEGIES)
 ```
 
-## 11. Open decisions (resolve during Phase 2)
+## 11. Open decisions — ALL RESOLVED (closed 2026-07-06)
 
-1. **Command I/O:** `--out /dev/null` (recommended — includes serialization +
-   write syscalls, no disk pollution). *Verified safe:* `with_output/2` is
+1. **Command I/O:** RESOLVED — `--out /dev/null`, as recommended (the as-built
+   `subjects.pl` uses it). *Verified safe:* `with_output/2` is
    capture-then-plain-write (`core.pl:118-123`), no temp-file/rename, so writing
    to `/dev/null` works and leaves the device intact (the suspected blocker was a
-   non-issue). Alternatives: stdout-discard, temp file.
-2. **Framings to bench in Layer A:** both `--size` and `--max-size` for a couple
-   of fixtures (cheap; exposes any crop/emit cost delta) vs `--size` only.
-3. **Canonical product fixture/size set:** decided empirically in Phase 2.
-4. **`arrange_best_layout/5` access:** module-qualified call (recommended — no
-   production API change) vs a thin export.
+   non-issue).
+2. **Framings to bench in Layer A:** RESOLVED — `--size` only as the rung mode.
+   Measured 2026-07-06 on `ladder_15x15_12w` (7 runs each, same host, under
+   concurrent load — indicative): `--size` 91–94 ms, `--max-size` 91–96 ms;
+   the crop/emit delta is sub-noise, and the search count is identical by
+   construction (both modes frame emit only — `subjects.pl size_flag/4`).
+   `mode: max_size` stays supported in the manifest schema for ad-hoc use.
+3. **Canonical product fixture/size set:** RESOLVED — the mesh cost ladder
+   (9×9/15×15/21×21, hill-climb instrument) + the real-word realism anchors
+   `real_13x13_12w` / `real_15x15_18w` (core) + the `benchmark_16_dense @17`
+   budget-saturation latency probe (heavy, `gate=latency`). `benchmark_20/26`
+   are OUT of product scope (research matrix only).
+4. **`arrange_best_layout/5` access:** RESOLVED — module-qualified call, as
+   recommended, onto the budget-explicit **/6** (the bench must raise the budget
+   above the shipped 500 M so hard rungs complete). This is a sanctioned
+   white-box reach: purity-audit **C25** annotation at `benchmarks/subjects.pl`,
+   with the export deferred in STATUS.md's de-accretion roadmap (trigger: the
+   next change to `arrange.pl`'s export surface). Every recorded `search_inf`
+   is defined against `/6`, so the access point must not silently move.
 
 ## 12. Non-goals
 

@@ -42,7 +42,9 @@ main :-
     set_prolog_flag(stack_limit, 2_000_000_000),
     current_prolog_flag(argv, Argv),
     ( memberchk('--heavy', Argv) -> Tiers = [core, heavy] ; Tiers = [core] ),
-    forall( ( arrange_workload(F, Grid, _Mode, _It, Wu, Exp, Tier, Budget),
+    % gate=latency rungs are skipped: their count pins to the budget constant
+    % (no ratchet-comparable search signal to diff) at a ~5e8-inference cost.
+    forall( ( arrange_workload(F, Grid, _Mode, _It, Wu, Exp, Tier, inf, Budget),
               memberchk(Tier, Tiers) ),
             run_rung(F, Grid, Wu, Exp, Budget) ).
 

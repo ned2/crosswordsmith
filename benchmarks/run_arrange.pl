@@ -57,12 +57,12 @@ main :-
     memberchk(iterations(ItOv), Opts),
     memberchk(warmup(WuOv), Opts),
     findall(Row,
-            ( arrange_workload(F, Size, Mode, It0, Wu0, Exp, Tier, Budget),
+            ( arrange_workload(F, Size, Mode, It0, Wu0, Exp, Tier, Gate, Budget),
               workload_selected(Filter, Heavy, F, Tier),
               apply_override(ItOv, It0, It),
               apply_override(WuOv, Wu0, Wu),
               run_workload(F, Size, Mode, It, Wu, Exp, Budget, Row0),
-              Row = Row0.put(_{tier: Tier}) ),
+              Row = Row0.put(_{tier: Tier, gate: Gate}) ),
             Rows),
     emit(Fmt, Rows).
 
@@ -74,7 +74,7 @@ opts_spec(
       [opt(fixture),    type(atom),    default(''),
        longflags([fixture]),  help('only workloads whose fixture basename contains this substring (any tier)')],
       [opt(heavy),      type(boolean), default(false),
-       longflags([heavy]),    help('also run the heavy budget-saturating latency probes (~20-30s each)')],
+       longflags([heavy]),    help('also run the heavy tail: the hard ladder rungs (~0.6-9s each) and the budget-saturating latency probe (~1 min)')],
       [opt(iterations), type(integer), default(-1),
        longflags([iterations]), help('override measured iterations for every workload')],
       [opt(warmup),     type(integer), default(-1),
@@ -117,7 +117,7 @@ run_workload(Fixture, Size, Mode, Iters, Warmup, Expected, Budget, Row) :-
     RestMedMs       is max(0.0, CmdWallMedMs - SearchWallMedMs),
     ( CmdWallMedMs > 0.0 -> Share is 100.0 * SearchWallMedMs / CmdWallMedMs ; Share = 0.0 ),
     length(Words, NumWords),
-    % warmup/budget/words ride along (with tier, added by the caller) so a
+    % warmup/budget/words ride along (with tier + gate, added by the caller) so a
     % recorder can build a COMPLETE baseline spec for a rung it has never seen
     % (check_baseline --record adds new ladder rungs from these fields).
     Row = _{ fixture:Name, size:Size, mode:Mode, iterations:Iters, expected:Expected,

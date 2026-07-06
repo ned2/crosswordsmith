@@ -1,5 +1,5 @@
 {
-  "generated_note":"search_inf is the tracked metric: warm arrange search inferences over the 9x9/15x15/21x21 cost ladder (benchmarks/workloads.pl). Deterministic and machine-independent (same count native or under WASM), so it hill-climbs performance across grid sizes: a drop is a real win, a rise past regression_tolerance_pct is a regression. `make bench-check` reports the per-rung delta and fails only on a regression; `make bench-record` ratchets these down after you accept a win. Add BENCH_ARGS=--heavy to include the hard tail rungs. wall/rss are host-specific and informational only. Only the pinned SWI-Prolog version reproduces these exact counts. Regenerate: make bench-record BENCH_ARGS=--heavy.",
+  "generated_note":"search_inf is the tracked metric: warm arrange search inferences over the 9x9/15x15/21x21 cost ladder (benchmarks/workloads.pl). Deterministic and machine-independent (same count native or under WASM), so it hill-climbs performance across grid sizes: a drop is a real win, a rise past regression_tolerance_pct is a regression. `make bench-check` reports the per-rung delta and fails only on a regression; `make bench-record` ratchets these down after you accept a win. Add BENCH_ARGS=--heavy to include the hard tail rungs. wall/rss are host-specific and informational only. A gate:latency rung (the benchmark_16_dense saturation probe) is measured for wall-latency: its search_inf pins to the budget constant and never gates. Only the pinned SWI-Prolog version reproduces these exact counts. Regenerate: make bench-record BENCH_ARGS=--heavy.",
   "host":"lana x86_64",
   "metric":"search_inf",
   "mode":"ratchet",
@@ -7,6 +7,19 @@
   "swi_prolog":"10.1.10",
   "tool":"crosswordsmith-arrange-bench",
   "workloads": {
+    "benchmark_16_dense_words.pl": {
+      "budget":500000000,
+      "cmd_rss_med_kib":14316,
+      "cmd_wall_med_ms":42240.0,
+      "gate":"latency",
+      "grid":17,
+      "info_only": ["search_inf", "cmd_wall_med_ms", "cmd_rss_med_kib" ],
+      "iterations":1,
+      "search_inf":500000191,
+      "tier":"heavy",
+      "warmup":0,
+      "words":16
+    },
     "ladder_09x09_08w.pl": {
       "budget":2000000000,
       "cmd_rss_med_kib":11820,
@@ -150,6 +163,32 @@
       "tier":"heavy",
       "warmup":1,
       "words":82
+    },
+    "real_13x13_12w.pl": {
+      "budget":2000000000,
+      "cmd_rss_med_kib":12552,
+      "cmd_wall_med_ms":350.0,
+      "gate":"inf",
+      "grid":13,
+      "info_only": ["cmd_wall_med_ms", "cmd_rss_med_kib" ],
+      "iterations":5,
+      "search_inf":3545338,
+      "tier":"core",
+      "warmup":2,
+      "words":12
+    },
+    "real_15x15_18w.pl": {
+      "budget":2000000000,
+      "cmd_rss_med_kib":12792,
+      "cmd_wall_med_ms":100.0,
+      "gate":"inf",
+      "grid":15,
+      "info_only": ["cmd_wall_med_ms", "cmd_rss_med_kib" ],
+      "iterations":20,
+      "search_inf":248068,
+      "tier":"core",
+      "warmup":3,
+      "words":18
     }
   }
 }
