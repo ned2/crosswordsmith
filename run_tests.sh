@@ -54,6 +54,23 @@ check_exit() {
     fi
 }
 
+# check_fail_report <name> <command...>: assert a clean fill-failure (exit 1,
+# a `fill:`-framed stderr line, and NO raw internal throw). Distinguishes the
+# clean report from an uncaught engine error, which check_exit (code only)
+# cannot - both exit 1. The fill: match is unanchored because hooked seed
+# errors render behind print_message's "ERROR: [Thread main] " prefix.
+check_fail_report() {
+    local name="$1"; shift
+    local err; err="$("$@" 2>&1 >/dev/null)"; local got=$?
+    if [ "$got" -eq 1 ] \
+       && printf '%s' "$err" | grep -q 'fill:' \
+       && ! printf '%s' "$err" | grep -qi 'Domain error\|unique_key_pairs'; then
+        echo "fail-report ($name): OK"
+    else
+        echo "fail-report ($name): FAILED (exit $got)"; printf '%s\n' "$err" | head -3; status=1
+    fi
+}
+
 echo
 echo "=== golden output regression (the crosswordsmith CLI, end to end) ==="
 check_golden "arrange fixed" \
@@ -104,6 +121,15 @@ check_exit "arrange --no- flag rejected" 1 \
 # exclusive framings; supplying both is a usage error, not a silent precedence.
 check_exit "arrange --size + --max-size rejected" 1 \
     ./crosswordsmith arrange --size 17 --max-size 20 --input fixtures/bundled_17_clues.pl
+# A seed answer the dictionary can also place must report cleanly, not throw a
+# raw unique_key_pairs domain error (regression: fill-seed-pin-crash-fix).
+check_fail_report "fill seed-reused unsolvable -> clean fail" \
+    ./crosswordsmith fill --grid fixtures/fill_grid_split3.json \
+        --seeds fixtures/fill_seed_cow_top.json --dict fixtures/dict_cow.txt
+# Two identical seed answers must be rejected before searching (fill_seed_duplicate).
+check_fail_report "fill duplicate seeds -> clean fail" \
+    ./crosswordsmith fill --grid fixtures/fill_grid_split3.json \
+        --seeds fixtures/fill_seed_cow_both.json --dict fixtures/dict_cow.txt
 
 # check_stderr <name> <grep-pattern> <want: present|absent> <command...>: run
 # the command (stdout discarded) and assert whether its stderr matches.

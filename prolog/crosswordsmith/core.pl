@@ -1336,8 +1336,9 @@ build_words(PlacedWords, Words, GridLen, WordObjs) :-
 %!  answer_meta_assoc(+Words:list, -Assoc:assoc) is det.
 %
 %   answer -> metadata dict for every input entry. An entry may omit metadata
-%   ([Answer] -> _{}); answers are unique (check_unique_answers/1), so no key
-%   clash.
+%   ([Answer] -> _{}); answers are unique (check_unique_answers/1 runs on the
+%   solve path in crossword/4 AND on the fill path in fill's emit_fill/4), so
+%   no key clash.
 answer_meta_assoc(Words, Assoc) :-
     findall(A-Meta,
             ( member(Entry, Words), Entry = [A|_],
