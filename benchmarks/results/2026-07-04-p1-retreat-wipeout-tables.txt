@@ -1,0 +1,116 @@
+
+============================================================
+control_12w   (fixtures/ladder_15x15_12w.pl, grid 15, 12 words)
+------------------------------------------------------------
+  per-corner:
+    topleft_across  placed=12  places=15  unplaces=3  wipeouts=2  max_retreat=2
+    topright        placed=12  places=48  unplaces=36  wipeouts=27  max_retreat=3
+
+(a) TREE CHURN + RETREAT DISTANCE (aggregate of both corners)
+    total places   = 63
+    total unplaces = 39   (search-tree churn)
+    total wipeouts = 29   (Placeable==[] deadends)
+    retreat runs   = 29
+    retreat-distance histogram (words retracted per forward move):
+        dist 1    : 20
+        dist 2    : 8
+        dist 3-5  : 1
+        dist 6-10 : 0
+        dist >10  : 0
+        max retreat distance = 3
+    %% of unplace events in distance-1 retreats = 51.28%
+
+(b) FAILURE CLUSTERING
+    top wipeout culprits (last-placed word at a deadend):
+        BAE:9  DGBC:6  CCC:5  GFEC:5  GBBA:2  EEE:1  HDD:1
+        top-5 culprits = 93.10%% of all wipeouts
+    top most-unplaced words (retraction churn):
+        BAE:13  DGBC:8  CCC:6  GFEC:6  GBBA:4  EEE:1  HDD:1
+        top-5 unplaced = 94.87%% of all unplaces
+
+============================================================
+dense_34w   (fixtures/ladder_15x15_34w.pl, grid 15, 34 words)
+------------------------------------------------------------
+  per-corner:
+    topleft_across  placed=34  places=143  unplaces=109  wipeouts=69  max_retreat=3
+    topright        placed=34  places=3107  unplaces=3073  wipeouts=1757  max_retreat=6
+
+(a) TREE CHURN + RETREAT DISTANCE (aggregate of both corners)
+    total places   = 3250
+    total unplaces = 3182   (search-tree churn)
+    total wipeouts = 1826   (Placeable==[] deadends)
+    retreat runs   = 1828
+    retreat-distance histogram (words retracted per forward move):
+        dist 1    : 826
+        dist 2    : 718
+        dist 3-5  : 283
+        dist 6-10 : 1
+        dist >10  : 0
+        max retreat distance = 6
+    %% of unplace events in distance-1 retreats = 25.96%
+
+(b) FAILURE CLUSTERING
+    top wipeout culprits (last-placed word at a deadend):
+        FCC:591  EFD:345  CBED:310  ABCB:307  AFBF:102  FFCC:90  ABFA:67  CBF:13  FCF:1
+        top-5 culprits = 90.64%% of all wipeouts
+    top most-unplaced words (retraction churn):
+        FCC:926  EFD:568  ABCB:539  CBED:470  FFCC:261  AFBF:200  ABFA:186  CBF:26  FCF:5  EAA:1
+        top-5 unplaced = 86.86%% of all unplaces
+
+============================================================
+dense_36w   (fixtures/ladder_15x15_36w.pl, grid 15, 36 words)
+------------------------------------------------------------
+  per-corner:
+    topleft_across  placed=36  places=40  unplaces=4  wipeouts=4  max_retreat=1
+    topright        placed=36  places=3454  unplaces=3418  wipeouts=2117  max_retreat=7
+
+(a) TREE CHURN + RETREAT DISTANCE (aggregate of both corners)
+    total places   = 3494
+    total unplaces = 3422   (search-tree churn)
+    total wipeouts = 2121   (Placeable==[] deadends)
+    retreat runs   = 2145
+    retreat-distance histogram (words retracted per forward move):
+        dist 1    : 1217
+        dist 2    : 633
+        dist 3-5  : 294
+        dist 6-10 : 1
+        dist >10  : 0
+        max retreat distance = 7
+    %% of unplace events in distance-1 retreats = 35.56%
+
+(b) FAILURE CLUSTERING
+    top wipeout culprits (last-placed word at a deadend):
+        DEAA:396  CBF:339  CEF:324  DACA:284  ACA:238  EADF:210  ABCB:138  FDD:94  AEFD:38  CADF:29
+        top-5 culprits = 74.54%% of all wipeouts
+    top most-unplaced words (retraction churn):
+        DEAA:607  CBF:520  CEF:466  DACA:416  ACA:373  EADF:338  ABCB:226  FDD:155  CADF:103  EDDE:97
+        top-5 unplaced = 69.61%% of all unplaces
+
+============================================================
+dense_80w   (fixtures/ladder_21x21_80w.pl, grid 21, 80 words)
+------------------------------------------------------------
+  per-corner:
+    topleft_across  placed=80  places=80  unplaces=0  wipeouts=0  max_retreat=0
+    topright        placed=80  places=80  unplaces=0  wipeouts=0  max_retreat=0
+
+(a) TREE CHURN + RETREAT DISTANCE (aggregate of both corners)
+    total places   = 160
+    total unplaces = 0   (search-tree churn)
+    total wipeouts = 0   (Placeable==[] deadends)
+    retreat runs   = 0
+    retreat-distance histogram (words retracted per forward move):
+        dist 1    : 0
+        dist 2    : 0
+        dist 3-5  : 0
+        dist 6-10 : 0
+        dist >10  : 0
+        max retreat distance = 0
+    %% of unplace events in distance-1 retreats = 0.00%
+
+(b) FAILURE CLUSTERING
+    top wipeout culprits (last-placed word at a deadend):
+        (none)
+        top-5 culprits = 0.00%% of all wipeouts
+    top most-unplaced words (retraction churn):
+        (none)
+        top-5 unplaced = 0.00%% of all unplaces

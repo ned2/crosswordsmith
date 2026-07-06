@@ -1,0 +1,113 @@
+diff --git a/prolog/crosswordsmith/core.pl b/prolog/crosswordsmith/core.pl
+index ab124c2..24dc1b7 100644
+--- a/prolog/crosswordsmith/core.pl
++++ b/prolog/crosswordsmith/core.pl
+@@ -390,6 +390,87 @@ capped(N, Goal) :- limit(N, Goal).
+ % The cache is threaded as a plain argument, so backtracking restores prior
+ % caches automatically. Counts are capped at 2 (as in mrv_capped).
+ 
++% ============================================================================
++% MEASUREMENT PROBE P1 (throwaway instrumentation; NEVER merged).
++% Characterises mrv_inc backtracking on the dense ladder rungs: backjump-distance
++% distribution (CBJ headroom) + failure clustering (dom/wdeg signal). All state is
++% non-backtrackable (nb_setval), so retreats are observed, and NO search variable
++% is ever bound by the logging (it only reads PlacedWords / the chosen answer).
++% When the probe is disabled (probe_on/0 absent) every hook is an O(1) no-op that
++% cannot alter a single search decision.
++% ============================================================================
++:- dynamic probe_on/0.
++
++probe_enable  :- ( probe_on -> true ; assertz(probe_on) ).
++probe_disable :- retractall(probe_on).
++
++% Zero all accumulators. Scalars: places / unplaces / wipeouts / current
++% consecutive-unplace run length / max run length. Assocs: run-length histogram,
++% per-word wipeout-culprit counts, per-word unplace counts.
++probe_reset :-
++    nb_setval(probe_places, 0),
++    nb_setval(probe_unplaces, 0),
++    nb_setval(probe_wipeouts, 0),
++    nb_setval(probe_cur_run, 0),
++    nb_setval(probe_max_run, 0),
++    empty_assoc(E), nb_setval(probe_runs, E),
++    empty_assoc(E), nb_setval(probe_wipe_words, E),
++    empty_assoc(E), nb_setval(probe_unplace_words, E).
++
++probe_bump_ctr(Var) :- nb_getval(Var, N), N1 is N+1, nb_setval(Var, N1).
++
++probe_bump_assoc(Var, Key) :-
++    nb_getval(Var, A0),
++    ( get_assoc(Key, A0, N) -> N1 is N+1 ; N1 = 1 ),
++    put_assoc(Key, A0, N1, A1),
++    nb_setval(Var, A1).
++
++% A place terminates any open unplace run: record its length in the histogram
++% (this is the retreat distance = # words retracted before the search moved
++% forward again), update the max, then reset the run and count the place.
++probe_place :-
++    ( probe_on
++    ->  nb_getval(probe_cur_run, R),
++        ( R > 0
++        ->  probe_bump_assoc(probe_runs, R),
++            nb_getval(probe_max_run, M), ( R > M -> nb_setval(probe_max_run, R) ; true ),
++            nb_setval(probe_cur_run, 0)
++        ;   true ),
++        probe_bump_ctr(probe_places)
++    ;   true ).
++
++probe_unplace(Word) :-
++    ( probe_on
++    ->  probe_bump_ctr(probe_cur_run),
++        probe_bump_ctr(probe_unplaces),
++        probe_bump_assoc(probe_unplace_words, Word)
++    ;   true ).
++
++% Wipeout: at this node NO remaining word is placeable (Placeable == []); the
++% just-placed word (head of PlacedWords) is the implicated culprit.
++probe_wipeout(PlacedWords) :-
++    ( probe_on
++    ->  PlacedWords = [Last|_], get_dict(answer, Last, Ans),
++        probe_bump_ctr(probe_wipeouts),
++        probe_bump_assoc(probe_wipe_words, Ans)
++    ;   true ).
++
++% Flush a still-open run at end of search, then read out all accumulators.
++probe_stats(stats{ places:P, unplaces:U, wipeouts:W, max_run:MaxR,
++                   runs:Runs, wipe_words:WW, unplace_words:UW }) :-
++    nb_getval(probe_cur_run, R),
++    ( R > 0
++    ->  probe_bump_assoc(probe_runs, R),
++        nb_getval(probe_max_run, M0), ( R > M0 -> nb_setval(probe_max_run, R) ; true ),
++        nb_setval(probe_cur_run, 0)
++    ;   true ),
++    nb_getval(probe_places, P), nb_getval(probe_unplaces, U),
++    nb_getval(probe_wipeouts, W), nb_getval(probe_max_run, MaxR),
++    nb_getval(probe_runs, RunsA),      assoc_to_list(RunsA, Runs),
++    nb_getval(probe_wipe_words, WWA),  assoc_to_list(WWA, WW),
++    nb_getval(probe_unplace_words, UWA), assoc_to_list(UWA, UW).
++% ============================================================================
++
+ % State is `none` (no cache yet) or state(CountAssoc, LastPlacedLetters).
+ assign_words_inc([], P, _State, _, _, _, G, G, P).
+ assign_words_inc(Words, PlacedWords, StateIn, GridLen, Start, Dir, GIn, GOut, Out) :-
+@@ -400,6 +481,9 @@ assign_words_inc(Words, PlacedWords, StateIn, GridLen, Start, Dir, GIn, GOut, Ou
+     length(Letters2, WLen),
+     find_intersecting_word(Letters2, WLen, PlacedWords, GridLen, Start, Dir),
+     assign_word(Word, Letters2, WLen, Start, Dir, GridLen, PlacedWords, GIn, Placed, G1),
++    % PROBE: forward = place; on backtrack the second arm logs the unplace and
++    % re-fails (never offers an alternative), so the search tree is unchanged.
++    ( probe_place ; probe_unplace(Word), fail ),
+     assign_words_inc(RemWords, [Placed|PlacedWords], StateOut, GridLen,
+                      _Start, _Dir, G1, GOut, Out).
+ 
+@@ -479,6 +563,10 @@ select_inc(Words, PlacedWords, StateIn, GridLen, Start, Dir, GIn, Entry, RemWord
+     % breaking the ==-based remove_x below and looping forever).
+     map_list_to_pairs(count_of(CountMap), Words, Pairs),
+     include(positive_key, Pairs, Placeable),
++    % PROBE: no remaining word is placeable here -> deadend/wipeout; the head of
++    % PlacedWords (last placed) is the implicated culprit. Logging never binds a
++    % search variable and always leaves the branch to fail via the empty member/2.
++    ( Placeable == [] -> probe_wipeout(PlacedWords) ; true ),
+     keysort(Placeable, Sorted),
+     order_candidates(Sorted, Ordered),
+     member(Entry, Ordered),

@@ -1,0 +1,126 @@
+diff --git a/prolog/crosswordsmith/core.pl b/prolog/crosswordsmith/core.pl
+index ab124c2..402a87a 100644
+--- a/prolog/crosswordsmith/core.pl
++++ b/prolog/crosswordsmith/core.pl
+@@ -390,7 +390,8 @@ capped(N, Goal) :- limit(N, Goal).
+ % The cache is threaded as a plain argument, so backtracking restores prior
+ % caches automatically. Counts are capped at 2 (as in mrv_capped).
+ 
+-% State is `none` (no cache yet) or state(CountAssoc, LastPlacedLetters).
++% State is `none` (no cache yet) or state(CountAssoc, LastPlacedAnswer). The
++% last-placed answer feeds answer_mask/2 for the incremental recount gate.
+ assign_words_inc([], P, _State, _, _, _, G, G, P).
+ assign_words_inc(Words, PlacedWords, StateIn, GridLen, Start, Dir, GIn, GOut, Out) :-
+     select_inc(Words, PlacedWords, StateIn, GridLen, Start, Dir, GIn,
+@@ -471,8 +472,8 @@ select_inc(Words, [], _StateIn, _GridLen, _Start, _Dir, _GIn, Entry, RemWords, n
+     remove_x(Entry, Words, RemWords).
+ % Otherwise: get current counts (full or incremental), order most-constrained
+ % first over the connectable words, pick backtrackably. The cache passed
+-% forward is this node's count map tagged with the chosen word's letters, so
+-% the next node only recounts words sharing a letter with it.
++% forward is this node's count map tagged with the chosen word's answer, so
++% the next node only recounts words sharing a letter with it (via answer_mask/2).
+ select_inc(Words, PlacedWords, StateIn, GridLen, Start, Dir, GIn, Entry, RemWords, StateOut) :-
+     inc_counts(StateIn, Words, PlacedWords, GridLen, Start, Dir, GIn, CountMap),
+     % map_list_to_pairs keeps the ORIGINAL word terms (findall would copy them,
+@@ -483,8 +484,8 @@ select_inc(Words, PlacedWords, StateIn, GridLen, Start, Dir, GIn, Entry, RemWord
+     order_candidates(Sorted, Ordered),
+     member(Entry, Ordered),
+     remove_x(Entry, Words, RemWords),
+-    entry_letters(Entry, EntryLetters),
+-    StateOut = state(CountMap, EntryLetters).
++    Entry = [LastAnswer|_],
++    StateOut = state(CountMap, LastAnswer).
+ 
+ count_of(CountMap, Word, Count) :-
+     Word = [A|_],
+@@ -497,9 +498,10 @@ inc_counts(none, Words, PlacedWords, GridLen, Start, Dir, GIn, CountMap) :-
+     !,
+     empty_assoc(A0),
+     foldl(full_count(PlacedWords, GridLen, Start, Dir, GIn), Words, A0, CountMap).
+-inc_counts(state(PrevMap, LastLetters), Words, PlacedWords, GridLen, Start, Dir, GIn, CountMap) :-
++inc_counts(state(PrevMap, LastAnswer), Words, PlacedWords, GridLen, Start, Dir, GIn, CountMap) :-
++    answer_mask(LastAnswer, LastMask),
+     empty_assoc(A0),
+-    foldl(inc_count(PrevMap, LastLetters, PlacedWords, GridLen, Start, Dir, GIn),
++    foldl(inc_count(PrevMap, LastMask, PlacedWords, GridLen, Start, Dir, GIn),
+           Words, A0, CountMap).
+ 
+ full_count(PlacedWords, GridLen, Start, Dir, GIn, Entry, AIn, AOut) :-
+@@ -507,12 +509,12 @@ full_count(PlacedWords, GridLen, Start, Dir, GIn, Entry, AIn, AOut) :-
+     mrv_count(2, PlacedWords, GridLen, Start, Dir, GIn, Entry, Count),
+     put_assoc(A, AIn, Count, AOut).
+ 
+-inc_count(PrevMap, LastLetters, PlacedWords, GridLen, Start, Dir, GIn, Entry, AIn, AOut) :-
++inc_count(PrevMap, LastMask, PlacedWords, GridLen, Start, Dir, GIn, Entry, AIn, AOut) :-
+     Entry = [A|_],
+-    entry_letters(Entry, ELetters),
+-    (   shares_letter(ELetters, LastLetters)
++    answer_mask(A, EMask),
++    (   EMask /\ LastMask =\= 0                  % may share a letter -> recount
+     ->  mrv_count(2, PlacedWords, GridLen, Start, Dir, GIn, Entry, Count)
+-    ;   get_assoc(A, PrevMap, Count)            % carry forward (>= true count)
++    ;   get_assoc(A, PrevMap, Count)            % disjoint -> carry forward (== true count)
+     ->  true
+     ;   mrv_count(2, PlacedWords, GridLen, Start, Dir, GIn, Entry, Count)
+     ),
+@@ -528,15 +530,57 @@ shares_letter(Letters, OtherLetters) :-
+     memberchk(L, OtherLetters),
+     !.
+ 
+-
+-% Given a Word and a set of Placed words, locates a candidate 
++% Letter-presence bitmask (experiment E-H8). One bit per distinct letter: the
++% bit index is the char code masked to 6 bits, so a-z (33..58), A-Z (1..26) and
++% 0-9 (48..57) each get a DISTINCT bit - no collisions on any real crossword
++% alphabet. The derived test is CONSERVATIVE: mask(A) /\ mask(B) =:= 0 PROVES A
++% and B share no letter (a shared letter is the same char, hence the same bit,
++% and always survives the AND). Two different chars whose codes coincide mod 64
++% would collide, producing only a FALSE POSITIVE (AND =\= 0 while disjoint),
++% which is safe wherever the mask is used here: find_intersecting_word/6 then
++% falls through to the exact intersection (which yields no candidate for a truly
++% disjoint pair anyway), and inc_count/10 merely recomputes an exact count it
++% could have carried forward. A false NEGATIVE never occurs, so the mrv_inc
++% no-under-count invariant is preserved unconditionally.
++letters_mask(Letters, Mask) :-
++    foldl(add_letter_bit, Letters, 0, Mask).
++
++add_letter_bit(Ch, In, Out) :-
++    char_code(Ch, Code),
++    Out is In \/ (1 << (Code /\ 63)).
++
++% Mask of an answer atom, TABLED on the atom: a pure function of the answer, so
++% each distinct answer is scanned once per process and every later read is an
++% O(1) table hit. Strips the same separators as entry_letters/2, so
++% answer_mask(A) equals letters_mask of A's placed letters exactly.
++:- table answer_mask/2.
++answer_mask(Answer, Mask) :-
++    atom_chars(Answer, Chars0),
++    exclude(mask_sep, Chars0, Chars),
++    letters_mask(Chars, Mask).
++
++mask_sep(' ').
++mask_sep('-').
++
++
++% Given a Word and a set of Placed words, locates a candidate
+ % start cell and direction that intersects with an existing word.
+ 
+ % No placed words; just use grounded Start and Dir values
+ find_intersecting_word(_Letters, _WLen, [], _GridLen, _Start, _Dir).
+ 
+ find_intersecting_word(Letters, WLen, PlacedWords, GridLen, Start, Dir) :-
++    % Prefilter (E-H8): the candidate's letter mask, computed once, gates each
++    % placed word by an O(1) integer AND. A placed word whose mask is disjoint
++    % from the candidate's shares no letter, so it can supply no crossing cell -
++    % skip it before paying the intersection/3 + list_to_set scan. Skipping only
++    % zero-candidate pairs leaves the enumeration of REAL candidates (and thus
++    % every golden) byte-identical.
++    letters_mask(Letters, CandMask),
+     member(PW, PlacedWords),
++    get_dict(answer, PW, PAnswer),
++    answer_mask(PAnswer, PMask),
++    CandMask /\ PMask =\= 0,
+     get_dict(letters, PW, PLetters),
+     get_dict(dir, PW, PDir),
+     get_dict(start, PW, PStart),

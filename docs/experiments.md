@@ -1488,3 +1488,218 @@ byte-identity on every rung).
   rule. Command hygiene that held: `</dev/null` + timeout on every
   swipl call, absolute paths, agents never touch master or the main
   checkout, verify state not success messages.
+
+
+---
+
+## Appendix: full experiment-time writeups (landed 2026-07-06 from record branches)
+
+The close-out entries above summarize E-H8/E-H10/E-H10b; the sections below are
+the full writeups as committed on the (now-deleted) experiment branches at the
+time the work was done. The rejected implementations themselves are preserved as
+patches under `docs/experiments/` (e-h8-bitmask-prefilter.patch,
+e-h10-watched-witnesses.patch, e-h10b-sparse-witnesses.patch,
+p1-backtrack-instrumentation.patch).
+
+### E-H8 — per-word letter bitmask prefilter — REJECTED
+
+- **Idea (code present in the experiment worktree, do-not-merge):** short-circuit
+  the two "do these words share a letter?" hot paths with an O(1) integer AND on
+  a per-word letter-presence bitmask, instead of a list scan.
+  - `find_intersecting_word/6`: compute the candidate word's mask once, then gate
+    each placed word by `CandMask /\ PMask =\= 0` before the `intersection/3` +
+    `list_to_set` scan (skip pairs that share no letter, hence no crossing cell).
+  - `inc_count/10` (the `mrv_inc` recount gate): replace the exact
+    `shares_letter/2` member scan with `EMask /\ LastMask =\= 0`.
+- **Bit mapping:** bit index = `CharCode /\ 63` (`1 << (Code /\ 63)`). a-z→33..58,
+  A-Z→1..26, 0-9→48..57 are all DISTINCT, so on every real crossword alphabet the
+  mask is *exact* (no collisions). The test is conservative by construction: a
+  shared letter is the same char → same bit → survives the AND, so AND=0 PROVES
+  disjoint (no false negatives → `mrv_inc`'s no-under-count invariant is safe).
+  A hypothetical mod-64 collision yields only a false POSITIVE (fall through to
+  the exact path / an unnecessary-but-exact recount) — safe. Masks stored as a
+  **tabled `answer_mask/2`** keyed on the answer atom (a pure function, scanned
+  once per answer per process); every placed dict already carries `answer`, so no
+  dict-shape change and no golden-leak risk. The `inc_count` change also drops the
+  per-node `entry_letters/2` (atom_chars) call, replaced by the tabled lookup.
+- **Result (goldens byte-identical, 66 plunit + goldens green):** a REGRESSION
+  everywhere. Ladder (`make bench-check --heavy`) rose on 8 of 9 rungs, +1.3% to
+  +2.9% inferences (9x9/08w +2.31%, 15x15/28w +1.91%, 15x15/32w +2.06%, 9x9/16w
+  +2.56%, 21x21/80w +1.34%, 15x15/34w +2.87%, 15x15/36w +2.77%; only 15x15/12w
+  ~flat at -0.48%). `bundled_17` (real 26-letter words, in-process strict arrange)
+  also regressed, 673,333 → 677,707 inferences (+0.65%).
+- **Why (measured pre-filter skip rates):** the prefilter almost never fires, and
+  what it gates is already cheap. Fraction of pair tests with AND=0:
+  `find_intersecting_word` 2.6% (`bundled_17`), 6.1% (9x9), 11.6% (15x15/32w),
+  13.7% (21x21/80w); `inc_count` 10-17%. Crucially the REAL-word fixture had the
+  LOWEST find-intersecting skip rate (2.6%): crossword answers (esp. multi-word,
+  e.g. `NARRATIVE FALLACY`) have many distinct letters → dense masks → pairs
+  almost always share a bit. So "26-letter alphabet ⇒ more disjoint pairs" is
+  wrong — per-WORD letter density, not alphabet size, decides, and it is high.
+  Every call pays the mask machinery (candidate mask rebuild + a tabled
+  `answer_mask` lookup + the AND) on the hottest path; the saved work is one
+  `intersection/3` over short lists, only 3-14% of the time. Constant cost >
+  constant saving → the net rise.
+- **Verdict:** REJECTED, do not revisit on this solver. Unlike the tabled
+  `pair_crossings` design the hypothesis assumed (skip an expensive hash+copy
+  table lookup), this codebase's `find_intersecting_word/6` does a cheap inline
+  `intersection/3`; there is no expensive lookup to amortize away, so an O(1)
+  prefilter with its own non-trivial constant cannot pay off at these skip rates.
+  (A bitmask would only help a variant that made the *gated* operation expensive.)
+
+### E-H10 — watched witnesses for the incremental recount — REJECTED (branch only)
+
+- **Idea (watched-literals analogue):** cache, per word, the WITNESSES for its
+  last count - the first up-to-2 legal placements, each a re-checkable
+  `w(Start,Dir)`. At a recount trigger (a word shares a letter with the just-placed
+  word), first re-validate the cached witnesses with `check_word_fits/5`
+  (O(word length) each); if they still hold, KEEP the previous bucket and skip the
+  full `find_intersecting_word x pair_crossings x check_word_fits` rescan.
+- **Where (measured, branch `experiment/e-h10-watched-witnesses`, not merged):**
+  core.pl only - `count_upto2_wit/5` (count_upto2 that snapshots ground
+  `w(Start,Dir)` copies into the mutable holder via nb_setarg, order- and
+  count-preserving), `mrv_count_wit/8`, the cache value widened `Count -> wc(Count,
+  Witnesses)` threaded in the existing `state(CountMap, LastLetters)` (pure
+  backtrackable arg, so it unwinds on backtrack - the one hard requirement), and
+  `recount_or_reuse/9` on the inc_count shares-letter branch. `count_of/3` unwraps
+  the wc on the hot ordering loop.
+- **Soundness — the headline mechanism is UNSOUND (verified in code, not on
+  faith).** The brief's monotonicity premise ("within one descent a word's legal
+  set only SHRINKS") is FALSE for exactly the words this optimisation touches. The
+  recount trigger is "shares a letter with the last placement", which is precisely
+  the case where placing that word can ADD a new crossing placement (the mrv_inc
+  invariant, core.pl §"Correctness rests on this invariant"): a shares-letter
+  word's count can RISE, not only fall. So a bucket-1 word whose single witness
+  still validates can nonetheless have TRUE count 2 (a fresh placement crossing the
+  just-placed word), and keeping bucket 1 UNDER-counts. Empirically confirmed: the
+  brief's bucket>=1 policy left `all_crossword` full-tree solution counts identical
+  (the solution SET is unchanged - completeness holds) but changed the emitted
+  first layout on 11 of 12 ladder rungs (only 21x21_25w survived) - a byte-identity
+  violation. Only the SATURATED bucket is sound: `Count == 2` (== cap) cannot rise
+  past the cap, so both-witnesses-valid => still >= 2 => same bucket. The shipped
+  experiment therefore short-circuits ONLY `Count == 2`; buckets 0/1 always recount.
+- **The sound scope excludes the volume.** P1 found count<=1 is the plurality
+  bucket at nodes, and a full recount of a bucket-2 word already EARLY-EXITS at the
+  2nd hit (count_upto2). So the sound (bucket-2-only) short-circuit skips
+  candidate-regeneration on the recounts that were already the CHEAPEST, while a
+  flat witness-capture + `wc` unwrap tax is paid on every count/every ordering pass.
+- **Witness-survival instrumentation (first-solution descent, topleft_across;
+  temporary counters, removed before commit):** of shares-letter recounts, the
+  fraction that are bucket-2 and the fraction of those whose witnesses survive:
+  21x21_80w 53.8% bucket-2 x 65.7% survival (fires on 35.3% of triggers);
+  21x21_82w 36.2% x 45.3% (16.4%); 15x15_36w 30.5% x 45.7% (14.0%);
+  09x09_08w 29.7% x 18.2% (5.4%); 15x15_12w 29.8% x 21.4% (6.4%). The hit rate
+  tracks fan-out: high on the dense 21x21 rungs, low on the light/trail rungs.
+- **Result (`make bench-check --heavy`, warm, vs baseline.json; sound bucket-2
+  version, all 12 rungs byte-identical):**
+
+  | rung | baseline | measured | delta | status |
+  | --- | --- | --- | --- | --- |
+  | 09x09_08w | 28,212 | 28,616 | **+1.43%** | **REGRESSION** |
+  | 15x15_12w | 101,588 | 102,808 | **+1.20%** | **REGRESSION** |
+  | 21x21_25w | 302,257 | 304,600 | **+0.78%** | **REGRESSION** |
+  | 15x15_28w | 374,521 | 369,794 | -1.26% | win |
+  | 15x15_32w | 969,070 | 936,588 | -3.35% | win |
+  | 09x09_16w | 674,961 | 656,651 | -2.71% | win |
+  | 21x21_80w | 4,487,855 | 3,658,866 | **-18.47%** | win |
+  | 15x15_34w | 13,650,369 | 13,556,053 | -0.69% | win |
+  | 15x15_36w | 38,275,505 | 38,375,768 | +0.26% | ok |
+  | 09x09_17w | 38,533,195 | 38,600,393 | +0.17% | ok |
+  | 15x15_40w | 10,411,252 | 10,359,444 | -0.50% | ok |
+  | 21x21_82w | 6,822,207 | 6,410,131 | -6.04% | win |
+
+  Ratchet verdict: **FAIL** (3 regressions, 6 wins). The gradient is exactly P1's
+  prediction - the counting-dominated, high-fan-out 21x21 rungs gain most
+  (80w -18.5%, 82w -6.0%), the trail/low-fan-out rungs least (they REGRESS on the
+  flat tax).
+- **Identity:** 204 plunit pass; all goldens byte-identical; `all_crossword`
+  full-tree solution counts identical across baseline/mrv_capped/mrv_inc x 4 corners
+  on 2 fixtures (09x09_08w, bundled_17); arrange output byte-identical on all 12
+  ladder rungs. (The sound version only; the bucket>=1 version fails identity - see
+  Soundness above.)
+- **Verdict:** REJECTED - branch only, nothing merged, not bench-recorded. The
+  headline win the hypothesis targeted (making the PLURALITY count<=1 recounts
+  O(word length)) is unreachable: that bucket is exactly where a shares-letter
+  recount can gain a placement, so the witness check cannot certify it without a
+  rescan. The sound residue (bucket-2) helps only the high-fan-out counting rungs
+  and taxes the rest past the 0.5% gate. This closes the "cheaper per-node counting
+  via cached placements" idea in its stated form. The ONE avenue that could still
+  ship the 21x21 win: keep witnesses in a SPARSE side-assoc (only ever-bucket-2
+  words) so `count_of` stays a bare-int read and the flat ordering-loop tax
+  disappears - untried here; it is a different experiment, not this hypothesis.
+
+### E-H10b — sparse-side-map watched witnesses — REJECTED (light-path structural tax removed; the shortcut still cannot pay its own admission test on the smallest rungs)
+
+- **Idea:** rebuild E-H10's sound Count==2 witness shortcut so the light path
+  is untouched. Keep CountMap values BARE INTS (no ordering-loop unwrap); hold
+  witnesses in a SPARSE side-map keyed only by cap-saturated words; confine
+  witness capture to recounts. Aim: keep the 21x21 win with ZERO regressions.
+  Branch experiment/e-h10b-sparse-witnesses, not merged.
+- **Where:** core.pl only. New: mrv_count_wit/8 + count_upto2_wit/5 +
+  wcounter_witnesses/2 (the witness-capturing count, reused near-verbatim from
+  92179c8 but reachable ONLY from the recount fallback); recount_or_reuse/9 +
+  witness_valid/4 (the shortcut). Changed: inc_count/11's shares-letter branch
+  gains a `get_assoc(A, PrevMap, 2)` gate that routes ONLY previously-saturated
+  words into the shortcut; inc_counts(none,...) resets the witness map. Every
+  other line of the mrv_inc counting path (count_of, select_inc, the state/2
+  term, full_count, the carry-forward branch, inc_counts(state,...)) is
+  BYTE-FOR-BYTE master.
+- **Design decisions (deliverable b):**
+  - *Side-map location.* Threading the map through the state term via the foldl
+    accumulator (a cw(CountAcc,WitAcc) pair) was tried FIRST and REGRESSED the
+    light rungs +1.1..+3.1% - the per-word compound wrap/unwrap taxes every
+    carry-forward word. Instead the map lives in a BACKTRACKABLE GLOBAL
+    (b_setval/b_getval `cw_witnesses`): itself backtrack-restored state, but the
+    carry-forward path and the ordering loop never touch it, so they stay
+    byte-identical. Reset at inc_counts(none,...) (the per-subtree entry both
+    the search and greedy/fragment drivers pass through); sibling seeds start
+    clean via ordinary backtracking.
+  - *Capture confinement.* Witnesses are captured only in the recount FALLBACK
+    (mrv_count_wit), never in the initial full pass and never on carry-forward.
+    The `PrevMap==2` gate further restricts capture to words that were saturated
+    last node - the alternative (gate on sparse-map membership, capturing on
+    every shares-letter recount) REGRESSED +2.4..+3.2% and is recorded as the
+    losing variant.
+  - *Stale-entry policy.* A recount OVERWRITES the entry on re-saturation and
+    LEAVES a stale entry when the count drops (the zero-assoc-op branch). SOUND
+    REGARDLESS of staleness: two currently-valid distinct witnesses are two real
+    placements, so validation succeeding proves true count >= 2; if the word
+    truly dropped, at most one witness validates and we fall through. A blocked
+    witness cell stays blocked deeper on a descent, so a dead entry never
+    mis-fires - it wastes at most two check_word_fits.
+- **Result (--heavy, all 12 rungs, inferences vs baseline.json):** the 21x21
+  win is FULLY retained - 21x21_80w 4,487,855 -> 3,698,716 (-17.6%), 21x21_82w
+  6,822,207 -> 6,440,060 (-5.6%); also 15x15_32w -2.6%, 09x09_16w -2.7%,
+  15x15_28w -0.8%. But THREE light rungs still regress past the 0.5% ratchet:
+  09x09_08w +1.5%, 15x15_12w +1.4%, 21x21_25w +0.6%. The E-H10 structural taxes
+  are GONE (36w +1.07% -> +0.26%; 17w +1.77% -> +0.29% - both now pass), but the
+  smallest rungs do not clear the bar.
+- **The decisive finding (why this closes the avenue):** a diagnostic that keeps
+  ONLY the gate probe (`get_assoc(A, PrevMap, 2)` on every shares-letter word)
+  with the shortcut and capture DISABLED still costs +0.60..+0.74% on the four
+  smallest rungs (08w +0.74%, 12w +0.71%, 25w +0.60%, 28w +0.60%) and +0.2..+0.4%
+  everywhere else. That is the IRREDUCIBLE admission test the sound shortcut
+  needs: to decide a word is shortcut-eligible you must look up whether it was
+  cap-saturated, and that single bare-int assoc probe per shares-letter word is
+  ALREADY over the ratchet on the smallest rungs, BEFORE the shortcut does any
+  useful work. On the high-fan-out rungs the -18%/-6% savings bury it; on the
+  light rungs (hit rate ~5-6%, and a bucket-2 rescan already early-exits at the
+  2nd hit) there is nothing to bury it with. No size-independent signal skips the
+  probe only where it cannot pay off, and an input-size switch / magic constant
+  is off-limits by charter.
+- **Identity verification:** 204 plunit green; goldens BYTE-IDENTICAL (not
+  regenerated); arrange output BYTE-IDENTICAL on all 12 ladder rungs vs master;
+  FULL-TREE all_crossword counts identical across all four strategies
+  (baseline/mrv/mrv_capped/mrv_inc) x 4 corners on 2 non-zero fixtures
+  (bundled_17: 16315/16315/4238/4238; ladder_09x09_08w: 36553/36553/39040/39040).
+  The shortcut is SOUND - it only changes speed, never the tree.
+- **Verdict:** REJECTED. E-H10b did its narrow job - it removed E-H10's
+  bookkeeping tax (bare-int count map, byte-identical light path, capture off the
+  light path) and kept the entire 21x21 win - and by doing so ISOLATED the real
+  obstacle: not the bookkeeping, but the per-shares-word eligibility lookup the
+  sound Count==2 scope inherently requires. That lookup is a flat ~0.6-0.7% tax
+  on the smallest rungs that the shortcut's light-rung savings cannot offset.
+  **This closes the watched-witness avenue** (E-H10 + E-H10b). The E-H9 lesson
+  restated: a per-node cost that is minimal on the heavy rungs can still be the
+  whole budget on the light ones - and here it is the shortcut's own admission
+  test, which no amount of bookkeeping cleverness can remove.

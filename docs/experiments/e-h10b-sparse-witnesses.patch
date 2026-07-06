@@ -1,0 +1,191 @@
+diff --git a/prolog/crosswordsmith/core.pl b/prolog/crosswordsmith/core.pl
+index dba8d5a..639333e 100644
+--- a/prolog/crosswordsmith/core.pl
++++ b/prolog/crosswordsmith/core.pl
+@@ -387,6 +387,18 @@ mrv_count(2, PlacedWords, GridLen, Start, Dir, GIn, Entry, Count) :-
+     mrv_count_goal(PlacedWords, GridLen, Start, Dir, GIn, Entry, Goal),
+     count_upto2(Goal, Count).
+ 
++% mrv_count_wit/8: the Cap=2 count PLUS its witnesses (E-H10b). Identical Goal to
++% mrv_count(2,...) - same accept/reject set and enumeration order, so the returned
++% Count is byte-identical - but it ALSO snapshots the first up-to-2 legal
++% (Start,Dir) placements for later O(word-length) re-validation. Called ONLY from
++% the incremental recount FALLBACK (recount_or_reuse's full-recount clause), never
++% on the carry-forward light path nor the initial full-count pass, so witness
++% capture cost is confined to recounts that actually rescan. Start/Dir are left
++% unbound on exit (count_upto2_wit's \+ discards the loop bindings), as mrv_count.
++mrv_count_wit(PlacedWords, GridLen, Start, Dir, GIn, Entry, Count, Witnesses) :-
++    mrv_count_goal(PlacedWords, GridLen, Start, Dir, GIn, Entry, Goal),
++    count_upto2_wit(Goal, Start, Dir, Count, Witnesses).
++
+ % The placement-enumeration goal shared by both count paths: a candidate
+ % (Start,Dir) from find_intersecting_word that also survives the legality
+ % checks. On backtracking it re-binds Start/Dir to the next placement (or
+@@ -433,6 +445,43 @@ count_upto2(Goal, Count) :-
+     ),
+     arg(1, Counter, Count).
+ 
++% count_upto2_wit(:Goal, +Start, +Dir, -Count, -Witnesses): count_upto2 that ALSO
++% captures the WITNESSES for its count - the first up-to-2 legal placements found,
++% each a ground w(Start,Dir) re-checkable description (E-H10b). Start/Dir are the
++% shared placement vars the Goal binds per solution (mrv_count_goal builds Goal
++% around them); on the Nth solution we snapshot a GROUND copy of w(Start,Dir) into
++% the mutable holder via nb_setarg (a copy onto the global stack, so it survives
++% the \+ that discards the loop's bindings). The snapshot is a pure side effect
++% inside the SAME loop conjunction and the N >= 2 early exit is unchanged, so
++% enumeration order and the resulting Count are byte-identical to count_upto2/2 -
++% the witnesses are exactly the first placements in today's order. Witnesses is a
++% list of length min(Count,2). Reused verbatim from branch 92179c8 (E-H10), but
++% only ever reached from the recount fallback here.
++:- meta_predicate count_upto2_wit(0, ?, ?, -, -).
++count_upto2_wit(Goal, Start, Dir, Count, Witnesses) :-
++    Counter = wcounter(0, none, none),
++    (   \+ ( Goal,
++             arg(1, Counter, N0),
++             N is N0 + 1,
++             nb_setarg(1, Counter, N),
++             ( N =:= 1 -> nb_setarg(2, Counter, w(Start, Dir))
++             ; N =:= 2 -> nb_setarg(3, Counter, w(Start, Dir))
++             ; true ),
++             N >= 2 )
++    ->  true
++    ;   true
++    ),
++    arg(1, Counter, Count),
++    wcounter_witnesses(Counter, Witnesses).
++
++% Collect the 0-2 captured witnesses (holder args 2,3) in enumeration order,
++% dropping the `none` placeholders for counts below that arg.
++wcounter_witnesses(wcounter(_, W1, W2), Witnesses) :-
++    ( W1 == none -> Witnesses = []
++    ; W2 == none -> Witnesses = [W1]
++    ;               Witnesses = [W1, W2]
++    ).
++
+ 
+ % mrv_inc: capped MRV with an INCREMENTAL count cache (idea I1 in
+ % docs/experiments.md). mrv_capped recomputes every remaining word's placement
+@@ -454,7 +503,20 @@ count_upto2(Goal, Count) :-
+ % The cache is threaded as a plain argument, so backtracking restores prior
+ % caches automatically. Counts are capped at 2 (as in mrv_capped).
+ 
+-% State is `none` (no cache yet) or state(CountAssoc, LastPlacedLetters).
++% State is `none` (no cache yet) or state(CountAssoc, LastPlacedLetters) - unchanged
++% by E-H10b: CountAssoc stays BARE-INT counts (the ordering loop never unwraps), and
++% the state term is byte-for-byte as before.
++%
++% E-H10b's watched witnesses live OUTSIDE this term, in a backtrackable global var
++% (`cw_witnesses`, a SPARSE assoc; see recount_or_reuse/9). A backtrackable global is
++% itself backtrack-restored state - it undoes on backtracking exactly as a threaded
++% arg would - but, unlike a threaded arg, it costs the carry-forward light path and
++% the ordering loop NOTHING: they never touch it. Only the shares-letter recount
++% branch reads/writes it. A word appears in the map ONLY when its last recount
++% saturated the cap, mapping its head letter to the two legal witness placements
++% [w(S1,D1), w(S2,D2)] captured then. (Measured: threading the map through the foldl
++% accumulator instead regressed the light rungs +1..+3% from the per-word wrap; the
++% global keeps them byte-identical. See docs/experiments.md E-H10b.)
+ assign_words_inc([], P, _State, _, _, _, G, G, P).
+ assign_words_inc(Words, PlacedWords, StateIn, GridLen, Start, Dir, GIn, GOut, Out) :-
+     select_inc(Words, PlacedWords, StateIn, GridLen, Start, Dir, GIn,
+@@ -557,10 +619,23 @@ count_of(CountMap, Word, Count) :-
+ % Build the count map for the current words. With no cache yet, count them all;
+ % otherwise recount only words sharing a letter with the last-placed word and
+ % carry the rest forward from the previous map.
++% Initial full pass: bare-int counts exactly as before (byte-for-byte master), and
++% RESET the sparse witness side-map for this subtree. `none` is the node right after
++% a seed placement; every descent passes through it before any incremental node, so
++% it is the natural per-subtree reset point (and it covers both the search driver and
++% the greedy/fragment driver, which both start from `none`). Backtracking to a
++% sibling seed restores the global to this empty value automatically, so each seed's
++% subtree starts clean. Witnesses are captured lazily by the first recount of each
++% word (mrv_count_wit), never here - so touching EVERY word stays capture-free.
+ inc_counts(none, Words, PlacedWords, GridLen, Start, Dir, GIn, CountMap) :-
+     !,
++    empty_assoc(EmptyWit),
++    b_setval(cw_witnesses, EmptyWit),
+     empty_assoc(A0),
+     foldl(full_count(PlacedWords, GridLen, Start, Dir, GIn), Words, A0, CountMap).
++% Incremental pass: byte-for-byte master. The bare-int count map is built from empty
++% exactly as before; the witness global is read/written only inside inc_count's
++% shares-letter recount branch, so this clause needs no witness argument at all.
+ inc_counts(state(PrevMap, LastLetters), Words, PlacedWords, GridLen, Start, Dir, GIn, CountMap) :-
+     empty_assoc(A0),
+     foldl(inc_count(PrevMap, LastLetters, PlacedWords, GridLen, Start, Dir, GIn),
+@@ -571,17 +646,76 @@ full_count(PlacedWords, GridLen, Start, Dir, GIn, Entry, AIn, AOut) :-
+     mrv_count(2, PlacedWords, GridLen, Start, Dir, GIn, Entry, Count),
+     put_assoc(A, AIn, Count, AOut).
+ 
++% inc_count/11: byte-for-byte master EXCEPT the shares-letter branch, which routes
++% through recount_or_reuse/9 (the watched-witness shortcut) instead of calling
++% mrv_count directly. The count accumulator AIn/AOut is a plain bare-int assoc, and
++% the carry-forward branch is identical to master - the plurality light path pays
++% nothing for witnesses. The gate `get_assoc(A, PrevMap, 2)` fires the shortcut
++% machinery ONLY for words whose previous count was the saturated cap; every other
++% shares-letter word takes master's plain recount (only that one cheap bare-int
++% lookup is added on the shares path). See the SOUNDNESS note below for why the
++% saturated bucket is the only sound one to reuse.
+ inc_count(PrevMap, LastLetters, PlacedWords, GridLen, Start, Dir, GIn, Entry, AIn, AOut) :-
+     Entry = [A|_],
+     entry_letters(Entry, ELetters),
+     (   shares_letter(ELetters, LastLetters)
+-    ->  mrv_count(2, PlacedWords, GridLen, Start, Dir, GIn, Entry, Count)
++    ->  (   get_assoc(A, PrevMap, 2)           % was saturated last node -> maybe reuse
++        ->  recount_or_reuse(A, ELetters, PlacedWords, GridLen, Start, Dir, GIn, Entry, Count)
++        ;   mrv_count(2, PlacedWords, GridLen, Start, Dir, GIn, Entry, Count)
++        )
+     ;   get_assoc(A, PrevMap, Count)            % carry forward (>= true count)
+     ->  true
+     ;   mrv_count(2, PlacedWords, GridLen, Start, Dir, GIn, Entry, Count)
+     ),
+     put_assoc(A, AIn, Count, AOut).
+ 
++% recount_or_reuse/9: for a shares-letter word that was cap-saturated last node, try
++% the sparse watched-witness shortcut before a full rescan; on any miss, do the full
++% recount (capturing fresh witnesses if it re-saturates).
++%
++% SOUNDNESS - why ONLY the saturated bucket short-circuits, and why a STALE entry is
++% safe:
++%   The recount trigger is "shares a letter with the last placement", which is
++%   EXACTLY when placing that word can ADD a new crossing option (mrv_inc invariant)
++%   - so a shares-letter word's count can RISE, not only fall. A surviving bucket-0/1
++%   witness therefore does NOT pin the bucket (a new crossing could push 0->1 or
++%   1->2); we NEVER shortcut those. The gate in inc_count restricts entry here to
++%   words whose previous count was the cap (2), and only cap-saturated words are ever
++%   stored in the witness map.
++%   For such a word: if BOTH cached witnesses still validate on the CURRENT grid they
++%   are two genuine, distinct current placements, so the true count is >= 2 => capped
++%   at 2 => the exact bucket a full recount would return. This holds REGARDLESS of
++%   staleness: two currently-valid distinct placements are two real placements, full
++%   stop; a stale entry only ever costs a wasted validation, never correctness. If
++%   the word truly dropped below 2, at most one witness validates and we fall through
++%   to the full recount.
++% Stale-entry policy: a full recount OVERWRITES the map entry when the fresh count
++% re-saturates, and LEAVES any stale entry untouched when it does not (the cheaper
++% zero-op branch; the entry self-corrects - a later shortcut attempt fails validation
++% and recounts). Once a witness placement's cell is taken it stays taken deeper on
++% the same descent (backtracking restores the global with the grid), so a dead entry
++% never mis-fires - it wastes at most the two check_word_fits before the recount.
++recount_or_reuse(A, ELetters, _PlacedWords, GridLen, _Start, _Dir, GIn, _Entry, 2) :-
++    b_getval(cw_witnesses, WitMap),
++    get_assoc(A, WitMap, [W1, W2]),
++    witness_valid(W1, ELetters, GridLen, GIn),
++    witness_valid(W2, ELetters, GridLen, GIn),
++    !.
++recount_or_reuse(A, _ELetters, PlacedWords, GridLen, Start, Dir, GIn, Entry, Count) :-
++    mrv_count_wit(PlacedWords, GridLen, Start, Dir, GIn, Entry, Count, Wit),
++    (   Count >= 2                              % re-saturated (count_upto2_wit caps at 2)
++    ->  b_getval(cw_witnesses, W0),
++        put_assoc(A, W0, Wit, W1),
++        b_setval(cw_witnesses, W1)             % (re)store fresh 2-witness entry
++    ;   true                                    % <2: leave any stale entry (self-correcting)
++    ).
++
++% A cached witness (a first-count legal placement) must STILL be legal on the
++% current grid. check_word_fits/5 is the same non-binding legality probe the count
++% uses, so a surviving witness is a genuine current placement.
++witness_valid(w(S, D), ELetters, GridLen, GIn) :-
++    check_word_fits(ELetters, S, D, GridLen, GIn).
++
+ entry_letters([Word|_], Letters) :-
+     answer_letters(Word, Letters).
+ 
