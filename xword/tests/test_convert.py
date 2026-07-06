@@ -20,6 +20,7 @@ from xword.convert import convert_text
 from xword.formats import parse_board
 
 FIXTURES = Path(__file__).parent / "fixtures"
+GOLDEN = Path(__file__).parent / "golden"
 NATIVE = FIXTURES / "bundled_17.native.json"
 IPUZ = FIXTURES / "bundled_17.ipuz.json"
 EXOLVE = FIXTURES / "bundled_17.exolve"
@@ -62,6 +63,22 @@ def native_without_links(src: str) -> dict:
     return obj
 
 
+class TestNoFeatureByteIdentity:
+    """D6 acceptance gate for the serializer-gap work: `bundled_17` carries no
+    rebus / prefill / shading, so its convert output must stay byte-identical
+    as the three gaps land. The goldens were captured before any gap change;
+    the new directives/fields must be emitted *only* when the feature is present.
+    """
+
+    def test_no_feature_ipuz_byte_identical(self):
+        out, _ = convert_text(NATIVE.read_text(), "ipuz")
+        assert out == (GOLDEN / "convert_bundled_17_no_feature.ipuz.json").read_text()
+
+    def test_no_feature_exolve_byte_identical(self):
+        out, _ = convert_text(NATIVE.read_text(), "exolve")
+        assert out == (GOLDEN / "convert_bundled_17_no_feature.exolve").read_text()
+
+
 class TestStructuralFailures:
     """D7 strict side: each error names the property and a capable target."""
 
@@ -94,18 +111,12 @@ class TestStructuralFailures:
         with pytest.raises(XwordError, match="unfilled.*ipuz or exolve"):
             convert_text(src, "native")
 
-    def test_prefilled_cell_blocks_ipuz(self):
-        src = mini_exolve("C!AB", "A.U", "BUS")
-        with pytest.raises(XwordError, match="prefilled.*exolve"):
-            convert_text(src, "ipuz")
-
-    def test_rebus_blocks_exolve(self, fixtures):
-        with pytest.raises(XwordError, match="rebus.*ipuz"):
-            convert_text((fixtures / "sample.ipuz.json").read_text(), "exolve")
-
     def test_foreign_styling_blocks_native_and_exolve(self):
+        # `colortext` (text colour) is a real ipuz StyleSpec key with no Exolve
+        # home — exolve-colour sets background only — so it stays fail-strict
+        # even after Gap 3 taught the serializer the background `color` key.
         src = mini_ipuz(
-            puzzle=[[1, 0, {"cell": 0, "style": {"fill": "DDDDDD"}}], [0, "#", 0], [0, 0, 0]]
+            puzzle=[[1, 0, {"cell": 0, "style": {"colortext": "FF0000"}}], [0, "#", 0], [0, 0, 0]]
         )
         for target in ("native", "exolve"):
             with pytest.raises(XwordError, match="styling"):
@@ -117,6 +128,92 @@ class TestStructuralFailures:
         )
         with pytest.raises(XwordError, match="enumeration.*ipuz or exolve"):
             convert_text(src, "native")
+
+
+class TestPrefilledToIpuz:
+    """Gap 2 (closed): a prefilled/given cell serializes to ipuz as a puzzle
+    `value` and survives a full serialize + parse-back round-trip."""
+
+    def test_prefilled_serializes_value_and_round_trips(self):
+        src = mini_exolve("C!AB", "A.U", "BUS")
+        out, warnings = convert_text(src, "ipuz")
+        assert warnings == []
+        obj = json.loads(out)
+        # the given cell carries its letter as a puzzle `value` (+ solution)
+        assert obj["puzzle"][0][0] == {"cell": 1, "value": "C"}
+        assert obj["solution"][0][0] == "C"
+        # parse-back: the prefill flag + letter survive
+        board = parse_board(out, "ipuz")
+        given = board.grid[0][0]
+        assert given.prefilled and given.letter == "C"
+        others = [c for row in board.grid for c in row if c is not None and c is not given]
+        assert not any(c.prefilled for c in others)  # only the given cell is prefilled
+
+    def test_exolve_ipuz_exolve_preserves_prefill(self):
+        src = mini_exolve("C!AB", "A.U", "BUS")
+        via, _ = convert_text(src, "ipuz")
+        back, _ = convert_text(via, "exolve")
+        assert parse_board(back, "exolve") == parse_board(src, "exolve")
+
+
+class TestRebusToExolve:
+    """Gap 1 (closed): a rebus (multi-char) cell serializes to Exolve via a
+    whole-grid `exolve-option: rebus-cells` switch (space-separated tokens) and
+    round-trips back through the rebus-mode tokeniser."""
+
+    def test_rebus_serializes_and_parses_back(self, fixtures):
+        src = (fixtures / "sample.ipuz.json").read_text()
+        out, _ = convert_text(src, "exolve")
+        assert "  exolve-option: rebus-cells" in out
+        assert "    PH E F" in out  # grid switched to space-separated tokens
+        board = parse_board(out, "exolve")
+        assert board.grid[1][0].letter == "PH"  # rebus survives the parse-back
+        assert board.grid[0][1].circle  # a decorator still rides its token (B@)
+
+    def test_no_rebus_stays_compact(self):
+        # a grid with no multi-char cell must NOT switch modes (byte-level D6)
+        out, _ = convert_text(mini_exolve("CAB", "A.U", "BUS"), "exolve")
+        assert "exolve-option" not in out
+        assert "    CAB" in out  # compact, non-spaced row
+
+
+class TestShadedToExolve:
+    """Gap 3 (closed, serialize-only): a background-shade `color` style
+    serializes to a deterministic exolve-colour directive. The reverse hop is
+    puzzle-lossless-only — Exolve's colour model is coarser than the ipuz
+    StyleSpec, so the exact StyleSpec is not reconstructed (no reverse reader)."""
+
+    def test_color_style_serializes_exolve_colour(self, fixtures):
+        src = (fixtures / "sample_shaded.ipuz.json").read_text()
+        out, warnings = convert_text(src, "exolve")
+        assert warnings == []  # a shade is structure, not metadata: never warns
+        assert "  exolve-colour: pink r1c2" in out
+        assert "exolve-option" not in out  # not rebus mode
+
+    def test_multiple_shades_are_deterministic(self):
+        src = mini_ipuz(
+            puzzle=[
+                [{"cell": 1, "style": {"color": "pink"}}, 0, {"cell": 0, "style": {"color": "aqua"}}],
+                [0, "#", 0],
+                [0, 0, 0],
+            ]
+        )
+        out, _ = convert_text(src, "exolve")
+        # one line per colour, colours sorted, cells sorted within a colour
+        assert "  exolve-colour: aqua r1c3" in out
+        assert "  exolve-colour: pink r1c1" in out
+        assert out.index("aqua") < out.index("pink")  # deterministic colour order
+
+    def test_shade_is_lossy_on_reverse_hop(self):
+        # option (a): no reverse coordinate parser, so exolve→ipuz drops the
+        # shade — the documented puzzle-lossless-only behaviour.
+        src = mini_ipuz(
+            puzzle=[[1, {"cell": 0, "style": {"color": "pink"}}, 0], [0, "#", 0], [0, 0, 0]]
+        )
+        exo, _ = convert_text(src, "exolve")
+        assert "exolve-colour: pink" in exo
+        back, _ = convert_text(exo, "ipuz")
+        assert "color" not in back  # the StyleSpec is not reconstructed
 
 
 class TestMetadataDrops:

@@ -1,0 +1,20 @@
+exolve-begin
+  exolve-id: xword-gap1-rebus
+  exolve-title: Rebus Sample
+  exolve-setter: Gap1 Spike
+  exolve-width: 3
+  exolve-height: 3
+  exolve-option: rebus-cells
+  exolve-grid:
+    PH@ A T
+    E R A
+    D E N
+  exolve-across:
+    1 Rebus and circle (3)
+    4 Middle row (3)
+    5 Bottom row (3)
+  exolve-down:
+    1 Left column (3)
+    2 Middle column (3)
+    3 Right column (3)
+exolve-end

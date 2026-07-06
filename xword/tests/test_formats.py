@@ -137,3 +137,14 @@ class TestExolve:
         src = (fixtures / "sample_decorated.exolve").read_text()
         with pytest.raises(XwordError, match="no derived word"):
             parse_board(src.replace("2 Adjoin (4)", "9 Adjoin (4)"), "exolve")
+
+    def test_rebus_round_trip(self, fixtures):
+        # exolve-option: rebus-cells → space-separated multi-char tokens (Gap 1)
+        src = (fixtures / "sample_rebus.exolve").read_text()
+        b1 = parse_board(src, "exolve")
+        assert b1.grid[0][0].letter == "PH"  # multi-char main
+        assert b1.grid[0][0].circle  # decorator on a rebus token (PH@)
+        out = serialize_board(b1, "exolve")
+        assert "  exolve-option: rebus-cells" in out
+        b2 = parse_board(out, "exolve")
+        assert b1 == b2
