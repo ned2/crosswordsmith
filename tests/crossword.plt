@@ -400,6 +400,19 @@ test(json_non_string_answer_throws, [throws(error(json_invalid_answer(_), _))]) 
 test(json_non_object_meta_throws, [throws(error(json_invalid_meta('FLOW'), _))]) :-
     crosswordsmith_core:doc_to_words(_{clues: [_{answer: "FLOW", meta: "no"}]}, _).
 
+% C62 pin: the answer gate is SHAPE-only (`answer` must be a string) - the
+% degenerate empty answer "" is deliberately ACCEPTED and maps to the empty
+% atom with the default empty meta. It cannot succeed silently downstream: a
+% zero-letter word can never cross anything, so strict arrange reports it
+% among the no-possible-crossing words and best-effort drops it. Rejecting it
+% at the gate would change the wire/CLI contract for existing callers, so the
+% current shape is pinned here instead.
+test(json_empty_answer_accepted_as_empty_atom) :-
+    crosswordsmith_core:doc_to_words(_{clues: [_{answer: ""}]}, Words),
+    Words = [['', Meta]],
+    is_dict(Meta),
+    dict_pairs(Meta, _, []).
+
 % Malformed JSON and a missing file surface as standard ISO errors.
 test(json_malformed_throws, [throws(_)]) :-
     setup_call_cleanup(open_string("{ not json", S),

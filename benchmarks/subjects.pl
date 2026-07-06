@@ -47,6 +47,14 @@ expected_exit(Expected, Got) :-
 % pathological workload that would otherwise SATURATE the budget (its count pinned
 % to the budget constant, useless as a hill-climbing signal) instead runs to true
 % completion, yielding a deterministic count that reflects the search's real cost.
+%
+% WHITE-BOX REACH, deliberate (C25): arrange_best_layout/6 is NOT on
+% crosswordsmith_arrange's export list - the module-qualified call below is
+% this harness reaching an internal on purpose. It must stay on exactly this
+% predicate: every recorded baseline.json/history.jsonl search_inf count is
+% defined against it, so re-pointing at a public seam (e.g. arrange_outcome/5)
+% would silently move the gated counts. If arrange.pl ever exports /6, switch
+% to a plain import; until then this is the sanctioned exception.
 % Any Budget >= a completing fixture's true cost gives the SAME count, so this does
 % not perturb the fast workloads. arrange_best_layout/6 is single-valued and always
 % succeeds with an Outcome (placed | not_proven | infeasible); we assert it matches

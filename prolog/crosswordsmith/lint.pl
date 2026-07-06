@@ -24,8 +24,10 @@
 % library(json), NOT the legacy library(http/json) alias — the alias does not
 % resolve in the WASM image (C6).
 :- use_module(library(json), [json_read_dict/2, json_write_dict/2]).
-:- use_module(library(apply), [include/3, maplist/3]).
+:- use_module(library(apply), [maplist/3]).
 :- use_module(library(aggregate), [aggregate_all/3]).
+% domain_error/2: lint_run/5's unknown-profile guard (C17a).
+:- use_module(library(error), [domain_error/2]).
 :- use_module(library(lists), [append/3, member/2, nth1/3, reverse/2]).
 :- use_module(library(ordsets), [ord_memberchk/2]).
 % vertices_edges_to_ugraph/3 + reachable/3: the connectivity rule's
@@ -163,8 +165,14 @@ filled_cells(PlacedWords, Filled) :-
 %   verdict is the worst severity ('PASS'/'WARN'/'FAIL'). AllowAsym = true
 %   downgrades a symmetry hard-FAIL to WARN (AC-LINT-3). Pure: no output,
 %   no side effects (stockgrid.pl consumes it as a library validator).
+%   Throws domain_error(lint_profile, Profile) on an unknown profile (C17a:
+%   this is deliberate library API - an unrecognized profile is a caller
+%   bug, never a silent failure; lint_known_profile/1 pre-validates).
 lint_run(PlacedWords, GridLen, Profile, AllowAsym, Report) :-
-    lint_profile(Profile, Rules),
+    (   lint_profile(Profile, Rules)
+    ->  true
+    ;   domain_error(lint_profile, Profile)
+    ),
     filled_cells(PlacedWords, Filled),
     % compute both directions' covered-cell sets ONCE (P4): every checked-based
     % per-word rule derives from the word's bitmap, so dir_cells/3 (a findall+sort
@@ -338,10 +346,12 @@ worst_severity(Sevs, Verdict) :-
     ; memberchk('WARN', Sevs) -> Verdict = 'WARN'
     ; Verdict = 'PASS' ).
 
+% The file's own counting idiom (symmetry_deficit/3 above) - no throwaway
+% include/3 lists (C37).
 tally(Sevs, Pass, Warn, Fail) :-
-    include(==('PASS'), Sevs, Ps), length(Ps, Pass),
-    include(==('WARN'), Sevs, Ws), length(Ws, Warn),
-    include(==('FAIL'), Sevs, Fs), length(Fs, Fail).
+    aggregate_all(count, member('PASS', Sevs), Pass),
+    aggregate_all(count, member('WARN', Sevs), Warn),
+    aggregate_all(count, member('FAIL', Sevs), Fail).
 
 
 % --- entry point -------------------------------------------------------------
@@ -355,10 +365,13 @@ tally(Sevs, Pass, Warn, Fail) :-
 lint_solve(File, Profile, AllowAsym, Verdict) :-
     lint_load(File, GridLen, PlacedWords),
     lint_run(PlacedWords, GridLen, Profile, AllowAsym, Report),
+    % Bind Verdict BEFORE emitting (steadfastness, C21): a caller that (mis)binds
+    % Verdict fails here with NO output, honouring the same "no stdout on
+    % failure" contract as the other solve seams.
+    get_dict(verdict, Report, Verdict),
     current_output(Out),
     json_write_dict(Out, Report),
-    nl(Out),
-    get_dict(verdict, Report, Verdict).
+    nl(Out).
 
 
 % --- error messages ----------------------------------------------------------

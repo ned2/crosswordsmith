@@ -47,19 +47,19 @@
             % the memo-hygiene seam every top-level search entry runs
             % (arrange.pl's entries are the out-of-module consumers)
             reset_search_memos/0,
-            % strategy registry
+            % strategy registry (valid_strategy/1 is internal-only: its sole
+            % caller is require_strategy/1, the seam every entry runs)
             strategies/1,
             default_strategy/1,
-            valid_strategy/1,
             require_strategy/1,
-            % placed-word record (pw/8) accessors
+            % placed-word record (pw/8) accessors (pw_end/2 stays internal:
+            % no consumer outside this module reads the End field)
             pw_answer/2,
             pw_letters/2,
             pw_cells/2,
             pw_dir/2,
             pw_len/2,
             pw_start/2,
-            pw_end/2,
             pw_num/2,
             % utilities
             remove_x/3,
@@ -84,7 +84,9 @@
 % (O(1), allocation-free); a placement unifies the cell variable with its
 % letter and is undone automatically by the trail on backtracking, so a grid's
 % GIn and GOut are one and the same term (the old immutable-version threading
-% collapses onto the trail). See docs/experiments.md (E-H2).
+% collapses onto the trail). See docs/experiments.md (E-H2). The search
+% threads TWO such grids as the bundle gs(LetterGrid, BoundaryGrid) — see
+% init_gs/2 and the boundary-grid note above assign_word/9.
 
 % All library imports below carry explicit import lists so a
 % qsave_program(..., [autoload(false)]) build resolves them (P11/C5).
@@ -119,9 +121,12 @@
               [empty_assoc/1, get_assoc/3, list_to_assoc/2, put_assoc/4]).
 :- use_module(library(lists),
               [ append/2, append/3, intersection/3, last/2, list_to_set/2,
-                member/2, nth1/3, numlist/3 ]).
+                member/2, nextto/3, nth1/3, numlist/3 ]).
 :- use_module(library(pairs),
               [group_pairs_by_key/2, map_list_to_pairs/3, pairs_values/2]).
+% read_file_to_terms/3 (the .pl clue-fixture reader). Present in the WASM
+% image's library tree too (unlike the legacy http/json alias — C6).
+:- use_module(library(readutil), [read_file_to_terms/3]).
 
 % program predicates.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -156,10 +161,10 @@ valid_strategy(S) :-
 %   of failing - the seam that turns an unknown strategy atom into a rendered
 %   error; every CLI/API entry runs it before searching.
 require_strategy(S) :-
-    valid_strategy(S),
-    !.
-require_strategy(S) :-
-    throw(error(unknown_strategy(S), _)).
+    (   valid_strategy(S)
+    ->  true
+    ;   throw(error(unknown_strategy(S), _))
+    ).
 
 %!  valid_loc(+Loc:atom) is semidet.
 %
@@ -176,12 +181,12 @@ valid_loc(Loc) :-
 %   path is the unchanged direct write. Determinism follows Goal: det when
 %   Goal is det, fails when Goal fails.
 :- meta_predicate with_output(+, 0).   % Goal is called (P12)
-with_output('', Goal) :-
-    !,
-    call(Goal).
 with_output(File, Goal) :-
-    with_output_to(string(Text), Goal),
-    setup_call_cleanup(open(File, write, S), write(S, Text), close(S)).
+    (   File == ''
+    ->  call(Goal)
+    ;   with_output_to(string(Text), Goal),
+        setup_call_cleanup(open(File, write, S), write(S, Text), close(S))
+    ).
 
 % Success-summary verbosity (design-spec §5.1). Routine success summaries
 % ("arrange: grid ..., reward ...", "fill: ... filled N slots") print on
@@ -227,30 +232,27 @@ load_clues(File, Words) :-
     downcase_atom(Ext0, Ext),
     load_clues_by_extension(Ext, File, Words).
 
-load_clues_by_extension(json, File, Words) :-
-    !,
-    read_clues_json(File, Words).
-load_clues_by_extension(pl, File, Words) :-
-    !,
-    read_clues_prolog(File, Words).
-load_clues_by_extension(Ext, File, _Words) :-
-    throw(error(unsupported_clue_file(File, Ext), _)).
+load_clues_by_extension(Ext, File, Words) :-
+    (   Ext == json
+    ->  read_clues_json(File, Words)
+    ;   Ext == pl
+    ->  read_clues_prolog(File, Words)
+    ;   throw(error(unsupported_clue_file(File, Ext), _))
+    ).
 
-% Read a Prolog fixture file containing a clues/1 term. This reads terms rather
-% than consulting the file, so benchmark/main input fixtures do not define or
-% redefine global predicates.
+% Read a Prolog fixture file containing a clues/1 term. read_file_to_terms/3
+% reads terms rather than consulting the file, so benchmark/main input
+% fixtures do not define or redefine global predicates. (It parses the WHOLE
+% file where the old hand-rolled loop stopped at the first clues/1 term, so a
+% syntax error after the clues term now throws — for a fixture, a feature.)
+% The payload is unified only AFTER memberchk commits to the first clues/1
+% term, so a (mis)bound Words fails cleanly instead of skipping the term and
+% throwing a bogus prolog_no_clues_term (steadfastness, audit C19/C38).
 read_clues_prolog(File, Words) :-
-    setup_call_cleanup(open(File, read, S),
-                       read_clues_prolog_term(S, File, Words),
-                       close(S)).
-
-read_clues_prolog_term(S, File, Words) :-
-    read_term(S, Term, []),
-    (   Term == end_of_file
-    ->  throw(error(prolog_no_clues_term(File), _))
-    ;   Term = clues(Words)
-    ->  true
-    ;   read_clues_prolog_term(S, File, Words)
+    read_file_to_terms(File, Terms, []),
+    (   memberchk(clues(Words0), Terms)
+    ->  Words = Words0
+    ;   throw(error(prolog_no_clues_term(File), _))
     ).
 
 % Read and validate a JSON clue file into the internal Words list. A missing
@@ -282,6 +284,13 @@ doc_to_words(Doc, Words) :-
 
 % One JSON clue entry -> [AtomAnswer, MetaDict]. `answer` is required and must
 % be a string; `meta` is an optional object (default _{}), copied verbatim.
+%
+% The gate is SHAPE-only: the degenerate empty answer "" passes (-> the empty
+% atom ''). That is the pinned wire contract (audit C62; tests/crossword.plt
+% json_empty_answer_accepted_as_empty_atom): a zero-letter word can never
+% cross anything, so it surfaces downstream as a strict no-possible-crossing
+% failure or a best-effort drop - never as a silently placed ghost word.
+% Tightening the gate here would break existing callers' inputs.
 entry_to_word(Entry, [Answer, Meta]) :-
     (   is_dict(Entry), get_dict(answer, Entry, RawAnswer), string(RawAnswer)
     ->  atom_string(Answer, RawAnswer)
@@ -296,7 +305,7 @@ entry_to_word(Entry, [Answer, Meta]) :-
     ).
 
 % prolog:error_message//1 renders the formal term of an error(Formal, _). It is
-% verified working on the pinned SWI 10.0.2 but is undocumented in the manual
+% verified working on the pinned SWI 10.1.10 but is undocumented in the manual
 % (which documents prolog:message//1); do not migrate without re-checking.
 :- multifile prolog:error_message//1.
 prolog:error_message(json_no_clues_array) -->
@@ -470,13 +479,13 @@ assign_words(Strategy, [W|Ws], PlacedWords, GridLen, Start, Dir, GIn, GOut, Plac
     % select_word/9 chooses the next word to place (and the rest, RemWords)
     % according to the strategy; it is the only thing the strategies vary.
     select_word(Strategy, Words, PlacedWords, GridLen, Start, Dir, GIn, Entry, RemWords),
-    Entry = [Word|_],   % the solver uses only the answer; metadata is ignored
-    entry_letters(Entry, Letters2),
-    length(Letters2, WLen),
+    Entry = [Answer|_],   % the solver uses only the answer; metadata is ignored
+    entry_letters(Entry, Letters),
+    length(Letters, WLen),
     % on first pass, Start and Dir will be grounded with the start values
     % then afterwards will be unground, with find_intersecting_word grounding them
-    find_intersecting_word(Letters2, WLen, PlacedWords, GridLen, Start, Dir),
-    assign_word(Word, Letters2, WLen, Start, Dir, GridLen, GIn, Placed, G1),
+    find_intersecting_word(Letters, WLen, PlacedWords, GridLen, Start, Dir),
+    assign_word(Answer, Letters, WLen, Start, Dir, GridLen, GIn, Placed, G1),
     assign_words(Strategy, RemWords, [Placed|PlacedWords], GridLen, _Start, _Dir, G1, GOut, PlacedWordsOut).
 
 
@@ -493,10 +502,11 @@ select_word(baseline, Words, _Placed, _GridLen, _Start, _Dir, _GIn, Entry, RemWo
 
 % mrv / mrv_capped, first word (grid empty): Start/Dir are the ground seed and
 % every word has the same single placement there, so ranking is moot - branch
-% over all words, keeping the seed-word choice a backtrack point.
+% over all words, keeping the seed-word choice a backtrack point. Cut-free:
+% the []/[P|Ps] third-argument heads make this clause and the next disjoint
+% (audit C47), so the old commit-cut had nothing left to cut.
 select_word(Strategy, Words, [], _GridLen, _Start, _Dir, _GIn, Entry, RemWords) :-
     mrv_strategy(Strategy),
-    !,
     member(Entry, Words),
     remove_x(Entry, Words, RemWords).
 
@@ -507,7 +517,8 @@ select_word(Strategy, Words, [], _GridLen, _Start, _Dir, _GIn, Entry, RemWords) 
 % count of 0 means "not connectable yet", NOT "dead" - hence we filter rather
 % than fail. The branch is dead only when NOTHING is placeable, which leaves
 % Ordered empty and fails here (a sound forward check).
-select_word(Strategy, Words, PlacedWords, GridLen, Start, Dir, GIn, Entry, RemWords) :-
+select_word(Strategy, Words, [P|Ps], GridLen, Start, Dir, GIn, Entry, RemWords) :-
+    PlacedWords = [P|Ps],
     mrv_strategy(Strategy),
     mrv_cap(Strategy, Cap),
     map_list_to_pairs(mrv_count(Cap, PlacedWords, GridLen, Start, Dir, GIn),
@@ -545,17 +556,26 @@ positive_key(Count-_) :- Count > 0.
 % (`unbounded` vs `2`), so clause indexing keeps each call deterministic - no
 % cut needed.
 mrv_count(unbounded, PlacedWords, GridLen, Start, Dir, GIn, Entry, Count) :-
-    mrv_count_goal(PlacedWords, GridLen, Start, Dir, GIn, Entry, Goal),
-    aggregate_all(count, Goal, Count).
+    entry_letters(Entry, Letters),
+    length(Letters, WLen),
+    aggregate_all(count,
+                  viable_placement(Letters, WLen, PlacedWords, GridLen,
+                                   Start, Dir, GIn),
+                  Count).
 mrv_count(2, PlacedWords, GridLen, Start, Dir, GIn, Entry, Count) :-
-    mrv_count_goal(PlacedWords, GridLen, Start, Dir, GIn, Entry, Goal),
-    count_upto2(Goal, Count).
+    entry_letters(Entry, Letters),
+    length(Letters, WLen),
+    count_upto2(viable_placement(Letters, WLen, PlacedWords, GridLen,
+                                 Start, Dir, GIn),
+                Count).
 
-% The placement-enumeration goal shared by both count paths: a candidate
-% (Start,Dir) from find_intersecting_word that also survives the legality
-% checks. On backtracking it re-binds Start/Dir to the next placement (or
-% leaves them unbound when it fails), so the counter around it must undo those
-% bindings.
+% One viable placement of a word (placement letters Letters, length WLen) on
+% the current grid: a candidate (Start,Dir) from find_intersecting_word that
+% also survives the legality checks - the enumeration goal both count paths
+% share, as a named predicate the cross-referencer/debugger sees instead of a
+% goal term built at runtime (audit C44d). On backtracking it re-binds
+% Start/Dir to the next placement (or leaves them unbound when it fails), so
+% the counter around it must undo those bindings.
 %
 % Counting only needs to know whether a candidate placement is LEGAL, not to
 % realize it: check_word_fits/5 runs the SAME checks as assign_word/9 but
@@ -563,12 +583,9 @@ mrv_count(2, PlacedWords, GridLen, Start, Dir, GIn, Entry, Count) :-
 % (all of which assign_word materialized only for count_upto2 to discard).
 % Same accept/reject set in the same enumeration order -> every count is
 % identical and the search tree/output/goldens stay byte-identical.
-mrv_count_goal(PlacedWords, GridLen, Start, Dir, GIn, Entry, Goal) :-
-    entry_letters(Entry, Letters2),
-    length(Letters2, WLen),
-    Goal = ( find_intersecting_word(Letters2, WLen, PlacedWords, GridLen,
-                                    Start, Dir),
-             check_word_fits(Letters2, Start, Dir, GridLen, GIn) ).
+viable_placement(Letters, WLen, PlacedWords, GridLen, Start, Dir, GIn) :-
+    find_intersecting_word(Letters, WLen, PlacedWords, GridLen, Start, Dir),
+    check_word_fits(Letters, Start, Dir, GridLen, GIn).
 
 % count_upto2(:Goal, -Count): Count is the number of solutions of Goal SATURATED
 % at 2 (so Count is 0, 1, or 2, where 2 means ">=2"). Like findall/aggregate_all
@@ -624,15 +641,17 @@ count_upto2(Goal, Count) :-
 %
 %   The mrv_inc search driver: place every word of Words onto the gs/2
 %   bundle GSIn, threading the incremental placement-count cache State0
-%   (`none` to start; state(CountAssoc, LastPlacedLetters) internally).
-%   Start/Dir are the ground seed cell/direction on the first call and
-%   fresh variables afterwards (find_intersecting_word/6 grounds them per
-%   placement). Placed0 is the already-placed pw/8 list - [] for a fresh
-%   search; arrange.pl's fragment path seeds it. GSIn and GSOut are the
-%   same term (trail-undone in-place binding). Backtracks over every
+%   (`none` to start; state(CountAssoc, LastPlacedLetters, Perturb)
+%   internally). Start/Dir are the ground seed cell/direction on the first
+%   call and fresh variables afterwards (find_intersecting_word/6 grounds
+%   them per placement). Placed0 is the already-placed pw/8 list - [] for a
+%   fresh search; arrange.pl's fragment path seeds it. GSIn and GSOut are
+%   the same term (trail-undone in-place binding). Backtracks over every
 %   completion of the placement.
 
-% State is `none` (no cache yet) or state(CountAssoc, LastPlacedLetters).
+% State is `none` (no cache yet) or state(CountAssoc, LastPlacedLetters,
+% Perturb) - Perturb is the once-per-search seeded-path flag (see
+% state_perturb/2 below, audit C26).
 % The [_|_] head keeps the clauses index-disjoint on arg 1 ([] vs cons): a
 % terminal-[] call exits without leaving a choicepoint into this clause.
 assign_words_inc([], P, _State, _, _, _, G, G, P).
@@ -640,17 +659,17 @@ assign_words_inc([W|Ws], PlacedWords, StateIn, GridLen, Start, Dir, GIn, GOut, O
     Words = [W|Ws],
     select_inc(Words, PlacedWords, StateIn, GridLen, Start, Dir, GIn,
                Entry, RemWords, StateOut),
-    Entry = [Word|_],
-    entry_letters(Entry, Letters2),
-    length(Letters2, WLen),
-    find_intersecting_word(Letters2, WLen, PlacedWords, GridLen, Start, Dir),
-    assign_word(Word, Letters2, WLen, Start, Dir, GridLen, GIn, Placed, G1),
+    Entry = [Answer|_],
+    entry_letters(Entry, Letters),
+    length(Letters, WLen),
+    find_intersecting_word(Letters, WLen, PlacedWords, GridLen, Start, Dir),
+    assign_word(Answer, Letters, WLen, Start, Dir, GridLen, GIn, Placed, G1),
     assign_words_inc(RemWords, [Placed|PlacedWords], StateOut, GridLen,
                      _Start, _Dir, G1, GOut, Out).
 
 % --- search perturbation (the arrange --seed knob) --------------------------
 % The mrv_inc search is DETERMINISTIC by default. With no seed installed,
-% seed_word_order/2 and order_candidates/2 are pure identities and no RNG
+% seed_word_order/2 and order_candidates/3 are pure identities and no RNG
 % builtin is reachable, so a default run's output is byte-identical (the golden
 % invariant holds) and the RNG is never even seeded. A seed opts into a
 % REPRODUCIBLE pseudo-random perturbation of the SAME search tree: it reorders
@@ -678,8 +697,13 @@ assign_words_inc([W|Ws], PlacedWords, StateIn, GridLen, Start, Dir, GIn, GOut, O
 % engine-build-scoped: SWI's set_random/1 seeds GMP's generator natively but
 % SWI's builtin under the USE_GMP=OFF wasm build, which made the same seed
 % diverge CLI vs browser (finding 2026-07-06, wasm-sdk-strategy §10). Mirrors
-% set_check_target/1: at most one search_seed/1 fact, retract before assert,
-% the sole sanctioned writer of the two module-private dynamics.
+% set_check_target/1: at most one search_seed/1 fact, retract before assert.
+% This setter is the sole sanctioned writer of search_seed/1 and the only
+% place prng_state/1 is seeded or cleared — but prng_draw/1 below ADVANCES
+% prng_state/1 during a seeded search, so the pair are two mutable module
+% facts, not one. (browser.pl's per-request reset clears both through the -1
+% sentinel here; prng_state/1 is the "fourth dynamic fact" its state-reset
+% comment names.)
 set_search_seed(-1) :- !,
     retractall(search_seed(_)),
     retractall(prng_state(_)).
@@ -705,8 +729,14 @@ current_search_seed(N) :- search_seed(N).
 %   it as a normal search seed. Returning N keeps shuffle RECOVERABLE: the
 %   run is still reproducible via --seed N, so a liked layout is never lost.
 %   This is the only place that reseeds from entropy; --seed N and the
-%   deterministic default never do.
+%   deterministic default never do. FAILS, before any side effect, when N is
+%   already bound (misuse of the -N mode) — the same clean-failure contract
+%   as the sibling setters.
 set_shuffle_seed(N) :-
+    % var/1 first: with a (mis)bound N the old body reseeded the global RNG
+    % from OS entropy and THEN failed in random_between/3 — a dirty failure
+    % that clobbered RNG state (audit C20). Validate, then mutate.
+    var(N),
     set_random(seed(random)),
     random_between(0, 1_000_000_000, N),
     set_search_seed(N).
@@ -755,17 +785,27 @@ seed_word_order(Words, Order) :-
     ( search_seed(_) -> seeded_permutation(Words, Order) ; Order = Words ).
 
 % Interior value ordering over the keysorted Count-Entry pairs (most-constrained
-% first). Deterministic = the plain values; seeded = shuffled WITHIN each
-% equal-count bucket only, so the fail-first heuristic (and thus solution
-% quality) is preserved while equally-ranked branches are explored in a
-% seed-varied order.
-order_candidates(Sorted, Ordered) :-
-    (   search_seed(_)
-    ->  group_pairs_by_key(Sorted, Groups),
-        maplist(shuffle_bucket, Groups, Buckets),
-        append(Buckets, Ordered)
-    ;   pairs_values(Sorted, Ordered)
-    ).
+% first), dispatched on the threaded Perturb flag (constant heads, indexed -
+% the file's enumerated-clause idiom). Deterministic (false) = the plain
+% values; seeded (true) = shuffled WITHIN each equal-count bucket only, so the
+% fail-first heuristic (and thus solution quality) is preserved while
+% equally-ranked branches are explored in a seed-varied order.
+order_candidates(false, Sorted, Ordered) :-
+    pairs_values(Sorted, Ordered).
+order_candidates(true, Sorted, Ordered) :-
+    group_pairs_by_key(Sorted, Groups),
+    maplist(shuffle_bucket, Groups, Buckets),
+    append(Buckets, Ordered).
+
+% The search's perturbation flag: read the search_seed/1 dynamic ONCE per
+% search - at the first interior node, before any cache exists - and thread it
+% forward inside the state bundle, instead of one dynamic-predicate lookup per
+% search node (audit C26). The deterministic path is provably unchanged:
+% Perturb == false is exactly the old per-node lookup failing, and no writer
+% can change the seed mid-search (the setters are entry-time seams).
+state_perturb(none, Perturb) :-
+    ( search_seed(_) -> Perturb = true ; Perturb = false ).
+state_perturb(state(_, _, Perturb), Perturb).
 
 shuffle_bucket(_Count-Entries, Shuffled) :- seeded_permutation(Entries, Shuffled).
 
@@ -783,20 +823,20 @@ select_inc(Words, [], _StateIn, _GridLen, _Start, _Dir, _GIn, Entry, RemWords, n
 % needed to stop a seed-node call falling into this clause on backtracking.
 select_inc(Words, [P|Ps], StateIn, GridLen, Start, Dir, GIn, Entry, RemWords, StateOut) :-
     PlacedWords = [P|Ps],
+    state_perturb(StateIn, Perturb),
     inc_counts(StateIn, Words, PlacedWords, GridLen, Start, Dir, GIn, CountMap),
     % map_list_to_pairs keeps the ORIGINAL word terms (findall would copy them,
     % breaking the ==-based remove_x below and looping forever).
     map_list_to_pairs(count_of(CountMap), Words, Pairs),
     include(positive_key, Pairs, Placeable),
     keysort(Placeable, Sorted),
-    order_candidates(Sorted, Ordered),
+    order_candidates(Perturb, Sorted, Ordered),
     member(Entry, Ordered),
     remove_x(Entry, Words, RemWords),
     entry_letters(Entry, EntryLetters),
-    StateOut = state(CountMap, EntryLetters).
+    StateOut = state(CountMap, EntryLetters, Perturb).
 
-count_of(CountMap, Word, Count) :-
-    Word = [A|_],
+count_of(CountMap, [A|_], Count) :-
     get_assoc(A, CountMap, Count).
 
 % Build the count map for the current words. With no cache yet, count them all;
@@ -805,7 +845,7 @@ count_of(CountMap, Word, Count) :-
 inc_counts(none, Words, PlacedWords, GridLen, Start, Dir, GIn, CountMap) :-
     empty_assoc(A0),
     foldl(full_count(PlacedWords, GridLen, Start, Dir, GIn), Words, A0, CountMap).
-inc_counts(state(PrevMap, LastLetters), Words, PlacedWords, GridLen, Start, Dir, GIn, CountMap) :-
+inc_counts(state(PrevMap, LastLetters, _Perturb), Words, PlacedWords, GridLen, Start, Dir, GIn, CountMap) :-
     empty_assoc(A0),
     foldl(inc_count(PrevMap, LastLetters, PlacedWords, GridLen, Start, Dir, GIn),
           Words, A0, CountMap).
@@ -1083,7 +1123,6 @@ check_next_cell(Dir, Num, GridLen, Grid) :-
 assign_letters([], Num, Dir, GridLen, [], Grid, Grid) :-
     check_next_cell(Dir, Num, GridLen, Grid).
 
-
 assign_letters([L|Ls], Num, Dir, GridLen, [Num|RestCells], Grid, GridOut) :-
     arg(Num, Grid, Cell),
     (   nonvar(Cell)
@@ -1102,34 +1141,37 @@ assign_letters([L|Ls], Num, Dir, GridLen, [Num|RestCells], Grid, GridOut) :-
 % check that adjacent cells are empty (unbound vars). arg/3 + var/1 is a pure
 % test - it never binds a cell (aliasing a fresh local to an empty cell's var
 % leaves both unbound), so a CHECK can never accidentally fill a cell.
+%
+% NB `M == 0` / `M == 1` (term comparison), NOT the arithmetic `=:=`, is
+% DELIBERATE and measured on this per-cell hot path: in compiled clauses SWI
+% 10.1.10 inlines the ==-against-constant condition to a VM instruction (zero
+% inferences) while `=:=` executes as a counted arithmetic call - swapping
+% these two tests (+ fits_on_grid's \==) to the arithmetic forms cost
+% +3.1-4.1% search inferences on every ratchet rung (audit C44c, reverted;
+% compiled probe: +~1 inference per =:= evaluation). Truth values are
+% identical: M comes fresh from is/2 and is always a plain integer.
 adj_is_free(down, Num, GridLen, Grid) :-
     N1 is Num - 1,
     N2 is Num + 1,
     M is Num mod GridLen,
-    (
-     M == 0 -> % last cell in row
-     arg(N1, Grid, C1), var(C1)
-    ;
-     M == 1 -> % first cell in row
-     arg(N2, Grid, C2), var(C2)
-    ;
-     arg(N1, Grid, C1), var(C1),
-     arg(N2, Grid, C2), var(C2)
+    (   M == 0                        % last cell in row
+    ->  arg(N1, Grid, C1), var(C1)
+    ;   M == 1                        % first cell in row
+    ->  arg(N2, Grid, C2), var(C2)
+    ;   arg(N1, Grid, C1), var(C1),
+        arg(N2, Grid, C2), var(C2)
     ).
 
 adj_is_free(across, Num, GridLen, Grid) :-
     N1 is Num - GridLen,
     N2 is Num + GridLen,
     LastCell is (GridLen * GridLen),
-    (
-     N1 =< 0 -> % before beginning of grid
-     arg(N2, Grid, C2), var(C2)
-    ;
-     N2 > LastCell -> % after end of grid
-     arg(N1, Grid, C1), var(C1)
-    ;
-     arg(N1, Grid, C1), var(C1),
-     arg(N2, Grid, C2), var(C2)
+    (   N1 =< 0                       % before beginning of grid
+    ->  arg(N2, Grid, C2), var(C2)
+    ;   N2 > LastCell                 % after end of grid
+    ->  arg(N1, Grid, C1), var(C1)
+    ;   arg(N1, Grid, C1), var(C1),
+        arg(N2, Grid, C2), var(C2)
     ).
 
 
@@ -1197,12 +1239,12 @@ add_group_tail([W2], ClueNum, [WClue2|Clues], Clues) :-
 check_unique_answers(Words) :-
     findall(A, member([A|_], Words), Answers),
     msort(Answers, Sorted),
-    (
-     append(_, [Dup, Dup|_], Sorted)
-    ->
-     throw(error(duplicate_answer(Dup), _))
-    ;
-     true
+    % two equal neighbours in the sorted list = a duplicate; nextto/3 finds
+    % the same leftmost pair the old append(_, [Dup,Dup|_], _) probe did,
+    % without the prefix unification (audit C41).
+    (   nextto(Dup, Dup, Sorted)
+    ->  throw(error(duplicate_answer(Dup), _))
+    ;   true
     ).
 
 prolog:error_message(duplicate_answer(Answer)) -->
@@ -1253,12 +1295,9 @@ add_word_cells(PW, AIn, AOut) :-
 % Record one cell's letter, its across/down clue numbers, and (if it is the
 % start cell of a word) its corner-label number.
 add_cell(Dir, Num, Start, Cell, Letter, AIn, AOut) :-
-    (
-     get_assoc(Cell, AIn, cell(_, Ac0, Dn0, N0))
-    ->
-     true
-    ;
-     Ac0 = null, Dn0 = null, N0 = null
+    (   get_assoc(Cell, AIn, cell(_, Ac0, Dn0, N0))
+    ->  true
+    ;   Ac0 = null, Dn0 = null, N0 = null
     ),
     ( Dir == across -> Ac = Num, Dn = Dn0 ; Ac = Ac0, Dn = Num ),
     ( Cell =:= Start -> N = Num ; N = N0 ),
@@ -1266,12 +1305,9 @@ add_cell(Dir, Num, Start, Cell, Letter, AIn, AOut) :-
 
 
 cell_to_json(CellMap, Cell, Json) :-
-    (
-     get_assoc(Cell, CellMap, cell(Letter, Ac, Dn, N))
-    ->
-     Json = _{letter: Letter, number: N, across: Ac, down: Dn}
-    ;
-     Json = null
+    (   get_assoc(Cell, CellMap, cell(Letter, Ac, Dn, N))
+    ->  Json = _{letter: Letter, number: N, across: Ac, down: Dn}
+    ;   Json = null
     ).
 
 
@@ -1316,7 +1352,7 @@ answer_meta_assoc(Words, Assoc) :-
 % emit -> re-ingest-as-fragment byte-identity (AC-EMIT-2, R3). num+dir is unique
 % per word, so this is a total, stable order. The grid rows are built from cell
 % occupancy and are unaffected. map_list_to_pairs (not findall) keeps the
-% original word dicts (no copy).
+% original pw/8 records (no copy).
 canonical_word_order(PlacedWords, Ordered) :-
     map_list_to_pairs(word_canon_key, PlacedWords, Keyed),
     keysort(Keyed, Sorted),
@@ -1409,7 +1445,7 @@ start_locs([topleft_across, topleft_down, topright, bottomleft]).
 start_loc(topleft_across, _GridLen, 1, across).
 start_loc(topleft_down, _GridLen, 1, down).
 start_loc(topright, GridLen, GridLen, down).
-start_loc(bottomleft, GridLen, StartNum, across) :- 
+start_loc(bottomleft, GridLen, StartNum, across) :-
     StartNum is (GridLen * GridLen) - (GridLen - 1).
 
 
@@ -1420,26 +1456,26 @@ start_loc(bottomleft, GridLen, StartNum, across) :-
 %   within the grid (across: within Start's row; down: within the column).
 
 % make sure word fits in the row...
-fits_on_grid(across, Start, WLen, GridLen) :- 
+fits_on_grid(across, Start, WLen, GridLen) :-
     M is Start mod GridLen,
-    M \== 0,
+    M \== 0,      % term comparison on purpose - see the adj_is_free/4 note (C44c)
     Space is GridLen - (M - 1),
     WLen =< Space.
 
 % Make sure word fits in the column...
-fits_on_grid(down, Start, WLen, GridLen) :- 
-     EndNum is Start + (GridLen * (WLen - 1)),
-     EndNum =< GridLen * GridLen.
+fits_on_grid(down, Start, WLen, GridLen) :-
+    EndNum is Start + (GridLen * (WLen - 1)),
+    EndNum =< GridLen * GridLen.
 
 
-is_start_cell(across, Num, Length) :- 1 is Num mod Length.
-is_start_cell(down, Num, Length) :- Num =< Length.
-is_end_cell(across, Num, Length) :- 0 is Num mod Length.
-is_end_cell(down, Num, Length) :- Num > (Length - 1) * Length.
+is_start_cell(across, Num, GridLen) :- 1 is Num mod GridLen.
+is_start_cell(down, Num, GridLen) :- Num =< GridLen.
+is_end_cell(across, Num, GridLen) :- 0 is Num mod GridLen.
+is_end_cell(down, Num, GridLen) :- Num > (GridLen - 1) * GridLen.
 
 
-prev_cell(across, Num, _Length, Prev) :- Prev is Num - 1.
-prev_cell(down, Num, Length, Prev) :- Prev is Num - Length.
+prev_cell(across, Num, _GridLen, Prev) :- Prev is Num - 1.
+prev_cell(down, Num, GridLen, Prev) :- Prev is Num - GridLen.
 
 
 %!  next_cell(+Dir:oneof([across,down]), +Num:integer, +GridLen:integer,
@@ -1448,8 +1484,8 @@ prev_cell(down, Num, Length, Prev) :- Prev is Num - Length.
 %   The cell number one step from Num in Dir (across: +1; down: +GridLen).
 %   Pure arithmetic - no bounds check; callers guard with fits_on_grid/4 /
 %   is_end_cell/3.
-next_cell(across, Num, _Length, Next) :- Next is Num + 1.
-next_cell(down, Num, Length, Next) :- Next is Num + Length.
+next_cell(across, Num, _GridLen, Next) :- Next is Num + 1.
+next_cell(down, Num, GridLen, Next) :- Next is Num + GridLen.
 
 
 % Calculates the start of a word given the number
@@ -1518,8 +1554,8 @@ init_gs(GridLen, gs(LGrid, BGrid)) :-
 %   choicepoint per traversed element.
 remove_x(_, [], []).
 remove_x(Y, [X|Xs], R) :-
-	(   Y == X
-	->  R = Xs
-	;   R = [X|Tail],
-	    remove_x(Y, Xs, Tail)
-	).
+    (   Y == X
+    ->  R = Xs
+    ;   R = [X|Tail],
+        remove_x(Y, Xs, Tail)
+    ).

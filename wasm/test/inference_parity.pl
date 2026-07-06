@@ -67,11 +67,11 @@ outcome_ok(infeasible, infeasible).
 outcome_ok(infeasible, not_proven).
 
 % Strict clue reader (same contract as benchmarks/run_arrange.pl): a fixture with
-% no clues/1 is a hard error, never a bogus empty-word run.
+% no clues/1 is a hard error, never a bogus empty-word run. read_file_to_terms/3
+% resolves under the WASM image too (library/readutil.pl ships in its tree).
 read_clues(File, Words) :-
-    setup_call_cleanup(open(File, read, S), read_loop(S, File, Words), close(S)).
-read_loop(S, File, Words) :-
-    read_term(S, T, []),
-    ( T == end_of_file -> throw(error(fixture_missing_clues(File), _))
-    ; T = clues(Words)  -> true
-    ; read_loop(S, File, Words) ).
+    read_file_to_terms(File, Terms, []),
+    (   memberchk(clues(Words0), Terms)
+    ->  Words = Words0
+    ;   throw(error(fixture_missing_clues(File), _))
+    ).

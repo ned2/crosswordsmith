@@ -39,9 +39,8 @@
 % All library imports carry explicit import lists so a
 % qsave_program(..., [autoload(false)]) build resolves them (P11/C5).
 :- use_module(library(ordsets), [ord_intersection/3, ord_memberchk/2]).
-:- use_module(library(apply), [exclude/3, maplist/3]).
-:- use_module(library(lists), [max_list/2, member/2, min_list/2, sum_list/2]).
-:- use_module(library(pairs), [pairs_keys_values/3]).
+:- use_module(library(apply), [exclude/3, foldl/4, maplist/3]).
+:- use_module(library(lists), [member/2, sum_list/2]).
 
 % next_cell/4 (word_cells/5's stepper) plus the placed-word record (pw/8)
 % field accessors — the metric predicates read cells/dir off each placed word.
@@ -90,16 +89,22 @@ cell_rc(Cell, GridLen, R, C) :-
 %   BBox = bbox(MinR, MaxR, MinC, MaxC), the tight bounding box (0-based
 %   rows/cols) of all cells covered by the placed pw/8 records, and its
 %   Area. Fails for an empty placement set (no cells, no box).
+%
+%   One rc_extend/3 fold computes all four bounds in a single pass over the
+%   R-C pairs (was pairs_keys_values + min_list/max_list x4 - five passes;
+%   audit C34). The head match on RCs keeps the empty-set FAILURE contract.
 placed_bbox(Placed, GridLen, bbox(MinR, MaxR, MinC, MaxC), Area) :-
     findall(R-C,
             ( member(PW, Placed), pw_cells(PW, Cells), member(Cell, Cells),
               cell_rc(Cell, GridLen, R, C) ),
             RCs),
-    RCs = [_|_],
-    pairs_keys_values(RCs, Rs, Cs),
-    min_list(Rs, MinR), max_list(Rs, MaxR),
-    min_list(Cs, MinC), max_list(Cs, MaxC),
+    RCs = [R0-C0|Rest],                    % [] -> fail (no cells, no box)
+    foldl(rc_extend, Rest, b(R0, R0, C0, C0), b(MinR, MaxR, MinC, MaxC)),
     Area is (MaxR - MinR + 1) * (MaxC - MinC + 1).
+
+rc_extend(R-C, b(Rlo, Rhi, Clo, Chi), b(Rlo2, Rhi2, Clo2, Chi2)) :-
+    Rlo2 is min(Rlo, R), Rhi2 is max(Rhi, R),
+    Clo2 is min(Clo, C), Chi2 is max(Chi, C).
 
 % --- shared metric predicates over a placed layout (design-spec §6.4) ------
 % Pure measurement: arrange.pl reads them as optimizer signals, `lint` as

@@ -31,6 +31,8 @@
 :- use_module(library(apply), [maplist/2, maplist/3]).
 :- use_module(library(lists), [append/2, member/2]).
 :- use_module(library(pairs), [pairs_values/2]).
+% must_be/2: export_solve/2's unknown-format guard (C17b).
+:- use_module(library(error), [must_be/2]).
 
 
 % --- load + validate a canonical layout --------------------------------------
@@ -263,16 +265,27 @@ exolve_clue_line(W, Num, Line) :-
 %
 %   The `export` CLI seam: load + shape-gate the canonical layout File and
 %   write the transformed puzzle on the current output (ipuz: a JSON object;
-%   exolve: plain text). Throws error(export_invalid_layout, _) on a
-%   malformed layout shape; FAILS (no partial output, P17) if gate-passing
-%   malformed content defeats the transform.
-export_solve(File, ipuz) :-
+%   exolve: plain text). Throws type_error(oneof([ipuz,exolve]), Format) on
+%   an unknown format ATOM (a caller bug, C17b - guarded up-front, so it can
+%   never be confused with the data-driven failure below) and
+%   error(export_invalid_layout, _) on a malformed layout shape; FAILS (no
+%   partial output, P17) if gate-passing malformed CONTENT defeats the
+%   transform - that semidet failure is by design, NOT an error case.
+export_solve(File, Format) :-
+    must_be(oneof([ipuz, exolve]), Format),
+    export_solve_(File, Format).
+
+% NB no catch-all clause here: the two clauses also fail BY DESIGN on
+% gate-passing malformed content (the no-partial-output policy, P17), so a
+% fallback domain_error clause would mislabel that data failure as a caller
+% bug. The must_be guard above owns the unknown-format case instead.
+export_solve_(File, ipuz) :-
     export_load(File, Dict),
     layout_to_ipuz(Dict, Ipuz),
     current_output(Out),
     json_write_dict(Out, Ipuz),
     nl(Out).
-export_solve(File, exolve) :-
+export_solve_(File, exolve) :-
     export_load(File, Dict),
     layout_to_exolve(Dict, Text),
     current_output(Out),

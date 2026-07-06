@@ -11,8 +11,9 @@
 % (the shared variable), and dead-ends backtrack. MRV ordering (fewest matching
 % candidates first) + a node/inference budget make it deterministic and bounded.
 %
-% Exports: fill_solve/4 (the CLI seam) — nothing else; every other predicate
-% is internal (tests reach them as crosswordsmith_fill:Pred(...)). All
+% Exports: fill_solve/4 (the CLI seam) plus the prebuilt-index seams
+% (fill_solve_index/5, fill_save_index/2,3); every other predicate is
+% internal (tests reach them as crosswordsmith_fill:Pred(...)). All
 % project dependencies are explicit imports below (stockgrid, metrics,
 % arrange, core).
 
@@ -27,14 +28,15 @@
 % qsave_program(..., [autoload(false)]) build resolves them (P11/C5). (No JSON
 % import: this module's emit delegates to core's emit_json/3 / arrange's
 % emit_arrange/4 — the old library(http/json) line here was vestigial.)
-:- use_module(library(apply), [exclude/3, foldl/4, maplist/3]).
+:- use_module(library(apply), [convlist/3, exclude/3, foldl/4, maplist/3]).
 :- use_module(library(lists), [append/3, member/2, nth0/3, select/3]).
 :- use_module(library(ordsets),
               [list_to_ord_set/2, ord_intersect/2, ord_intersection/3]).
 :- use_module(library(assoc),
-              [ assoc_to_list/2, assoc_to_values/2, empty_assoc/1, gen_assoc/3,
-                get_assoc/3, list_to_assoc/2, put_assoc/4 ]).
-:- use_module(library(pairs), [group_pairs_by_key/2, map_list_to_pairs/3]).
+              [ assoc_to_list/2, assoc_to_values/2, gen_assoc/3,
+                get_assoc/3, list_to_assoc/2, ord_list_to_assoc/2 ]).
+:- use_module(library(pairs),
+              [group_pairs_by_key/2, map_list_to_pairs/3, pairs_keys_values/3]).
 % F-L2: dict-file SHA-256 (artifact integrity). NB library(sha)'s file defines
 % module `crypto_hash` on 10.1.10; both predicates are on its export list.
 :- use_module(library(sha), [sha_hash/3, hash_atom/2]).
@@ -43,6 +45,9 @@
 % option/2,3: the artifact Meta is a keyed list of unary Key(Value) terms -
 % literally an SWI option list - and fill_save_index's Options is one too.
 :- use_module(library(option), [option/2, option/3]).
+% read_file_to_string/3: whole-file reads (dict lines + the SHA-256
+% fingerprint) without the hand-rolled open/read_string/close dance (C39).
+:- use_module(library(readutil), [read_file_to_string/3]).
 
 % Slot derivation from a stock-grid mask.
 :- use_module(crosswordsmith(stockgrid),
@@ -84,9 +89,12 @@ fill_grid(GridFile, Size, Slots, CellVar) :-
 spec_slot(CellVar, spec(Start, Dir, Cells), slot(Start, Dir, Cells, Vars)) :-
     slot_vars(Cells, CellVar, Vars).
 
+% WhiteCells is a strictly-ascending ordset (mask_white_cells/3 ends in
+% list_to_ord_set/2), so ord_list_to_assoc/2 constructs the balanced assoc
+% directly - no per-element put_assoc rebalance (C31).
 init_cell_vars(WhiteCells, Assoc) :-
-    empty_assoc(A0), foldl(add_cell_var, WhiteCells, A0, Assoc).
-add_cell_var(C, AIn, AOut) :- put_assoc(C, AIn, _FreshVar, AOut).
+    pairs_keys_values(Pairs, WhiteCells, _FreshVars),
+    ord_list_to_assoc(Pairs, Assoc).
 
 % NB: a yall lambda `[C,V]>>get_assoc(C, CellVar, V)` would copy_term its free
 % variable CellVar on every call - cloning the assoc and the unbound cell
@@ -130,7 +138,11 @@ seeded_slot(SeededKeys, slot(Start, Dir, _, _)) :- memberchk(Start-Dir, SeededKe
 % (intersection of the index sets), or all words of that length if nothing bound.
 load_dict(File, DictByLen, Index) :-
     read_file_lines(File, Lines),
-    findall(W, ( member(L, Lines), normalize_word(L, W), W \== [] ), Ws0),
+    % convlist, not findall+member+guard (C32): the same word list in the same
+    % order with no findall record/copy per word. NB named helper, not a yall
+    % lambda (the F-L1 rationale, alpha_chars/2 below) - this is the gated
+    % load_inf path.
+    convlist(line_word, Lines, Ws0),
     sort(Ws0, Words),                       % dedupe + a stable, deterministic order
     map_list_to_pairs(length, Words, LPairs),
     keysort(LPairs, LSorted),
@@ -139,9 +151,15 @@ load_dict(File, DictByLen, Index) :-
     build_index(DictByLen, Index).
 
 read_file_lines(File, Lines) :-
-    setup_call_cleanup(open(File, read, S), read_string(S, _, Str), close(S)),
+    read_file_to_string(File, Str, []),
     split_string(Str, "\n", "\r \t", Parts),
     exclude(==(""), Parts, Lines).
+
+% One dictionary line -> its normalized letters; fails (and convlist skips the
+% line) when nothing alphabetic remains.
+line_word(Line, Letters) :-
+    normalize_word(Line, Letters),
+    Letters \== [].
 
 % NB first-order on purpose: an include([C]>>char_type(C,alpha), ...) filter
 % pays the yall meta-call + lambda copy PER CHARACTER (this module never
@@ -435,8 +453,14 @@ slot_candidate_count(DictByLen, Index, slot(Start, Dir, _, Vars), c(Count, Start
 % --- emit the filled layout --------------------------------------------------
 slots_to_layout(Slots, Numbered, InputWords) :-
     maplist(slot_to_word, Slots, Placed),
-    once(assign_clue_numbers(Placed, Numbered)),
-    findall([A], ( member(PW, Placed), pw_answer(PW, A) ), InputWords).
+    % No once/1: assign_clue_numbers/2 is deterministic at source (X6.B4;
+    % probe re-verified on this call shape) - the wrap was defensive (C23).
+    assign_clue_numbers(Placed, Numbered),
+    % maplist, not findall+member (C35): a deterministic 1:1 projection in the
+    % same order, with no findall copy per entry.
+    maplist(pw_answer_entry, Placed, InputWords).
+
+pw_answer_entry(PW, [A]) :- pw_answer(PW, A).
 
 slot_to_word(slot(Start, Dir, Cells, Vars),
              pw(A, Vars, Cells, Dir, Len, Start, _End, _Num)) :-
@@ -579,11 +603,13 @@ fill_report_failure(infeasible, Slots, DictByLen, Index, Size) :-
     ).
 
 % Slots (by start cell) that already have ZERO candidate words - genuinely
-% unfillable, reportable up front.
+% unfillable, reportable up front. "Count is zero" is asked of the purpose-
+% built counter (C36), not by materializing candidates/4's word list and
+% matching [].
 empty_slots(Slots, DictByLen, Index, Bad) :-
     findall(Start,
             ( member(slot(Start, _, _, Vars), Slots),
-              candidates(Vars, DictByLen, Index, []) ),
+              candidate_count(Vars, DictByLen, Index, 0) ),
             Bad).
 
 
@@ -702,9 +728,12 @@ fill_load_index(IndexFile, DictFileOrNone, DictByLen, Index) :-
 fill_load_index(IndexFile, DictFileOrNone, DictByLen, Index, Masks) :-
     ( exists_file(IndexFile) -> true
     ; throw(error(fill_index_missing(IndexFile), _)) ),
+    % Keep the root cause (C33): the context slot carries the original error
+    % term (fastrw version mismatch vs permissions vs truncation), so it shows
+    % under verbose error printing instead of being swallowed.
     catch(fill_read_artifact(IndexFile, Artifact),
-          _ReadErr,
-          throw(error(fill_index_unreadable(IndexFile), _))),
+          ReadErr,
+          throw(error(fill_index_unreadable(IndexFile), context(_, ReadErr)))),
     ( Artifact = fill_index(Version, Meta, DictByLen0, Index0)
     -> true
     ;  throw(error(fill_index_malformed(IndexFile), _)) ),
@@ -738,9 +767,7 @@ bucket_len(B, A0, A1) :- length(B, L), A1 is A0 + L.
 % SHA-256 of the file's raw bytes - a self-consistent build/verify fingerprint
 % that also matches coreutils sha256sum (encoding(octet) hashes each byte as-is).
 fill_file_sha256(File, Hex) :-
-    setup_call_cleanup(open(File, read, S, [encoding(octet)]),
-                       read_string(S, _, Bytes),
-                       close(S)),
+    read_file_to_string(File, Bytes, [encoding(octet)]),
     sha_hash(Bytes, Digest, [algorithm(sha256), encoding(octet)]),
     hash_atom(Digest, Hex).
 

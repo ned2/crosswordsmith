@@ -63,11 +63,11 @@ stockgrid_load(File, grid(Name, Size, Mask)) :-
         get_dict(size, Dict, Size), integer(Size), Size > 0,
         get_dict(mask, Dict, Rows), is_list(Rows), length(Rows, Size),
         forall(member(R, Rows), ( string(R), string_length(R, Size) ))
-    ->  maplist(row_string, Rows, Mask)         % each row -> list of chars
+    ->  maplist(row_chars, Rows, Mask)          % each row -> list of chars
     ;   throw(error(stockgrid_invalid(File), _))
     ).
 
-row_string(RowStr, Chars) :- string_chars(RowStr, Chars).
+row_chars(RowStr, Chars) :- string_chars(RowStr, Chars).
 
 %!  mask_white_cells(+Mask:list, +Size:integer, -WhiteSet:ordset) is det.
 %
@@ -93,7 +93,9 @@ grid_lights(Size, WhiteSet, Numbered) :-
             ( grid_run(Size, WhiteSet, down, Cells), light_word(down, Cells, W) ),
             Down),
     append(Across, Down, Lights),
-    once(assign_clue_numbers(Lights, Numbered)).
+    % No once/1: assign_clue_numbers/2 is deterministic at source (X6.B4;
+    % probe re-verified on the shipped grids) - the wrap was defensive (C23).
+    assign_clue_numbers(Lights, Numbered).
 
 %!  grid_run(+Size:integer, +WhiteSet:ordset, +Dir:oneof([across,down]),
 %!           -Cells:list(integer)) is nondet.

@@ -110,9 +110,7 @@ run_product_bench(BenchDir, Extra, Doc) :-
     close(Out),
     process_wait(PID, Status),
     ( Status == exit(0) -> true ; throw(error(fill_bench_run_failed(Status), _)) ),
-    setup_call_cleanup(open_string(JsonText, S),
-                       json_read_dict(S, Doc, [default_tag(json)]),
-                       close(S)).
+    atom_json_dict(JsonText, Doc, [default_tag(json)]).
 
 % --- CHECK -------------------------------------------------------------------
 
@@ -402,10 +400,7 @@ read_history(Path, Entries) :-
     findall(E, ( member(L, Lines), parse_history_line(L, E) ), Entries).
 
 parse_history_line(Line, Entry) :-
-    catch(setup_call_cleanup(open_string(Line, S),
-                             json_read_dict(S, Entry, [default_tag(json)]),
-                             close(S)),
-          _, fail).
+    catch(atom_json_dict(Line, Entry, [default_tag(json)]), _, fail).
 
 render_history(Entries) :-
     length(Entries, N),

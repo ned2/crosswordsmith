@@ -128,4 +128,11 @@ test(export_gate_accepts_canonical_layout) :-
     export_layout_dict(D, D2),
     D2 == D.
 
+% An unknown format ATOM is a caller bug (C17b): the up-front must_be guard
+% throws BEFORE the layout file is touched, so it can never be confused with
+% the transforms' designed semidet failure on gate-passing malformed content.
+test(export_solve_unknown_format_throws,
+     [throws(error(type_error(oneof([ipuz, exolve]), bogus), _))]) :-
+    export_solve('/nonexistent/never-read.json', bogus).
+
 :- end_tests(export).

@@ -37,12 +37,12 @@
 % library(json), NOT the legacy library(http/json) alias — the alias does not
 % resolve in the WASM image (C6): fragment load + the JSON emits.
 :- use_module(library(json), [json_read_dict/2, json_write_dict/2]).
-:- use_module(library(apply), [foldl/4, maplist/3]).
+:- use_module(library(apply), [exclude/3, foldl/4, maplist/3]).
 :- use_module(library(aggregate), [aggregate_all/3]).
 :- use_module(library(assoc),
               [assoc_to_keys/2, empty_assoc/1, get_assoc/3, list_to_assoc/2]).
 :- use_module(library(lists),
-              [append/3, member/2, numlist/3, reverse/2, selectchk/3]).
+              [append/3, member/2, nextto/3, numlist/3, reverse/2, selectchk/3]).
 :- use_module(library(ordsets), [ord_union/3]).
 % map_list_to_pairs/3, pairs_values/2 (fragment ordering, candidate rescore,
 % and the greedy constructor's seed selection).
@@ -192,10 +192,20 @@ arrange_diag_dict(Numbered, Words, Diag) :-
     ;   Diag = Base
     ).
 
+% maplist/exclude, not findall: these are deterministic 1:1 maps/filters and
+% copy nothing — findall copies every collected term, the exact footgun the
+% apply_move comment below documents for non-ground [Answer, _{...}] entries
+% (audit C27). Named helpers, not lambdas (C13: this module never imports
+% library(yall), so a >> here would be meta-called).
 dropped_answers(Words, Placed, Dropped) :-
     maplist(pw_answer, Placed, PlacedAnswers),
-    findall(A, ( member([A|_], Words), \+ memberchk(A, PlacedAnswers) ),
-            Dropped).
+    maplist(entry_answer, Words, All),
+    exclude(answer_placed(PlacedAnswers), All, Dropped).
+
+% The answer atom of one input entry [Answer|_] (answer first, maybe meta).
+entry_answer([A|_], A).
+
+answer_placed(PlacedAnswers, A) :- memberchk(A, PlacedAnswers).
 
 % Human-readable cap-status suffix for the --verbose summary line (the
 % payload's capInert, surfaced for interactive runs that opted in).
@@ -358,9 +368,10 @@ words with no possible crossing: ~w~n",
 % A word sharing no letter with any other word can never be crossed - the
 % spec's "genuinely unplaceable (no legal intersection anywhere)".
 unplaceable_words(Words, Bad) :-
-    findall(A,
-            ( member(E, Words), E = [A|_], \+ word_shares_letter(E, Words) ),
-            Bad).
+    exclude(crossable_in(Words), Words, BadEntries),
+    maplist(entry_answer, BadEntries, Bad).
+
+crossable_in(Words, Entry) :- word_shares_letter(Entry, Words).
 
 word_shares_letter(Entry, Words) :-
     Entry = [A|_], word_letters(Entry, Ls, _),
@@ -393,7 +404,7 @@ arrange_best_effort(Words, GridLen, Numbered, Reward, NumPlaced, Dropped) :-
               greedy_construct(Words, GridLen, Loc, Seed, Placed, DroppedEntries),
               length(Placed, NP),
               layout_reward(WCap, WTail, Placed, R),
-              findall(A, member([A|_], DroppedEntries), DroppedAnswers) ),
+              maplist(entry_answer, DroppedEntries, DroppedAnswers) ),
             Results),
     Results = [_|_],
     sort(1, @>=, Results, [score(NumPlaced, Reward)-pd(BestPlaced, Dropped)|_]),
@@ -434,14 +445,18 @@ arrange_best_effort_solve(Words, GridLen, SizeMode) :-
 %   diagnostics.arrange sub-object.
 emit_arrange(Numbered, Words, GridLen, SizeMode) :-
     arrange_layout_dict(Numbered, Words, GridLen, SizeMode, Payload),
-    current_output(Out),
-    json_write_dict(Out, Payload),
-    nl(Out).
+    emit_payload(Payload).
 
 % arrange's own emit: the layout dict plus the diagnostics property
 % (json-output-spec §6.4) carrying the solver's quality caveats.
 emit_arrange_diag(Numbered, Words, GridLen, SizeMode) :-
     arrange_diag_layout_dict(Numbered, Words, GridLen, SizeMode, Payload),
+    emit_payload(Payload).
+
+% The one emit body every payload writer shares (single layout, diag layout,
+% candidates array): write the JSON value + newline on the current output
+% (audit C45a; byte-identical to the three inlined copies it replaces).
+emit_payload(Payload) :-
     current_output(Out),
     json_write_dict(Out, Payload),
     nl(Out).
@@ -657,11 +672,16 @@ load_fragment(File, GridLen, Frags) :-
 %
 %   The fragment's gridLength sets N; an explicit --size (OptSize `none` when
 %   not given) is redundant and an error if it disagrees (design-spec §6.6):
-%   throws fragment_size_mismatch on a conflict.
-reconcile_fragment_size(FragGridLen, none, FragGridLen) :- !.
-reconcile_fragment_size(FragGridLen, FragGridLen, FragGridLen) :- !.
-reconcile_fragment_size(FragGridLen, OptSize, _) :-
-    throw(error(fragment_size_mismatch(FragGridLen, OptSize), _)).
+%   throws fragment_size_mismatch on a conflict. Decides on the two INPUTS
+%   only, unifying GridLen after — so a (mis)bound GridLen fails cleanly
+%   instead of turning an agreeing input pair into a bogus mismatch throw
+%   (steadfastness, audit C18; the single-clause if-then-else also retires
+%   the two commit cuts the census called A4/A5).
+reconcile_fragment_size(FragGridLen, OptSize, GridLen) :-
+    (   ( OptSize == none ; OptSize == FragGridLen )
+    ->  GridLen = FragGridLen
+    ;   throw(error(fragment_size_mismatch(FragGridLen, OptSize), _))
+    ).
 
 
 % --- seeding: pin the fragment, validate up front, shrink Words -------------
@@ -734,12 +754,17 @@ reconcile_answer(Answer, Words, Entry) :-
     member(Entry, Words), Entry = [A|_], A == Answer, !.
 
 fragment_answers(Frags, Answers) :-
-    findall(A, member(frag(A, _, _, _), Frags), Answers).
+    maplist(frag_answer, Frags, Answers).
 
+frag_answer(frag(A, _, _, _), A).
+
+% exclude/3, not findall: the surviving entries flow onward into search state,
+% and exclude keeps the ORIGINAL (possibly non-ground [Answer, _{...}]) terms
+% where findall handed the search copies (audit C27).
 remaining_words(Words, Pinned, Remaining) :-
-    findall(E,
-            ( member(E, Words), E = [A|_], \+ memberchk(A, Pinned) ),
-            Remaining).
+    exclude(entry_pinned(Pinned), Words, Remaining).
+
+entry_pinned(Pinned, [A|_]) :- memberchk(A, Pinned).
 
 % Stable order by start cell so pin order, error reporting and numbering are
 % deterministic (an across+down sharing a start keep fragment order).
@@ -754,7 +779,9 @@ frag_start(frag(_, _, Start, _), Start).
 check_fragment_unique(Frags) :-
     fragment_answers(Frags, As),
     msort(As, Sorted),
-    (   append(_, [D, D|_], Sorted)
+    % two equal neighbours = a double-pinned answer (same nextto/3 idiom as
+    % core's check_unique_answers/1 — audit C41).
+    (   nextto(D, D, Sorted)
     ->  throw(error(fragment_duplicate_answer(D), _))
     ;   true
     ).
@@ -818,7 +845,7 @@ arrange_fragment_best_effort(Words, Frags, GridLen, Numbered, Reward, NumPlaced,
     greedy_loop(Remaining, SeededPlaced, GridLen, SeededGrid, FinalPlaced, DroppedEntries),
     layout_reward(WCap, WTail, FinalPlaced, Reward),
     length(FinalPlaced, NumPlaced),
-    findall(A, member([A|_], DroppedEntries), Dropped),
+    maplist(entry_answer, DroppedEntries, Dropped),
     assign_clue_numbers(FinalPlaced, Numbered).
 
 
@@ -968,21 +995,25 @@ placement_assoc(Placed, GridLen, Assoc) :-
     list_to_assoc(Pairs, Assoc).
 
 % Greedy diversity selection: best-first, keep each layout that is >= tau from
-% every already-kept one, until K kept or the pool is exhausted.
+% every already-kept one, until K kept or the pool is exhausted. Need counts
+% DOWN the picks still wanted (Need = K - |Acc| invariantly, so Need =< 0 is
+% exactly the old length(Acc) >= K stop) — the standard countdown accumulator
+% instead of an O(K) length/2 per pool element (audit C29).
 pick_diverse(Pool, TauPct, Total, K, Picked) :-
     pick_diverse_(Pool, TauPct, Total, K, [], Rev),
     reverse(Rev, Picked).
 
-pick_diverse_([], _TauPct, _Total, _K, Acc, Acc).
-pick_diverse_([c(P, A)|Cs], TauPct, Total, K, Acc, Out) :-
-    length(Acc, L),
-    (   L >= K
+pick_diverse_([], _TauPct, _Total, _Need, Acc, Acc).
+pick_diverse_([c(P, A)|Cs], TauPct, Total, Need, Acc, Out) :-
+    (   Need =< 0
     ->  Out = Acc
     ;   Acc == []
-    ->  pick_diverse_(Cs, TauPct, Total, K, [c(P, A)], Out)        % best: always kept
+    ->  Need1 is Need - 1,                                         % best: always kept
+        pick_diverse_(Cs, TauPct, Total, Need1, [c(P, A)], Out)
     ;   far_from_all(A, Acc, TauPct, Total)
-    ->  pick_diverse_(Cs, TauPct, Total, K, [c(P, A)|Acc], Out)
-    ;   pick_diverse_(Cs, TauPct, Total, K, Acc, Out)
+    ->  Need1 is Need - 1,
+        pick_diverse_(Cs, TauPct, Total, Need1, [c(P, A)|Acc], Out)
+    ;   pick_diverse_(Cs, TauPct, Total, Need, Acc, Out)
     ).
 
 far_from_all(Assoc, Acc, TauPct, Total) :-
@@ -1010,17 +1041,19 @@ arrange_candidates(Words, GridLen, DropContract, K, Numbered, Returned) :-
     length(Words, Total),
     candidate_tau_pct(TauPct),
     pick_diverse(Pool, TauPct, Total, K, Picked),
-    findall(N, ( member(c(P, _), Picked), assign_clue_numbers(P, N) ), Numbered),
+    % a 1:1 map (assign_clue_numbers/2 is det, choicepoint-free — its PlDoc
+    % header locks that), so maplist states it directly (audit C27)
+    maplist(numbered_candidate, Picked, Numbered),
     length(Numbered, Returned).
+
+numbered_candidate(c(P, _), N) :- assign_clue_numbers(P, N).
 
 % Emit the candidates as a JSON ARRAY of canonical layout dicts (each element is
 % itself a valid fragment for re-ingestion). Single-layout emit stays a bare
 % object; the array shape is what `--candidates` opts into.
 emit_candidates(NumberedLayouts, Words, GridLen, SizeMode) :-
     maplist(candidate_dict(Words, GridLen, SizeMode), NumberedLayouts, Dicts),
-    current_output(Out),
-    json_write_dict(Out, Dicts),
-    nl(Out).
+    emit_payload(Dicts).
 % Each candidate carries its own diagnostics: quality caveats are per-layout
 % (rewards differ; under a drops contract the dropped sets can too).
 candidate_dict(Words, GridLen, SizeMode, Numbered, Dict) :-
@@ -1100,17 +1133,21 @@ arrange_enumerate_solve(Words, GridLen) :-
 % Seed candidates: the K longest words (restart diversity to escape greedy
 % local optima). K shrinks as the set grows, so the total start x seed sweep
 % stays bounded (and deterministic).
+% sort(1, @>=) on the positive lengths — the file's own stable-descending
+% idiom (best_move, arrange_best_layout, arrange_candidate_pool) — instead of
+% negating keys for an ascending keysort; both are stable, ties keep input
+% order, same Seeds (audit C30).
 seed_candidates(Words, Seeds) :-
     length(Words, N),
     K is max(1, min(5, 80 // N)),
-    map_list_to_pairs(neg_answer_len, Words, Pairs),
-    keysort(Pairs, Sorted),
+    map_list_to_pairs(answer_len, Words, Pairs),
+    sort(1, @>=, Pairs, Sorted),
     pairs_values(Sorted, ByLenDesc),
     ( length(Prefix, K), append(Prefix, _, ByLenDesc)
     ->  Seeds = Prefix
     ;   Seeds = ByLenDesc ).
 
-neg_answer_len(Entry, NL) :- word_letters(Entry, _, WLen), NL is -WLen.
+answer_len(Entry, WLen) :- word_letters(Entry, _, WLen).
 
 % --- greedy construction from one start location --------------------------
 
@@ -1163,10 +1200,10 @@ apply_move(move(Answer, NewPW, NewGrid), Remaining, Placed, GridLen, FinalPlaced
 % is materialized or snapshotted per candidate; assign_word/9 runs ONCE, for
 % the winner, in best_move. (This replaced a version whose findall templates
 % snapshotted the whole gs/2 bundle - 2 x N^2 args - per legal placement AND
-% per word; identical output, the probe/assign accept sets and the stable
-% first-tie-wins sorts are unchanged.) sort(1,@>=) compares KEYS only and is
-% stable, so the winner is the FIRST-generated candidate with the maximal
-% score, exactly as before.
+% per word; identical output, the probe/assign accept sets and the
+% first-tie-wins selection are unchanged.) The max_key_first/3 fold compares
+% KEYS only and keeps the incumbent on ties, so the winner is the
+% FIRST-generated candidate with the maximal score, exactly as before.
 next_move(Remaining, Placed, GridLen, Grid, Move) :-
     placed_bbox(Placed, GridLen, BBox, _),
     findall(Score-Best,
@@ -1175,9 +1212,21 @@ next_move(Remaining, Placed, GridLen, Grid, Move) :-
             Cands),
     best_move(Cands, Placed, GridLen, Grid, Move).
 
+% The running maximum by key, in one pass. The comparison MUST be the strict
+% @>: on a key tie the incumbent (earlier-generated) candidate wins, exactly
+% the head of the stable sort(1, @>=, L, [Best|_]) this replaced (audit C28;
+% probe: fold == sort-head over exhaustive tie-heavy lists). NB max_member/2
+% would be wrong here - on key ties standard order falls through to comparing
+% the payloads, breaking first-tie-wins.
+max_key_first(K-V, K0-V0, Best) :-
+    (   K @> K0
+    ->  Best = K-V
+    ;   Best = K0-V0
+    ).
+
 best_move([], _Placed, _GridLen, _Grid, none).
 best_move([C|Cs], _Placed, GridLen, Grid, move(Answer, PW, G1)) :-
-    sort(1, @>=, [C|Cs], [_-best(Answer, Letters, WLen, Start, Dir)|_]),
+    foldl(max_key_first, Cs, C, _-best(Answer, Letters, WLen, Start, Dir)),
     % Realize the winning placement. check_word_fits/5 accepted exactly this
     % (Letters, Start, Dir) against exactly this Grid - the probe binds
     % nothing, so the grid is untouched since - and it accepts iff
@@ -1190,7 +1239,7 @@ best_move([C|Cs], _Placed, GridLen, Grid, move(Answer, PW, G1)) :-
 % ground descriptor best(Answer,Letters,WLen,Start,Dir) - cut-free: legality
 % (the pure probe check_word_fits/5, which binds no cell) is folded INTO the
 % findall generator so only legal placements are collected (keyed by the
-% density score), and the head of the @>=-sorted list is the best - no
+% density score), and the max_key_first/3 fold picks the best - no
 % first-solution `!` (see spec v1b.1).
 %
 % This used to run assign_word/9 per legal candidate and let findall snapshot
@@ -1218,17 +1267,23 @@ word_best_placement(Entry, Placed, GridLen, Grid, BBox, Score, Best) :-
               placement_key(Letters, Start, Dir, WLen, GridLen, LGrid, BBox, Key),
               check_word_fits(Letters, Start, Dir, GridLen, Grid) ),
             Keyed),
-    Keyed = [_|_],
-    sort(1, @>=, Keyed, [Score-(BestStart-BestDir)|_]),
+    Keyed = [K0|Ks],
+    foldl(max_key_first, Ks, K0, Score-(BestStart-BestDir)),
     Best = best(Answer, Letters, WLen, BestStart, BestDir).
 
 % Density score for a candidate placement: crossings dominate, bbox-growth
-% breaks ties (smaller is better). 10000 > any plausible bbox area.
+% breaks ties (smaller is better).
 placement_key(Letters, Start, Dir, WLen, GridLen, Grid, BBox, Key) :-
     crossing_count(Letters, Start, Dir, GridLen, Grid, Crossings),
     word_cells(Start, Dir, WLen, GridLen, Cells),
     bbox_growth(BBox, Cells, GridLen, Growth),
-    Key is Crossings * 10000 - Growth.
+    crossing_weight(W),
+    Key is Crossings * W - Growth.
+
+% The crossings weight: larger than any plausible bbox area, so one extra
+% crossing always outranks any bbox saving. Named after the file's own
+% candidate_tau_pct/1 tunable pattern (audit C45b).
+crossing_weight(10000).
 
 crossing_count(Letters, Start, Dir, GridLen, Grid, Count) :-
     % Reject an off-grid (underflow) start before indexing the grid: since

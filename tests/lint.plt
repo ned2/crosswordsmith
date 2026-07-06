@@ -147,6 +147,13 @@ test(lint_known_profiles) :-
            lint_known_profile(P)),
     \+ lint_known_profile(nope).
 
+% An unknown profile is a caller bug, not a silent failure (C17a): lint_run/5
+% is deliberate library API, so it throws the typed domain error rather than
+% plain-failing with no diagnosis.
+test(lint_run_unknown_profile_throws,
+     [throws(error(domain_error(lint_profile, bogus_profile), _))]) :-
+    lint_run([], 5, bogus_profile, false, _).
+
 % --- barred-ximenean: the Ximenean per-length unchecked-letter band (OD-7) ----
 
 % The primary-sourced table: none in a 3, one in 4-5, two in 6-7, three in 8,

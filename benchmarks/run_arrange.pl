@@ -139,12 +139,11 @@ repo_file(Rel, File) :-
 % Same strict clue reader as run_matrix: a fixture with no clues/1 is a hard error
 % (an empty word set would "arrange" trivially and record a bogus row).
 read_clues(File, Words) :-
-    setup_call_cleanup(open(File, read, S), read_loop(S, File, Words), close(S)).
-read_loop(S, File, Words) :-
-    read_term(S, T, []),
-    ( T == end_of_file -> throw(error(fixture_missing_clues(File), _))
-    ; T = clues(Words)  -> true
-    ; read_loop(S, File, Words) ).
+    read_file_to_terms(File, Terms, []),
+    (   memberchk(clues(Words0), Terms)
+    ->  Words = Words0
+    ;   throw(error(fixture_missing_clues(File), _))
+    ).
 
 % --- output formats ----------------------------------------------------------
 emit(text, Rows) :- !,

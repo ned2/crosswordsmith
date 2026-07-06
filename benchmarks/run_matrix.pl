@@ -118,16 +118,15 @@ repo_file(Rel, File) :-
     repo_root(Root),
     directory_file_path(Root, Rel, File).
 
-read_clues(File, Words) :-
-    setup_call_cleanup(open(File, read, S), read_loop(S, File, Words), close(S)).
 % A fixture with no clues/1 term (typo, truncation, wrong path) must be a hard
 % error: silently unifying Words=[] makes an empty puzzle "solve" trivially and
 % records a bogus measured cell, corrupting the batch docs/experiments.md reads.
-read_loop(S, File, Words) :-
-    read_term(S, T, []),
-    ( T == end_of_file -> throw(error(fixture_missing_clues(File), _))
-    ; T = clues(Words)  -> true
-    ; read_loop(S, File, Words) ).
+read_clues(File, Words) :-
+    read_file_to_terms(File, Terms, []),
+    (   memberchk(clues(Words0), Terms)
+    ->  Words = Words0
+    ;   throw(error(fixture_missing_clues(File), _))
+    ).
 
 :- multifile prolog:error_message//1.
 prolog:error_message(fixture_missing_clues(Fixture)) -->
