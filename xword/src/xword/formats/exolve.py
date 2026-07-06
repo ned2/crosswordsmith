@@ -145,15 +145,38 @@ def _attach_clues(board: Board, direction: str, lines: list[str]) -> None:
         word.enumeration = enum
 
 
+# The canonical ipuz StyleSpec background-shade key. Exolve's colour model is
+# one background colour + a cell list (`exolve-colour`), strictly coarser than
+# the full StyleSpec, so only this background-fill key maps; text/border colour
+# (`colortext`, `colorborder`), `imagebg`, `mark`, boolean `highlight`, … have
+# no Exolve home and stay fail-strict.
+_SHADE_KEY = "color"
+
+
 def _style_expressible(style: Meta) -> bool:
-    """True when every ipuz style key is already carried by Cell decorator flags."""
+    """True when every ipuz style key has an Exolve home.
+
+    `shapebg: circle` and `barred` ride on the Cell's circle/bar decorator
+    flags; the background shade `color` emits a top-level `exolve-colour`
+    directive. Any other key genuinely has no Exolve home — fail-strict.
+    """
     for key, value in style.items():
         if key == "shapebg" and value == "circle":
             continue
         if key == "barred":
             continue
+        if key == _SHADE_KEY and isinstance(value, str) and value:
+            continue
         return False
     return True
+
+
+def _shade_colour(style: Meta | None) -> str | None:
+    """The Exolve background colour for a cell, or None when it has no shade."""
+    if not style:
+        return None
+    colour = style.get(_SHADE_KEY)
+    return colour if isinstance(colour, str) and colour else None
 
 
 # Note: no exolve-id is emitted (invent-nothing). Exolve treats the directive
@@ -167,6 +190,7 @@ def serialize(board: Board) -> str:
         lines.append(f"  exolve-title: {board.meta['title']}")
     if "author" in board.meta:
         lines.append(f"  exolve-setter: {board.meta['author']}")
+    shades: list[tuple[str, int, int]] = []  # (colour, row, col), 0-indexed
     lines.append("  exolve-grid:")
     for r, row in enumerate(board.grid):
         chars: list[str] = []
@@ -184,6 +208,9 @@ def serialize(board: Board) -> str:
                     f"exolve cannot hold ipuz cell styling ({cell.style!r} at "
                     f"[{r},{c}]) — target ipuz instead"
                 )
+            colour = _shade_colour(cell.style)
+            if colour is not None:
+                shades.append((colour, r, c))
             chars.append(cell.letter or "0")
             if cell.circle:
                 chars.append("@")
@@ -194,6 +221,16 @@ def serialize(board: Board) -> str:
             if cell.bar_below:
                 chars.append("_")
         lines.append("    " + "".join(chars))
+    # Background shades are top-level exolve-colour directives (not grid
+    # decorators): one line per colour, cells grouped, deterministically sorted
+    # by (colour, row, col) with 1-indexed rNcM cell-specs. Emitted only when a
+    # shaded cell exists, so the no-shade path stays byte-identical (D6).
+    by_colour: dict[str, list[tuple[int, int]]] = {}
+    for colour, r, c in shades:
+        by_colour.setdefault(colour, []).append((r, c))
+    for colour in sorted(by_colour):
+        specs = " ".join(f"r{r + 1}c{c + 1}" for r, c in sorted(by_colour[colour]))
+        lines.append(f"  exolve-colour: {colour} {specs}")
     for header, direction in (("across", ACROSS), ("down", DOWN)):
         words = [w for w in board.words if w.direction == direction]
         if not any(w.clue is not None for w in words):

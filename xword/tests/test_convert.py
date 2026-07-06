@@ -116,8 +116,11 @@ class TestStructuralFailures:
             convert_text((fixtures / "sample.ipuz.json").read_text(), "exolve")
 
     def test_foreign_styling_blocks_native_and_exolve(self):
+        # `colortext` (text colour) is a real ipuz StyleSpec key with no Exolve
+        # home — exolve-colour sets background only — so it stays fail-strict
+        # even after Gap 3 taught the serializer the background `color` key.
         src = mini_ipuz(
-            puzzle=[[1, 0, {"cell": 0, "style": {"fill": "DDDDDD"}}], [0, "#", 0], [0, 0, 0]]
+            puzzle=[[1, 0, {"cell": 0, "style": {"colortext": "FF0000"}}], [0, "#", 0], [0, 0, 0]]
         )
         for target in ("native", "exolve"):
             with pytest.raises(XwordError, match="styling"):
@@ -155,6 +158,45 @@ class TestPrefilledToIpuz:
         via, _ = convert_text(src, "ipuz")
         back, _ = convert_text(via, "exolve")
         assert parse_board(back, "exolve") == parse_board(src, "exolve")
+
+
+class TestShadedToExolve:
+    """Gap 3 (closed, serialize-only): a background-shade `color` style
+    serializes to a deterministic exolve-colour directive. The reverse hop is
+    puzzle-lossless-only — Exolve's colour model is coarser than the ipuz
+    StyleSpec, so the exact StyleSpec is not reconstructed (no reverse reader)."""
+
+    def test_color_style_serializes_exolve_colour(self, fixtures):
+        src = (fixtures / "sample_shaded.ipuz.json").read_text()
+        out, warnings = convert_text(src, "exolve")
+        assert warnings == []  # a shade is structure, not metadata: never warns
+        assert "  exolve-colour: pink r1c2" in out
+        assert "exolve-option" not in out  # not rebus mode
+
+    def test_multiple_shades_are_deterministic(self):
+        src = mini_ipuz(
+            puzzle=[
+                [{"cell": 1, "style": {"color": "pink"}}, 0, {"cell": 0, "style": {"color": "aqua"}}],
+                [0, "#", 0],
+                [0, 0, 0],
+            ]
+        )
+        out, _ = convert_text(src, "exolve")
+        # one line per colour, colours sorted, cells sorted within a colour
+        assert "  exolve-colour: aqua r1c3" in out
+        assert "  exolve-colour: pink r1c1" in out
+        assert out.index("aqua") < out.index("pink")  # deterministic colour order
+
+    def test_shade_is_lossy_on_reverse_hop(self):
+        # option (a): no reverse coordinate parser, so exolve→ipuz drops the
+        # shade — the documented puzzle-lossless-only behaviour.
+        src = mini_ipuz(
+            puzzle=[[1, {"cell": 0, "style": {"color": "pink"}}, 0], [0, "#", 0], [0, 0, 0]]
+        )
+        exo, _ = convert_text(src, "exolve")
+        assert "exolve-colour: pink" in exo
+        back, _ = convert_text(exo, "ipuz")
+        assert "color" not in back  # the StyleSpec is not reconstructed
 
 
 class TestMetadataDrops:

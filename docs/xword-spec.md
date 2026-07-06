@@ -361,14 +361,21 @@ Consequences of the table:
   native→ipuz→native preserves the whole puzzle but drops `link`/`meta` at the
   ipuz hop; native→Exolve→native likewise. Payload-lossless round-trips need a
   format that carries the metadata (today only native→native qualifies).
-- **v1 serializer coverage gaps fail strict, never drop silently.** Structural
-  properties the *format* can hold but the v1 *serializer* does not yet emit —
-  rebus → Exolve, shaded/arbitrary-styled cells → Exolve — fail with a "not
-  supported yet" error naming a capable target, per the D7 rule (a serializer
-  gap must behave like a `✗` cell, not like metadata). Closing them is ordinary
-  later work, not a deferred decision. **Prefilled cells → ipuz is now closed**:
-  a given cell serializes to a puzzle-cell `value` and round-trips back (the
-  ipuz parser reads that `value` as a prefilled letter).
+- **v1 serializer coverage gaps fail strict, never drop silently.** The one
+  remaining structural property the *format* can hold but the v1 *serializer*
+  does not yet emit — rebus → Exolve — fails with a "not supported yet" error
+  naming a capable target, per the D7 rule (a serializer gap must behave like a
+  `✗` cell, not like metadata). Closing it is ordinary later work, not a
+  deferred decision. **Prefilled cells → ipuz is now closed**: a given cell
+  serializes to a puzzle-cell `value` and round-trips back (the ipuz parser
+  reads that `value` as a prefilled letter). **Shaded/styled cells → Exolve is
+  now closed serialize-only**: a background-shade `color` style emits a
+  top-level `exolve-colour` directive (text/border colour, `imagebg`, `mark`,
+  boolean `highlight`, … still fail-strict — a narrow, not a removal). Exolve's
+  colour model is strictly coarser than the ipuz StyleSpec, so `exolve→ipuz`
+  cannot reconstruct the exact StyleSpec; that direction is **puzzle-lossless
+  only**, and because a shade is *structure* not metadata it never warns — the
+  serializer either maps the shade or fails-strict on an unmappable style key.
 
 **Deferred escape hatches** (not rejected): (a) **best-effort *structural***
 conversion (crop/flatten with warnings); (b) **uplifting native's model** (add

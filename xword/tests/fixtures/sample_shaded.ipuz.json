@@ -1,0 +1,30 @@
+{
+  "version": "http://ipuz.org/v2",
+  "kind": ["http://ipuz.org/crossword#1"],
+  "title": "Shaded Sample",
+  "author": "Gap3 Spike",
+  "dimensions": {"width": 3, "height": 3},
+  "empty": "0",
+  "puzzle": [
+    [1, {"cell": 2, "style": {"color": "pink"}}, 3],
+    [4, "0", "0"],
+    [5, "0", "#"]
+  ],
+  "solution": [
+    ["A", "B", "C"],
+    ["D", "E", "F"],
+    ["G", "H", "#"]
+  ],
+  "clues": {
+    "Across": [
+      {"number": 1, "clue": "First across", "enumeration": "(3)"},
+      {"number": 4, "clue": "Second across", "enumeration": "(3)"},
+      {"number": 5, "clue": "Short one", "enumeration": "(2)"}
+    ],
+    "Down": [
+      {"number": 1, "clue": "First down", "enumeration": "(3)"},
+      {"number": 2, "clue": "Shaded top", "enumeration": "(3)"},
+      {"number": 3, "clue": "Right column", "enumeration": "(2)"}
+    ]
+  }
+}
