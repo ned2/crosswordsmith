@@ -87,32 +87,38 @@ only with all gates green; two census predictions were **dropped by measurement*
   cut IS the pruning**: the negative control regressed `search_inf` on **7/7 rungs** and
   failed the project's own ratchet. "Delete cuts" is not a direction; *"make clause
   selection indexable, then delete the cut"* is.
-- **18 experiment steps earned APPLY and are applied to this worktree** (staged,
-  uncommitted; the overlapping X4.3/X5.1 pair merged via git 3-way into 17 distinct
+- **18 experiment steps earned APPLY and are applied and committed 2026-07-06
+  (`fb4cfd9`)** (the overlapping X4.3/X5.1 pair merged via git 3-way into 17 distinct
   patches — see the [count note](#applied-step-count-note)). Merged-state gates: full
   `./run_tests.sh` **ALL TESTS PASSED**; `make bench-check` **PASS (no change, 0
   regressions)**; `make bench-fill-check` **PASS** with `search_inf`
   **−0.97% / −2.39% / −2.47% / −0.34% / −4.60% / −3.42% / −2.82%** on
   sq04/g11/g11_seed/sq05/g17/g21/g13 (**6 WINs, 0 regressions**; sq05's −0.34% sits
-  inside the 0.5% tolerance). `make bench-fill-record` is owed after commit.
+  inside the 0.5% tolerance). `make bench-fill-record` was run post-commit (baseline +
+  history recorded, `86ac895`).
 - Net purity movement: **14 of the 42 cuts deleted, 9 of the 12 `once/1` wrappers
   deleted**, one exported predicate (`assign_clue_numbers/2`) made deterministic at
   source, the fill search spine and both counting kernels now cut-free, the greedy
   constructor's grid-copy tax removed (**wall −17…−18%** on heavy greedy workloads).
-- **Findings backlog: 47 open items** (C1–C47: **16 med · 24 low · 7 nit**), none
-  applied in Phase 2. The top three (C1–C3) are the determinism agent's MEDs — all about
-  *measurement/state integrity in persistent processes*, not solver correctness.
+- **Findings backlog: 47 raised in the Phase-1 sweep** (C1–C47: **16 med · 24 low · 7
+  nit**), none applied *during Phase 2*; the browser.pl addendum later added 16 more
+  (C48–C63). **All 63 are now dispositioned and closed** — see the [Remediation
+  tracker](#remediation-tracker). The top three (C1–C3) are the determinism agent's MEDs
+  — all about *measurement/state integrity in persistent processes*, not solver
+  correctness.
 - **3 candidate steps dropped by measurement**: E2 (ordered-merge candidates walk,
   **+55.4%** `search_inf` — the census cost model was inverted), E4 (staged compares,
   **+0.21%**, and a GC probe showed there was no GC to save), E8 (the negative control,
   regression by design, reverted).
 
-| open severity | count | ids |
+| severity (as raised) | count | ids |
 |----------|-------|-----|
 | high     | 0     | — |
 | med      | 16    | C1–C16 |
 | low      | 24    | C17–C40 |
 | nit      | 7     | C41–C47 |
+
+> All 47 above, plus the 16 addendum findings (C48–C63), are now closed — **63/63** (see [Remediation tracker](#remediation-tracker).)
 
 ---
 
@@ -457,11 +463,12 @@ goal is det); open cleanup item **C23**.
 
 ## 3. Applied remediation — the Phase-2 APPLY steps
 
-All steps below are **applied to this worktree (staged, uncommitted)**. Merged-state
+All steps below are **applied and committed 2026-07-06 (`fb4cfd9`)**. Merged-state
 gates re-run green: `./run_tests.sh` ALL TESTS PASSED · `make bench-check` PASS (no
 change, 0 regressions) · `make bench-fill-check` PASS (6 WINs, 0 regressions; per-rung
-deltas in the [Executive summary](#executive-summary)). **Owed after commit:
-`make bench-fill-record`** to ratchet the fill baseline down to the new numbers.
+deltas in the [Executive summary](#executive-summary)). **Done post-commit:**
+`make bench-fill-record` ratcheted the fill baseline to the new numbers (`86ac895`;
+re-recorded after later batches in `efa4289` / `1701c78`).
 
 <a id="applied-step-count-note"></a>
 > **Count note (flagged honestly):** the campaign tallied "17 APPLY steps"; the
@@ -507,10 +514,13 @@ core-census once-hygiene items (#14/#16/#17).
 
 ---
 
-## 4. Findings backlog (C1–C47) — found, verified, NOT applied
+## 4. Findings backlog (C1–C47) — found & verified in Phase 1 (all now closed — see [Remediation tracker](#remediation-tracker))
 
-Deduplicated across all eight Phase-1 reports; severity-ordered. Everything here is
-`status: open`. Sources are noted as (census / style-core / style-arrange / style-fill /
+Deduplicated across all eight Phase-1 reports; severity-ordered. Each finding below is
+recorded **as raised** in Phase 1; its per-finding status line has been updated to the
+live disposition, and the authoritative record (with commit) is the [Remediation
+tracker](#remediation-tracker) and [log](#remediation-log) — **all findings are now
+closed**. Sources are noted as (census / style-core / style-arrange / style-fill /
 style-small / stdlib / determinism).
 
 ### Med
@@ -535,7 +545,7 @@ enumerated-clause restructure makes the shared-prologue fix mechanically easy no
 #### C2 — Unbounded table growth across greedy-path solves in a persistent process
 `core.pl:646–654` (`:- table pair_crossings/3`), `:595–599` (`answer_letters/2`); greedy
 consumers arrange.pl:965–1046 with no abolish on best-effort/candidates/fragment paths ·
-behaviour preserving · flags: **WASM** · **open** · (determinism M2)
+behaviour preserving · flags: **WASM** · **relocated → C48 2026-07-06** · (determinism M2)
 
 Only the strict `mrv_inc` path abolishes the tables. A long-lived process serving
 repeated **best-effort** solves — exactly what `solve_browser_json` with
@@ -552,7 +562,7 @@ calls per request (pairs with C3).
 `core.pl:479–496` (`search_seed/1`), `:142–148` (`verbose_mode/0`), arrange.pl:101–115
 (`check_target_override/1`); the owed reset is self-documented at
 `wasm/client/solve_browser.pl:71–75` · behaviour preserving today (hazard demonstrated,
-not reachable from the current browser input schema) · flags: **WASM** · **open** ·
+not reachable from the current browser input schema) · flags: **WASM** · **fixed 2026-07-06** ·
 (determinism M3)
 
 Set-and-forget module globals: any stray write poisons every later in-process solve
@@ -569,7 +579,7 @@ abolish) at the top of the browser entry, and a same-worker determinism test.
 #### C4 — No PlDoc (`%!`) structured comments or determinism annotations anywhere
 whole project (`%!` appears nowhere under `prolog/`; e.g. core.pl:16–66 export list,
 arrange.pl:20–30, fill exported API, metrics' 10 exports) · behaviour preserving
-(comments only) · **open** · (style-core M1 / style-arrange S2 / style-fill F2 /
+(comments only) · **fixed 2026-07-06** · (style-core M1 / style-arrange S2 / style-fill F2 /
 style-small M1 — all four lanes independently)
 
 The prose comments are unusually good — often better than typical PlDoc — so this is a
@@ -591,7 +601,7 @@ autoload); arrange.pl:32–37 (lists/assoc/ordsets/http-json autoload — while 
 import carries the P11 rationale comment); metrics.pl (lists autoload); lint.pl:20–23
 (lists autoload); export.pl (pairs autoload at :142, and its header claims "Zero project
 dependencies (it only needs JSON + lists)" — missing pairs) · behaviour preserving ·
-flags: WASM-adjacent (qsave deployment) · **open** · (determinism L5 / style-core M3 /
+flags: WASM-adjacent (qsave deployment) · **fixed 2026-07-06** · (determinism L5 / style-core M3 /
 style-arrange S1 / style-small L1+L4)
 
 This is the P11 finding's follow-through: P11 (closed) added `library(pairs)` to
@@ -606,7 +616,7 @@ comments and accept autoload uniformly. Either way, make it consistent.
 #### C6 — Legacy `library(http/json)` alias where 10.1.10 has core `library(json)`
 solve_browser.pl:40 (strongest case); also lint.pl:20, export.pl:24, stockgrid.pl:31,
 core.pl, fill.pl (project-wide pattern) · behaviour preserving (load-time only) · flags:
-**WASM** · **open** · (style-small M4; `check/0` also emits "Library was moved:
+**WASM** · **fixed 2026-07-06** · (style-small M4; `check/0` also emits "Library was moved:
 library(http/json) --> library(json)")
 
 In the **WASM image the `http/json` alias does not resolve at all** — the project's own
@@ -621,7 +631,7 @@ project-wide. Coordinate with C5.
 
 #### C7 — `meta_value/3` + `meta_value_or/4` reimplement `library(option)`, via `=..`
 fill.pl:669–671 (defs); call sites :651–661; also `memberchk(masks(true), Options)`
-at :601 · behaviour preserving · **open** · (stdlib F3 / style-fill F3 — independently
+at :601 · behaviour preserving · **fixed 2026-07-06** · (stdlib F3 / style-fill F3 — independently
 found by both lanes)
 
 The artifact `Meta` is documented as "a keyed list [Key(Value), ...]" (fill.pl:552) —
@@ -634,7 +644,7 @@ artifact-load path; output bytes unaffected.
 
 #### C8 — lint's hand-rolled BFS duplicates `library(ugraphs)`; frontier append is O(n²)
 lint.pl:248–264 (`connected/2` + `reach/5`) · behaviour preserving (boolean pass/fail
-rule; lint not inference-gated) · **open** · (stdlib F2; subsumes style-small L8's
+rule; lint not inference-gated) · **fixed 2026-07-06** · (stdlib F2; subsumes style-small L8's
 `append(Q, NewNbs, Q1)` O(n²) frontier and I4's `length/2`-pair vs `Reached == Filled`
 note)
 
@@ -645,7 +655,7 @@ list from `cell_neighbour/3`, `reachable(Start, G, Reached)`, then `Reached == F
 (both ordsets). Needs `:- use_module(library(ugraphs)).` per the C5 discipline.
 
 #### C9 — `solve_browser_str/2` reimplements `atom_json_dict/3`
-solve_browser.pl:96–101 · behaviour preserving · flags: WASM · **open** · (stdlib F1)
+solve_browser.pl:96–101 · behaviour preserving · flags: WASM · **closed via C51 2026-07-06** · (stdlib F1)
 
 The `setup_call_cleanup(open_string(...), json_read_dict(..., [default_tag(json)]),
 close(...))` dance is exactly what `atom_json_dict/3` does internally
@@ -656,7 +666,7 @@ build. **Fix:** 5 lines → 2, one less stream to leak.
 
 #### C10 — Browser error formals have no `prolog:error_message//1` hooks
 solve_browser.pl:105–121 (`browser_missing_size`, `browser_max_mode_unsupported`) ·
-behaviour preserving · flags: **WASM** · **open** · (style-small M5)
+behaviour preserving · flags: **WASM** · **fixed 2026-07-06** · (style-small M5)
 
 Unlike every sibling module (lint.pl:321, export.pl:214, stockgrid.pl:165), no message
 hook is defined, so an uncaught formal renders as "Unknown error term:
@@ -667,7 +677,7 @@ DCG clauses (pure Prolog, WASM-safe); verify the JS bridge surfaces the printed 
 
 #### C11 — `stockgrid_report/1` loads and parses the grid file twice
 stockgrid.pl:156–161 (calls `stockgrid_load/2`, then `stockgrid_validate_file/2` which
-loads again) · behaviour preserving (stderr text identical) · **open** · (style-small M3)
+loads again) · behaviour preserving (stderr text identical) · **fixed 2026-07-06** · (style-small M3)
 
 Two opens, two JSON parses; a validation error is thrown from the *second* load. The
 single-load composition already exists (`stockgrid_validate/3` takes the loaded term).
@@ -675,7 +685,7 @@ single-load composition already exists (`stockgrid_validate/3` takes the loaded 
 
 #### C12 — stockgrid re-pairs report entries to source words quadratically and fragilely
 stockgrid.pl:136–141 · behaviour preserving (no golden output; Fails order preserved) ·
-**open** · (style-small M2)
+**fixed 2026-07-06** · (style-small M2)
 
 `member(WR, Ws)` then re-searching the same list with `nth0(I, Ws, WR)` to recover the
 index is O(n²) and only correct because no two report dicts can be equal — a future
@@ -687,7 +697,7 @@ probe-verified in-order generation) — no uniqueness assumption.
 arrange.pl:131 (`layout_reward/4`'s `[PW,A,A1]>>(...)` foldl lambda — per placed word per
 rescored candidate) and fill.pl:159 (`build_index/2`'s `[K-Is, K-Set]>>list_to_ord_set(Is,
 Set)` — per index key group at every dict load) · behaviour preserving · flags:
-**perf-relevant** (fill's is on the gated `load_inf` path → needs re-baseline) · **open**
+**perf-relevant** (fill's is on the gated `load_inf` path → needs re-baseline) · **fixed 2026-07-06**
 · (determinism L6 / style-arrange S6 / style-fill F4)
 
 Neither module imports `library(yall)`, so `>>` is autoloaded and every call pays a
@@ -700,7 +710,7 @@ own measured rationale. **Fix:** first-order named helpers (`add_word_reward/6`,
 
 #### C14 — `require_strategy/1`'s error message hard-codes the list the registry owns
 core.pl:236–237 vs the strategies registry at :98–102 · behaviour preserving
-(stderr-only; plunit locks only the `unknown_strategy(S)` term) · **open** ·
+(stderr-only; plunit locks only the `unknown_strategy(S)` term) · **fixed 2026-07-06** ·
 (style-core M4)
 
 The registry comment promises "adding a strategy is a one-line entry here", but the
@@ -712,7 +722,7 @@ render from `strategies/1` at message time via `{}/1` in the DCG
 #### C15 — `assign_word/10` carries a dead `_PlacedWords` parameter in its exported signature
 core.pl:665–689 (arg 7 unused in the sole clause body); export at :39; callers
 arrange.pl:578,977,1043 + tests all thread a real list into it · behaviour preserving ·
-flags: **test-affecting** (arity change; white-box tests call it directly) · **open** ·
+flags: **test-affecting** (arity change; white-box tests call it directly) · **fixed 2026-07-06** ·
 (style-core M6)
 
 The boundary-grid refactor made the placed-words argument unnecessary but the arity-10
@@ -727,7 +737,7 @@ core.pl:596–599 (`answer_letters/2`, tabled) and metrics.pl:56–58 (`word_let
 + the entry-shaped head fill must fake at fill.pl:103) · behaviour preserving (probe:
 byte-identical on ground char lists) · flags: **perf-relevant** (`word_letters/3` feeds
 arrange's gated search/rescore; `answer_letters/2` feeds mrv_inc counting — needs
-`make bench-record`) · **open** · (style-core M2 / stdlib F12 / style-fill F7)
+`make bench-record`) · **fixed 2026-07-06** · (style-core M2 / stdlib F12 / style-fill F7)
 
 `delete/3` is formally deprecated (`swi-manual/lists.md:59–65`) and both helpers do two
 passes where one suffices. **Fix:** one pass —
@@ -752,11 +762,11 @@ up-front with `must_be(oneof([ipuz, exolve]), Format)` before dispatching
 on bad input (core.pl:486–491, 144–145) where the module's error discipline elsewhere is
 exemplary; fix: `must_be(nonneg, N)` / `must_be(boolean, V)` — but verify no caller
 relies on failure (check tests/arrange.plt seed tests first). · behaviour preserving
-(all unreachable from the CLI success path) · **open** · (style-small L3+L5 /
+(all unreachable from the CLI success path) · **fixed 2026-07-06** · (style-small L3+L5 /
 style-core L4)
 
 #### C18 — `reconcile_fragment_size/3` is not steadfast: bound output turns success into a bogus throw
-arrange.pl:544–547 · behaviour preserving (misuse path only) · **open** · (determinism L3)
+arrange.pl:544–547 · behaviour preserving (misuse path only) · **fixed 2026-07-06** · (determinism L3)
 
 `reconcile_fragment_size(5, none, 6)` **throws**
 `fragment_size_mismatch(5, none)` — with the nonsense rendering "gridLength 5 disagrees
@@ -766,7 +776,7 @@ etc. (also resolves the A4/A5 RBC cuts in §2.1).
 
 #### C19 — `load_clues/2` (.pl path) is not steadfast; JSON path fails cleanly — inconsistent misuse behaviour
 core.pl:180–187 (`read_clues_prolog_term/3`: `Term = clues(Words)` unifies the caller's
-output while *deciding*) · behaviour preserving · **open** · (determinism L4)
+output while *deciding*) · behaviour preserving · **fixed 2026-07-06** · (determinism L4)
 
 `load_clues('fixtures/bundled_17_clues.pl', bogus)` throws `prolog_no_clues_term(...)`
 even though the file contains a clues/1 term. **Fix:** test against a fresh variable,
@@ -775,14 +785,14 @@ exists in `benchmarks/run_matrix.pl:121–125` `read_loop` — fix together (and
 
 #### C20 — `set_shuffle_seed/1` performs side effects before it can fail
 core.pl:504–507 · behaviour preserving (deterministic path never reads the RNG) ·
-**open** · (determinism L9)
+**fixed 2026-07-06** · (determinism L9)
 
 With a (mis)bound argument, `set_random(seed(random))` reseeds the global RNG from OS
 entropy *first*, then `random_between/3` fails — a dirty failure that clobbers RNG
 state. **Fix:** `must_be(var, N)` first, or draw into a fresh variable and unify last.
 
 #### C21 — `lint_solve/4` writes the full report to stdout before its output arg can fail
-lint.pl:311–317 · behaviour preserving (CLI passes a fresh var) · **open** ·
+lint.pl:311–317 · behaviour preserving (CLI passes a fresh var) · **fixed 2026-07-06** ·
 (determinism L10)
 
 `lint_solve(File, toc, false, 'BOGUS')` fails *after* emitting 8.5 KB of JSON — the
@@ -791,7 +801,7 @@ honour. **Fix:** bind Verdict from the report dict *before* emitting.
 
 #### C22 — Unused / internal-only exports
 core.pl:56 `pw_end/2` (zero consumers repo-wide) and core.pl:47 `valid_strategy/1` (used
-only by `require_strategy/1` in the same module) · behaviour preserving · **open** ·
+only by `require_strategy/1` in the same module) · behaviour preserving · **fixed 2026-07-06** ·
 (determinism L7)
 
 Contradicts the stated convention ("export list is the verified union of every
@@ -800,7 +810,7 @@ consumer but is documented interactive API — not flagged.)
 
 #### C23 — Two `once(assign_clue_numbers(...))` wraps now redundant post-X6.B4
 fill.pl:392 and stockgrid.pl:79 · behaviour preserving · flags: perf-relevant (fill's
-deletion shifts its gated rungs by exactly −1 inf → re-record) · **open** · (X6 report
+deletion shifts its gated rungs by exactly −1 inf → re-record) · **fixed 2026-07-06** · (X6 report
 caveat)
 
 X6.B4 made `assign_clue_numbers/2` deterministic at source and deleted arrange's five
@@ -815,13 +825,13 @@ working grid as the single `grid/N²` term; the threaded structure is the
 `gs(LetterGrid, BoundaryGrid)` bundle documented only at :658–664); fill.pl:14 (header
 says "Exports: fill_solve/4 … nothing else" but the module exports four predicates —
 `fill_solve/4, fill_solve_index/5, fill_save_index/2,3`) · behaviour preserving
-(comments only) · **open** · (style-core L1 / style-fill F1)
+(comments only) · **fixed 2026-07-06** · (style-core L1 / style-fill F1)
 
 #### C25 — solve_browser is not a module and reaches unexported internals (acknowledged spike debt)
 solve_browser.pl:50,53–54,82 (`crosswordsmith_core:doc_to_words/2`,
 `crosswordsmith_arrange:arrange_best_layout/5`, `…:arrange_diag_layout_dict/5`); also
 `benchmarks/subjects.pl:57` reaches `crosswordsmith_arrange:arrange_best_layout/6` ·
-behaviour preserving · flags: WASM · **open** · (determinism L8 / style-small L9)
+behaviour preserving · flags: WASM · **fixed 2026-07-06** · (determinism L8 / style-small L9)
 
 Self-documented at solve_browser.pl:24–31 with a named production fix (exported
 `browser.pl` module, plan §9) — recorded here so the promotion isn't lost, plus:
@@ -831,7 +841,7 @@ white-box.
 #### C26 — Per-node dynamic `search_seed/1` lookup on the gated hot path
 core.pl:519–525 (`order_candidates/2` — one dynamic-predicate call per search node) ·
 behaviour preserving (deterministic path provably unchanged: flag=false ≡ lookup-fails) ·
-flags: perf-relevant · **open** · (census core, experiment shortlist rank 12 — the one
+flags: perf-relevant · **fixed 2026-07-06** · (census core, experiment shortlist rank 12 — the one
 ranked candidate Phase 2 did not run)
 
 **Fix:** hoist to a once-per-search flag threaded through the existing `select_inc`
@@ -842,7 +852,7 @@ expected inference drop; measure like the X-steps.
 arrange.pl:171–174 (`dropped_answers/3`), :320–324 (`unplaceable_words/2`), :619–620
 (`fragment_answers/2`), :622–625 (`remaining_words/3`), :695–697/:350 (dropped-entry
 projections), :870–877 (`arrange_candidates/6`) · behaviour preserving (order preserved
-by all) · **open** · (style-arrange S3)
+by all) · **fixed 2026-07-06** · (style-arrange S3)
 
 findall copies every collected term — and this very file documents term-copying as a
 live footgun for non-ground `[Answer, _{...}]` entries (apply_move comment :992–999);
@@ -853,7 +863,7 @@ Use named helpers, not lambdas (C13).
 
 #### C28 — Greedy argmax sorts a whole list to take its stable maximum
 arrange.pl `best_move` + `word_best_placement` (post-X3 shapes; baseline
-:1016–1018/:1040–1046) · behaviour **risk if done wrong** · **open** · (style-arrange S4)
+:1016–1018/:1040–1046) · behaviour **risk if done wrong** · **fixed 2026-07-06** · (style-arrange S4)
 
 `sort(1, @>=, List, [Best|_])` is correct and documented (stability per
 `swi-manual/builtinlist.md`) but O(n log n) per greedy step where a single-pass
@@ -865,14 +875,14 @@ line numbers from the applied tree. Candidate lists are small — low value; ver
 `make golden`.
 
 #### C29 — `pick_diverse_/6` recomputes `length(Acc)` every iteration
-arrange.pl:843–853 (:845) · behaviour preserving · **open** · (style-arrange S5)
+arrange.pl:843–853 (:845) · behaviour preserving · **fixed 2026-07-06** · (style-arrange S5)
 
 O(K) per pool element where a countdown argument is the standard accumulator shape.
 Cold (once per `--candidates` run over a ≤20-element pool) — clarity more than cost.
 
 #### C30 — `seed_candidates/2` sorts by negated keys where `sort(1, @>=)` is the file's own idiom
 arrange.pl:951–961 (`neg_answer_len/2`) · behaviour preserving (both stable —
-`swi-manual/builtinlist.md:93–97`) · **open** · (style-arrange S8)
+`swi-manual/builtinlist.md:93–97`) · **fixed 2026-07-06** · (style-arrange S8)
 
 The file leans on stable-descending `sort/4` everywhere else (:237, :353, :818, :1018,
 :1046); sorting positive lengths deletes the negation helper. Both forms legitimately
@@ -880,7 +890,7 @@ idiomatic — hence low/possible.
 
 #### C31 — `init_cell_vars/2`: element-wise `put_assoc` where `ord_list_to_assoc` is the direct constructor
 fill.pl:75–77 · behaviour preserving · flags: perf-relevant (strict "counts change"
-sense; grid-load, small N) · **open** · (style-fill F8)
+sense; grid-load, small N) · **fixed 2026-07-06** · (style-fill F8)
 
 Keys are already a strictly-ascending ordset (`mask_white_cells/3` ends in
 `list_to_ord_set/2`). `pairs_keys_values(Pairs, WhiteCells, _FreshVars),
@@ -888,14 +898,14 @@ ord_list_to_assoc(Pairs, Assoc)` (`swi-manual/assoc.md:39`) replaces N rebalance
 
 #### C32 — `load_dict/3` word collection: findall+member+guard where `convlist/3` is the idiom
 fill.pl:121 · behaviour preserving (word set and post-`sort/2` order identical) · flags:
-**perf-relevant** (gated `load_inf` → re-baseline) · **open** · (style-fill F9)
+**perf-relevant** (gated `load_inf` → re-baseline) · **fixed 2026-07-06** · (style-fill F9)
 
 `convlist(line_word, Lines, Ws0)` with `line_word(Line, Letters) :-
 normalize_word(Line, Letters), Letters \== [].` (`swi-manual/apply.md:67`) — no findall
 copy per word.
 
 #### C33 — Artifact-read catch discards the root cause
-fill.pl:641–643 · behaviour preserving (normal-case stderr unchanged) · **open** ·
+fill.pl:641–643 · behaviour preserving (normal-case stderr unchanged) · **fixed 2026-07-06** ·
 (style-fill F11)
 
 `catch(fill_read_artifact(...), _ReadErr, throw(error(fill_index_unreadable(File), _)))`
@@ -905,21 +915,21 @@ the cause then shows under verbose error printing.
 
 #### C34 — `placed_bbox/4`: five passes over the cell set where one fold suffices
 metrics.pl:73–82 (`min_list`/`max_list` ×4 after `pairs_keys_values/3`) · behaviour
-preserving · flags: perf-relevant (arrange rescore path, not the fill ratchet) · **open**
+preserving · flags: perf-relevant (arrange rescore path, not the fill ratchet) · **fixed 2026-07-06**
 · (style-fill F12)
 
 A single `foldl/4` over `R-C` pairs computes all four bounds in one pass. Optional —
 the current form is arguably more readable.
 
 #### C35 — `slots_to_layout/3`: findall+member where maplist expresses the 1:1 map
-fill.pl:393 · behaviour preserving (emit path, order preserved) · **open** ·
+fill.pl:393 · behaviour preserving (emit path, order preserved) · **fixed 2026-07-06** ·
 (style-fill F13)
 
 `maplist(pw_answer_entry, Placed, InputWords)` with
 `pw_answer_entry(PW, [A]) :- pw_answer(PW, A).`
 
 #### C36 — `empty_slots/4` tests emptiness through `candidates/4` instead of the purpose-built counter
-fill.pl:524–528 · behaviour preserving (cold failure-report path) · **open** ·
+fill.pl:524–528 · behaviour preserving (cold failure-report path) · **fixed 2026-07-06** ·
 (style-fill F10)
 
 Intent is "count is zero"; the module owns `candidate_count/4` for exactly this. Current
@@ -929,7 +939,7 @@ and its cheapness depends on maplist evaluation order. **Fix:**
 
 #### C37 — lint `tally/4` builds three throwaway lists; the file's own counting idiom is `aggregate_all(count, …)`
 lint.pl:302–305 · behaviour preserving (values identical) · flags: contract-adjacent
-(feeds the golden-locked JSON `summary` counts — rerun `make golden`) · **open** ·
+(feeds the golden-locked JSON `summary` counts — rerun `make golden`) · **fixed 2026-07-06** ·
 (style-small L2)
 
 `include(==('PASS'), Sevs, Ps), length(Ps, Pass)` ×3 → three
@@ -939,7 +949,7 @@ lint.pl:277 already uses the idiom, library already imported).
 #### C38 — Five copies of a read-terms-until-`clues/1` loop vs `read_file_to_terms/3`
 core.pl:175–187 + verbatim clones in benchmarks/run_arrange.pl:137–143,
 run_matrix.pl:126–133, start_sensitivity.pl:66–75, wasm/test/inference_parity.pl:73–80 ·
-behaviour preserving for every existing fixture · **open** · (stdlib F5)
+behaviour preserving for every existing fixture · **fixed 2026-07-06** · (stdlib F5)
 
 `read_file_to_terms(File, Terms, []), memberchk(clues(Words), Terms)`
 (`swi-manual/readutil.md:54`; probe-verified against the bundled fixture). Honest
@@ -952,14 +962,14 @@ is deleting the four clones, not the core.pl copy. Combine with C19's steadfastn
 fill.pl:129–132 and :681–686 · behaviour preserving (probe: octet read byte-identical;
 SHA-256 matches coreutils) · flags: **perf-relevant** (`read_file_lines` is inside the
 gated `load_inf` — the swap moves it by a small constant → deliberate re-record) ·
-**open** · (stdlib F6)
+**fixed 2026-07-06** · (stdlib F6)
 
 `read_file_to_string(File, Str, [])` / `read_file_to_string(File, Bytes,
 [encoding(octet)])` (`swi-manual/readutil.md:48`). Pure-clarity win otherwise.
 
 #### C40 — Bench harnesses parse JSON strings by hand vs `atom_json_dict/3`
 benchmarks/check_baseline.pl:99–101,357–361 and check_fill_baseline.pl:109–111
-(+ its parse_history_line twin) · behaviour preserving · **open** · (stdlib F9)
+(+ its parse_history_line twin) · behaviour preserving · **fixed 2026-07-06** · (stdlib F9)
 
 Same replacement as C9, three-plus call sites; harness-only code. The *file*-reading
 `json_read_dict` sites are already the correct idiom — only the string-input sites are
@@ -970,14 +980,14 @@ reinventions.
 #### C41 — Adjacent-duplicate detection: `append(_, [D,D|_], Sorted)` → `nextto(D, D, Sorted)`
 core.pl:909–918 (`check_unique_answers/1`), arrange.pl:637–643
 (`check_fragment_unique/1`) · behaviour preserving (probe: same leftmost pair, same
-order, same failure) · **open** · (stdlib F4)
+order, same failure) · **fixed 2026-07-06** · (stdlib F4)
 
 `swi-manual/lists.md:56`. Readability ("two equal neighbours") plus avoiding the prefix
 unification; runs once per invocation before the search — not perf-gated.
 
 #### C42 — `bits_max_unch_run/2` hand-rolls run-length encoding vs `clumped/2`
 metrics.pl:132–137 · behaviour preserving (probe-verified incl. all-checked case) ·
-**open** · (stdlib F7 — honestly marked borderline)
+**wont-fix 2026-07-06** · (stdlib F7 — honestly marked borderline)
 
 `clumped/2` (`swi-manual/lists.md:157`) + `aggregate_all(max(N), member(0-N, RLE), …)`
 is the precise library concept, but trades a transparent 5-line fold for RLE + a guarded
@@ -985,7 +995,7 @@ aggregate — reasonable people could call it churn. Recorded; adopt only if tou
 file anyway.
 
 #### C43 — `row_string/2` is a misnamed one-line wrapper
-stockgrid.pl:52,56 · behaviour preserving · **open** · (style-small L6)
+stockgrid.pl:52,56 · behaviour preserving · **fixed 2026-07-06** · (style-small L6)
 
 The name says "string", the output is a char list, and `string_chars/2` is directly
 maplist-able. Inline it or rename `row_chars/2`.
@@ -1000,7 +1010,7 @@ freshly-computed integers where `=:=`/`=\=` is the arithmetic idiom (:834,:837,:
 (d) `mrv_count_goal/7` builds a goal term where a named `viable_placement/7` helper
 would be cross-referencer-visible (:402–407); (e) remaining legacy bare-`(`/`;` layout
 sites not converted by X1 (:912–917, :959–964, :972–977 and the adj_is_free chains) ·
-behaviour preserving · **open** · (style-core L2/L3/L6/L7 + M5 remainder)
+behaviour preserving · **fixed 2026-07-06 (partial — (c) reverted on measurement)** · (style-core L2/L3/L6/L7 + M5 remainder)
 
 #### C45 — Nit batch, arrange.pl
 (a) three emit bodies repeat `current_output(Out), json_write_dict(Out, X), nl(Out)` —
@@ -1008,7 +1018,7 @@ one `emit_payload/1` helper (:383–395, :882–886); (b) the crossings weight `
 commented but unnamed — `crossing_weight(10000).` matching the file's
 `candidate_tau_pct/1` pattern (:1049–1054); (c) the two report-failure predicates are
 near-duplicates differing only in contract-adjacent stderr wording — leaving them
-verbatim is defensible (:301–316 vs :734–749) · behaviour preserving · **open** ·
+verbatim is defensible (:301–316 vs :734–749) · behaviour preserving · **fixed 2026-07-06** ·
 (style-arrange N1/N2/N3)
 
 #### C46 — Recorded-only stdlib notes (no action recommended)
@@ -1020,7 +1030,7 @@ non-issue — probably **not** worth doing (stdlib F10); (c) `dict_word_count/2`
 duplicated between fill.pl:674–677 and benchmarks/run_fill.pl:155–157 — the smell is the
 duplication, not the fold; run_fill could call the module's copy (stdlib F11); (d)
 `verbose_report/2` bypasses `print_message/2` — coherent for a CLI whose stderr contract
-is prose lines; change only if log redirection is ever wanted (style-core L5) · **open**
+is prose lines; change only if log redirection is ever wanted (style-core L5) · **wont-fix 2026-07-06**
 (as a record) 
 
 #### C47 — Cold RED-CONVERTIBLE cut conversions (optional robustness batch)
@@ -1030,7 +1040,7 @@ core.pl:116 (`require_strategy/1` → single ITE clause), :130 (`with_output/2` 
 verified exact semantics after conversion; warm, non-default strategies only);
 lint.pl:164 (`symmetry_override/4` → complement guard), :228 (`double_unch_end/2` →
 `Bits \= [0,0|_]` guard) · behaviour preserving after conversion (bare removal is RED at
-every one of these — that is the point of the class) · **open** · (census core C1–C4/C6,
+every one of these — that is the point of the class) · **fixed 2026-07-06** · (census core C1–C4/C6,
 census fill/small #5/#8/#15)
 
 Each of these cuts is *correct today*; conversion buys guard-explicit clauses instead of
@@ -1219,7 +1229,7 @@ silently passes; enumerate `current_table(M:G, T)` unbound and filter.
 `browser.pl:131–140` (dispatch clauses) vs `:300` (`engine_capabilities` literal
 `[arrange, lint, export, capabilities]`) vs `:441–442` (unknown_verb message text) vs
 `:24–29` (header claim) · **med** · behaviour preserving (message/capabilities drift
-hazard) · **open** · (style F1; pattern kin of C14; confidence: high)
+hazard) · **fixed 2026-07-06** · (style F1; pattern kin of C14; confidence: high)
 
 Three hand-maintained copies of the verb list. A new verb (e.g. `fill`, strategy §6
 phase 4) added per the header's own instruction ("one dispatch/3 clause + classifier
@@ -1235,7 +1245,7 @@ as-is. Update the header to "one dispatch clause + one `verb/1` fact".
 #### C50 — Export's shallow shape gate turns gate-passing garbage into a mislabelled `internal` "engine bug" envelope — or a degenerate success
 `browser.pl:246–251` + `export.pl:38–45` (`export_layout_dict/2`) · **med** · behaviour
 **risk** (the fix changes the CLI's failure mode on garbage files — for the better) ·
-flags: **WASM**, contract-affecting · **open** · (style F2; cross-ref C17(b);
+flags: **WASM**, contract-affecting · **fixed 2026-07-06** · (style F2; cross-ref C17(b);
 confidence: high, probe-verified)
 
 The gate checks only `gridLength`/`grid`/`words` presence and listness. Two
@@ -1260,7 +1270,7 @@ payloads (→ C58).
 
 #### C51 — Both wire directions hand-roll `atom_json_dict/3` (C9's pattern, re-instantiated ×2)
 parse: `browser.pl:98–102`; emit: `:76–77` · **med** · behaviour preserving (probe:
-byte-identical) · flags: **WASM** · **open** · (style E2; extends C9, whose original
+byte-identical) · flags: **WASM** · **fixed 2026-07-06** · (style E2; extends C9, whose original
 site is deleted — this is now the actionable item; confidence: high)
 
 Read: `setup_call_cleanup(open_string(Payload, In), json_read_dict(In, Req0,
@@ -1279,7 +1289,7 @@ one fewer stream to manage; coordinate with C52.
 
 #### C52 — Legacy `library(http/json)` alias in the one module qcompiled into the WASM image (C6's strongest case, relocated) — and no explicit import list
 `browser.pl:35`; also `tests/browser.plt:19` · **med** · behaviour preserving
-(load-time only) · flags: **WASM** · **open** · (style E1 + E3; extends C6 and C5;
+(load-time only) · flags: **WASM** · **fixed 2026-07-06** · (style E1 + E3; extends C6 and C5;
 confidence: high)
 
 C6 named `solve_browser.pl:40` as the strongest case; that file was rewritten —
@@ -1295,7 +1305,7 @@ lists — the C5/P11 qsave-`autoload(false)` discipline (style E3, folded here).
 
 #### C53 — `formal_message/2` hand-rolls `message_to_string/2` and discards the error context
 `browser.pl:398–410` · **low** · behaviour preserving on all hooked formals (probe:
-identical text) · **open** · (style F3; confidence: high)
+identical text) · **fixed 2026-07-06** · (style F3; confidence: high)
 
 The 13-line dance — direct hook `phrase`, `print_message_lines` capture, `split_string`
 newline trim — is `message_to_string/2` (`printmsg.md:141`; probe: exactly the hook
@@ -1314,7 +1324,7 @@ lines → ~5, better messages for `resource_exhausted` (§4.2's mobile priority)
 
 #### C54 — The post-classifier tail (including the final `json_write_dict`) runs outside both catches — the never-crash totality has a last-step hole
 `browser.pl:64` (`request_id`), `:71–77` (`envelope_verb`, `outcome_envelope`, the
-`with_output_to`/`json_write_dict` emit) · **low** · flags: **WASM** · **open** ·
+`with_output_to`/`json_write_dict` emit) · **low** · flags: **WASM** · **fixed 2026-07-06** ·
 (merged: style F4 **low** + census F8 **nit** — the lanes' one severity disagreement,
 merged at the higher; confidence: hole certain, reachability currently nil per the
 94-probe evidence)
@@ -1335,7 +1345,7 @@ one-line comment making the tail's no-throw convention explicit.
 
 #### C55 — Duplicate JSON keys map to `internal` and leak engine internals onto the wire
 `browser.pl:361ff` (the `thrown_type/2` table lacks a row) · **low** · behaviour
-preserving · **open** · (census F3, probe p08; confidence: high)
+preserving · **fixed 2026-07-06** · (census F3, probe p08; confidence: high)
 
 p08 `{"v":1,"v":2,…}` →
 `{"error":{"message":"error(duplicate_key(v),context(system:dict_create/3,_16328))","type":"internal"},…}`
@@ -1346,7 +1356,7 @@ optionally add a message hook for wording. Pin in browser.plt (→ C58).
 
 #### C56 — No upper bound on `size`: a cap converts a whole resource class into cheap validation
 `browser.pl:176` (`resolve_size/2` accepts any positive integer) · **low** · flags:
-**WASM** · **open** · (census F4; confidence: high, probe-verified natively)
+**WASM** · **fixed 2026-07-06** · (census F4; confidence: high, probe-verified natively)
 
 `size:2000` (4M cells) burns 2.54 s then yields the typed `resource_exhausted`
 envelope; `size:10^5`/`size:10^8` fail fast (0.001 s, same envelope — allocation fails
@@ -1359,7 +1369,7 @@ beats a device abort.
 #### C57 — Two resolver shapes duplicated clause-for-clause
 boolean: `browser.pl:198–205` (`resolve_best_effort`) ≡ `:279–286`
 (`resolve_allow_asymmetry`); enum: `:189–196` (`resolve_mode`) ≡ `:288–295`
-(`resolve_export_to`) · **low** · behaviour preserving · **open** · (style F5;
+(`resolve_export_to`) · **low** · behaviour preserving · **fixed 2026-07-06** · (style F5;
 confidence: high)
 
 Six get_dict/validate/throw resolvers share one skeleton; these two pairs are identical
@@ -1374,7 +1384,7 @@ genuinely distinct guards — leave them.
 
 #### C58 — browser.plt coverage gaps (consolidated)
 `tests/browser.plt` (51 tests, **all pass** on this tree, run natively this session) ·
-**low** · behaviour preserving (tests only) · **open** · (census §6 + style E1 note;
+**low** · behaviour preserving (tests only) · **fixed 2026-07-06** · (census §6 + style E1 note;
 confidence: high)
 
 Credit first: the suite is a model contract suite, strong on the happy/sad contract
@@ -1400,7 +1410,7 @@ into C52.
 
 #### C59 — Protocol leniencies neither documented nor pinned: absent `v` ⇒ v1, trailing garbage accepted, `v:1.0` rejected, `request.verb` never cross-checked
 `browser.pl:98–110` (parse + version gate), `:125` (verb echo) · **nit** · behaviour
-preserving (contract clarification) · **open** · (merged: style F6 + census F5 — both
+preserving (contract clarification) · **fixed 2026-07-06** · (merged: style F6 + census F5 — both
 lanes independently flagged the absent-`v` acceptance; confidence: high, probes
 p09/p10/p12 + probe2)
 
@@ -1417,7 +1427,7 @@ each, or a `bad_request` throw on the verb mismatch; pin in browser.plt (→ C58
 
 #### C60 — An unbound `Verb` argument silently dispatches `arrange`
 `browser.pl:132` (first verb clause of `dispatch/3`) · **nit** · behaviour preserving
-(Worker-impossible today) · **open** · (census F6, probe p25; confidence: high)
+(Worker-impossible today) · **fixed 2026-07-06** · (census F6, probe p25; confidence: high)
 
 An unbound var unifies with the first verb clause's head and runs arrange to success;
 string/compound/number verbs correctly yield `unknown_verb` with a `term_to_atom` echo
@@ -1429,7 +1439,7 @@ string/compound/number verbs correctly yield `unknown_verb` with a `term_to_atom
 #### C61 — ":80 the ONLY three mutable module globals" is stale — `prng_state/1` is a fourth
 `browser.pl:80–84`; `core.pl:512`; also strategy §3.2's state table and the 3-fact
 white-box plt test · **nit** · behaviour preserving (comment/test drift; reset
-sufficiency itself holds) · **open** · (census F7; confidence: high, probed)
+sufficiency itself holds) · **fixed 2026-07-06** · (census F7; confidence: high, probed)
 
 Since the splitmix64 change, `prng_state/1` is a fourth dynamic fact — cleared
 transitively by `set_search_seed(-1)` (core.pl:524–526; probe: present with an advanced
@@ -1440,7 +1450,7 @@ comment, extend the white-box test to 4 facts (→ C58), flag the strategy-doc l
 
 #### C62 — `""` as an answer rides the wire as `failure/unplaceable_words` with `words:[""]`
 core `doc_to_words/2` domain, surfaced at the browser seam · **nit** · behaviour
-preserving (CLI-parity holds) · **open** · (census F9, probes p40/p41; confidence:
+preserving (CLI-parity holds) · **fixed 2026-07-06** · (census F9, probes p40/p41; confidence:
 high)
 
 An empty-string answer is accepted by validation and surfaces as
@@ -1461,7 +1471,7 @@ cut before an unconditional throw is inert — the census's one GREEN dead cut (
 unwinds the choicepoint regardless; probe-identical cut-free; the lint.pl X6.B2 class)
 — deletable, or leave as an intent marker; (d) mode/determinism headers are plain `%`
 not `%!` — C4's project-wide convention decision applies unchanged to the new module
-(style E4; no separate action). · **nit** · behaviour preserving · **open** · (style F7
+(style E4; no separate action). · **nit** · behaviour preserving · **fixed 2026-07-06** · (style F7
 + census census-row #8 + style E4; confidence: high)
 
 ### What browser.pl does well
@@ -1669,7 +1679,7 @@ Tick as landed. `→ §Cn` links to the finding; X-steps link to
 - [x] **X4.1–X4.3** fill spine `[]`/`[_|_]`, shares_cell→ord_intersect, candidate_count arg-1 — 2026-07-06
 - [x] **X5.1** bound_positions first-order kernel — 2026-07-06
 - [x] **X6.B1–B5** once/cut hygiene + add_clue_nums det-at-source + find_crossword enumerated — 2026-07-06
-- [ ] **post-commit**: `make bench-fill-record` (ratchet the 6-WIN fill baseline down)
+- [x] **post-commit**: `make bench-fill-record` — ratcheted the 6-WIN fill baseline down, 2026-07-06 (`86ac895`)
 - [x] serial idle-machine wall A/B for §1d (3 interleaved pairs; tables inline in §1d) — 2026-07-06
 
 **Open — med**
@@ -1704,7 +1714,7 @@ Tick as landed. `→ §Cn` links to the finding; X-steps link to
 - [x] **C22** `low` — unused exports `pw_end/2`, `valid_strategy/1` → `core.pl:47,56` · *fixed 2026-07-06 (085a44c): de-exported*
 - [x] **C23** `low·perf` — redundant once() post-X6.B4 → `fill.pl:392` · `stockgrid.pl:79` · *fixed 2026-07-06 (085a44c): both once/1 dropped after det probes; WIN −1 inf/rung*
 - [x] **C24** `low` — stale comments (10.0.2 pin, word-dicts, gs/2 header, fill export header) · *fixed 2026-07-06 (085a44c)*
-- [x] **C25** `low·WASM` — solve_browser module promotion (plan §9) + subjects.pl internals · *2026-07-06: **half done on main** — the module promotion shipped (`browser.pl`; solve_browser.pl is now the thin qcompile root with no internals reach, grep-verified); the `benchmarks/subjects.pl:57` half remains* · *fixed 2026-07-06 (085a44c): explicit white-box annotation (the sanctioned alternative); arrange_best_layout/6 export deferred to a future arrange change*
+- [x] **C25** `low·WASM` — solve_browser module promotion (plan §9) + subjects.pl internals · *2026-07-06: **half done on main** — the module promotion shipped (`browser.pl`; solve_browser.pl is now the thin qcompile root with no internals reach, grep-verified); the `benchmarks/subjects.pl:57` half remains* · *fixed 2026-07-06 (085a44c): explicit white-box annotation (the sanctioned alternative); arrange_best_layout/6 export deferred to a future arrange change* · tracked in [STATUS.md de-accretion roadmap](./STATUS.md#de-accretion--retirement-roadmap)
 - [x] **C26** `low·perf` — per-node search_seed dynamic lookup hoist → `core.pl:519` · *fixed 2026-07-06 (085a44c): lookup hoisted to threaded flag; WIN −0.015..−0.064%/rung — recorded*
 - [x] **C27** `low` — arrange findall-as-map/filter → maplist/exclude (6 sites) · *fixed 2026-07-06 (085a44c): 6 sites → maplist/exclude with named helpers; inference-flat*
 - [x] **C28** `low·risk` — greedy argmax sort → strict-@> fold (golden-check) · *fixed 2026-07-06 (085a44c): strict-@> fold; tie-winner verified 3 ways (2363-case probe, goldens, CLI byte A/B); flat*
