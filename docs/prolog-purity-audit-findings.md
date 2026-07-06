@@ -1679,21 +1679,21 @@ Tick as landed. `→ §Cn` links to the finding; X-steps link to
 - [ ] **C4** `med` — no PlDoc/determinism annotations project-wide (or record the convention)
 - [ ] **C5** `med` — P11 explicit-import follow-through; `load.pl` dies under autoload(false) → `load.pl:12` + module headers
 - [ ] **C6** `med·WASM` — `library(http/json)` → `library(json)` → ~~`solve_browser.pl:40`~~ +siblings · *2026-07-06: ref stale — that file was rewritten; the strongest case is now `browser.pl:35` (tracked as **C52**); this row stays open for the siblings (lint/export/stockgrid/core/fill)*
-- [ ] **C7** `med` — `meta_value/3`+`meta_value_or/4` → `library(option)` → `fill.pl:669`
-- [ ] **C8** `med` — lint BFS → `library(ugraphs)` → `lint.pl:248`
-- [ ] **C9** `med·WASM` — `solve_browser_str/2` → `atom_json_dict/3` → ~~`solve_browser.pl:96`~~ · *2026-07-06: ref stale — original site **deleted** on main (file rewritten); the pattern is re-instantiated ×2 in `browser.pl` — the actionable item is **C51**, no separate action here; close this row with C51*
+- [x] **C7** `med` — `meta_value/3`+`meta_value_or/4` → `library(option)` → `fill.pl:669` · *fixed 2026-07-06 (b02a057): library(option); `=..` and an RBC cut deleted; fill benches bit-identical*
+- [x] **C8** `med` — lint BFS → `library(ugraphs)` → `lint.pl:248` · *fixed 2026-07-06 (b02a057): ugraphs `reachable/3`; 500-case verdict fuzz identical; lint golden byte-identical*
+- [x] **C9** `med·WASM` — `solve_browser_str/2` → `atom_json_dict/3` → ~~`solve_browser.pl:96`~~ · *2026-07-06: ref stale — original site **deleted** on main (file rewritten); the pattern is re-instantiated ×2 in `browser.pl` — the actionable item is **C51**, no separate action here; close this row with C51* · *closed 2026-07-06 with **C51***
 - [x] **C10** `med·WASM` — browser error_message hooks for the two unhooked formals → `solve_browser.pl:105` · ***resolved on main (browser.pl), probe-verified 2026-07-06**: the spike formals were deleted with the spike, and every formal `browser.pl` mints has a `prolog:error_message//1` hook (`browser.pl:412–444`)*
-- [ ] **C11** `med` — stockgrid_report double load → `stockgrid.pl:156`
-- [ ] **C12** `med` — stockgrid quadratic report re-pairing → `stockgrid.pl:136`
-- [ ] **C13** `med·perf` — interpreted yall pair → `arrange.pl:131` · `fill.pl:159`
-- [ ] **C14** `med` — require_strategy message hard-codes the registry → `core.pl:236`
-- [ ] **C15** `med·test` — `assign_word/10` dead arg 7 → `core.pl:665`
-- [ ] **C16** `med·perf` — deprecated `delete/3` letter-normalization → `core.pl:596` · `metrics.pl:56`
+- [x] **C11** `med` — stockgrid_report double load → `stockgrid.pl:156` · *fixed 2026-07-06 (b02a057): single load*
+- [x] **C12** `med` — stockgrid quadratic report re-pairing → `stockgrid.pl:136` · *fixed 2026-07-06 (b02a057): positional `nth0/3` pairing; report bytes identical incl. Fails order*
+- [x] **C13** `med·perf` — interpreted yall pair → `arrange.pl:131` · `fill.pl:159` · *fixed 2026-07-06 (b02a057): named helpers; arrange search_inf −176..−704/rung, fill load_inf −0.54% all rungs — recorded*
+- [x] **C14** `med` — require_strategy message hard-codes the registry → `core.pl:236` · *fixed 2026-07-06 (b02a057): rendered from `strategies/1`; bytes identical*
+- [x] **C15** `med·test` — `assign_word/10` dead arg 7 → `core.pl:665` · *fixed 2026-07-06 (b02a057): `assign_word/9`; all callers + white-box tests updated; benches inference-identical*
+- [x] **C16** `med·perf` — deprecated `delete/3` letter-normalization → `core.pl:596` · `metrics.pl:56` · *fixed 2026-07-06 (b02a057): one-pass `exclude/3`; arrange search_inf −29..−113/rung — recorded*
 - [x] **C48** `med·WASM` — unbounded `pair_crossings/3` growth in single-engine embeddings (ex-C2, concretized): abolish-in-reset and/or document the engine-privacy dependency → `browser.pl:85` · `core.pl:646,595` · `wasm/client/worker.js` · *2026-07-06: **fixed** via the core seam (C1's `reset_search_memos/0` at every search entry), not abolish-in-reset — 50 fresh-vocab best-effort dispatches now end at 117,888 B / 94 variants (98,184 after 1 → 97,056 after 10; pre-fix 98,184 → 1,086,840 → 5,589,120), bounded at ONE request's residue flushed by the next request's search entry. `reset_request_state/0` deliberately does NOT abolish (it runs on entry, so an abolish there is redundant with the seam and cannot shrink the between-request footprint; browser.pl:79ff documents the residue). The Worker's engine-privacy accident is no longer load-bearing. plt lock `browser:table_growth_bounded_across_dispatches` (also closes that C58 line item)*
-- [ ] **C49** `med` — verb registry triplicated (dispatch clauses / capabilities literal / unknown_verb message) → one `verb/1` fact table → `browser.pl:131,300,441`
-- [ ] **C50** `med·WASM·risk` — export shallow shape gate: gate-passing garbage → mislabelled `internal` envelope or degenerate success → `browser.pl:246` · `export.pl:38`
-- [ ] **C51** `med·WASM` — both wire directions hand-roll `atom_json_dict/3` (ex-C9 pattern) → `browser.pl:98,76`
-- [ ] **C52** `med·WASM` — `library(http/json)` alias in the qcompiled module + no explicit import list → `browser.pl:35` · `tests/browser.plt:19`
+- [x] **C49** `med` — verb registry triplicated (dispatch clauses / capabilities literal / unknown_verb message) → one `verb/1` fact table → `browser.pl:131,300,441` · *fixed 2026-07-06 (7b638a2): `verb/1` fact table + 2 registry-lock tests; capabilities/unknown_verb envelopes byte-identical*
+- [x] **C50** `med·WASM·risk` — export shallow shape gate: gate-passing garbage → mislabelled `internal` envelope or degenerate success → `browser.pl:246` · `export.pl:38` · *fixed 2026-07-06 (7b638a2): gate deepened to the audited depth; both probed mislabels now tagged validation errors on browser AND CLI (7 new tests incl. regressions); happy-path bytes unchanged*
+- [x] **C51** `med·WASM` — both wire directions hand-roll `atom_json_dict/3` (ex-C9 pattern) → `browser.pl:98,76` · *fixed 2026-07-06 (7b638a2): `atom_json_dict/3` both wire directions; 15-case dispatch battery byte-identical*
+- [x] **C52** `med·WASM` — `library(http/json)` alias in the qcompiled module + no explicit import list → `browser.pl:35` · `tests/browser.plt:19` · *fixed 2026-07-06 (7b638a2): `library(json)` + explicit import list in browser.pl and browser.plt; WASM-image load-noise check is a build-time follow-up*
 
 **Open — low**
 - [ ] **C17** `low` — silent-failure exports: lint_run profile / export_solve format / set_search_seed+set_verbose
@@ -1822,3 +1822,12 @@ one-line note`. Update the finding's status line and tick its box above at the s
   ":80 only three mutable globals" staleness in passing (C61's comment half; C61's
   plt/strategy-doc halves stay open). det/steadfastness re-probed on every edited
   entry: det=true, wrong-bound output fails cleanly.
+
+- **2026-07-06 (backlog, med batch)** — 13 med rows closed in two parallel lanes
+  (11 patches; commits `7b638a2` browser/export + `b02a057` engine). Lane A:
+  C49/C50/C51/C52 (verb registry, deepened export gate + 7 tests, atom_json_dict,
+  library(json)); C9 closed via C51. Lane B: C7/C8/C11/C12/C13/C14/C15/C16.
+  Gates on the merged tree: full suite green; arrange ratchet PASS (C16+C13 WINs,
+  −29..−817 inf/rung core, heavy tail −0.01..−0.03%); fill ratchet PASS
+  (load_inf −0.54% all 7 rungs from C13, search_inf ±0). Baselines re-recorded
+  (`0a1c79b`). Remaining med rows: C4, C5, C6-siblings — next pass.
