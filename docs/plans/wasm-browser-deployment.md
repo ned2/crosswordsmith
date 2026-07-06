@@ -648,11 +648,21 @@ is tracked debt (mostly already owned by §9.1).
 > `tests/browser.plt`), the `resource_error(stack)` tightening (error_probe now
 > asserts the typed `resource_exhausted` envelope), and the edge-case list
 > (unicode/empty/duplicate/concurrency all locked in browser.plt + headless).
-> **Still open:** sizing the heavy-capped 300KB constant off a measured peak;
-> the CI entry point (value_golden/headless/probes remain hand-run with a
-> hand-started server; `npm test` runs only headless); the HEAVY 36-word set is
-> now inline-triplicated (headless, error_probe, yield_probe) instead of loaded
-> from `fixtures/ladder_15x15_36w.pl`.
+> **Status 2026-07-06, harness slice:** the three leftovers are **closed** —
+> the CI entry point is `make test-wasm` (`wasm/test/run_all.sh`: preflights
+> the build tree + node_modules with loud fix-it messages, stages
+> `swipl-web.{js,wasm,data}` + wasm-qcompiles the qlf only when stale, then
+> value-golden → type lock → headless + error probe behind a self-managed
+> static server on a free port, exit codes aggregated; `yield_probe` opt-in
+> via `--yield`). The HEAVY 36-word set is single-sourced:
+> `wasm/test/heavy_words.mjs` parses it out of `fixtures/ladder_15x15_36w.pl`
+> at import time, so the probes cannot drift from the certified fixture. And
+> the heavy-capped constant is measurement-derived, no longer magic: a
+> stack_limit bisection under the wasm node swipl put the search's peak at
+> ~730–750KB (completes at 750000, trips at 720000) and the dispatch
+> machinery's floor under 180000, so 300000 keeps ~1.7× floor margin (can't
+> fire before the search) and ~2.4× peak margin (reliably trips) — see the
+> `HEAVY_STACK_CAP` comment in `error_probe.mjs`.
 
 - **No wasm output-*correctness* assertion** — `golden_parity` proves byte-identity
   *natively only*; `headless.mjs` only checks the status contains `placed`. A

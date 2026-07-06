@@ -22,7 +22,7 @@ VM cost model: [`docs/research/swi-vm-wasm-performance.md`](../docs/research/swi
 | `sdk/` | the JS/TS SDK: `crosswordsmith.mjs` (`createCrosswordsmith()` facade) + hand-written `crosswordsmith.d.ts` |
 | `client/` | the engine assets — served as static files; `harness.html` is the minimal SDK consumer (smoke/diagnostic page) |
 | `build/build-wasm.sh` | reproducible build: emsdk + deps → `swipl-web` → app `.qlf` |
-| `test/` | native + headless-Chrome regression tests (Playwright + system Chrome) |
+| `test/` | native + headless-Chrome regression tests (Playwright + system Chrome); `run_all.sh` is the one-command battery (`make test-wasm`) |
 
 ### `sdk/`
 | File | Role |
@@ -110,7 +110,28 @@ that sets it (e.g. `npx serve`).
 
 ## Test
 
-Layer by layer, cheapest first:
+**One command** — from a checkout with the swipl-devel wasm build tree present
+(built per `wasm/build/build-wasm.sh`; override `WASM_BUILD`/`WASM_SWIPL`):
+
+```bash
+make test-wasm                            # stage artifacts + run the full wasm battery
+make test-wasm WASM_TEST_ARGS=--yield     # + the ~60s gate #1 responsiveness/cancel probe
+```
+
+`wasm/test/run_all.sh` copies `swipl-web.{js,wasm,data}` into `client/` and
+re-qcompiles `crosswordsmith.qlf` **with the WASM node swipl** (see "Why the
+app `.qlf` must be wasm-produced" above) — both skipped when nothing changed —
+then runs the value golden, the type lock, and the headless-Chrome probes
+behind a self-managed static server on a free port, aggregating exit codes
+(any failing step ⇒ non-zero). One-time prereq — the tests drive **system
+Chrome** (Playwright `channel:'chrome'`), so skip the browser download:
+
+```bash
+( cd wasm/test && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install )
+```
+
+The same battery layer by layer, cheapest first — useful when bisecting a
+failure:
 
 **Native (no build, no browser)** — the dispatch spine itself is plunit-locked
 in `tests/browser.plt` (envelope fuzz, determinism/reset, edge matrix, value
@@ -146,7 +167,6 @@ alongside determinism, perturbation, and provenance checks.
 hand-written `Layout` type (DEC-5):
 
 ```bash
-( cd wasm/test && npm install )    # once; typescript + playwright
 node wasm/test/golden_type_check.mjs
 ```
 
@@ -170,6 +190,8 @@ node wasm/test/error_probe.mjs
 # PASS failure:infeasible-strict   — {status:failure, reason:unplaceable_words}
 # PASS heavy-default-completes     — ~38M search under the 256MB cap → 36 words
 # PASS heavy-capped-recoverable    — 300KB cap → {error.type:resource_exhausted}
+#      (the cap is derived from a measured ~750KB search peak — see the
+#       HEAVY_STACK_CAP comment in error_probe.mjs)
 ```
 
 **Inference-count parity (gate #2)** — proves the ratchet is a valid wasm proxy:

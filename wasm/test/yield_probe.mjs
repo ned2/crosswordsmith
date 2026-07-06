@@ -16,6 +16,7 @@
 // T1/T2/T3 asserts and a failure makes the process exit 1).
 
 import { chromium } from 'playwright';
+import { HEAVY as WORDS } from './heavy_words.mjs';
 
 const URL = process.env.URL || 'http://127.0.0.1:8080/client/harness.html?noauto=1';
 const SEARCH_INF = 38275505;
@@ -25,9 +26,6 @@ const SEARCH_INF = 38275505;
 const DRIFT_MAX_MS = 200;
 // terminate() is a synchronous thread kill; gate #1 measured it returns in ~0ms.
 const TERMINATE_MAX_MS = 500;
-const WORDS = ['DFAD','FCC','FCB','BEED','CBED','AFCC','DED','DEF','BFF','BCD','DBED','CDF',
-  'FFCC','CCD','EAB','FCF','EAA','EFAF','ABFA','BBEF','FFE','EFEE','ABCB','EFD','DACA','FAFB',
-  'ACA','CBF','DEAA','AFBF','AEFD','EADF','EDDE','CEF','CADF','FDD'];
 const WARM = ['CAT','CAR','ARC','RAT','TAR'];
 
 const browser = await chromium.launch({ channel: 'chrome', headless: true, args: ['--no-sandbox'] });

@@ -13,7 +13,8 @@
 //                          answer, not an error
 //   heavy-default          the ~38M search under the normal 256MB cap
 //                          COMPLETES (36 words) - the cap doesn't harm real work
-//   heavy-capped           the same search under a tiny 300KB stack cap ->
+//   heavy-capped           the same search under a tiny stack cap (see
+//                          HEAVY_STACK_CAP - sized off the measured peak) ->
 //                          {error.type:"resource_exhausted"} (the classifier's
 //                          resource_error(stack) mapping), NOT a wasm-heap-
 //                          growth tab abort. Only holds because the cap is
@@ -24,12 +25,10 @@
 // wasm/test. Run: node wasm/test/error_probe.mjs (exit 0 = all pass).
 
 import { chromium } from 'playwright';
+import { HEAVY } from './heavy_words.mjs';
 
 const URL = process.env.URL || 'http://127.0.0.1:8080/client/harness.html?noauto=1';
 const TOY = ['CAT', 'CAR', 'ARC', 'RAT', 'TAR'];
-const HEAVY = ['DFAD','FCC','FCB','BEED','CBED','AFCC','DED','DEF','BFF','BCD','DBED','CDF',
-  'FFCC','CCD','EAB','FCF','EAA','EFAF','ABFA','BBEF','FFE','EFEE','ABCB','EFD','DACA','FAFB',
-  'ACA','CBF','DEAA','AFBF','AEFD','EADF','EDDE','CEF','CADF','FDD'];
 const clues = (ws) => ws.map(a => ({ answer: a }));
 
 const browser = await chromium.launch({ channel: 'chrome', headless: true, args: ['--no-sandbox'] });
@@ -66,6 +65,20 @@ const recoverable = (a) => a.status === 'success' && a.result.words.length === 5
 const req = (params, extra = {}) =>
   ({ type: 'request', request: { v: 1, id: 'probe', verb: 'arrange', params }, ...extra });
 
+// heavy-capped's stack cap, sized from measurement (2026-07-06, stack_limit
+// threshold probe: set_prolog_flag(stack_limit, L) then browser_dispatch of
+// the HEAVY request under `node build.wasm/src/swipl.js`, bisecting L):
+//   - the HEAVY search completes at L=750000 and throws resource_error(stack)
+//     at L=720000 -> its true peak is ~730-750KB;
+//   - the dispatch machinery end-to-end (JSON parse -> resolvers -> a toy
+//     solve -> envelope emit) fits under L=180000.
+// 300000 sits ~1.7x ABOVE that machinery floor (so the error cannot fire
+// before the search proper - the failure would be a pass for the wrong
+// reason) and ~2.4x BELOW the measured peak (so the search reliably trips it,
+// with headroom for ratchet-driven peak drops). If heavy-capped starts
+// failing after an arrange perf win, re-run the bisection and re-derive.
+const HEAVY_STACK_CAP = 300000;
+
 const cases = [
   { name: 'validation:bad-seed',
     msg: req({ clues: clues(TOY), size: 5, seed: -1 }),
@@ -85,8 +98,8 @@ const cases = [
     ok: ({ reply, alive }) => reply.status === 'success'
       && reply.result.words.length === 36 && recoverable(alive) },
 
-  { name: 'heavy-capped-recoverable',   // 300KB « the search's ~0.5-1MB peak
-    msg: req({ clues: clues(HEAVY), size: 15 }, { stackLimit: 300000 }),
+  { name: 'heavy-capped-recoverable',   // cap « the measured ~750KB peak (see HEAVY_STACK_CAP)
+    msg: req({ clues: clues(HEAVY), size: 15 }, { stackLimit: HEAVY_STACK_CAP }),
     ok: ({ reply, alive }) => reply.status === 'error'
       && reply.error.type === 'resource_exhausted' && recoverable(alive) },
 ];

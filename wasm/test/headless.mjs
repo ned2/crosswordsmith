@@ -24,13 +24,11 @@
 // Run:  node wasm/test/headless.mjs
 
 import { chromium } from 'playwright';
-
-const url = process.env.URL || 'http://127.0.0.1:8080/client/harness.html';
 // fixtures/ladder_15x15_36w.pl's word set: ~38.3M inferences, several seconds
 // under wasm — long enough to cancel mid-flight.
-const HEAVY = ['DFAD','FCC','FCB','BEED','CBED','AFCC','DED','DEF','BFF','BCD','DBED','CDF',
-  'FFCC','CCD','EAB','FCF','EAA','EFAF','ABFA','BBEF','FFE','EFEE','ABCB','EFD','DACA','FAFB',
-  'ACA','CBF','DEAA','AFBF','AEFD','EADF','EDDE','CEF','CADF','FDD'];
+import { HEAVY } from './heavy_words.mjs';
+
+const url = process.env.URL || 'http://127.0.0.1:8080/client/harness.html';
 
 const browser = await chromium.launch({ channel: 'chrome', headless: true, args: ['--no-sandbox'] });
 const page = await browser.newPage();

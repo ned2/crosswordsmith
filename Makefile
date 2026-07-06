@@ -2,7 +2,7 @@
 
 SHELL := /bin/bash
 
-.PHONY: test unit golden update-golden fuzz bench bench-check bench-record bench-log bench-history bench-matrix
+.PHONY: test test-wasm unit golden update-golden fuzz bench bench-check bench-record bench-log bench-history bench-matrix
 
 BENCH_FORMAT ?= text
 BENCH_ARGS ?=
@@ -10,6 +10,19 @@ BENCH_ARGS ?=
 # Full suite: plunit tests + golden-output regression.
 test:
 	./run_tests.sh
+
+# One-command wasm battery (wasm/test/run_all.sh): stage swipl-web artifacts +
+# qcompile the app qlf with the WASM swipl (both skipped when fresh), then
+# value-golden, the type lock, and the headless-Chrome probes behind a
+# self-managed static server on a free port. Prereqs: the swipl-devel wasm
+# build tree (wasm/build/build-wasm.sh; override WASM_BUILD/WASM_SWIPL) and a
+# one-time `( cd wasm/test && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install )`.
+# The ~60s gate #1 probe is opt-in:
+#   make test-wasm
+#   make test-wasm WASM_TEST_ARGS=--yield
+WASM_TEST_ARGS ?=
+test-wasm:
+	wasm/test/run_all.sh $(WASM_TEST_ARGS)
 
 # Just the plunit unit/integration tests.
 unit:

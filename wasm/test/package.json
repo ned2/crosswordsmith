@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "test": "node headless.mjs",
+    "test:all": "bash run_all.sh",
     "probe": "node probe.mjs",
     "check-types": "node golden_type_check.mjs"
   },
