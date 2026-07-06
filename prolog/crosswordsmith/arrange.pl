@@ -118,11 +118,13 @@ check_target(L, T) :-
     T0 is (L + 1) // 2,
     ( check_target_override(K) -> T is min(T0, K) ; T = T0 ).
 
-% set_check_target(N): install the global --check-target ceiling (spec §7.2
-% reachability escape hatch). -1 (the CLI's "not given" sentinel) clears any
-% override; N>=1 lowers each word's target to min(ceil(L/2), N). Argument
-% validation (and the CLI error message) stays with the driver; this setter
-% fails on anything else rather than half-updating the state.
+%!  set_check_target(+N:integer) is semidet.
+%
+%   Install the global --check-target ceiling (spec §7.2 reachability escape
+%   hatch). -1 (the CLI's "not given" sentinel) clears any override; N>=1
+%   lowers each word's target to min(ceil(L/2), N). Argument validation (and
+%   the CLI error message) stays with the driver; this setter FAILS on
+%   anything else rather than half-updating the state.
 set_check_target(-1) :- !, retractall(check_target_override(_)).
 set_check_target(N) :-
     integer(N), N >= 1,
@@ -421,9 +423,15 @@ arrange_best_effort_solve(Words, GridLen, SizeMode) :-
 %         anchored at the bbox top-left. Square keeps the single-`gridLength`
 %         output schema (rectangular grids are out of scope, design-spec §3).
 
-% Plain emit: layout only, no diagnostics. This is the variant fill's
-% emit_fill(max) delegates to - fill has no arrange-solver compromises to
-% report, so its payload must not grow a diagnostics.arrange sub-object.
+%!  emit_arrange(+Numbered:list, +Words:list, +GridLen:integer,
+%!               +SizeMode:oneof([fixed,max])) is det.
+%
+%   Emit one placed layout as the canonical JSON object on the current
+%   output, framed by SizeMode (fixed: the N x N grid; max: the tight
+%   enclosing-square crop). Plain emit: layout only, no diagnostics. This is
+%   the variant fill's emit_fill(max) delegates to - fill has no
+%   arrange-solver compromises to report, so its payload must not grow a
+%   diagnostics.arrange sub-object.
 emit_arrange(Numbered, Words, GridLen, SizeMode) :-
     arrange_layout_dict(Numbered, Words, GridLen, SizeMode, Payload),
     current_output(Out),
@@ -494,30 +502,48 @@ cropped_coord(GridLen, MinR, MinC, Cell, [R, C]) :-
     cell_coord(GridLen, Cell, [R0, C0]),
     R is R0 - MinR, C is C0 - MinC.
 
-% Drop-contract dispatch (strict | best_effort) -> the matching solver. The
-% crosswordsmith CLI is the entry point; it calls arrange_solve/4 (and the
-% fragment/candidates/enumerate solvers) directly on a loaded Words list.
+%!  arrange_solve(+Words:list, +GridLen:integer,
+%!                +Drop:oneof([strict,best_effort]),
+%!                +SizeMode:oneof([fixed,max])) is semidet.
+%
+%   The `arrange` CLI seam: solve Words on a GridLen x GridLen grid under
+%   the Drop contract and emit the layout (with diagnostics) on stdout,
+%   framed by SizeMode; success summaries go to stderr under --verbose. On
+%   any non-placed outcome: report on stderr and FAIL with no stdout (the
+%   json-output-spec §6.3 "no output / non-zero exit" contract). Throws
+%   duplicate_answer(_) on a duplicate input answer.
+%
+%   Drop-contract dispatch (strict | best_effort) -> the matching solver. The
+%   crosswordsmith CLI is the entry point; it calls arrange_solve/4 (and the
+%   fragment/candidates/enumerate solvers) directly on a loaded Words list.
 arrange_solve(Words, GridLen, strict, SizeMode) :-
     arrange_strict_solve(Words, GridLen, SizeMode).
 arrange_solve(Words, GridLen, best_effort, SizeMode) :-
     arrange_best_effort_solve(Words, GridLen, SizeMode).
 
-% arrange_outcome(+Words, +GridLen, +Drop, +SizeMode, -Outcome)
-% The browser/WASM envelope seam (wasm-sdk-strategy §3, DEC-7): same search as
-% arrange_solve/4 but EMITS NOTHING and NEVER FAILS — it returns a tagged
-% outcome carrying the diagnostics-bearing layout dict, so the caller
-% (crosswordsmith_browser) can wrap every result in a discriminated envelope
-% instead of collapsing the non-happy paths into a bare fail. Tags:
-%   placed(Dict)       strict search placed a full interlock
-%   not_proven         the inference budget elapsed first (feasibility open)
-%   infeasible(Bad)    strict search completed with no full placement; Bad =
-%                      the genuinely-uncrossable answers ([] = interlock/size)
-%   best_effort(Dict)  best-effort placement (drops ride
-%                      Dict.diagnostics.arrange.dropped)
-%   nothing_placeable  best-effort could not place a single word
-% Throws duplicate_answer(_) like the solve seams; Dict is built by
-% arrange_diag_layout_dict/5 (identical to the emitted payload, framed by
-% SizeMode) but never written, so the envelope nests it as a live dict (DEC-8).
+%!  arrange_outcome(+Words:list, +GridLen:integer,
+%!                  +Drop:oneof([strict,best_effort]),
+%!                  +SizeMode:oneof([fixed,max]), -Outcome) is det.
+%
+%   The browser/WASM envelope seam (wasm-sdk-strategy §3, DEC-7): same search
+%   as arrange_solve/4 but EMITS NOTHING and NEVER FAILS — it returns a
+%   tagged outcome carrying the diagnostics-bearing layout dict, so the
+%   caller (crosswordsmith_browser) can wrap every result in a discriminated
+%   envelope instead of collapsing the non-happy paths into a bare fail.
+%   Tags:
+%
+%     placed(Dict)       strict search placed a full interlock
+%     not_proven         the inference budget elapsed first (feasibility open)
+%     infeasible(Bad)    strict search completed with no full placement; Bad =
+%                        the genuinely-uncrossable answers ([] = interlock/size)
+%     best_effort(Dict)  best-effort placement (drops ride
+%                        Dict.diagnostics.arrange.dropped)
+%     nothing_placeable  best-effort could not place a single word
+%
+%   Throws duplicate_answer(_) like the solve seams; Dict is built by
+%   arrange_diag_layout_dict/5 (identical to the emitted payload, framed by
+%   SizeMode) but never written, so the envelope nests it as a live dict
+%   (DEC-8).
 arrange_outcome(Words, GridLen, strict, SizeMode, Outcome) :-
     !,
     check_unique_answers(Words),
@@ -617,13 +643,21 @@ cell_pair_to_num(GridLen, Answer, Pair, Num) :-
     ;   throw(error(fragment_invalid_cell(Answer, Pair), _))
     ).
 
-% Read a fragment file (JSON - the emit format) into GridLen + frags.
+%!  load_fragment(+File:atom, -GridLen:integer, -Frags:list) is det.
+%
+%   Read a fragment file (JSON - the emit format, made partial) into its
+%   GridLen and frag(Answer, Dir, Start, CellNums) terms. Validates shape
+%   only (throws the shaped fragment_* errors below); reconciliation against
+%   --input and legality are seed_from_fragment's job.
 load_fragment(File, GridLen, Frags) :-
     setup_call_cleanup(open(File, read, S), json_read_dict(S, Dict), close(S)),
     fragment_dict_words(Dict, GridLen, Frags).
 
-% The fragment's gridLength sets N; an explicit --size is redundant and an
-% error if it disagrees (design-spec §6.6). Ready for the Phase-7 CLI.
+%!  reconcile_fragment_size(+FragGridLen:integer, +OptSize, -GridLen:integer) is det.
+%
+%   The fragment's gridLength sets N; an explicit --size (OptSize `none` when
+%   not given) is redundant and an error if it disagrees (design-spec §6.6):
+%   throws fragment_size_mismatch on a conflict.
 reconcile_fragment_size(FragGridLen, none, FragGridLen) :- !.
 reconcile_fragment_size(FragGridLen, FragGridLen, FragGridLen) :- !.
 reconcile_fragment_size(FragGridLen, OptSize, _) :-
@@ -789,9 +823,18 @@ arrange_fragment_best_effort(Words, Frags, GridLen, Numbered, Reward, NumPlaced,
 
 
 % --- fragment solve entry points (emit + report) ---------------------------
-% Mirror arrange_strict_solve/arrange_best_effort_solve: emit on stdout, report
-% on stderr; on any non-placed outcome report and fail with no stdout layout.
 
+%!  arrange_fragment_solve(+Words:list, +Frags:list, +GridLen:integer,
+%!                         +Drop:oneof([strict,best_effort]),
+%!                         +SizeMode:oneof([fixed,max])) is semidet.
+%
+%   The fragment-seeded `arrange` CLI seam: pin every fragment word of Frags
+%   (load_fragment/3) at exactly its cells, solve the remaining Words around
+%   the seed under the Drop contract, and emit/report exactly as
+%   arrange_solve/4 does - emit on stdout, report on stderr; on any
+%   non-placed outcome report and FAIL with no stdout layout. Throws
+%   duplicate_answer(_) and the shaped fragment_* validation errors
+%   (AC-FRAG-1/2: answer not in --input, inconsistent cells, illegal pin).
 arrange_fragment_solve(Words, Frags, GridLen, strict, SizeMode) :-
     check_unique_answers(Words),
     arrange_fragment_strict(Words, Frags, GridLen, Numbered, Reward, Outcome),
@@ -983,9 +1026,16 @@ emit_candidates(NumberedLayouts, Words, GridLen, SizeMode) :-
 candidate_dict(Words, GridLen, SizeMode, Numbered, Dict) :-
     arrange_diag_layout_dict(Numbered, Words, GridLen, SizeMode, Dict).
 
-% Solve + emit the candidates array on stdout, report requested/returned/tau on
-% stderr (INV-3: a short return is reported, never silent). Fails (no stdout) if
-% nothing is placeable.
+%!  arrange_candidates_solve(+Words:list, +GridLen:integer,
+%!                           +DropContract:oneof([strict,best_effort]),
+%!                           +SizeMode:oneof([fixed,max]), +K:integer) is semidet.
+%
+%   The `--candidates K` CLI seam: solve + emit up to K meaningfully distinct
+%   layouts as a JSON ARRAY on stdout (each element a valid fragment for
+%   re-ingestion), report requested/returned/tau on stderr (INV-3: a short
+%   return is reported, never silent; the got-what-you-asked-for summary is
+%   --verbose only). FAILS (no stdout) if nothing is placeable. Throws
+%   duplicate_answer(_) on a duplicate input answer.
 arrange_candidates_solve(Words, GridLen, DropContract, SizeMode, K) :-
     check_unique_answers(Words),
     (   arrange_candidates(Words, GridLen, DropContract, K, Layouts, Returned),
@@ -1022,7 +1072,12 @@ arrange_enumerate(Words, GridLen, Num) :-
     % resetting here too would double-fire (C1: one reset per external call).
     all_crossword(Strat, GridLen, Words, _StartLoc, Num).
 
-% Count + print the enumeration on stdout (a bare integer), as the old CLI did.
+%!  arrange_enumerate_solve(+Words:list, +GridLen:integer) is det.
+%
+%   The `--enumerate` CLI seam: count every feasible full placement of Words
+%   on the GridLen x GridLen grid (all four start corners, the production
+%   default strategy) and print the count on stdout as a bare integer, as the
+%   old CLI did. Throws duplicate_answer(_) on a duplicate input answer.
 arrange_enumerate_solve(Words, GridLen) :-
     check_unique_answers(Words),
     arrange_enumerate(Words, GridLen, Num),

@@ -48,6 +48,14 @@
 
 
 % --- load + parse the mask ---------------------------------------------------
+
+%!  stockgrid_load(+File:atom, -Grid) is det.
+%
+%   Read a stock-grid JSON file into grid(Name, Size, Mask), Mask a list of
+%   Size row char-lists. Requires {name, size:N, mask:[N strings of length
+%   N]}; throws error(stockgrid_invalid(File), _) otherwise. An optional
+%   "symmetry" annotation in the file is ignored (the validator RE-DERIVES
+%   the actual symmetry from the mask).
 stockgrid_load(File, grid(Name, Size, Mask)) :-
     setup_call_cleanup(open(File, read, S), json_read_dict(S, Dict), close(S)),
     (   is_dict(Dict),
@@ -61,7 +69,10 @@ stockgrid_load(File, grid(Name, Size, Mask)) :-
 
 row_string(RowStr, Chars) :- string_chars(RowStr, Chars).
 
-% White (light) cell numbers (1-based, row-major): any mask char that is not '#'.
+%!  mask_white_cells(+Mask:list, +Size:integer, -WhiteSet:ordset) is det.
+%
+%   The white (light) cell numbers of a mask (1-based, row-major): any mask
+%   char that is not '#'. An ordset, for the run/validation set tests.
 mask_white_cells(Mask, Size, WhiteSet) :-
     findall(Cell,
             ( nth0(R, Mask, Chars), nth0(C, Chars, Ch), Ch \== '#',
@@ -84,8 +95,12 @@ grid_lights(Size, WhiteSet, Numbered) :-
     append(Across, Down, Lights),
     once(assign_clue_numbers(Lights, Numbered)).
 
-% Backtrack over the light cell-lists (maximal white runs >= 2) of one direction.
-% Exposed so `fill` can build its slots from the same derivation.
+%!  grid_run(+Size:integer, +WhiteSet:ordset, +Dir:oneof([across,down]),
+%!           -Cells:list(integer)) is nondet.
+%
+%   Backtrack over the light cell-lists (maximal white runs of length >= 2)
+%   of one direction. Exposed so `fill` can build its slots from the same
+%   derivation the validator uses.
 grid_run(Size, WhiteSet, across, Cells) :-
     Smax is Size - 1, between(0, Smax, R),
     Lo is R * Size + 1, Hi is R * Size + Size, numlist(Lo, Hi, RowCells),
@@ -129,8 +144,14 @@ light_cell_set(Lights, Set) :-
 
 
 % --- validate (the design-time legality check; reuses lint blocked-uk) -------
-% Verdict is 'PASS' / 'WARN' / 'FAIL'. A grid is legal iff Verdict \== 'FAIL'
-% AND it has no isolated white cells. Fails lists the blocking reasons.
+
+%!  stockgrid_validate(+Grid, -Verdict:atom, -Fails:list) is det.
+%
+%   Validate a grid(Name, Size, Mask) term: derive its lights and run lint's
+%   blocked-uk profile over them. Verdict is 'PASS' / 'WARN' / 'FAIL' (an
+%   isolated white cell forces 'FAIL'). A grid is legal iff Verdict \==
+%   'FAIL'. Fails lists the blocking reasons as fail(Rule, NumOrGrid,
+%   CellsOrNone) terms.
 stockgrid_validate(grid(_Name, Size, Mask), Verdict, Fails) :-
     mask_white_cells(Mask, Size, WhiteSet),
     grid_lights(Size, WhiteSet, Words),
@@ -159,12 +180,18 @@ stockgrid_validate(grid(_Name, Size, Mask), Verdict, Fails) :-
     ( Isolated == [] -> IsoFails = [] ; IsoFails = [fail(isolated_cells, grid, Isolated)] ),
     append([WordFails, GridFails, IsoFails], Fails).
 
+%!  stockgrid_validate_file(+File:atom, -Verdict:atom, -Fails:list) is det.
+%
+%   stockgrid_load/2 + stockgrid_validate/3 on one grid file. Throws
+%   stockgrid_invalid on a malformed file.
 stockgrid_validate_file(File, Verdict, Fails) :-
     stockgrid_load(File, Grid),
     stockgrid_validate(Grid, Verdict, Fails).
 
-% Design-time report on stderr for one grid file (the "draft -> lint -> iterate"
-% loop); succeeds iff the grid is legal (Verdict \== 'FAIL').
+%!  stockgrid_report(+File:atom) is semidet.
+%
+%   Design-time report on stderr for one grid file (the "draft -> lint ->
+%   iterate" loop); succeeds iff the grid is legal (Verdict \== 'FAIL').
 stockgrid_report(File) :-
     stockgrid_load(File, Grid),
     Grid = grid(Name, Size, _Mask),

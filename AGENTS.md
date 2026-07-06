@@ -49,6 +49,12 @@ the README.
 - Keep behavioral changes covered by focused plunit tests and, when JSON output
   intentionally changes, update and review the golden fixture.
 - Prefer the existing Prolog style and SWI-Prolog libraries already in use.
+- Every exported predicate carries a PlDoc `%!` header with mode annotations
+  (`+`/`-`/`?`) and a determinism tag (`det`/`semidet`/`nondet`/`multi`).
+  The tags are load-bearing, verified claims (probed with `deterministic/1`
+  and failure-path checks), not aspirations — when you add or change an
+  export, verify its determinism before writing the tag, and keep the header
+  in sync. Internal predicates use plain `%` prose as needed.
 - Do not change the JSON input or output contract without updating the
   corresponding spec, README, tests, and golden output as needed.
 

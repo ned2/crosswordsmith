@@ -38,8 +38,16 @@ export_load(File, Dict) :-
     setup_call_cleanup(open(File, read, S), json_read_dict(S, Dict0), close(S)),
     export_layout_dict(Dict0, Dict).
 
-% The shape gate, factored file-free so the browser path validates through the
-% SAME predicate the CLI does (no duplicated validation to drift). Depth (C50):
+%!  export_layout_dict(+Dict0:dict, -Dict:dict) is det.
+%
+%   The canonical-layout shape gate: Dict is Dict0 unchanged if it carries
+%   the structure the transforms dereference (positive integer gridLength,
+%   grid rows that are lists, words[] entries each an object with
+%   answer/direction/cells); throws error(export_invalid_layout, _)
+%   otherwise. Factored file-free so the browser path validates through the
+%   SAME predicate the CLI does (no duplicated validation to drift).
+
+% Depth (C50):
 % a cheap SHAPE check on everything the transforms dereference structurally —
 % each grid row must be a list and each words[] entry an object carrying
 % answer/direction/cells — so gate-passing garbage can no longer surface as a
@@ -87,6 +95,13 @@ word_clue_text(W, Text) :-
 
 
 % --- enumeration: derive "(5,5)" / "(4-5)" from spaces/hyphens (§6.3) ---------
+
+%!  answer_enumeration(+Answer, -Enum:atom) is det.
+%
+%   Derive the printed enumeration - "(5,5)" for a space, "(4-5)" for a
+%   hyphen - from the answer's separators (§6.3). Answer may be an atom or a
+%   string. Authoring typos (leading/trailing/adjacent separators) produce no
+%   empty segment (R5); an all-separator answer collapses to "(0)".
 answer_enumeration(Answer, Enum) :-
     ( atom(Answer) -> atom_chars(Answer, Chars) ; string_chars(Answer, Chars) ),
     enum_tokens(Chars, 0, Tokens),
@@ -124,9 +139,16 @@ enum_clean_pairs([S, R | Rest], Emitted, Out) :-
 
 
 % --- ipuz v2 -----------------------------------------------------------------
-% Invert null->"#", split the merged cell into parallel puzzle/solution arrays,
-% group words by direction into a clues dict, add version/kind/dimensions.
-% ipuz carries no symmetry field - symmetry stays a crosswordsmith lint concept.
+
+%!  layout_to_ipuz(+Dict:dict, -Ipuz:dict) is semidet.
+%
+%   Transform a canonical layout dict (export_layout_dict/2-validated) into
+%   an ipuz v2 crossword dict: invert null->"#", split the merged cell into
+%   parallel puzzle/solution arrays, group words by direction into a clues
+%   dict, add version/kind/dimensions. ipuz carries no symmetry field -
+%   symmetry stays a crosswordsmith lint concept. On gate-passing malformed
+%   CONTENT (e.g. a bad cell) it FAILS by design with no partial output
+%   (P17) - the shape gate is not schema validation.
 layout_to_ipuz(Dict,
     _{ version: "http://ipuz.org/v2",
        kind: ["http://ipuz.org/crossword#1"],
@@ -184,9 +206,15 @@ ipuz_clue(W, Num, _{number:Num, clue:Text, enumeration:Enum}) :-
 
 
 % --- Exolve ------------------------------------------------------------------
-% Plain text: a grid of letters (white) and '.' (block), then the across/down
-% clue lines (number, clue, enumeration). Exolve numbers the grid itself; our
-% standard numbering matches, so the clue-line numbers align.
+
+%!  layout_to_exolve(+Dict:dict, -Text:atom) is semidet.
+%
+%   Transform a canonical layout dict (export_layout_dict/2-validated) into
+%   Exolve plain text: a grid of letters (white) and '.' (block), then the
+%   across/down clue lines (number, clue, enumeration). Exolve numbers the
+%   grid itself; our standard numbering matches, so the clue-line numbers
+%   align. On gate-passing malformed CONTENT it FAILS by design with no
+%   partial output (P17), like layout_to_ipuz/2.
 layout_to_exolve(Dict, Text) :-
     get_dict(gridLength, Dict, N),
     get_dict(grid, Dict, Rows),
@@ -230,6 +258,14 @@ exolve_clue_line(W, Num, Line) :-
 
 
 % --- entry point -------------------------------------------------------------
+
+%!  export_solve(+File:atom, +Format:oneof([ipuz,exolve])) is semidet.
+%
+%   The `export` CLI seam: load + shape-gate the canonical layout File and
+%   write the transformed puzzle on the current output (ipuz: a JSON object;
+%   exolve: plain text). Throws error(export_invalid_layout, _) on a
+%   malformed layout shape; FAILS (no partial output, P17) if gate-passing
+%   malformed content defeats the transform.
 export_solve(File, ipuz) :-
     export_load(File, Dict),
     layout_to_ipuz(Dict, Ipuz),

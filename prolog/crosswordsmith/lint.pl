@@ -66,6 +66,12 @@ lint_profile(american,
 lint_profile('barred-ximenean',
     [ min_length-fail, checked_band-fail, connectivity-fail, symmetry-warn ]).
 
+%!  lint_known_profile(+Profile:atom) is semidet.
+%!  lint_known_profile(-Profile:atom) is multi.
+%
+%   True iff Profile is a named lint profile (the CLI's and browser's
+%   --profile validation). With Profile unbound, enumerates the known
+%   profiles.
 lint_known_profile(P) :- lint_profile(P, _).
 
 per_word_rule(min_length).
@@ -80,10 +86,23 @@ grid_rule(symmetry).
 
 
 % --- load a canonical layout (the emit format) into placed-word dicts --------
+
+%!  lint_load(+File:atom, -GridLen:integer, -PlacedWords:list) is det.
+%
+%   Read a canonical layout file (the emit format) into its grid length and
+%   placed-word pw/8 records, via lint_dict_layout/3. Throws the shaped
+%   lint_* errors below on a malformed layout.
 lint_load(File, GridLen, PlacedWords) :-
     setup_call_cleanup(open(File, read, S), json_read_dict(S, Dict), close(S)),
     lint_dict_layout(Dict, GridLen, PlacedWords).
 
+%!  lint_dict_layout(+Dict:dict, -GridLen:integer, -PlacedWords:list) is det.
+%
+%   The file-free layout seam (browser.pl's params path): map a parsed
+%   canonical layout dict to its grid length and placed-word pw/8 records.
+%   lint reads only answer/dir/cells/len/num, so each record's Letters/Start/
+%   End are left unbound (the metric layer touches only cells/dir, which are
+%   bound here). Throws the shaped lint_* errors below on a malformed layout.
 lint_dict_layout(Dict, GridLen, PlacedWords) :-
     (   is_dict(Dict), get_dict(gridLength, Dict, GridLen),
         integer(GridLen), GridLen > 0
@@ -135,6 +154,15 @@ filled_cells(PlacedWords, Filled) :-
 
 
 % --- the run: build the report dict ------------------------------------------
+
+%!  lint_run(+PlacedWords:list, +GridLen:integer, +Profile:atom,
+%!           +AllowAsym:boolean, -Report:dict) is det.
+%
+%   Evaluate every rule of Profile over the placed layout and build the full
+%   report dict {profile, allowAsymmetry, verdict, summary, grid, words} -
+%   verdict is the worst severity ('PASS'/'WARN'/'FAIL'). AllowAsym = true
+%   downgrades a symmetry hard-FAIL to WARN (AC-LINT-3). Pure: no output,
+%   no side effects (stockgrid.pl consumes it as a library validator).
 lint_run(PlacedWords, GridLen, Profile, AllowAsym, Report) :-
     lint_profile(Profile, Rules),
     filled_cells(PlacedWords, Filled),
@@ -317,8 +345,13 @@ tally(Sevs, Pass, Warn, Fail) :-
 
 
 % --- entry point -------------------------------------------------------------
-% Emit the report on stdout (always, regardless of verdict - AC-LINT-1) and bind
-% Verdict for the caller's exit code (AC-LINT-2). Malformed input throws.
+
+%!  lint_solve(+File:atom, +Profile:atom, +AllowAsym:boolean, -Verdict:atom) is det.
+%
+%   The `lint` CLI seam: load the layout File, run Profile over it, emit the
+%   report dict on stdout (ALWAYS, regardless of verdict - AC-LINT-1) and
+%   bind Verdict ('PASS'/'WARN'/'FAIL') for the caller's exit code
+%   (AC-LINT-2). Malformed input throws (the shaped lint_* errors below).
 lint_solve(File, Profile, AllowAsym, Verdict) :-
     lint_load(File, GridLen, PlacedWords),
     lint_run(PlacedWords, GridLen, Profile, AllowAsym, Report),

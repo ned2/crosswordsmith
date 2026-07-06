@@ -63,11 +63,17 @@
                 layout_to_exolve/2
               ]).
 
-% browser_dispatch(+Verb:atom, +Payload, -JsonEnvelope:atom)
-% Payload is the request envelope {v, id, verb, params, meta?} as a JSON
-% string/atom (what JSON.stringify hands the Worker). JsonEnvelope is returned
-% as an ATOM: an atom crosses the WASM boundary as a clean JS String, whereas a
-% Prolog string arrives wrapped as a Prolog.String instance (strategy §4.3).
+%!  browser_dispatch(+Verb:atom, +Payload, -JsonEnvelope:atom) is det.
+%
+%   The browser/WASM entry point: dispatch one request and return its wire
+%   envelope. Payload is the request envelope {v, id, verb, params, meta?}
+%   as a JSON string/atom (what JSON.stringify hands the Worker).
+%   JsonEnvelope is returned as an ATOM: an atom crosses the WASM boundary
+%   as a clean JS String, whereas a Prolog string arrives wrapped as a
+%   Prolog.String instance (strategy §4.3). NEVER fails and never throws
+%   (strategy §10): every outcome - success, failure, parse error, unknown
+%   verb, engine error, even a plain-failing dispatch - is classified into a
+%   discriminated success/failure/error envelope.
 browser_dispatch(Verb, Payload, JsonEnvelope) :-
     reset_request_state,
     catch(parse_request(Payload, Req), ParseErr, Req = invalid(ParseErr)),

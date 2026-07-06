@@ -127,36 +127,54 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
-% The variable-ordering strategies the solver can run. `baseline` is the
-% original input-order search; `mrv`, `mrv_capped` and `mrv_inc` are the
-% fail-first variants (see select_word/9 and assign_words_inc/9). Adding a
-% strategy is a one-line entry here plus a select_word/9 clause.
+%!  strategies(-Strategies:list(atom)) is det.
+%
+%   The variable-ordering strategies the solver can run. `baseline` is the
+%   original input-order search; `mrv`, `mrv_capped` and `mrv_inc` are the
+%   fail-first variants (see select_word/9 and assign_words_inc/9). Adding a
+%   strategy is a one-line entry here plus a select_word/9 clause.
 strategies([baseline, mrv, mrv_capped, mrv_inc]).
 
-% The production default when no --strategy is given. mrv_inc (incremental
-% capped MRV) is the best general strategy: it tames the pathological dense
-% search (~1300x fewer inferences than baseline) while keeping the large-grid
-% per-node cost low. See docs/experiments.md (entry E5) for the evidence.
+%!  default_strategy(-Strategy:atom) is det.
+%
+%   The production default when no --strategy is given. mrv_inc (incremental
+%   capped MRV) is the best general strategy: it tames the pathological dense
+%   search (~1300x fewer inferences than baseline) while keeping the large-grid
+%   per-node cost low. See docs/experiments.md (entry E5) for the evidence.
 default_strategy(mrv_inc).
 
+%!  valid_strategy(+Strategy:atom) is semidet.
+%
+%   True iff Strategy is a registered strategy name (strategies/1).
 valid_strategy(S) :-
     strategies(Ss),
     memberchk(S, Ss).
 
+%!  require_strategy(+Strategy:atom) is det.
+%
+%   Like valid_strategy/1, but throws error(unknown_strategy(S), _) instead
+%   of failing - the seam that turns an unknown strategy atom into a rendered
+%   error; every CLI/API entry runs it before searching.
 require_strategy(S) :-
     valid_strategy(S),
     !.
 require_strategy(S) :-
     throw(error(unknown_strategy(S), _)).
 
+%!  valid_loc(+Loc:atom) is semidet.
+%
+%   True iff Loc is one of the named start locations (start_locs/1).
 valid_loc(Loc) :-
     start_locs(Locs),
     memberchk(Loc, Locs).
 
-% Run Goal with its output sent to a file, or straight to stdout when '' (no
-% --out). For a file the output is captured first and written only if Goal
-% succeeds, so a no-solution run leaves no empty file behind; the stdout path
-% is the unchanged direct write.
+%!  with_output(+File:atom, :Goal) is semidet.
+%
+%   Run Goal with its output sent to File, or straight to stdout when '' (no
+%   --out). For a file the output is captured first and written only if Goal
+%   succeeds, so a no-solution run leaves no empty file behind; the stdout
+%   path is the unchanged direct write. Determinism follows Goal: det when
+%   Goal is det, fails when Goal fails.
 :- meta_predicate with_output(+, 0).   % Goal is called (P12)
 with_output('', Goal) :-
     !,
@@ -173,9 +191,19 @@ with_output(File, Goal) :-
 % must NOT go through verbose_report.
 :- dynamic verbose_mode/0.
 
+%!  set_verbose(+OnOff:boolean) is semidet.
+%
+%   Set (true) or clear (false) the verbosity gate verbose_report/2 reads.
+%   Fails on anything other than true/false rather than half-updating state
+%   (browser.pl's per-request reset relies on the false path being cheap and
+%   idempotent).
 set_verbose(true)  :- ( verbose_mode -> true ; assertz(verbose_mode) ).
 set_verbose(false) :- retractall(verbose_mode).
 
+%!  verbose_report(+Format, +Args:list) is det.
+%
+%   format/3 Format with Args to user_error iff verbose mode is set
+%   (set_verbose/1); otherwise do nothing.
 verbose_report(Fmt, Args) :-
     ( verbose_mode -> format(user_error, Fmt, Args) ; true ).
 
@@ -187,6 +215,13 @@ verbose_report(Fmt, Args) :-
 % interchange format; Prolog fixture files define a clues/1 term in the same
 % shape. Everything after this loader is unchanged.
 
+%!  load_clues(+File:atom, -Words:list) is det.
+%
+%   Load a clue file into the internal Words list ([[Answer, MetaDict], ...],
+%   answers normalised to atoms). Dispatches on the file extension: .json
+%   (the interchange format, via doc_to_words/2) or .pl (a Prolog fixture
+%   defining a clues/1 term). Throws unsupported_clue_file for any other
+%   extension, and the schema errors below for malformed content.
 load_clues(File, Words) :-
     file_name_extension(_, Ext0, File),
     downcase_atom(Ext0, Ext),
@@ -226,13 +261,18 @@ read_clues_json(File, Words) :-
     setup_call_cleanup(open(File, read, S), json_read_dict(S, Doc), close(S)),
     doc_to_words(Doc, Words).
 
-% Map the parsed document to [[AtomAnswer, MetaDict], ...], the form clues/1
-% already returns. json_read_dict does not check shape and atom_string/2
-% silently coerces (a number or JSON null would become a bogus atom), so each
-% type is guarded *before* conversion. Schema violations throw error/2 terms
-% rendered by the prolog:error_message//1 clauses below. Answers are
-% normalised to atoms so the emit-time answer_meta_assoc/2 join and
-% check_unique_answers/1 (both ==-based) behave identically across sources.
+%!  doc_to_words(+Doc:dict, -Words:list) is det.
+%
+%   Map a parsed clues document to [[AtomAnswer, MetaDict], ...], the form
+%   clues/1 already returns - the file-free JSON-document input seam
+%   (browser.pl's params path). Schema violations throw error/2 terms
+%   rendered by the prolog:error_message//1 clauses below.
+%
+%   json_read_dict does not check shape and atom_string/2 silently coerces (a
+%   number or JSON null would become a bogus atom), so each type is guarded
+%   *before* conversion. Answers are normalised to atoms so the emit-time
+%   answer_meta_assoc/2 join and check_unique_answers/1 (both ==-based)
+%   behave identically across sources.
 doc_to_words(Doc, Words) :-
     (   is_dict(Doc), get_dict(clues, Doc, Clues), is_list(Clues)
     ->  true
@@ -295,20 +335,28 @@ crossword(Strategy, GridLen, Words, StartLoc) :-
     emit_json(NumberedPlacedWords, Words, GridLen).
 
 
-% Top level predicate for finding the number of solutions for the crossword
-% for a specific starting position (or all start positions when StartLoc is
-% unbound). aggregate_all/3 runs the search once and counts deterministically;
-% the previous length(Sols,Num)/findall idiom re-ran the entire search once per
-% candidate length and left a (failing) choicepoint behind.
+%!  all_crossword(+Strategy:atom, +GridLen:integer, +Words:list,
+%!                ?StartLoc:atom, -Num:integer) is det.
+%
+%   The number of solutions of the crossword search for a specific starting
+%   position (or all start positions when StartLoc is unbound).
+%   aggregate_all/3 runs the search once and counts deterministically.
+%
+%   (History: the previous length(Sols,Num)/findall idiom re-ran the entire
+%   search once per candidate length and left a (failing) choicepoint behind.)
 all_crossword(Strategy, GridLen, Words, StartLoc, Num) :-
     aggregate_all(count,
                   find_crossword(Strategy, GridLen, Words, StartLoc, _Grid, _Placed),
                   Num).
 
 
-% reset_search_memos: abolish the two tabled search memos (pair_crossings/3,
-% answer_letters/2) so the next search starts from empty tables.
+%!  reset_search_memos is det.
 %
+%   Abolish the two tabled search memos (pair_crossings/3, answer_letters/2)
+%   so the next search starts from empty tables. Every TOP-LEVEL search entry
+%   runs this exactly once on entry - read the seam invariant below (audit
+%   C1/C48) before adding, moving, or removing a call.
+
 % THE SEAM INVARIANT (audit C1/C48): every TOP-LEVEL search entry runs this
 % exactly ONCE on entry, all strategies and paths alike - find_crossword/6
 % below (which crossword/3,4 and all_crossword/5 route through; the benchmark
@@ -365,6 +413,16 @@ reset_search_memos :-
 find_crossword(GridLen, Words, Loc, Grid, PlacedWords) :-
     default_strategy(Strategy),
     find_crossword(Strategy, GridLen, Words, Loc, Grid, PlacedWords).
+
+%!  find_crossword(+Strategy:atom, +GridLen:integer, +Words:list,
+%!                 ?StartLoc:atom, -Grid, -PlacedWords:list) is nondet.
+%
+%   Construct a full interlocking placement of Words on a GridLen x GridLen
+%   grid under Strategy (strategies/1), starting at StartLoc (one of
+%   start_locs/1; leave unbound to sweep all four). Grid is the solved
+%   gs(LetterGrid, BoundaryGrid) bundle; PlacedWords the pw/8 records, clue
+%   numbers unbound (assign_clue_numbers/2 is the numbering step). Backtracks
+%   over every solution; strategies only REORDER the same search tree.
 
 % find_crossword/6 is a TOP-LEVEL search entry, so it owns a
 % reset_search_memos/0 seam: exactly one memo reset per external call, ALL
@@ -560,6 +618,20 @@ count_upto2(Goal, Count) :-
 % The cache is threaded as a plain argument, so backtracking restores prior
 % caches automatically. Counts are capped at 2 (as in mrv_capped).
 
+%!  assign_words_inc(+Words:list, +Placed0:list, +State0, +GridLen:integer,
+%!                   ?Start:integer, ?Dir:atom, +GSIn, -GSOut,
+%!                   -PlacedWords:list) is nondet.
+%
+%   The mrv_inc search driver: place every word of Words onto the gs/2
+%   bundle GSIn, threading the incremental placement-count cache State0
+%   (`none` to start; state(CountAssoc, LastPlacedLetters) internally).
+%   Start/Dir are the ground seed cell/direction on the first call and
+%   fresh variables afterwards (find_intersecting_word/6 grounds them per
+%   placement). Placed0 is the already-placed pw/8 list - [] for a fresh
+%   search; arrange.pl's fragment path seeds it. GSIn and GSOut are the
+%   same term (trail-undone in-place binding). Backtracks over every
+%   completion of the placement.
+
 % State is `none` (no cache yet) or state(CountAssoc, LastPlacedLetters).
 % The [_|_] head keeps the clauses index-disjoint on arg 1 ([] vs cons): a
 % terminal-[] call exits without leaving a choicepoint into this clause.
@@ -593,16 +665,21 @@ assign_words_inc([W|Ws], PlacedWords, StateIn, GridLen, Start, Dir, GIn, GOut, O
 % {engine:true} search engines (dynamics live in the global database).
 :- dynamic prng_state/1.
 
-% set_search_seed(N): install the search seed. -1 (the CLI "not given"
-% sentinel) clears it -> the fully deterministic path. N>=0 records the seed
-% and seeds the module's PORTABLE PRNG (splitmix64) ONCE, so a given N always
-% reproduces the same layout — on every build of every platform. We own the
-% algorithm precisely so reproducibility is NOT engine-build-scoped: SWI's
-% set_random/1 seeds GMP's generator natively but SWI's builtin under the
-% USE_GMP=OFF wasm build, which made the same seed diverge CLI vs browser
-% (finding 2026-07-06, wasm-sdk-strategy §10). Mirrors set_check_target/1: at
-% most one search_seed/1 fact, retract before assert, the sole sanctioned
-% writer of the two module-private dynamics.
+%!  set_search_seed(+N:integer) is semidet.
+%
+%   Install the search seed. -1 (the CLI "not given" sentinel) clears it ->
+%   the fully deterministic path. N>=0 records the seed and seeds the
+%   module's PORTABLE PRNG (splitmix64) ONCE, so a given N always reproduces
+%   the same layout — on every build of every platform. FAILS on anything
+%   else (non-integer, or negative other than -1) rather than half-updating
+%   state; browser.pl's option resolvers rely on that failure.
+
+% We own the PRNG algorithm precisely so reproducibility is NOT
+% engine-build-scoped: SWI's set_random/1 seeds GMP's generator natively but
+% SWI's builtin under the USE_GMP=OFF wasm build, which made the same seed
+% diverge CLI vs browser (finding 2026-07-06, wasm-sdk-strategy §10). Mirrors
+% set_check_target/1: at most one search_seed/1 fact, retract before assert,
+% the sole sanctioned writer of the two module-private dynamics.
 set_search_seed(-1) :- !,
     retractall(search_seed(_)),
     retractall(prng_state(_)).
@@ -614,17 +691,21 @@ set_search_seed(N) :-
     assertz(prng_state(S0)),
     assertz(search_seed(N)).
 
-% current_search_seed(-N): the installed search seed, or FAILS if none (the
-% deterministic default). Lets the emitter record the seed as provenance in the
-% output without threading it through every emit signature. Semidet.
+%!  current_search_seed(-N:integer) is semidet.
+%
+%   The installed search seed, or FAILS if none (the deterministic default).
+%   Lets the emitter record the seed as provenance in the output without
+%   threading it through every emit signature.
 current_search_seed(N) :- search_seed(N).
 
-% set_shuffle_seed(-N): the --shuffle path. Draw an UNPREDICTABLE seed from the
-% OS entropy source (a different N on each process run -> a different layout),
-% then install it as a normal search seed. Returning N keeps shuffle
-% RECOVERABLE: the run is still reproducible via --seed N, so a liked layout is
-% never lost. This is the only place that reseeds from entropy; --seed N and the
-% deterministic default never do.
+%!  set_shuffle_seed(-N:integer) is det.
+%
+%   The --shuffle path. Draw an UNPREDICTABLE seed from the OS entropy source
+%   (a different N on each process run -> a different layout), then install
+%   it as a normal search seed. Returning N keeps shuffle RECOVERABLE: the
+%   run is still reproducible via --seed N, so a liked layout is never lost.
+%   This is the only place that reseeds from entropy; --seed N and the
+%   deterministic default never do.
 set_shuffle_seed(N) :-
     set_random(seed(random)),
     random_between(0, 1_000_000_000, N),
@@ -765,14 +846,26 @@ answer_letters(Word, Letters) :-
 separator_char(' ').
 separator_char('-').
 
+%!  shares_letter(+Letters:list, +OtherLetters:list) is semidet.
+%
+%   True iff the two letter lists share at least one letter. Short-circuits
+%   at the first shared letter (P6).
 shares_letter(Letters, OtherLetters) :-
     member(L, Letters),
     memberchk(L, OtherLetters),
     !.
 
 
-% Given a Word and a set of Placed words, locates a candidate
-% start cell and direction that intersects with an existing word.
+%!  find_intersecting_word(+Letters:list, +WLen:integer, +PlacedWords:list,
+%!                         +GridLen:integer, ?Start:integer, ?Dir:atom) is nondet.
+%
+%   Locate a candidate start cell + direction at which a word with Letters
+%   (placement length WLen) crosses one of PlacedWords, perpendicular to the
+%   crossed word. With PlacedWords == [] (the first placement) it succeeds
+%   once, leaving Start/Dir at the caller's ground seed values. On
+%   backtracking it enumerates every crossing candidate that fits on the
+%   grid; candidates are NOT yet fully legality-checked - assign_word/9 /
+%   check_word_fits/5 accept or reject each one.
 
 % No placed words; just use grounded Start and Dir values
 find_intersecting_word(_Letters, _WLen, [], _GridLen, _Start, _Dir).
@@ -829,6 +922,19 @@ pair_crossings(Letters, PLetters, Crossings) :-
 % - it never inspects the grid, only carries it - so only the sites that actually
 % read cells (assign_word, check_word_fits, the greedy scorer, the fragment pin)
 % destructure the bundle.
+
+%!  assign_word(+Word:atom, +Letters:list, +WLen:integer, +Start:integer,
+%!              +Dir:oneof([across,down]), +GridLen:integer, +GSIn, -Placed,
+%!              -GSOut) is semidet.
+%
+%   Place Word (placement letters Letters, length WLen) at cell Start in Dir
+%   on the gs(LetterGrid, BoundaryGrid) bundle: run the full legality core
+%   (bounds, prev-cell, per-cell letter match / adjacency, boundary-merge,
+%   next-cell), bind the letter cells, mark the word's boundary cells, and
+%   return the pw/8 record Placed (clue number left unbound). GSIn and GSOut
+%   are the SAME term - cells are bound in place and undone by the trail on
+%   backtracking. Fails on any illegal placement.
+
 % NB no placed-words argument: placement legality depends only on the grid
 % state - the boundary grid subsumed the old placed-words scan, and the
 % vestigial _PlacedWords parameter the arity-10 signature still advertised
@@ -899,14 +1005,18 @@ mark_boundary(Start, End, Dir, GridLen, BGrid) :-
     ).
 
 
-% check_word_fits/5: a pure legality PROBE for the mrv_count Cap=2 counting path
-% (mrv_count_goal) and the greedy constructor's candidate scan (arrange.pl
-% word_best_placement/7). It answers "would assign_word/9 accept this candidate?" with
-% NO side effects - it binds no letter cell, marks no boundary cell, and builds
-% neither the Cells run nor the pw/8 record (all of which assign_word materialized
-% only for count_upto2 to discard) - so it is cheaper per counted candidate and
-% leaves nothing for count_upto2's \+ to unwind (no trail churn in the loop).
+%!  check_word_fits(+Letters:list, +Start:integer, +Dir:oneof([across,down]),
+%!                  +GridLen:integer, +GS) is semidet.
 %
+%   A pure legality PROBE for the mrv_count Cap=2 counting path
+%   (mrv_count_goal) and the greedy constructor's candidate scan (arrange.pl
+%   word_best_placement/7). It answers "would assign_word/9 accept this
+%   candidate?" with NO side effects - it binds no letter cell, marks no
+%   boundary cell, and builds neither the Cells run nor the pw/8 record (all
+%   of which assign_word materialized only for count_upto2 to discard) - so
+%   it is cheaper per counted candidate and leaves nothing for count_upto2's
+%   \+ to unwind (no trail churn in the loop).
+
 % CORRECTNESS (must match assign_word exactly): Start >= 1 ; check_prev_cell ;
 % per cell (not a marked boundary cell, then a matching existing letter OR an
 % empty cell with free perpendicular neighbours) ; check_next_cell. Not binding is
@@ -1023,10 +1133,14 @@ adj_is_free(across, Num, GridLen, Grid) :-
     ).
 
 
-% Takes the placed words and works out the clue numbers of each
-% clue/word. This works by interating through the list of words which
-% are sorted by their start numbers.  Clue numbers are then assigned
-% in the order that words occur in this list.
+%!  assign_clue_numbers(+PlacedWords:list, -Numbered:list) is det.
+%
+%   Assign crossword clue numbers to the placed pw/8 records: sort by start
+%   cell, give two words sharing a start cell (one across + one down) the
+%   same number, and number the groups 1..N in start-cell order. Returns the
+%   records rebuilt with Num bound (pure rebuild, no setarg). Succeeds
+%   exactly once without a choicepoint (determinism-audit L2) - callers need
+%   no defensive once/1.
 assign_clue_numbers(PlacedWords, WordsClues) :-
     % sort placed words by their start number
     map_list_to_pairs(start_is, PlacedWords, Pairs),
@@ -1072,10 +1186,14 @@ add_group_tail([W2], ClueNum, [WClue2|Clues], Clues) :-
 % JSON output
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-% The emit-time metadata join is keyed on the answer string, so fail loudly if
-% two input entries share an answer (crosswords do not repeat answers). A
-% standard error/2 term plus the error_message//1 hook below renders cleanly;
-% a bare custom throw would print as "Unknown message".
+%!  check_unique_answers(+Words:list) is det.
+%
+%   Throw error(duplicate_answer(Dup), _) if two input entries share an
+%   answer; succeed silently otherwise. The emit-time metadata join is keyed
+%   on the answer string, so a duplicate must fail loudly (crosswords do not
+%   repeat answers). A standard error/2 term plus the error_message//1 hook
+%   below renders cleanly; a bare custom throw would print as "Unknown
+%   message".
 check_unique_answers(Words) :-
     findall(A, member([A|_], Words), Answers),
     msort(Answers, Sorted),
@@ -1091,8 +1209,11 @@ prolog:error_message(duplicate_answer(Answer)) -->
     [ 'duplicate answer ~q in clues; answers must be unique'-[Answer] ].
 
 
-% Emit the solved crossword as a single JSON object on the current output.
-% Words is the original input list, used to rejoin per-word metadata.
+%!  emit_json(+NumberedPlacedWords:list, +Words:list, +GridLen:integer) is det.
+%
+%   Emit the solved crossword as a single JSON object (the canonical layout:
+%   gridLength, dense grid rows, words array) on the current output. Words is
+%   the original input list, used to rejoin per-word metadata.
 emit_json(NumberedPlacedWords, Words, GridLen) :-
     build_grid_rows(NumberedPlacedWords, GridLen, GridRows),
     build_words(NumberedPlacedWords, Words, GridLen, WordObjs),
@@ -1102,8 +1223,11 @@ emit_json(NumberedPlacedWords, Words, GridLen) :-
     nl(Out).
 
 
-% Build the dense GridLen x GridLen array, row-major. Empty cells are the atom
-% `null` (written as JSON null); filled cells are dicts.
+%!  build_grid_rows(+PlacedWords:list, +GridLen:integer, -Rows:list) is det.
+%
+%   Build the dense GridLen x GridLen cell array, row-major. Empty cells are
+%   the atom `null` (written as JSON null); filled cells are dicts
+%   {letter, number, across, down}.
 build_grid_rows(PlacedWords, GridLen, Rows) :-
     empty_assoc(A0),
     foldl(add_word_cells, PlacedWords, A0, CellMap),
@@ -1113,7 +1237,10 @@ build_grid_rows(PlacedWords, GridLen, Rows) :-
     rows_of(FlatCells, GridLen, Rows).
 
 
-% Fold one placed word's cells into the cell map.
+%!  add_word_cells(+PW, +AssocIn:assoc, -AssocOut:assoc) is det.
+%
+%   Fold one placed pw/8 record's cells into the cell map (cell number ->
+%   cell(Letter, AcrossNum, DownNum, CornerLabel)).
 add_word_cells(PW, AIn, AOut) :-
     pw_cells(PW, Cells),
     pw_letters(PW, Letters),
@@ -1156,16 +1283,25 @@ rows_of(Flat, GridLen, [Row|Rows]) :-
     rows_of(Rest, GridLen, Rows).
 
 
-% Build the `words` array. Metadata is rejoined from the input list by answer -
-% via a one-shot answer->meta assoc so the join is O(n log n), not a member/2
-% rescan of the whole input per placed word (P5).
+%!  build_words(+PlacedWords:list, +Words:list, +GridLen:integer,
+%!              -WordObjs:list(dict)) is det.
+%
+%   Build the canonical `words` array: one dict {number, direction, answer,
+%   cells, meta} per placed word, in canonical emit order (clue number, then
+%   across before down - see canonical_word_order/2). Metadata is rejoined
+%   from the input list by answer - via a one-shot answer->meta assoc so the
+%   join is O(n log n), not a member/2 rescan of the whole input per placed
+%   word (P5).
 build_words(PlacedWords, Words, GridLen, WordObjs) :-
     canonical_word_order(PlacedWords, Ordered),
     answer_meta_assoc(Words, MetaAssoc),
     maplist(placed_to_word(MetaAssoc, GridLen), Ordered, WordObjs).
 
-% answer -> metadata dict for every input entry. An entry may omit metadata
-% ([Answer] -> {}); answers are unique (check_unique_answers/1), so no key clash.
+%!  answer_meta_assoc(+Words:list, -Assoc:assoc) is det.
+%
+%   answer -> metadata dict for every input entry. An entry may omit metadata
+%   ([Answer] -> _{}); answers are unique (check_unique_answers/1), so no key
+%   clash.
 answer_meta_assoc(Words, Assoc) :-
     findall(A-Meta,
             ( member(Entry, Words), Entry = [A|_],
@@ -1200,7 +1336,9 @@ placed_to_word(MetaAssoc, GridLen, PW, WordObj) :-
                 cells: Coords, meta: Meta}.
 
 
-% Cell number (1-based, row-major) to 0-based [Row, Col].
+%!  cell_coord(+GridLen:integer, +Cell:integer, -RowCol:list(integer)) is det.
+%
+%   Cell number (1-based, row-major) to 0-based [Row, Col].
 cell_coord(GridLen, Cell, [Row, Col]) :-
     Row is (Cell - 1) // GridLen,
     Col is (Cell - 1) mod GridLen.
@@ -1210,12 +1348,25 @@ cell_coord(GridLen, Cell, [Row, Col]) :-
 % Placed word utility predicates:
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-% A placed word is a fixed-arity compound record (formerly a word{...} dict):
-%   pw(Answer, Letters, Cells, Dir, Len, Start, End, Num)
-% End is the word's last cell (precomputed in assign_word). `Num` (the clue
-% number) is a fresh, unbound var until assign_clue_numbers/2 rebuilds the record
-% with it bound (a pure, setarg-free rebuild). The accessors below are arg/3-style
-% one-liners the compiler indexes cheaply; call sites read like the old dict gets.
+%!  pw_answer(+PW, -Answer:atom) is det.
+%!  pw_letters(+PW, -Letters:list) is det.
+%!  pw_cells(+PW, -Cells:list(integer)) is det.
+%!  pw_dir(+PW, -Dir:oneof([across,down])) is det.
+%!  pw_len(+PW, -Len:integer) is det.
+%!  pw_start(+PW, -Start:integer) is det.
+%!  pw_end(+PW, -End:integer) is det.
+%!  pw_num(+PW, -Num:integer) is det.
+%
+%   Field accessors for the placed-word record. A placed word is a
+%   fixed-arity compound record (formerly a word{...} dict):
+%
+%       pw(Answer, Letters, Cells, Dir, Len, Start, End, Num)
+%
+%   End is the word's last cell (precomputed in assign_word/9). Num (the
+%   clue number) is a fresh, unbound var until assign_clue_numbers/2 rebuilds
+%   the record with it bound (a pure, setarg-free rebuild). The accessors are
+%   arg/3-style one-liners the compiler indexes cheaply; call sites read like
+%   the old dict gets.
 pw_answer( pw(A,_,_,_,_,_,_,_), A).
 pw_letters(pw(_,L,_,_,_,_,_,_), L).
 pw_cells(  pw(_,_,C,_,_,_,_,_), C).
@@ -1242,16 +1393,31 @@ swap_dir(down, across).
 swap_dir(across, down).
 
 
-% The list of start locations.
+%!  start_locs(-Locs:list(atom)) is det.
+%
+%   The list of named start locations the search can seed from.
 start_locs([topleft_across, topleft_down, topright, bottomleft]).
 
-% Get the cell number of each possible start location. 
+%!  start_loc(+Loc:atom, +GridLen:integer, -StartNum:integer,
+%!            -StartDir:oneof([across,down])) is semidet.
+%!  start_loc(-Loc:atom, +GridLen:integer, -StartNum:integer,
+%!            -StartDir:oneof([across,down])) is multi.
+%
+%   The start cell number + direction of each named start location
+%   (start_locs/1). With Loc bound: fails on an unknown name (valid_loc/1 is
+%   the validating guard). With Loc unbound: enumerates all four locations.
 start_loc(topleft_across, _GridLen, 1, across).
 start_loc(topleft_down, _GridLen, 1, down).
 start_loc(topright, GridLen, GridLen, down).
 start_loc(bottomleft, GridLen, StartNum, across) :- 
     StartNum is (GridLen * GridLen) - (GridLen - 1).
 
+
+%!  fits_on_grid(+Dir:oneof([across,down]), +Start:integer, +WLen:integer,
+%!               +GridLen:integer) is semidet.
+%
+%   True iff a word of length WLen starting at cell Start in Dir stays
+%   within the grid (across: within Start's row; down: within the column).
 
 % make sure word fits in the row...
 fits_on_grid(across, Start, WLen, GridLen) :- 
@@ -1276,6 +1442,12 @@ prev_cell(across, Num, _Length, Prev) :- Prev is Num - 1.
 prev_cell(down, Num, Length, Prev) :- Prev is Num - Length.
 
 
+%!  next_cell(+Dir:oneof([across,down]), +Num:integer, +GridLen:integer,
+%!            -Next:integer) is det.
+%
+%   The cell number one step from Num in Dir (across: +1; down: +GridLen).
+%   Pure arithmetic - no bounds check; callers guard with fits_on_grid/4 /
+%   is_end_cell/3.
 next_cell(across, Num, _Length, Next) :- Next is Num + 1.
 next_cell(down, Num, Length, Next) :- Next is Num + Length.
 
@@ -1298,22 +1470,28 @@ calc_num(down, GridLen, WPos, WStart, WNum) :-
     WNum is  WStart + (GridLen * (WPos - 1)).
 
 
-% The grid is the compound term grid(C1,...,C(N*N)); cell Num is arg Num, an
-% unbound var when empty. functor/3 builds it with N*N fresh variables in one
-% allocation (441 args at 21x21 is fine). See the data-structure note above.
+%!  init_grid(+GridLen:integer, -Grid:compound) is det.
+%
+%   A fresh letter grid: the compound term grid(C1,...,C(N*N)); cell Num is
+%   arg Num, an unbound var when empty. functor/3 builds it with N*N fresh
+%   variables in one allocation (441 args at 21x21 is fine). See the
+%   data-structure note at the top of this file.
 init_grid(GridLen, Grid) :-
     NumTiles is GridLen * GridLen,
     functor(Grid, grid, NumTiles).
 
-% The working-grid bundle threaded through the search: gs(LetterGrid,
-% BoundaryGrid). LetterGrid is the letter grid above; BoundaryGrid is a second
-% grid-sized all-var term in which assign_word marks the placed words' boundary
-% cells (atom `b`), giving no_word_merge_bg/2 and check_word_fits/5 an O(1)
-% arg/3+nonvar boundary test instead of a scan over all placed words. Boundary
-% cells stay UNBOUND in LetterGrid (they must still read as empty to
-% check_prev/next_cell and adj_is_free - a nonvar sentinel there would change
-% the search); the mark lives only in BoundaryGrid. Both structures backtrack
-% via the trail, so the bundle threads exactly as the single grid did.
+%!  init_gs(+GridLen:integer, -GS) is det.
+%
+%   A fresh working-grid bundle gs(LetterGrid, BoundaryGrid) - what the
+%   search threads. LetterGrid is the letter grid above; BoundaryGrid is a
+%   second grid-sized all-var term in which assign_word marks the placed
+%   words' boundary cells (atom `b`), giving no_word_merge_bg/2 and
+%   check_word_fits/5 an O(1) arg/3+nonvar boundary test instead of a scan
+%   over all placed words. Boundary cells stay UNBOUND in LetterGrid (they
+%   must still read as empty to check_prev/next_cell and adj_is_free - a
+%   nonvar sentinel there would change the search); the mark lives only in
+%   BoundaryGrid. Both structures backtrack via the trail, so the bundle
+%   threads exactly as the single grid did.
 init_gs(GridLen, gs(LGrid, BGrid)) :-
     init_grid(GridLen, LGrid),
     init_grid(GridLen, BGrid).
@@ -1328,13 +1506,16 @@ init_gs(GridLen, gs(LGrid, BGrid)) :-
 % generic utility predicates
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-% remove_x(X,L,R) :- R is L with the first ==-identical occurrence of X
-% removed from it (identity, not unification: entries are selected from L by
-% member/2 upstream, so the match must be the very term, never a unifiable
-% lookalike). The []/[_|_] heads are index-disjoint and the if-then-else
-% leaves no choicepoint, so the traversal is deterministic - the search
-% backtracks straight to member/2's real alternative instead of grinding
-% through one dead remove_x choicepoint per traversed element.
+%!  remove_x(+X, +List:list, -Rest:list) is det.
+%
+%   Rest is List with the first ==-identical occurrence of X removed
+%   (identity, not unification: entries are selected from List by member/2
+%   upstream, so the match must be the very term, never a unifiable
+%   lookalike). If X does not occur, Rest is List. The []/[_|_] heads are
+%   index-disjoint and the if-then-else leaves no choicepoint, so the
+%   traversal is deterministic - the search backtracks straight to member/2's
+%   real alternative instead of grinding through one dead remove_x
+%   choicepoint per traversed element.
 remove_x(_, [], []).
 remove_x(Y, [X|Xs], R) :-
 	(   Y == X

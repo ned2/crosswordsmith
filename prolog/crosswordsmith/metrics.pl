@@ -49,10 +49,13 @@
 
 % --- shared answer/footprint helpers ----------------------------------------
 
-% The "placement footprint" of an answer: its letters with word separators
-% (spaces AND hyphens) removed - those are enumeration markers, not grid cells.
-% The original answer atom is carried to emit (placed_to_word/4) so export still
-% derives the enumeration; only the placed run/length drops the separators.
+%!  word_letters(+Entry:list, -Letters:list, -WLen:integer) is det.
+%
+%   The "placement footprint" of an input word entry [Answer|_]: its letters
+%   with word separators (spaces AND hyphens) removed - those are enumeration
+%   markers, not grid cells - and its placed length. The original answer atom
+%   is carried to emit (placed_to_word/4) so export still derives the
+%   enumeration; only the placed run/length drops the separators.
 word_letters([Word|_], Letters, WLen) :-
     atom_chars(Word, L0),
     exclude(separator_char, L0, Letters),
@@ -63,7 +66,10 @@ word_letters([Word|_], Letters, WLen) :-
 separator_char(' ').
 separator_char('-').
 
-% The run of cell numbers a word occupies from Start in Dir.
+%!  word_cells(+Start:integer, +Dir:oneof([across,down]), +Len:nonneg,
+%!             +GridLen:integer, -Cells:list(integer)) is det.
+%
+%   The run of Len cell numbers a word occupies from Start in Dir.
 word_cells(_, _, 0, _, []) :- !.
 word_cells(Num, Dir, K, GridLen, [Num|Rest]) :-
     K > 0, K1 is K - 1,
@@ -72,10 +78,18 @@ word_cells(Num, Dir, K, GridLen, [Num|Rest]) :-
 
 % --- geometry helpers -----------------------------------------------------
 
+%!  cell_rc(+Cell:integer, +GridLen:integer, -R:integer, -C:integer) is det.
+%
+%   Cell number (1-based, row-major) to 0-based row/column.
 cell_rc(Cell, GridLen, R, C) :-
     R is (Cell - 1) // GridLen,
     C is (Cell - 1) mod GridLen.
 
+%!  placed_bbox(+Placed:list, +GridLen:integer, -BBox, -Area:integer) is semidet.
+%
+%   BBox = bbox(MinR, MaxR, MinC, MaxC), the tight bounding box (0-based
+%   rows/cols) of all cells covered by the placed pw/8 records, and its
+%   Area. Fails for an empty placement set (no cells, no box).
 placed_bbox(Placed, GridLen, bbox(MinR, MaxR, MinC, MaxC), Area) :-
     findall(R-C,
             ( member(PW, Placed), pw_cells(PW, Cells), member(Cell, Cells),
@@ -116,14 +130,20 @@ dir_cells(Placed, Dir, Set) :-
 % per-cell 1/0 flags. Checked count (sum) and max-unchecked-run (a fold) derive
 % from the bitmap, so "checkedness" has a single source of truth.
 
-% Both directions' covered-cell ordsets over a layout, computed once.
+%!  layout_dir_cells(+Placed:list, -DirCells) is det.
+%
+%   Both directions' covered-cell ordsets over a layout, computed once:
+%   DirCells = dircells(AcrossCells, DownCells). lint threads the result
+%   through every per-word rule (P4).
 layout_dir_cells(Placed, dircells(AcrossCells, DownCells)) :-
     dir_cells(Placed, across, AcrossCells),
     dir_cells(Placed, down, DownCells).
 
-% A word's per-cell checked bitmap (1 = crossed by a perpendicular word) from a
-% precomputed dircells/2: an across word's crossings live in the down set, and
-% vice versa.
+%!  word_checked_bitmap(+W, +DirCells, -Bits:list(integer)) is det.
+%
+%   W's per-cell checked bitmap (1 = crossed by a perpendicular word) from a
+%   precomputed dircells/2 (layout_dir_cells/2): an across word's crossings
+%   live in the down set, and vice versa.
 word_checked_bitmap(W, dircells(AcrossCells, DownCells), Bits) :-
     pw_cells(W, Cells), pw_dir(W, Dir),
     ( Dir == across -> Perp = DownCells ; Perp = AcrossCells ),
@@ -133,7 +153,11 @@ word_checked_bitmap(W, dircells(AcrossCells, DownCells), Bits) :-
 checked_bits(Cells, Perp, Bits) :- maplist(cell_checked(Perp), Cells, Bits).
 cell_checked(Perp, C, B) :- ( ord_memberchk(C, Perp) -> B = 1 ; B = 0 ).
 
-% Derived from the bitmap: number of checked cells; longest UNchecked run.
+%!  bits_checked_count(+Bits:list(integer), -Count:integer) is det.
+%!  bits_max_unch_run(+Bits:list(integer), -MaxRun:integer) is det.
+%
+%   Derived from the checked bitmap: the number of checked cells; the
+%   longest UNchecked run.
 bits_checked_count(Bits, Count) :- sum_list(Bits, Count).
 bits_max_unch_run(Bits, MaxRun) :- max_unch_run(Bits, 0, 0, MaxRun).
 max_unch_run([], _, M, M).
@@ -142,9 +166,11 @@ max_unch_run([B|Bs], Cur, M0, M) :-
     M1 is max(M0, Cur1),
     max_unch_run(Bs, Cur1, M1, M).
 
-% The "half-checked" threshold: at least ceil(L/2) of a word's L cells must be
-% crossings. Defined once here so lint's checked_half rule reuses it rather than
-% re-deriving ceil(L/2) (P10).
+%!  word_half_threshold(+L:integer, -T:integer) is det.
+%
+%   The "half-checked" threshold: at least ceil(L/2) of a word's L cells must
+%   be crossings. Defined once here so lint's checked_half rule reuses it
+%   rather than re-deriving ceil(L/2) (P10).
 word_half_threshold(L, T) :- T is (L + 1) // 2.
 
 % A word is "half-checked" iff at least ceil(L/2) of its cells are crossings.
@@ -154,10 +180,14 @@ word_meets_half(W, Placed) :-
     word_half_threshold(L, T),
     CC >= T.
 
-% Convenience (W, Placed) forms: derive from the same bitmap primitives, but over
-% only THIS word's perpendicular direction. arrange.pl reads word_checked_count/3
-% per word during rescore and needs just the one direction, so these compute
-% dir_cells/3 once (not both, as lint's threaded path does).
+%!  word_checked_count(+W, +Placed:list, -Count:integer) is det.
+%
+%   The number of W's cells crossed by a perpendicular word of Placed - the
+%   convenience (W, Placed) form of bits_checked_count/2. Derives from the
+%   same bitmap primitives, but over only THIS word's perpendicular
+%   direction: arrange.pl reads it per word during rescore and needs just the
+%   one direction, so it computes dir_cells/3 once (not both, as lint's
+%   threaded path does).
 word_checked_count(W, Placed, Count) :-
     word_perp_bits(W, Placed, Bits),
     bits_checked_count(Bits, Count).

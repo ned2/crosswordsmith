@@ -489,20 +489,33 @@ fill_attempt_masked(SearchSlots, AllSlots, DictByLen, Index, Budget, Masks,
     ;   Outcome = infeasible, Numbered = [], InputWords = []
     ).
 
-% Construct + emit a fill on stdout; report on stderr. Fails (no stdout) on any
-% non-filled outcome (INV-3: report the unfillable slot(s), never silent).
+%!  fill_solve(+GridFile:atom, +SeedFileOrNone, +DictFile:atom,
+%!             +SizeMode:oneof([fixed,max])) is semidet.
+%
+%   The `fill` CLI seam: derive the slots of the stock grid GridFile, pin the
+%   seeds of SeedFileOrNone (a §6.6 fragment file, or the atom `none`), fill
+%   every remaining slot from the text dictionary DictFile, and emit the
+%   filled canonical layout on stdout framed by SizeMode. FAILS (no stdout)
+%   on any non-filled outcome - not_proven (budget) or infeasible - after
+%   reporting the unfillable slot(s) on stderr (INV-3, never silent). Throws
+%   on a malformed grid/seed file or an unmatchable seed.
 fill_solve(GridFile, SeedFileOrNone, DictFile, SizeMode) :-
     fill_prepare(GridFile, SeedFileOrNone, Size, Slots, SearchSlots),
     load_dict(DictFile, DictByLen, Index),
     fill_place_and_emit(Size, Slots, SearchSlots, DictByLen, Index, none, SizeMode).
 
-% Artifact-consuming twin of fill_solve/4 (F-L2): load a prebuilt, verified
-% index artifact instead of parsing a text dictionary, then fill IDENTICALLY.
-% Grid/seed derivation, search, and emit are the shared body below, so the
-% filled layout is byte-for-byte identical to the raw path (proven by the
-% identity oracle in both modes). DictFileOrNone: an atom path checks the
-% artifact's embedded SHA-256; `none` skips that check (version + SWI are
-% always checked). fill_load_index throws a clear error on any mismatch.
+%!  fill_solve_index(+GridFile:atom, +SeedFileOrNone, +IndexFile:atom,
+%!                   +DictFileOrNone, +SizeMode:oneof([fixed,max])) is semidet.
+%
+%   Artifact-consuming twin of fill_solve/4 (F-L2): load a prebuilt,
+%   verified index artifact (fill_save_index/2,3) instead of parsing a text
+%   dictionary, then fill IDENTICALLY - the filled layout is byte-for-byte
+%   identical to the raw path (proven by the identity oracle in both modes).
+%   DictFileOrNone: an atom path checks the artifact's embedded SHA-256;
+%   `none` skips that check (version + SWI are always checked); any mismatch
+%   throws a clear rebuild error. Same failure contract as fill_solve/4.
+
+% Grid/seed derivation, search, and emit are the shared body below.
 % A v2 artifact carries precomputed bitset Masks; F-H2's bignum counting kernel
 % runs iff Masks == masks(_). A `none` here (no masks in the artifact) transparently
 % falls back to the ordset kernel, so this entry is correct for any artifact shape
@@ -625,16 +638,21 @@ empty_slots(Slots, DictByLen, Index, Bad) :-
 % --save-index step - the gate probe's binding condition), never at load or fill.
 fill_index_format_version(2).
 
-% BUILD: load_dict the frozen file and serialize the exact structures + meta.
-% This is the one-off cost (~ current load + a fast_write); the CLI's
-% `fill --save-index FILE` seam calls it. /2 = the default build (no masks).
+%!  fill_save_index(+DictFile:atom, +OutFile:atom) is det.
+%!  fill_save_index(+DictFile:atom, +OutFile:atom, +Options:list) is det.
+%
+%   BUILD the precomputed index artifact: load_dict the frozen DictFile and
+%   serialize the exact runtime structures + integrity/provenance meta to
+%   OutFile (fast_write binary). This is the one-off cost (~ current load +
+%   a fast_write); the CLI's `fill --save-index FILE` seam calls it. /2 = the
+%   default build (no masks). /3: Options is a keyed list; masks(true)
+%   additionally derives the parallel bitset masks FROM the ordset Index (so
+%   popcount agreement is by construction) and embeds them as the masks(...)
+%   Meta key. Any other Options content is ignored (same permissive
+%   convention as Meta itself). Throws on an unreadable dictionary file.
 fill_save_index(DictFile, OutFile) :-
     fill_save_index(DictFile, OutFile, []).
 
-% /3: Options is a keyed list; masks(true) additionally derives the parallel
-% bitset masks FROM the ordset Index (so popcount agreement is by construction)
-% and embeds them as the masks(...) Meta key. Any other Options content is
-% ignored (same permissive convention as Meta itself).
 fill_save_index(DictFile, OutFile, Options) :-
     load_dict(DictFile, DictByLen, Index),
     dict_word_count(DictByLen, NWords),
