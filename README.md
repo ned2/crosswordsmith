@@ -479,25 +479,36 @@ one median definition). All numbers are machine-specific and reporting-only;
 compare on **inferences**, which are deterministic and portable, not on wall time.
 
 **Product benchmark** — how long `arrange` takes a user, for the workloads in
-`benchmarks/workloads.pl`:
+`benchmarks/workloads.pl`: a synthetic mesh **cost ladder** (the hill-climbing
+instrument, 9×9/15×15/21×21) plus **real-word realism anchors** at the blocked
+daily sizes 13/15 (`fixtures/real_*`, ENABLE dictionary words planted on a legal
+witness layout by `benchmarks/gen_real_fixture.py`):
 
     $ make bench
 
 For each workload it reports three layers over the same word set: `cmd_wall`
 (end-to-end `crosswordsmith arrange` process latency), `search` (the in-process
 4-corner search alone), and `rest` (the CLI-wrapper overhead between them,
-`cmd_wall - search`). Core workloads run by default; the budget-saturating
-latency probes (~26 s each) are opt-in:
+`cmd_wall - search`). Core workloads run by default; the heavy tail — the hard
+ladder rungs (~0.6–9 s each) plus one budget-saturating **latency probe**
+(`benchmark_16_dense`, ~30–40 s per layer; its inference count pins to the
+budget constant, so it is reported latency-only and never gates) — is opt-in:
 
     $ make bench BENCH_ARGS=--heavy
-    $ make bench BENCH_FORMAT=csv BENCH_ARGS="--fixture bundled"
+    $ make bench BENCH_FORMAT=csv BENCH_ARGS="--fixture real"
 
 `rss` is the whole-process peak footprint, not a search-memory metric. Note that
 `arrange` latency is bimodal: `arrange` tries four start corners under a shared
 inference budget, so an input whose non-placing corners fail fast is ~0.1-1 s,
-while one whose corner triggers deep search burns the whole budget (~26 s) even
-after a valid layout was already found — the heavy probes exist to keep that
-cliff visible.
+while one whose corner triggers deep search burns the whole budget (~26-40 s)
+even after a valid layout was already found — the latency probe exists to keep
+that cliff visible.
+
+The tracked metric is **search inferences** (deterministic, machine-independent;
+the same count native or under WASM). `benchmarks/baseline.json` records each
+rung as a **ratchet**: `make bench-check` fails on a rise past tolerance, a drop
+is a win you accept with `make bench-record` (which also appends the run to the
+`benchmarks/history.jsonl` trend ledger; `make bench-history` renders it).
 
 **Strategy matrix** — algorithm research (comparing the solver strategies, not a
 shipped path). One CSV row per (strategy, fixture) over `benchmarks/fixtures.pl`,

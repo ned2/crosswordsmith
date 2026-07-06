@@ -125,7 +125,9 @@ check_row(WL, Tol, VMatch, Row, F0-W0, F1-W1) :-
     ( find_baseline(WL, Fx, Spec)
     ->  get_dict(search_inf, Spec, Base),
         ( Base =:= 0 -> Delta = 0.0 ; Delta is (Meas - Base) / Base * 100.0 ),
-        classify(Delta, Tol, VMatch, Kind),
+        ( row_latency_gated(Row)
+        ->  Kind = latency_info
+        ;   classify(Delta, Tol, VMatch, Kind) ),
         kind_counts(Kind, DF, DW), F1 is F0 + DF, W1 is W0 + DW,
         signed(Delta, DStr), kind_label(Kind, Label),
         format("~w~t~30|~t~D~14+~t~D~14+~t~w%~11+   ~w~n",
@@ -133,6 +135,15 @@ check_row(WL, Tol, VMatch, Row, F0-W0, F1-W1) :-
     ;   F1 = F0, W1 = W0,
         format("~w~t~30|~t~w~14+~t~D~14+~t~w~11+   ~w~n",
                [Fx, '(none)', Meas, '-', 'NEW (not in baseline)']) ).
+
+% A gate:latency workload (workloads.pl) is measured for its wall-latency only:
+% its search count is pinned to the budget constant (budget-saturated), so the
+% inference delta is not an algorithm signal and can neither fail nor win the
+% ratchet. The manifest (via the run_arrange row) is authoritative; rows from
+% pre-gate JSON default to inference-gated.
+row_latency_gated(Row) :-
+    get_dict(gate, Row, Gate),
+    same_text(Gate, latency).
 
 % win: dropped past tolerance. ok: within +/-tolerance. regression: rose past it
 % (a hard fail when the SWI version matches; a WARN when it differs - version, not
@@ -146,11 +157,13 @@ kind_counts(win,             0, 1).
 kind_counts(ok,              0, 0).
 kind_counts(regression,      1, 0).
 kind_counts(regression_warn, 0, 0).
+kind_counts(latency_info,    0, 0).
 
 kind_label(win,             'WIN (improvement)').
 kind_label(ok,              'ok').
 kind_label(regression,      'REGRESSION').
 kind_label(regression_warn, 'regress? (swi-ver)').
+kind_label(latency_info,    'info (latency-only)').
 
 % A rung in the baseline that this run did not measure (e.g. heavy rungs on a
 % core-only run). Informational - never a failure.
@@ -228,6 +241,7 @@ new_rung_spec(Row, _{ search_inf:      Row.search_inf_med,
                       grid:            Row.size,
                       words:           Row.words,
                       tier:            Row.tier,
+                      gate:            Row.get(gate, "inf"),
                       iterations:      Row.iterations,
                       warmup:          Row.warmup,
                       budget:          Row.budget }).

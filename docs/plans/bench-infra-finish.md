@@ -114,7 +114,30 @@ budget-saturated → iters=1, latency-only, excluded from the inference gate.*
    test path; no `prolog/` or `tests/` file changes) — run only if any shared
    .pl file is touched.
 
-## 4. Non-goals
+## 4. Results (as landed)
+
+- Rungs chosen (probed 2026-07-06, seed 11, `enable1.txt`, lengths 4–9 +
+  anchor G−2): `real_13x13_12w` — 3,545,338 warm inf (~0.27 s search); 
+  `real_15x15_18w` — 248,068 warm inf (~21 ms search). Both `placed`,
+  min==median, counts reproduced exactly across three independent runs.
+  Density probes confirmed real-word instances are wildly instance-noisy near
+  the cliff (13×13: 14w=240.8M; 15×15: 12w=1.7M / 14w=85K / 16w=853M /
+  18w=248K), so the anchors deliberately sit away from the thrash regime.
+- `benchmark_16_dense @17 @5e8`: `placed`, count pinned at 500,000,191 cold /
+  500,008,138 warm-process (+7.9 K wobble — live proof it cannot be
+  inference-gated), CLI exit 0, ~35–42 s per layer under load. Runs as
+  `heavy` + `gate=latency`; the ratchet displays `info (latency-only)`.
+- §11.2 probe: `--size` 91–94 ms vs `--max-size` 91–96 ms (7 runs each,
+  loaded host) — sub-noise; `--size` canonical.
+- Verification: core ratchet PASS (7 rungs +0.00%); full `--heavy` ratchet
+  PASS (14 gated rungs +0.00% + 1 latency-info); native
+  `wasm/test/inference_parity.pl` runs clean over the /9 manifest (the
+  pre-existing +1 first-rung offset vs baseline reproduces on main —
+  protocol artifact, shared by both VMs in a parity diff).
+- Consumer fix folded in: `wasm/test/inference_parity.pl` tracked the
+  manifest arity change (/8 → /9) and now skips `gate=latency` rungs.
+
+## 5. Non-goals
 
 Changing `arrange.pl` (incl. its export list — C25 stays deferred); touching
 `benchmarks/fixtures.pl` / `run_matrix.pl` / the fill bench; re-recording any
