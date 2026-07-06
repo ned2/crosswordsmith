@@ -403,6 +403,10 @@ bench-matrix:  ## research: strategy × fixture inference matrix (CSV)
    with the export deferred in STATUS.md's de-accretion roadmap (trigger: the
    next change to `arrange.pl`'s export surface). Every recorded `search_inf`
    is defined against `/6`, so the access point must not silently move.
+   *(2026-07-06: the trigger fired — the thin-form work touched the export
+   surface, so `/6` is now exported and `subjects.pl` plain-imports it. The
+   access point is unchanged, ratchet-verified +0.00% on every gated rung;
+   the white-box annotation is retired. C25 fully closed.)*
 
 ## 12. Non-goals
 
