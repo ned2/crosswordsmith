@@ -12,9 +12,11 @@
 % descope decision was recorded in the implementation plan.)
 %
 % Exports: the four *_solve CLI seams, the fragment API the driver and fill
-% share (load_fragment/4, reconcile_fragment_size/3), and set_check_target/1
+% share (load_fragment/4, reconcile_fragment_size/3), set_check_target/1
 % (the only sanctioned writer of the module-private check_target_override/1
-% dynamic). White-box test helpers are NOT exported — arrange.plt reaches
+% dynamic), and two non-CLI seams: arrange_outcome/5 (browser/WASM) and
+% arrange_best_layout/6 (the benchmark search sampler — C25 export
+% promotion). White-box test helpers are NOT exported — arrange.plt reaches
 % them as crosswordsmith_arrange:Pred(...).
 
 :- module(crosswordsmith_arrange,
@@ -25,6 +27,10 @@
             % the browser/WASM envelope seam (no emit, tagged outcome) —
             % crosswordsmith_browser is its consumer
             arrange_outcome/5,
+            % the benchmark search seam (budget-explicit; benchmarks/
+            % subjects.pl) — every recorded search_inf baseline is defined
+            % against /6, so benchmarks must never re-point elsewhere
+            arrange_best_layout/6,
             load_fragment/4,
             reconcile_fragment_size/3,
             set_check_target/1,
@@ -251,17 +257,31 @@ arrange_budget(500_000_000).
 % paths. Do not route those through arrange_corners/1.
 arrange_corners([topleft_across, topright]).
 
-% Best-scoring complete placement over the strict start corners, rescored and
-% picked by reward (deterministic: reward desc, ties by start-corner order).
-% Outcome: placed | not_proven (budget hit) | infeasible (search completed,
-% no full placement).
+% Internal default-budget form: reads arrange_budget/1 and delegates to /6.
+% Outcome contract as documented on /6 below.
 arrange_best_layout(Words, GridLen, Numbered, Reward, Outcome) :-
     arrange_budget(Budget),
     arrange_best_layout(Words, GridLen, Budget, Numbered, Reward, Outcome).
 
-% Budget-parameterized form: Budget is the per-corner inference budget. The
-% default /5 reads arrange_budget/1; passing a tiny Budget drives the
-% AC-ARR-1c / AC-ARR-10 "not proven within budget" path (tests/arrange.plt).
+%!  arrange_best_layout(+Words:list, +GridLen:integer, +Budget:integer,
+%!                      -Numbered:list, -Reward:integer,
+%!                      -Outcome:oneof([placed,not_proven,infeasible])) is det.
+%
+%   Best-scoring complete placement over the strict start corners
+%   (arrange_corners/1), rescored and picked by reward (deterministic:
+%   reward desc, ties by start-corner order). Budget is the per-corner
+%   inference budget; the internal /5 reads the shipped default from
+%   arrange_budget/1, and a tiny Budget drives the AC-ARR-1c / AC-ARR-10
+%   "not proven within budget" path (tests/arrange.plt). Always succeeds
+%   exactly once: a non-placement is Outcome=not_proven (budget hit) or
+%   Outcome=infeasible (search completed, no full placement) — never failure.
+%
+%   Exported for the benchmark search sampler (benchmarks/subjects.pl),
+%   which raises Budget above the shipped default so hard rungs run to true
+%   completion (C25 export promotion, 2026-07-06). Every recorded search_inf
+%   baseline is defined against this predicate; benchmarks must not re-point
+%   at another seam (e.g. arrange_outcome/5) — that would silently move the
+%   gated counts.
 arrange_best_layout(Words, GridLen, Budget, Numbered, Reward, Outcome) :-
     % Top-level search entry: one memo reset per request (core.pl
     % reset_search_memos/0, C1/C48). The corner sweep below SHARES the

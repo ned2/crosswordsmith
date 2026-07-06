@@ -836,7 +836,10 @@ behaviour preserving · flags: WASM · **fixed 2026-07-06** · (determinism L8 /
 Self-documented at solve_browser.pl:24–31 with a named production fix (exported
 `browser.pl` module, plan §9) — recorded here so the promotion isn't lost, plus:
 either export `arrange_best_layout/6` for benchmarks or comment subjects.pl as
-white-box.
+white-box. *Both halves are now done: the white-box annotation shipped first
+(085a44c); the export promotion landed 2026-07-06 when the thin-form work fired
+the de-accretion roadmap's trigger — `/6` exported + PlDoc'd, subjects.pl
+converted to a plain import, gated counts ratchet-verified unmoved.*
 
 #### C26 — Per-node dynamic `search_seed/1` lookup on the gated hot path
 core.pl:519–525 (`order_candidates/2` — one dynamic-predicate call per search node) ·
@@ -1714,7 +1717,7 @@ Tick as landed. `→ §Cn` links to the finding; X-steps link to
 - [x] **C22** `low` — unused exports `pw_end/2`, `valid_strategy/1` → `core.pl:47,56` · *fixed 2026-07-06 (085a44c): de-exported*
 - [x] **C23** `low·perf` — redundant once() post-X6.B4 → `fill.pl:392` · `stockgrid.pl:79` · *fixed 2026-07-06 (085a44c): both once/1 dropped after det probes; WIN −1 inf/rung*
 - [x] **C24** `low` — stale comments (10.0.2 pin, word-dicts, gs/2 header, fill export header) · *fixed 2026-07-06 (085a44c)*
-- [x] **C25** `low·WASM` — solve_browser module promotion (plan §9) + subjects.pl internals · *2026-07-06: **half done on main** — the module promotion shipped (`browser.pl`; solve_browser.pl is now the thin qcompile root with no internals reach, grep-verified); the `benchmarks/subjects.pl:57` half remains* · *fixed 2026-07-06 (085a44c): explicit white-box annotation (the sanctioned alternative); arrange_best_layout/6 export deferred to a future arrange change* · tracked in [STATUS.md de-accretion roadmap](./STATUS.md#de-accretion--retirement-roadmap)
+- [x] **C25** `low·WASM` — solve_browser module promotion (plan §9) + subjects.pl internals · *2026-07-06: **half done on main** — the module promotion shipped (`browser.pl`; solve_browser.pl is now the thin qcompile root with no internals reach, grep-verified); the `benchmarks/subjects.pl:57` half remains* · *fixed 2026-07-06 (085a44c): explicit white-box annotation (the sanctioned alternative); arrange_best_layout/6 export deferred to a future arrange change* · *closed 2026-07-06 (follow-up): the roadmap trigger fired (thin-form export change) — `/6` exported + PlDoc'd, subjects.pl plain-imports it (annotation retired); core + heavy ratchet verified all gated `search_inf` counts +0.00%* · tracked in [STATUS.md de-accretion roadmap](./STATUS.md#de-accretion--retirement-roadmap)
 - [x] **C26** `low·perf` — per-node search_seed dynamic lookup hoist → `core.pl:519` · *fixed 2026-07-06 (085a44c): lookup hoisted to threaded flag; WIN −0.015..−0.064%/rung — recorded*
 - [x] **C27** `low` — arrange findall-as-map/filter → maplist/exclude (6 sites) · *fixed 2026-07-06 (085a44c): 6 sites → maplist/exclude with named helpers; inference-flat*
 - [x] **C28** `low·risk` — greedy argmax sort → strict-@> fold (golden-check) · *fixed 2026-07-06 (085a44c): strict-@> fold; tie-winner verified 3 ways (2363-case probe, goldens, CLI byte A/B); flat*

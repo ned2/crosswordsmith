@@ -6,8 +6,8 @@
 %
 %   - COMMAND layer: the whole `crosswordsmith arrange` process, timed end-to-end
 %     (SWI startup + load + parse + search + emit) - the latency a user feels.
-%   - SEARCH layer: the in-process 4-corner arrange search alone (arrange_best_
-%     layout/5), so the CLI wrapper's fixed cost can be subtracted out (rest = A-B).
+%   - SEARCH layer: the in-process arrange search alone (arrange_best_layout/6),
+%     so the CLI wrapper's fixed cost can be subtracted out (rest = A-B).
 %
 % Both layers read the SAME .pl fixture (arrange --input accepts .pl), so they
 % measure the same word set. Each layer asserts its result against the workload's
@@ -20,6 +20,12 @@
             arrange_search_sampler/5 ]).
 
 :- use_module(library(lists)).
+
+% The engine seam this harness measures. Exported by arrange.pl for exactly
+% this consumer (C25 export promotion, 2026-07-06); loaded here through the
+% `crosswordsmith` alias that load.pl registers before run_arrange.pl
+% use_module's this file.
+:- use_module(crosswordsmith(arrange), [arrange_best_layout/6]).
 
 % --size N and --max-size N both frame the SAME N x N canvas (GridLen = N); only
 % the emit framing differs (crop vs full). So the search layer takes GridLen = N
@@ -48,13 +54,11 @@ expected_exit(Expected, Got) :-
 % to the budget constant, useless as a hill-climbing signal) instead runs to true
 % completion, yielding a deterministic count that reflects the search's real cost.
 %
-% WHITE-BOX REACH, deliberate (C25): arrange_best_layout/6 is NOT on
-% crosswordsmith_arrange's export list - the module-qualified call below is
-% this harness reaching an internal on purpose. It must stay on exactly this
-% predicate: every recorded baseline.json/history.jsonl search_inf count is
-% defined against it, so re-pointing at a public seam (e.g. arrange_outcome/5)
-% would silently move the gated counts. If arrange.pl ever exports /6, switch
-% to a plain import; until then this is the sanctioned exception.
+% arrange_best_layout/6 is exported and plain-imported above (the C25
+% white-box annotation that used to live here is retired). It must stay on
+% exactly this predicate: every recorded baseline.json/history.jsonl
+% search_inf count is defined against it, so re-pointing at a different seam
+% (e.g. arrange_outcome/5) would silently move the gated counts.
 % Any Budget >= a completing fixture's true cost gives the SAME count, so this does
 % not perturb the fast workloads. arrange_best_layout/6 is single-valued and always
 % succeeds with an Outcome (placed | not_proven | infeasible); we assert it matches
@@ -62,7 +66,7 @@ expected_exit(Expected, Got) :-
 % numeric wall/cpu/inferences that measure/3 summarizes.
 arrange_search_sampler(Words, GridLen, Budget, Expected, Sample) :-
     bench_core:inproc_sampler(
-        crosswordsmith_arrange:arrange_best_layout(Words, GridLen, Budget, _, _, Outcome),
+        arrange_best_layout(Words, GridLen, Budget, _, _, Outcome),
         Sample),
     ( outcome_ok(Expected, Outcome) -> true
     ; throw(error(bench_search_outcome(expected(Expected), got(Outcome)), _)) ).
