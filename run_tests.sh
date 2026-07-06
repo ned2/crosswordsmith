@@ -82,6 +82,11 @@ check_golden "arrange max" \
 check_golden "arrange fragment" \
     tests/golden/arrange_bundled_17_fragment.json \
     ./crosswordsmith arrange --strict --fragment fixtures/bundled_17_fragment.json --input fixtures/bundled_17_clues.pl
+# The thin spelling of the same fragment against the SAME golden file:
+# byte-identity between the two forms is AC-FRAG-4 itself.
+check_golden "arrange fragment (thin form)" \
+    tests/golden/arrange_bundled_17_fragment.json \
+    ./crosswordsmith arrange --strict --fragment fixtures/bundled_17_fragment_thin.json --size 17 --input fixtures/bundled_17_clues.pl
 check_golden "arrange candidates" \
     tests/golden/arrange_bundled_17_candidates.json \
     ./crosswordsmith arrange --strict --candidates 3 --size 17 --input fixtures/bundled_17_clues.pl

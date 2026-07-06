@@ -205,7 +205,7 @@ The current interface — `./crossword.pl --input F [--strategy S] [--shuffle] [
 A **fragment grid** is a partial layout the engine solves *from*. It is the single mechanism behind three features: **anchors** (Flavour A — pre-placed words), **ninas** (Flavour B — fixed letters along a path), and **interactive iteration** (place some, let the engine finish).
 
 - **Schema = the emit format made partial**, with the convention **presence = fixed**: any word/cell present is pinned; everything absent is the engine's to place. There is no separate "anchor" field — *being in the fragment is the anchor*.
-- An optional **thin, hand-authorable convenience form** (e.g. `{answer, row, col, dir}` tuples + optional fixed cells) **desugars into** the canonical form.
+- An optional **thin, hand-authorable convenience form** (e.g. `{answer, row, col, dir}` tuples + optional fixed cells) **desugars into** the canonical form. *(Implemented for `arrange --fragment`, words-only: a top-level JSON list of `{answer, row, col, dir}` entries, 0-based start cell; no `gridLength`, so `--size`/`--max-size` frames the desugar, default 15. `fill --seeds` stays canonical-only for now — it resolves seeds by cell number on its own grid — and rejects a thin file with a clear error.)*
 - **Words and letters both supported.** A placed word = a run of fixed cells of known identity; a lone fixed cell = a nina constraint. Words-only is a valid v1; the schema *permits* letter-level so Flavour-B ninas drop in later. Fixed letters not belonging to a list word are **free nina constraints, not entries** — they do not count toward `--strict`'s "place all words".
 - **Reconciliation by answer string** against `--input`; the engine places the unmatched remainder. A fragment word absent from `--input` is an error.
 - **Validate up front** against the legality core (overlaps, adjacency/merge, unsatisfiable fixed letters) and report conflicts *before* searching.
@@ -216,7 +216,7 @@ A **fragment grid** is a partial layout the engine solves *from*. It is the sing
 **AC-FRAG-3** Pinned words/cells appear at exactly their fragment positions in every produced layout.
 **AC-FRAG-4** Thin convenience form and canonical form for the same fragment produce identical results.
 
-*(Resolved by DP-1 (§10): the thin convenience form is **deferred** — v1 is canonical-only (the emit format made partial). Duplicate `--input` answers are **rejected** (answers are unique, `check_unique_answers/1`), so no fragment duplicate-answer disambiguation is needed.)*
+*(Resolved by DP-1 (§10): the thin convenience form was **deferred** — v1 shipped canonical-only (the emit format made partial). The deferral has since been lifted: the thin form is implemented for `arrange --fragment` and AC-FRAG-4 is satisfied (plunit + a golden check that byte-compares the two forms against the same golden); `fill --seeds` remains canonical-only. Duplicate `--input` answers are **rejected** (answers are unique, `check_unique_answers/1`), so no fragment duplicate-answer disambiguation is needed.)*
 
 ---
 
@@ -383,7 +383,7 @@ The **only** sanctioned places where scope is still undecided. A component canno
 | OD-6 | Stock-grid library | Which specific grids seed the bundled library, and provenance/license of each. | **resolved (§8.3 build): ships `blocked_13a`, `blocked_13b`, `blocked_15a`** — original, 180°-symmetric, all PASS under `lint --profile blocked-uk`. Set grows by adding validated masks. |
 | OD-7 | `lint` barred profile (§8.1) | Exact barred-Ximenean per-length unch table; per-publication barred symmetry codes — primary-source before building. | **resolved (DP-3): the Ximenean band is primary-sourced + built** (Ximenes 1966 + Azed); symmetry relaxed to advisory (per-publication codes not modelled — documented simplification). |
 | OD-8 | Backlog (§8.5) | Each backlog feature needs its own decision pass + spec section before implementation. | open |
-| OD-9 | `arrange` (impl, not product) | Empirical calibration of `ε`/`target`/`τ`; thin fragment-form syntax; duplicate-answer disambiguation. | **resolved (DP-1):** calibration locked at `WCap:WTail=5:1` (ε=0.2) / `target=ceil(L/2)` / `τ=0.30`, with `--check-target` the tunable escape hatch; thin fragment-form **deferred** (canonical-only); duplicate input answers **rejected** (answers are unique). |
+| OD-9 | `arrange` (impl, not product) | Empirical calibration of `ε`/`target`/`τ`; thin fragment-form syntax; duplicate-answer disambiguation. | **resolved (DP-1):** calibration locked at `WCap:WTail=5:1` (ε=0.2) / `target=ceil(L/2)` / `τ=0.30`, with `--check-target` the tunable escape hatch; thin fragment-form **deferred** (canonical-only) *(since implemented for `arrange --fragment` — AC-FRAG-4, see §6.6)*; duplicate input answers **rejected** (answers are unique). |
 
 ### Decision passes
 

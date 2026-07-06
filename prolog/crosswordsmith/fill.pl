@@ -57,7 +57,9 @@
 % word_letters/3: the separator-stripped placement footprint of a seed answer.
 :- use_module(crosswordsmith(metrics), [word_letters/3]).
 
-% load_fragment/3: seeds arrive in the §6.6 fragment format. emit_arrange/4:
+% load_fragment/3: seeds arrive in the §6.6 fragment format (canonical form
+% only - /3 rejects the thin arrange-only list form with a shaped error,
+% since fill matches seeds by raw cell numbers on its own grid). emit_arrange/4:
 % emit_fill's `max` mode delegates the cropped emit to arrange.
 :- use_module(crosswordsmith(arrange), [load_fragment/3, emit_arrange/4]).
 

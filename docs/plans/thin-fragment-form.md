@@ -1,6 +1,6 @@
 # Plan: thin fragment convenience form (AC-FRAG-4)
 
-Status: **in progress** (this branch). Spec: design-spec §6.6; acceptance
+Status: **done** (this branch; 2026-07-06). Spec: design-spec §6.6; acceptance
 AC-FRAG-4 ("Thin convenience form and canonical form for the same fragment
 produce identical results"), deferred by DP-1/OD-9, now implemented.
 

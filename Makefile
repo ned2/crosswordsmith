@@ -46,6 +46,9 @@ golden:
 	@diff -u tests/golden/arrange_bundled_17_fragment.json \
 		<(./crosswordsmith arrange --strict --fragment fixtures/bundled_17_fragment.json --input fixtures/bundled_17_clues.pl 2>/dev/null) \
 		&& echo "golden (arrange fragment): OK"
+	@diff -u tests/golden/arrange_bundled_17_fragment.json \
+		<(./crosswordsmith arrange --strict --fragment fixtures/bundled_17_fragment_thin.json --size 17 --input fixtures/bundled_17_clues.pl 2>/dev/null) \
+		&& echo "golden (arrange fragment, thin form): OK"
 	@diff -u tests/golden/arrange_bundled_17_candidates.json \
 		<(./crosswordsmith arrange --strict --candidates 3 --size 17 --input fixtures/bundled_17_clues.pl 2>/dev/null) \
 		&& echo "golden (arrange candidates): OK"

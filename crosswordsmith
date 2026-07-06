@@ -101,7 +101,7 @@ arrange_opts_spec(
       [opt(max_size),    type(integer), default(-1), meta('N'),
        longflags(['max-size']),                   help('build up to N x N, then crop to the tight enclosing square (<= N). Mutually exclusive with --size')],
       [opt(fragment),    type(atom),    default(''), meta('FILE'),
-       longflags([fragment]),                     help('seed from a partial-layout fragment (JSON); its gridLength sets N')],
+       longflags([fragment]),                     help('seed from a partial-layout fragment (JSON): the canonical {gridLength, words} object (gridLength sets N) or a thin [{answer,row,col,dir}] list (framed by --size/--max-size, default 15)')],
       [opt(candidates),  type(integer), default(0), meta('K'),
        longflags([candidates]),                   help('emit up to K diverse layouts (a JSON array) instead of one')],
       [opt(enumerate),   type(boolean), default(false),
@@ -258,8 +258,12 @@ arrange_action(false, K, Frag, _W, _S, _D, _M, _O) :-
     cli_error('--candidates cannot be combined with --fragment (v1)').
 arrange_action(false, _K, Frag, Words, SizeOpt, Drop, Mode, OutFile) :-
     Frag \== '', !,
-    load_fragment(Frag, FragGridLen, Frags),
+    % SizeFrame doubles as load_fragment's SizeCtx: it frames a thin
+    % fragment's desugar (none -> the default 15), and reconcile then
+    % cross-checks it against the returned gridLength (a no-op for thin,
+    % which desugars AT the frame; the real guard for canonical).
     ( SizeOpt == -1 -> SizeFrame = none ; SizeFrame = SizeOpt ),
+    load_fragment(Frag, SizeFrame, FragGridLen, Frags),
     reconcile_fragment_size(FragGridLen, SizeFrame, GridLen),
     with_output(OutFile, arrange_fragment_solve(Words, Frags, GridLen, Drop, Mode)).
 arrange_action(false, K, _Frag, Words, SizeOpt, Drop, Mode, OutFile) :-
