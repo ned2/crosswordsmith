@@ -4,6 +4,15 @@ Status: **done** (this branch; 2026-07-06). Spec: design-spec §6.6; acceptance
 AC-FRAG-4 ("Thin convenience form and canonical form for the same fragment
 produce identical results"), deferred by DP-1/OD-9, now implemented.
 
+Landed in two steps on this branch: v1 shipped the thin form for
+`arrange --fragment` only, with `fill --seeds` deliberately deferred (the
+concurrent benchmarks work item owned `benchmarks/fill_subjects.pl`, a
+white-box caller of fill's seed seam — see "fill --seeds" below for the
+original rationale, kept for the record). Once that item finished without
+touching fill's files, a follow-up commit extended the thin form to
+`fill --seeds`; the **Follow-up** section at the end describes the final
+state, which supersedes the v1 caveats in the body.
+
 ## Problem
 
 `arrange --fragment` (and `fill --seeds`) accept only the **canonical**
@@ -116,4 +125,40 @@ is compared against the **same** golden file as the canonical fixture.
 ## Non-goals
 
 Letter-level pins (ninas) stay future §6.6 scope; `fill --seeds` thin
-support deferred as above; no change to the canonical schema or emit.
+support deferred as above (lifted by the follow-up below); no change to
+the canonical schema or emit.
+
+## Follow-up: thin seeds for `fill --seeds` (same branch)
+
+The v1 deferral existed only to keep hands off `benchmarks/
+fill_subjects.pl` while a concurrent work item owned the benchmark tree.
+That item finished without touching fill's files, so a follow-up commit
+extended the thin form to fill:
+
+- `apply_seeds/3` → **`apply_seeds/4`**: `apply_seeds(+SeedFile, +Size,
+  +Slots, -SeededKeys)`. There was no arity-preserving option: the seeds
+  file is parsed inside `apply_seeds`, which could not see the grid's side,
+  and deriving it from `Slots` would be unreliable (nothing guarantees a
+  slot touches the last cell). `Size` comes from `fill_grid/4`, which
+  always runs first (`fill_prepare/5`), and is passed as `load_fragment/4`'s
+  SizeCtx — so thin seeds desugar to cell numbers on exactly the grid they
+  pin. Canonical seed files are parsed identically to before (SizeCtx is
+  ignored for the dict form); the fill search is untouched.
+- White-box callers updated in the same commit: `tests/fill.plt`
+  (`do_fill/5` + three direct calls) and `benchmarks/fill_subjects.pl`
+  (`build_search_slots/3`).
+- The now-dead canonical-only machinery was removed: `load_fragment/3`,
+  the `canonical_only` SizeCtx, the `fragment_thin_unsupported` error +
+  hook, and the plt test that pinned the rejection. `load_fragment/4` is
+  the single fragment-parse export.
+- Tests: `fill_thin_seed_identical_to_canonical` (thin vs canonical COW
+  seed on the split-3 grid produce the identical fill — the AC-FRAG-4
+  analogue), `fill_thin_seed_off_grid_throws` (a thin seed is framed by
+  THIS grid's side; the error names it). New fixtures
+  `fixtures/fill_seed_cow_top_thin.json` / `fill_seed_cow_off_thin.json`.
+- Golden: **new** `tests/golden/fill_3_seeded.json` (seeded fill had no
+  golden coverage before) checked twice — canonical and thin seed files
+  against the same golden, mirroring the arrange shape. Wired into
+  `run_tests.sh`, `make golden`, and `make update-golden`.
+- Fill's own ratchets stay green and un-re-recorded:
+  `benchmarks/check_fill_identity.sh` and `benchmarks/check_fill_baseline.pl`.

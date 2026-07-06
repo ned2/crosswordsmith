@@ -102,6 +102,14 @@ check_golden "export exolve" \
 check_golden "fill 3x3" \
     tests/golden/fill_3.json \
     ./crosswordsmith fill --grid fixtures/fill_grid_3.json --dict fixtures/wordlist_sample.txt
+# Seeded fill, canonical and thin seed spellings against the SAME golden file:
+# byte-identity between the two forms is the fill analogue of AC-FRAG-4.
+check_golden "fill seeded (canonical)" \
+    tests/golden/fill_3_seeded.json \
+    ./crosswordsmith fill --grid fixtures/fill_grid_split3.json --seeds fixtures/fill_seed_cow_top.json --dict fixtures/dict_cow_pig.txt
+check_golden "fill seeded (thin form)" \
+    tests/golden/fill_3_seeded.json \
+    ./crosswordsmith fill --grid fixtures/fill_grid_split3.json --seeds fixtures/fill_seed_cow_top_thin.json --dict fixtures/dict_cow_pig.txt
 # Scale golden (fill bench Phase 0): a 15x15 stock grid filled from full ENABLE.
 # Locks byte-identity of a realistic-scale fill (~10.7M search inferences, a few
 # seconds CLI). Stdout byte-compared; stderr (the --verbose summary path) discarded.

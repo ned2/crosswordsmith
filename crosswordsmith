@@ -404,7 +404,7 @@ fill_opts_spec(
       [opt(grid),  type(atom),    default(''), meta('FILE'),
        longflags([grid]),                    help('REQUIRED: the grid template (a black-square mask; stock grids in grids/)')],
       [opt(seeds), type(atom),    default(''), meta('FILE'),
-       longflags([seeds]),                   help('seed words to pin (a partial-layout fragment, JSON)')],
+       longflags([seeds]),                   help('seed words to pin (a partial-layout fragment, JSON: the canonical {gridLength, words} object or a thin [{answer,row,col,dir}] list framed by the grid itself)')],
       [opt(dict),  type(atom),    default(''), meta('FILE'),
        longflags([dict]),                    help('word list, one per line (default: a small bundled sample; real fills: --dict UKACD18)')],
       [opt(save_index), type(atom), default(''), meta('FILE'),

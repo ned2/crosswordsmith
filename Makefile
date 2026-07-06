@@ -64,6 +64,12 @@ golden:
 	@diff -u tests/golden/fill_3.json \
 		<(./crosswordsmith fill --grid fixtures/fill_grid_3.json --dict fixtures/wordlist_sample.txt 2>/dev/null) \
 		&& echo "golden (fill 3x3): OK"
+	@diff -u tests/golden/fill_3_seeded.json \
+		<(./crosswordsmith fill --grid fixtures/fill_grid_split3.json --seeds fixtures/fill_seed_cow_top.json --dict fixtures/dict_cow_pig.txt 2>/dev/null) \
+		&& echo "golden (fill seeded, canonical): OK"
+	@diff -u tests/golden/fill_3_seeded.json \
+		<(./crosswordsmith fill --grid fixtures/fill_grid_split3.json --seeds fixtures/fill_seed_cow_top_thin.json --dict fixtures/dict_cow_pig.txt 2>/dev/null) \
+		&& echo "golden (fill seeded, thin form): OK"
 
 # Regenerate the golden files. Use only after an INTENTIONAL output change,
 # and review the diff before committing.
@@ -76,7 +82,8 @@ update-golden:
 	./crosswordsmith export --to ipuz tests/golden/arrange_bundled_17_fixed.json 2>/dev/null > tests/golden/export_bundled_17.ipuz
 	./crosswordsmith export --to exolve tests/golden/arrange_bundled_17_fixed.json 2>/dev/null > tests/golden/export_bundled_17.exolve
 	./crosswordsmith fill --grid fixtures/fill_grid_3.json --dict fixtures/wordlist_sample.txt 2>/dev/null > tests/golden/fill_3.json
-	@echo "Regenerated golden files (arrange fixed/max/fragment/candidates + lint toc + export ipuz/exolve + fill)"
+	./crosswordsmith fill --grid fixtures/fill_grid_split3.json --seeds fixtures/fill_seed_cow_top.json --dict fixtures/dict_cow_pig.txt 2>/dev/null > tests/golden/fill_3_seeded.json
+	@echo "Regenerated golden files (arrange fixed/max/fragment/candidates + lint toc + export ipuz/exolve + fill plain/seeded)"
 
 # Product benchmark for `arrange`: end-to-end command latency, the in-process
 # search alone, and the CLI-wrapper overhead between them (rest = command -

@@ -12,7 +12,7 @@
 % descope decision was recorded in the implementation plan.)
 %
 % Exports: the four *_solve CLI seams, the fragment API the driver and fill
-% share (load_fragment/3,4, reconcile_fragment_size/3), and set_check_target/1
+% share (load_fragment/4, reconcile_fragment_size/3), and set_check_target/1
 % (the only sanctioned writer of the module-private check_target_override/1
 % dynamic). White-box test helpers are NOT exported — arrange.plt reaches
 % them as crosswordsmith_arrange:Pred(...).
@@ -25,7 +25,6 @@
             % the browser/WASM envelope seam (no emit, tagged outcome) —
             % crosswordsmith_browser is its consumer
             arrange_outcome/5,
-            load_fragment/3,
             load_fragment/4,
             reconcile_fragment_size/3,
             set_check_target/1,
@@ -629,13 +628,10 @@ fragment_json(_Json, _SizeCtx, _, _) :-
     throw(error(fragment_bad_toplevel, _)).
 
 % The thin form carries no gridLength, so the consumer's size frame sets N:
-% an explicit --size/--max-size value, or the default 15 when neither is
-% given (`none`) - the same frame a bare invocation resolves to (the CLI's
-% resolve_size/2, design-spec §7.1). `canonical_only` marks a boundary that
-% cannot frame the thin form (fill --seeds, which matches seeds by raw cell
-% numbers on its own grid) - rejected up front rather than desugared at a
-% width that could silently miss every slot.
-thin_size(canonical_only, _) :- !, throw(error(fragment_thin_unsupported, _)).
+% arrange passes its explicit --size/--max-size value, or `none` when neither
+% is given - the default 15, the same frame a bare invocation resolves to
+% (the CLI's resolve_size/2, design-spec §7.1); fill passes its grid's own
+% side, so thin seeds desugar to cell numbers on exactly the grid they pin.
 thin_size(none, 15) :- !.
 thin_size(N, N).
 
@@ -716,27 +712,17 @@ fragment_thin_word(GridLen, Entry, frag(Answer, Dir, Start, CellNums)) :-
     ;   throw(error(fragment_thin_off_grid(Answer, Row, Col, Dir, GridLen), _))
     ).
 
-%!  load_fragment(+File:atom, -GridLen:integer, -Frags:list) is det.
-%
-%   Canonical-form-only load_fragment/4 (SizeCtx = `canonical_only`): the
-%   fill --seeds boundary, which interprets a fragment's cell numbers
-%   against its own grid and so cannot frame the thin form (v1) - a thin
-%   file throws fragment_thin_unsupported instead of desugaring at a wrong
-%   width. Behaviour on canonical files is unchanged.
-load_fragment(File, GridLen, Frags) :-
-    load_fragment(File, canonical_only, GridLen, Frags).
-
 %!  load_fragment(+File:atom, +SizeCtx, -GridLen:integer, -Frags:list) is det.
 %
 %   Read a fragment file (JSON) into its GridLen and frag(Answer, Dir,
 %   Start, CellNums) terms. Accepts BOTH §6.6 forms: the canonical
 %   emit-made-partial object (SizeCtx ignored; the declared gridLength is
 %   returned) and the thin hand-authorable [{answer,row,col,dir}] list,
-%   desugared on the SizeCtx frame - a positive integer (the caller's
-%   --size/--max-size), `none` (default 15), or `canonical_only` (thin
-%   rejected; see load_fragment/3). Validates shape only (throws the shaped
-%   fragment_* errors below); reconciliation against --input and legality
-%   are seed_from_fragment's job.
+%   desugared on the SizeCtx frame - a positive integer (arrange's
+%   --size/--max-size value; fill's own grid side) or `none` (default 15).
+%   Validates shape only (throws the shaped fragment_* errors below);
+%   reconciliation against --input and legality are seed_from_fragment's
+%   job (fill reconciles by slot instead: apply_seeds).
 load_fragment(File, SizeCtx, GridLen, Frags) :-
     setup_call_cleanup(open(File, read, S), json_read_dict(S, Json), close(S)),
     fragment_json(Json, SizeCtx, GridLen, Frags).
@@ -929,7 +915,7 @@ arrange_fragment_best_effort(Words, Frags, GridLen, Numbered, Reward, NumPlaced,
 %!                         +SizeMode:oneof([fixed,max])) is semidet.
 %
 %   The fragment-seeded `arrange` CLI seam: pin every fragment word of Frags
-%   (load_fragment/3) at exactly its cells, solve the remaining Words around
+%   (load_fragment/4) at exactly its cells, solve the remaining Words around
 %   the seed under the Drop contract, and emit/report exactly as
 %   arrange_solve/4 does - emit on stdout, report on stderr; on any
 %   non-placed outcome report and FAIL with no stdout layout. Throws
@@ -1009,8 +995,6 @@ prolog:error_message(fragment_size_mismatch(FragGridLen, OptSize)) -->
     [ 'fragment: gridLength ~w disagrees with the requested --size ~w'-[FragGridLen, OptSize] ].
 prolog:error_message(fragment_bad_toplevel) -->
     [ 'fragment: expected a canonical fragment object ({gridLength, words}) or a thin list of {answer, row, col, dir} entries' ].
-prolog:error_message(fragment_thin_unsupported) -->
-    [ 'fragment: the thin [{answer,row,col,dir}] form is supported for arrange --fragment only (v1); use the canonical {gridLength, words} form here' ].
 prolog:error_message(fragment_thin_invalid_dir(Answer)) -->
     [ 'fragment: thin entry ~q needs a "dir" of "across" or "down"'-[Answer] ].
 prolog:error_message(fragment_thin_invalid_position(Answer, GridLen)) -->

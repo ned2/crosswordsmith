@@ -429,12 +429,6 @@ test(fragment_bad_toplevel_throws,
      [throws(error(fragment_bad_toplevel, _))]) :-
     crosswordsmith_arrange:fragment_json("junk", 9, _, _).
 
-% load_fragment/3 is the canonical-only boundary (fill --seeds): a thin file
-% is rejected up front rather than desugared at a width fill never told us.
-test(fragment_thin_unsupported_via_load3,
-     [throws(error(fragment_thin_unsupported, _))]) :-
-    crosswordsmith_arrange:load_fragment('fixtures/bundled_17_fragment_thin.json', _, _).
-
 % Best-effort with a fragment: the seed is pinned, the rest greedily placed;
 % on a roomy grid nothing is dropped and the pins are kept.
 test(fragment_best_effort_places_all) :-

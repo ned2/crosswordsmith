@@ -198,15 +198,16 @@ with `lint`/`export`.
     # Fill a grid from a word list (a tiny sample ships; real fills want UKACD18).
     $ ./crosswordsmith fill --grid grids/blocked_13a.json --dict UKACD18.txt
 
-    # Pin some answers (a canonical §6.6 fragment, the emit format made
-    # partial) and fill around them.
+    # Pin some answers (a §6.6 fragment, canonical or thin form) and fill
+    # around them. A thin seed file is just [{"answer": "COW", "row": 0,
+    # "col": 0, "dir": "across"}, ...], framed by the grid itself.
     $ ./crosswordsmith fill --grid grids/blocked_13a.json --seeds seeds.json \
         --dict UKACD18.txt
 
 | flag | meaning |
 | --- | --- |
 | `--grid <file>` | **required** — the grid template (a `grids/` black-square mask). |
-| `--seeds <file>` | seed words to pin (a fragment, §6.6, **canonical form only** — the thin list form is `arrange`-only for now and is rejected with a clear error); filled around as hard pins. |
+| `--seeds <file>` | seed words to pin (a fragment, §6.6, canonical or thin form — a thin `[{answer,row,col,dir}]` list is framed by the grid itself, no `gridLength` needed); filled around as hard pins. |
 | `--dict <file>` | word list, one per line (default: a small bundled sample; real fills: `--dict UKACD18`). |
 | `--out <file>` | write to `<file>` instead of stdout. |
 | `--verbose` | report the success summary (grid, filled slots) on stderr; a clean success is silent there by default. Failures print regardless. |
