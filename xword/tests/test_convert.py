@@ -3,9 +3,9 @@
 Structural failures block and the error names the property + a capable
 target; metadata drops (per-word `link`/`meta`, top-level `diagnostics`)
 warn on stderr and `-q` silences them with stdout byte-identical; round-trips
-are puzzle-lossless (modulo the Q5 exolve title default, which is warned and
-fail-stricts loudly on a native hop); output structurally agrees with the
-engine's `export`
+are puzzle-lossless (the Q5 exolve title default is warned on the exolve hop
+and, since P2, carried back through native rather than fail-stricking);
+output structurally agrees with the engine's `export`
 (fixtures `bundled_17.ipuz.json`/`bundled_17.exolve` are engine exports, and
 `arrange_bundled_17_fixed.json` is the engine's arrange golden verbatim).
 """
@@ -93,9 +93,9 @@ class TestStructuralFailures:
         with pytest.raises(XwordError, match="rectangular.*ipuz or exolve"):
             convert_text(src, "native")
 
-    def test_title_blocks_native(self):
-        with pytest.raises(XwordError, match="title.*ipuz or exolve"):
-            convert_text(EXOLVE.read_text(), "native")
+    # NB no test_title_blocks_native: title/author are no longer structural
+    # failures for native (P2 uplift). Their round-trip is pinned in
+    # TestRoundTrips.test_titled_exolve_native and test_native_exolve_native.
 
     def test_circled_cell_blocks_native(self):
         src = mini_exolve("CAB@", "A.U", "BUS")
@@ -258,16 +258,34 @@ class TestRoundTrips:
         assert json.loads(back) == native_without_links(src)
 
     def test_native_exolve_native(self):
-        # post-Q5 the exolve hop injects the default title, so the way back
-        # fail-stricts on it exactly like an engine exolve export does (the
-        # documented native title error, D7/§11) — loud, never silent. The
-        # lossless native round-trip is via ipuz (test above). Real Exolve
-        # files end up titled anyway: Exet's Save requires one.
+        # P2: native now carries title/author, so the way back SUCCEEDS. The
+        # title-less source gains the Q5 default `Untitled` on the exolve hop
+        # (Exet's Save requires a title); native carries that title back on the
+        # return trip. It gains the ecosystem default and loses nothing
+        # structural — NOT lossiness. (The exolve hop still drops per-word
+        # `link` meta, exactly as ipuz does; the payload-lossless round-trip is
+        # native→ipuz→native above.)
         src = NATIVE.read_text()
         via, _ = convert_text(src, "exolve")
         assert "  exolve-title: Untitled\n" in via
-        with pytest.raises(XwordError, match="title"):
-            convert_text(via, "native")
+        back, warnings = convert_text(via, "native")
+        assert warnings == []  # native holds everything the exolve hop produced
+        back_obj = json.loads(back)
+        assert back_obj["title"] == "Untitled"  # gained the default, carried back
+        # structure survives the double hop: same grid letters + word answers
+        assert parse_board(back, "native").grid == parse_board(src, "native").grid
+        src_answers = {(w["number"], w["direction"]): w["answer"] for w in json.loads(src)["words"]}
+        back_answers = {(w["number"], w["direction"]): w["answer"] for w in back_obj["words"]}
+        assert back_answers == src_answers  # enumeration reconstruction preserved
+
+    def test_titled_exolve_native(self):
+        # A titled/authored exolve source (the engine's own export carries a
+        # title) now converts to native carrying both anchors — the failure
+        # this once raised is retired (P2). The engine exolve fixture is titled
+        # "Untitled" and has no setter, so assert the title flows through.
+        back, warnings = convert_text(EXOLVE.read_text(), "native")
+        assert warnings == []
+        assert json.loads(back)["title"] == "Untitled"
 
     def test_display_answers_reconstructed_from_enumeration(self):
         # the (5,5) hop through ipuz regains "OMEGA POINT", not "OMEGAPOINT"
@@ -296,10 +314,14 @@ class TestRoundTrips:
 
 
 class TestEngineCrossCheck:
-    """§11: structural agreement with `crosswordsmith export` on the same
-    layout. Since Q5 the exolve title matches the engine byte-for-byte (the
-    convert boundary injects the same default); the remaining divergences are
-    ipuz's title (invent-nothing there) and the engine's `exolve-id`."""
+    """§11: structural + anchor-field agreement with `crosswordsmith export`
+    on the same layout. After P1 the engine retired its invented ipuz title
+    and the constant `exolve-id`, so title/author now agree on both sides
+    (ipuz: neither carries one for a title-less layout; exolve: both carry the
+    Q5 `Untitled` default). The residual divergences are cosmetic and left for
+    the byte-parity endgame (Stretch): ipuz JSON whitespace, and the exolve
+    title line's header position — engine emits it right after `exolve-begin`,
+    xword after width/height; same line content, different placement."""
 
     def _assert_structural_match(self, ours_text: str, engine_text: str, fmt: str):
         ours = parse_board(ours_text, fmt)
@@ -307,10 +329,14 @@ class TestEngineCrossCheck:
         assert (ours.height, ours.width) == (engine.height, engine.width)
         assert ours.grid == engine.grid
         assert ours.words == engine.words  # numbering, clues, enumerations
-        assert engine.meta.get("title") == "Untitled"
-        if fmt == "exolve":  # Q5: same invented default as the engine
-            assert ours.meta.get("title") == "Untitled"
-        else:  # ipuz stays invent-nothing (Q5 resolution)
+        # Anchor-field parity now holds on BOTH sides (P1 retired the invented
+        # ipuz title): ours and the engine agree on title AND author.
+        assert ours.meta.get("title") == engine.meta.get("title")
+        assert ours.meta.get("author") == engine.meta.get("author")
+        if fmt == "exolve":  # title-less bundled -> both carry the Q5 default
+            assert engine.meta.get("title") == "Untitled"
+        else:  # ipuz: invent-nothing on both sides now (P1)
+            assert "title" not in engine.meta
             assert "title" not in ours.meta
 
     def test_ipuz_matches_engine_export(self):
@@ -320,9 +346,12 @@ class TestEngineCrossCheck:
     def test_exolve_matches_engine_export(self):
         ours, _ = convert_text(NATIVE.read_text(), "exolve")
         self._assert_structural_match(ours, EXOLVE.read_text(), "exolve")
-        # the title LINE is byte-identical to the engine's (export.pl:235)
+        # the title LINE is byte-identical to the engine's (export.pl exolve_title_line/2)
         assert "\n  exolve-title: Untitled\n" in ours
         assert "\n  exolve-title: Untitled\n" in EXOLVE.read_text()
+        # P1 retired the engine's constant exolve-id — neither side emits one now
+        assert "exolve-id" not in ours
+        assert "exolve-id" not in EXOLVE.read_text()
 
 
 class TestExolveTitleDefault:
@@ -381,11 +410,15 @@ class TestCli:
         assert loud.stdout.startswith("exolve-begin")
 
     def test_structural_failure_exits_nonzero_no_out_file(self, tmp_path):
+        # A genuinely-structural failure: a rectangular source can't become
+        # native (title no longer qualifies since P2 — native carries it now).
+        src = tmp_path / "rect.exolve"
+        src.write_text(mini_exolve("CAB", "OWL", height=2))
         out = tmp_path / "layout.json"
-        result = run("convert", "--to", "native", "--out", str(out), str(EXOLVE))
+        result = run("convert", "--to", "native", "--out", str(out), str(src))
         assert result.returncode == 1
         assert result.stdout == ""
-        assert "title" in result.stderr and "ipuz or exolve" in result.stderr
+        assert "rectangular" in result.stderr and "ipuz or exolve" in result.stderr
         assert not out.exists()
 
     def test_stdin_detection_and_out(self, tmp_path):
