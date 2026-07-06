@@ -179,6 +179,21 @@ test(absent_id_echoes_json_null) :-
     once(sub_atom(Json, _, _, _, '"id":null')),
     \+ sub_atom(Json, _, _, _, '"id":"null"').
 
+% id wrong-type shapes (request_id/2's atomic gate): atomic ids echo as
+% themselves (number; boolean/null land as the atoms true/null after the
+% parse, which serialize back to the JSON literals); structured ids
+% (object/array) have no usable atomic echo -> JSON null, the absent-id rule.
+test(id_shapes_echo_or_null) :-
+    forall(member(IdJson-Expected,
+                  [ '42'-'"id":42',
+                    'true'-'"id":true',
+                    '{"a":1}'-'"id":null',
+                    '[1,2]'-'"id":null',
+                    'null'-'"id":null' ]),
+           ( format(atom(P), '{"v":1,"id":~w,"verb":"capabilities"}', [IdJson]),
+             browser_dispatch(capabilities, P, Json),
+             once(sub_atom(Json, _, _, _, Expected)) )).
+
 % --- the malformed-params invariant fuzz (strategy §7's headline lock) -------
 % Every case must yield a TYPED validation error — never a bare fail, never
 % the generic masquerade. Each entry mutates the known-good toy params.
@@ -222,6 +237,27 @@ test(fuzz_params_not_object) :-
     bt_dispatch(arrange, _{v: 1, id: "t-1", verb: "arrange", params: "x"}, Env),
     bt_error(Env, "validation").
 
+% The C56 pins: `size` is capped browser-side (max_browser_size/1 — the ONE
+% deliberate divergence from the CLI's accepted domain: grid terms are
+% size^2-arity compounds, and an uncapped size races the uncatchable WASM
+% abort() on device). cap+1 -> typed validation naming the bound; an at-cap
+% request still solves.
+test(size_cap_plus_one_typed_validation) :-
+    crosswordsmith_browser:max_browser_size(Cap),
+    Over is Cap + 1,
+    bt_toy_clues(Clues),
+    bt_arrange(_{clues: Clues, size: Over}, Env),
+    bt_error(Env, "validation"),
+    get_dict(error, Env, E),
+    get_dict(message, E, Msg),
+    once(sub_string(Msg, _, _, _, "at most")).
+test(size_at_cap_still_solves) :-
+    crosswordsmith_browser:max_browser_size(Cap),
+    bt_toy_clues(Clues),
+    bt_arrange(_{clues: Clues, size: Cap}, Env),
+    bt_success_result(Env, R),
+    get_dict(gridLength, R, Cap).
+
 % A huge seed that is still a JSON *integer* stays in the CLI's accepted
 % domain (integer >= 0 — SWI reads bignums); only a float-degraded one is bad.
 test(huge_integer_seed_accepted) :-
@@ -247,6 +283,100 @@ test(payload_not_json_typed) :-
 test(payload_not_object_typed) :-
     bt_dispatch_payload(arrange, '[1,2,3]', Env),
     bt_error(Env, "validation").
+
+% The C55 pin: duplicate JSON keys (top-level or nested) are a client-input
+% defect -> typed validation, with wire wording — never `internal` with the
+% leaked dict_create/3 context the audit probe caught (p08).
+test(duplicate_json_key_typed_validation) :-
+    forall(member(Payload,
+        [ '{"v":1,"v":2,"id":"t-d","verb":"arrange","params":{}}',
+          '{"v":1,"id":"t-d","verb":"arrange","params":{"size":5,"size":7}}'
+        ]),
+        ( bt_dispatch_payload(arrange, Payload, Env),
+          bt_error(Env, "validation"),
+          get_dict(error, Env, E),
+          get_dict(message, E, Msg),
+          once(sub_string(Msg, _, _, _, "duplicate key")),
+          \+ sub_string(Msg, _, _, _, "dict_create") )).
+
+% --- protocol leniencies (the C59 pins) ---------------------------------------
+% Four DELIBERATE lenient-reader behaviours (browser.pl parse_request/2's
+% leniency note): the facade always sends a full well-formed envelope, so none
+% can mask a facade bug — but the accepted shapes are contract, so lock them.
+
+% (a) absent `v` is accepted and treated as v1.
+test(lenient_absent_v_dispatches_as_v1) :-
+    bt_toy_params(P),
+    bt_dispatch(arrange, _{id: "t-v", verb: "arrange", params: P}, Env),
+    bt_success_result(Env, _),
+    get_dict(v, Env, 1).
+
+% (b) trailing bytes after the one JSON value are ignored.
+test(lenient_trailing_garbage_accepted) :-
+    bt_dispatch_payload(arrange,
+        '{"v":1,"id":"t-g","verb":"arrange","params":{"clues":[{"answer":"CAT"}],"size":5}} trailing garbage',
+        Env),
+    bt_success_result(Env, _).
+
+% (c) `v` must be the JSON *integer* 1: 1.0 is unsupported_version
+% (unreachable from a JS facade — JSON.stringify writes 1 — but hand-rolled
+% clients can send it).
+test(lenient_v_float_rejected) :-
+    bt_dispatch_payload(arrange,
+        '{"v":1.0,"id":"t-f","verb":"arrange","params":{"clues":[{"answer":"CAT"}],"size":5}}',
+        Env),
+    bt_error(Env, "unsupported_version").
+
+% (d) the payload `verb` field is documentation only: the bound Verb argument
+% dispatches and is echoed even when the field disagrees.
+test(lenient_verb_field_not_cross_checked) :-
+    bt_toy_params(P),
+    bt_dispatch(arrange, _{v: 1, id: "t-m", verb: "lint", params: P}, Env),
+    get_dict(verb, Env, "arrange"),
+    bt_success_result(Env, R),
+    get_dict(gridLength, R, 5).
+
+% The C60 pin: an unbound Verb ARGUMENT must not silently dispatch (pre-fix it
+% unified with the first verb clause and ran arrange). unknown_verb envelope
+% with a stable '<unbound>' echo in the message; the envelope's verb field is
+% JSON null (a variable's print name would be unstable bytes) and the caller's
+% variable stays unbound.
+test(unbound_verb_rejected_not_dispatched) :-
+    bt_toy_params(P),
+    atom_json_dict(Payload, _{v: 1, id: "t-u", verb: "arrange", params: P}, []),
+    browser_dispatch(UnboundVerb, Payload, Json),
+    var(UnboundVerb),
+    atom_json_dict(Json, Env, [default_tag(json)]),
+    bt_error(Env, "unknown_verb"),
+    get_dict(verb, Env, null),
+    get_dict(id, Env, "t-u"),
+    get_dict(error, Env, E),
+    get_dict(message, E, Msg),
+    once(sub_string(Msg, _, _, _, "unbound")).
+
+% Bound non-atom Verb arguments (string/number/compound — a facade defect,
+% probe p25) fall to the unknown_verb catch-all: the flattened term is
+% echoed, nothing dispatches. Pinned alongside C60's unbound case.
+test(non_atom_verb_shapes_unknown_verb) :-
+    forall(member(V, ["arrange", 42, f(x)]),
+           ( browser_dispatch(V,
+                 '{"v":1,"id":"t-nv","verb":"arrange","params":{}}', Json),
+             atom_json_dict(Json, Env, [default_tag(json)]),
+             bt_error(Env, "unknown_verb"),
+             get_dict(id, Env, "t-nv") )).
+
+% Non-text payloads (number/compound/unbound — Worker-impossible, the
+% defensive path): the engine-level parse throws (open_string type error /
+% instantiation_error) are honestly labelled `internal` — but still a tagged
+% envelope, never a throw out of the spine.
+test(non_text_payload_internal_envelope) :-
+    forall(member(Payload, [42, f(x)]),
+           ( browser_dispatch(arrange, Payload, Json),
+             atom_json_dict(Json, Env, [default_tag(json)]),
+             bt_error(Env, "internal") )),
+    browser_dispatch(arrange, _UnboundPayload, Json2),
+    atom_json_dict(Json2, Env2, [default_tag(json)]),
+    bt_error(Env2, "internal").
 
 % --- edge-case matrix (asserting the ENVELOPE, not "contains placed") --------
 
@@ -282,6 +412,17 @@ test(edge_unicode_lowercase_answers) :-
     get_dict(words, R, Ws),
     maplist([W]>>get_dict(answer, W, _), Ws),
     length(Ws, 2).
+% The C62 pin: an empty-string answer is accepted by validation (core's
+% doc_to_words domain, identical CLI-side — browser parity holds) and rides
+% the wire as failure/unplaceable_words with words:[""]. Pinned AS-IS: kinder
+% handling (a json_invalid_answer for empty/whitespace) is a core-lane
+% decision, not a browser fix.
+test(edge_empty_string_answer_current_shape) :-
+    bt_arrange(_{clues: [_{answer: ""}], size: 5}, Env),
+    bt_failure(Env, "unplaceable_words"),
+    get_dict(detail, Env, D),
+    get_dict(words, D, [""]).
+
 test(edge_best_effort_drops_ride_diagnostics) :-
     bt_arrange(_{clues: [_{answer: "CAT"}, _{answer: "CAR"}, _{answer: "ZZZ"}],
                  size: 5, bestEffort: true}, Env),
@@ -324,17 +465,21 @@ test(seedless_has_no_seed_provenance) :-
     bt_arrange(P, Env), bt_success_result(Env, R),
     \+ get_dict(seed, R.diagnostics.arrange, _).
 
-% White-box: dispatch entry unconditionally clears all three instance globals
-% ({engine:true} does NOT — strategy §3.2's table).
-test(reset_clears_all_three_globals, [
+% White-box: dispatch entry unconditionally clears all FOUR instance globals
+% ({engine:true} does NOT — strategy §3.2's table). prng_state/1 is the
+% fourth (C61): set_search_seed(7) in the setup asserts it alongside
+% search_seed/1, and reset's set_search_seed(-1) must clear it transitively.
+test(reset_clears_all_four_globals, [
         setup(( set_search_seed(7),
                 set_check_target(2),
                 set_verbose(true) )),
         cleanup(( set_search_seed(-1),
                   set_check_target(-1),
                   set_verbose(false) ))]) :-
+    once(crosswordsmith_core:prng_state(_)),   % the 4th fact exists pre-reset
     crosswordsmith_browser:reset_request_state,
     \+ crosswordsmith_core:search_seed(_),
+    \+ crosswordsmith_core:prng_state(_),
     \+ crosswordsmith_arrange:check_target_override(_),
     \+ crosswordsmith_core:verbose_mode.
 
@@ -373,6 +518,52 @@ test(table_growth_bounded_across_dispatches) :-
     bt_memo_census(V5, B5),
     assertion(V5 =< 2 * V1),
     assertion(B5 =< 2 * B1).
+
+% The spine det lock (§10: exactly one solution, no choicepoint left — the
+% main audit added deterministic/1 probes elsewhere; this is the browser
+% spine's), across all three envelope arms: success, error, failure.
+test(dispatch_det_lock_all_arms) :-
+    bt_toy_params(P),
+    atom_json_dict(Happy, _{v: 1, id: "d-1", verb: "arrange", params: P}, []),
+    browser_dispatch(arrange, Happy, _),
+    deterministic(D1), D1 == true,
+    browser_dispatch(arrange, 'not json', _),
+    deterministic(D2), D2 == true,
+    atom_json_dict(Failing,
+                   _{v: 1, id: "d-2", verb: "arrange",
+                     params: _{clues: [_{answer: "AAA"}, _{answer: "BBB"}],
+                               size: 5}}, []),
+    browser_dispatch(arrange, Failing, _),
+    deterministic(D3), D3 == true.
+
+% E2E resource_exhausted + post-blowout worker health (the census probes,
+% pinned): a genuine stack blowout inside an IN-CAP dispatch rides the wire
+% as the typed resource_exhausted envelope — single-line message (C53's
+% first-line rule) — and the very NEXT dispatch is byte-identical to its
+% baseline: nothing about the blowout leaks forward. The blowout is forced
+% by shrinking stack_limit around one dispatch (post-C56-cap a
+% user-reachable blowout is too slow for a unit test; 0.5 MB fails the
+% size-100 grid allocation in ~1 ms).
+test(e2e_resource_exhausted_and_worker_health) :-
+    bt_toy_params(P),
+    atom_json_dict(Toy, _{v: 1, id: "rh", verb: "arrange", params: P}, []),
+    browser_dispatch(arrange, Toy, Baseline),
+    current_prolog_flag(stack_limit, Old),
+    setup_call_cleanup(
+        set_prolog_flag(stack_limit, 500_000),
+        browser_dispatch(arrange,
+            '{"v":1,"id":"rr","verb":"arrange","params":{"clues":[{"answer":"CAT"}],"size":100}}',
+            Json),
+        set_prolog_flag(stack_limit, Old)),
+    atom_json_dict(Json, Env, [default_tag(json)]),
+    bt_error(Env, "resource_exhausted"),
+    get_dict(id, Env, "rr"),
+    get_dict(error, Env, E),
+    get_dict(message, E, Msg),
+    once(sub_string(Msg, _, _, _, "Stack limit")),
+    \+ sub_string(Msg, _, _, _, "\n"),
+    browser_dispatch(arrange, Toy, After),
+    Baseline == After.
 
 % --- native value-parity vs the committed CLI goldens (DEC-8) ----------------
 % The nested `result` is a live dict: correctness is value-equality of the
@@ -615,6 +806,15 @@ test(capabilities_engine_sourced) :-
     get_dict(swipl, E, Swipl),
     string(Swipl).
 
+% dispatch clause-1 ordering: an unparseable payload beats even the
+% payload-less capabilities verb — the parse-error envelope answers (verb
+% still echoed, id null), never a capabilities success built from garbage.
+test(capabilities_with_unparseable_payload_is_parse_error) :-
+    bt_dispatch_payload(capabilities, 'not json', Env),
+    bt_error(Env, "validation"),
+    get_dict(verb, Env, "capabilities"),
+    get_dict(id, Env, null).
+
 % --- classifier totality (white-box) ------------------------------------------
 % outcome_envelope/4 must map EVERY term: the outcome atoms, mapped throws,
 % unmapped throws -> internal, and the never-plain-fail backstop.
@@ -645,6 +845,25 @@ test(classifier_unknown_outcome_is_internal) :-
     crosswordsmith_browser:outcome_envelope(arrange, "t", frobnicated(9), Env),
     Env.status == error,
     Env.error.type == internal.
+
+% The C54 lock: even a SERIALIZATION failure yields a tagged envelope.
+% White-box at the emit seam, forcing the impossible-today failures the
+% armour exists for — a success outcome whose result dict smuggles (a) a
+% non-JSON compound and (b) an unbound variable past the total classifier.
+% Both must come back as the minimal internal envelope with id and verb
+% still echoed — never a raw throw out of the spine's last step.
+test(emit_serialization_failure_yields_internal_envelope) :-
+    forall(member(Bad, [ _{x: foo(bar)}, _{x: _} ]),
+           ( crosswordsmith_browser:emit_envelope(arrange, "t-54",
+                                                  placed(Bad), Json),
+             atom(Json),
+             atom_json_dict(Json, Env, [default_tag(json)]),
+             bt_error(Env, "internal"),
+             get_dict(id, Env, "t-54"),
+             get_dict(verb, Env, "arrange"),
+             get_dict(error, Env, E),
+             get_dict(message, E, Msg),
+             once(sub_string(Msg, _, _, _, "serialization failed")) )).
 
 % --- the arrange_outcome/5 seam (the exported wrapper, DEC-7) -----------------
 

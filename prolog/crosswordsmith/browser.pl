@@ -8,7 +8,10 @@
 % strings "null"/"true"/"false" — see wasm/client/solve_browser.pl's history).
 %
 % Wire contract (strategy §4.1) — every response is one of:
-%   {v:1, id, verb, status:"success", result: {...}}   a live layout dict
+%   {v:1, id, verb, status:"success", result: {...}}   the verb's result dict
+%       (arrange: a live layout; lint: the report; export: the document;
+%        capabilities: the registry — §4.1's "live layout dict" wording is
+%        arrange-specific)
 %   {v:1, id, verb, status:"failure", detail: {reason, words?}}
 %   {v:1, id, verb, status:"error",   error: {type, message}}
 %
@@ -77,20 +80,46 @@
 browser_dispatch(Verb, Payload, JsonEnvelope) :-
     reset_request_state,
     catch(parse_request(Payload, Req), ParseErr, Req = invalid(ParseErr)),
-    request_id(Req, Id),
+    request_id(Req, Id),        % total by construction: invalid(_) or a dict
     catch(( dispatch(Verb, Req, Outcome0)
           ->  Outcome = Outcome0
           ;   Outcome = failed(Verb)          % the never-plain-fail backstop
           ),
           Err,
           Outcome = thrown(Err)),
-    envelope_verb(Verb, VerbA),
-    outcome_envelope(VerbA, Id, Outcome, Envelope),
-    % width(0): a single-line wire envelope — nothing downstream reads the
-    % bytes (JSON.parse both ways, DEC-8), so pretty-printing only costs
-    % transport size and breaks line-oriented harnesses. as(atom) makes the
-    % §4.3 atom-not-string contract explicit (it is also the default).
-    atom_json_dict(JsonEnvelope, Envelope, [width(0), as(atom)]).
+    emit_envelope(Verb, Id, Outcome, JsonEnvelope).
+
+% Catch #3 (audit C54): the envelope build + serialization used to run after
+% both catches closed, so the never-throw contract was carried there by
+% convention alone (total classifier, term_to_atom flattening) — and JSON
+% serialization CAN throw: a result dict smuggling a non-JSON term or an
+% unbound variable (impossible today — the arrange/lint/export result dicts
+% are golden-locked JSON-clean — but one future verb away) would have escaped
+% browser_dispatch/3 raw, handing worker.js a bare string instead of an
+% envelope. On a serialization failure the fallback envelope is built from
+% literals plus the guaranteed-atomic Id and the atom VerbA — statically
+% serializable, so the true last step cannot throw. plt-locked by forcing
+% both failure shapes through this seam.
+emit_envelope(Verb, Id, Outcome, JsonEnvelope) :-
+    envelope_verb(Verb, VerbA),               % total: atom | null | flattened
+    catch(( outcome_envelope(VerbA, Id, Outcome, Envelope),
+            % width(0): a single-line wire envelope — nothing downstream reads
+            % the bytes (JSON.parse both ways, DEC-8), so pretty-printing only
+            % costs transport size and breaks line-oriented harnesses.
+            % as(atom) makes the §4.3 atom-not-string contract explicit (it is
+            % also the default).
+            atom_json_dict(JsonEnvelope, Envelope, [width(0), as(atom)])
+          ),
+          EmitErr,
+          emit_fallback(VerbA, Id, EmitErr, JsonEnvelope)).
+
+emit_fallback(VerbA, Id, EmitErr, JsonEnvelope) :-
+    format(atom(Msg), "envelope serialization failed: ~q", [EmitErr]),
+    (   atomic(Id) -> SafeId = Id ; SafeId = null ),  % belt: request_id/2
+    atom_json_dict(JsonEnvelope,                      % already guarantees it
+                   _{ v: 1, id: SafeId, verb: VerbA, status: error,
+                      error: _{type: internal, message: Msg} },
+                   [width(0), as(atom)]).
 
 % --- per-request state reset (strategy §3.2) ---------------------------------
 % Unconditionally clear the mutable module globals before every dispatch: a
@@ -123,6 +152,21 @@ reset_request_state :-
 % bad_request(_) on a non-object, unsupported_version(_) on a v we don't speak
 % — all mapped by the classifier, so a garbage payload still gets a typed
 % envelope.
+%
+% Deliberate leniencies (a lenient reader — the facade always sends a full
+% well-formed envelope, so none of these can mask a facade bug; all four are
+% plt-pinned contract, audit C59):
+%   - absent `v` is accepted and treated as v1: the version gate fires only
+%     when `v` is present and differs from 1, so the "v1 handshake" is opt-in
+%     for hand-rolled clients.
+%   - `v` must be the JSON *integer* 1: v:1.0 is unsupported_version. A JS
+%     facade cannot produce 1.0 (JSON.stringify serialises it as 1); noted
+%     for hand-rolled clients.
+%   - trailing bytes after the JSON value are ignored: the parser reads
+%     exactly one value and never inspects the remainder.
+%   - the payload's `verb` field is documentation only: the Worker-bound Verb
+%     ARGUMENT dispatches and is echoed; a disagreeing field is never
+%     cross-checked.
 parse_request(Payload, Req) :-
     atom_json_dict(Payload, Req0, [default_tag(json)]),
     (   is_dict(Req0)
@@ -146,7 +190,10 @@ request_id(Req, Id) :-
 
 % The verb is echoed for self-describing logs. It arrives as an atom from the
 % Worker's bound forEach variable; anything else (a defensive impossibility) is
-% flattened so json_write_dict cannot choke on the envelope itself.
+% flattened so json_write_dict cannot choke on the envelope itself. An UNBOUND
+% verb echoes as JSON null — the no-usable-id rule applied to the verb; a
+% variable's print name would be unstable wire bytes (audit C60).
+envelope_verb(Verb, null) :- var(Verb), !.
 envelope_verb(Verb, Verb) :- atom(Verb), !.
 envelope_verb(Verb, VerbA) :- term_to_atom(Verb, VerbA).
 
@@ -167,6 +214,16 @@ verb(capabilities).
 % dispatch(+Verb, +Req, -Outcome): one clause per verb/1 fact, unknown-verb
 % catch-all LAST. Every clause unifies a tagged Outcome or throws a mapped term.
 dispatch(_Verb, invalid(Err), thrown(Err)) :- !.   % request never parsed
+% An unbound Verb must not reach the verb clauses: it would unify with the
+% first head and silently dispatch arrange — Worker-impossible (worker.js
+% always binds a string), but the one hole in this head discipline (audit
+% C60). Reject via the unknown_verb envelope, echoing a stable atom rather
+% than a variable's print name, and leave the caller's variable unbound
+% (envelope_verb/2 echoes it as JSON null). Bound non-atom verbs
+% (string/number/compound) already fall through to the catch-all below.
+dispatch(Verb, _Req, thrown(error(unknown_verb('<unbound>'), _))) :-
+    var(Verb),
+    !.
 dispatch(arrange, Req, Outcome) :- !,
     arrange_browser(Req, Outcome).
 dispatch(lint, Req, lint_report(Report)) :- !,
@@ -209,15 +266,80 @@ request_params(Req, Params) :-
 % absent -> resolve_size's 15), seed ~ validate_seed (integer >= 0), the
 % seed+bestEffort guard ~ guard_seed_combos. JSON has true absence, so the
 % CLI's -1 "not given" sentinels are NOT part of the browser domain: seed:-1 is
-% a bad seed here, not "unset".
+% a bad seed here, not "unset". `size` carries the ONE deliberate domain
+% divergence: it is capped browser-side (max_browser_size/1 below, audit C56)
+% while the CLI accepts any positive integer.
+%
+% The boolean and enum shapes each appear twice (bestEffort/allowAsymmetry,
+% mode/to), so those four source one skeleton each below — while every key
+% KEEPS its own formal name: the classifier rows and message hooks key on
+% bad_mode/bad_best_effort/... per key (audit C57). The size/seed resolvers
+% have genuinely distinct guards and stay hand-written.
+
+% resolve_bool(+Params, +Key, +ErrName, +TrueVal-FalseVal, -Value): JSON
+% true/false map to TrueVal/FalseVal; absent -> FalseVal (both boolean params
+% default off); anything else throws ErrName(V).
+resolve_bool(Params, Key, ErrName, TrueVal-FalseVal, Value) :-
+    (   get_dict(Key, Params, B)
+    ->  (   B == true  -> Value = TrueVal
+        ;   B == false -> Value = FalseVal
+        ;   ErrTerm =.. [ErrName, B],
+            throw(error(ErrTerm, _))
+        )
+    ;   Value = FalseVal
+    ).
+
+% resolve_enum(+Params, +Key, +IfAbsent, +Pairs, +ErrName, -Value): Pairs is
+% WireString-Value; IfAbsent is default(Value) or required(MissingFormal).
+resolve_enum(Params, Key, IfAbsent, Pairs, ErrName, Value) :-
+    (   get_dict(Key, Params, W)
+    ->  (   enum_value(Pairs, W, Value0)
+        ->  Value = Value0
+        ;   ErrTerm =.. [ErrName, W],
+            throw(error(ErrTerm, _))
+        )
+    ;   IfAbsent = default(Value)
+    ->  true
+    ;   IfAbsent = required(Missing),
+        throw(error(Missing, _))
+    ).
+
+% ==-comparison lookup (the resolvers' original semantics; no unification
+% against the wire value, no library(lists) import for the WASM image).
+enum_value([W0-V0|_], W, V) :-
+    W == W0,
+    !,
+    V = V0.
+enum_value([_|Pairs], W, V) :-
+    enum_value(Pairs, W, V).
+
+% The browser-side size cap (audit C56). Natively an oversized grid burns
+% seconds then yields the typed resource_exhausted envelope under the stack
+% cap — but strategy §4.2's stack cap is BEST-EFFORT on device against the
+% uncatchable WASM abort(), and grid terms are size^2-arity compounds
+% (size:2000 = a 4M-arity functor), so an uncapped `size` lets one request
+% race the device to a dead Worker. A cheap validation error beats that. 100
+% is ~3-4x the largest published crosswords (NYT Sunday 21-25, weekend
+% giants ~40) and keeps the worst-case success envelope ~60 KB. The cap is
+% rendered into the size_over_cap message at message time, so the two cannot
+% drift; browser.plt pins cap+1 (validation) and an at-cap solve.
+max_browser_size(100).
 
 resolve_size(Params, GridLen) :-
     (   get_dict(size, Params, S)
     ->  (   integer(S), S > 0
-        ->  GridLen = S
+        ->  check_size_cap(S),
+            GridLen = S
         ;   throw(error(bad_size(S), _))
         )
     ;   GridLen = 15
+    ).
+
+check_size_cap(S) :-
+    max_browser_size(Cap),
+    (   S =< Cap
+    ->  true
+    ;   throw(error(size_over_cap(S), _))
     ).
 
 % mode:"max" = build on size N, crop to the tight enclosing square — the CLI's
@@ -225,22 +347,11 @@ resolve_size(Params, GridLen) :-
 % (This un-blocks the spike's browser_max_mode_unsupported: the crop path is
 % now golden-locked, wasm/test/value_golden.sh.)
 resolve_mode(Params, SizeMode) :-
-    (   get_dict(mode, Params, M)
-    ->  (   M == "fixed" -> SizeMode = fixed
-        ;   M == "max"   -> SizeMode = max
-        ;   throw(error(bad_mode(M), _))
-        )
-    ;   SizeMode = fixed
-    ).
+    resolve_enum(Params, mode, default(fixed),
+                 ["fixed"-fixed, "max"-max], bad_mode, SizeMode).
 
 resolve_best_effort(Params, Drop) :-
-    (   get_dict(bestEffort, Params, B)
-    ->  (   B == true  -> Drop = best_effort
-        ;   B == false -> Drop = strict
-        ;   throw(error(bad_best_effort(B), _))
-        )
-    ;   Drop = strict
-    ).
+    resolve_bool(Params, bestEffort, bad_best_effort, best_effort-strict, Drop).
 
 resolve_seed(Params, Seed) :-
     (   get_dict(seed, Params, N)
@@ -252,8 +363,10 @@ resolve_seed(Params, Seed) :-
     ).
 
 % Randomisation perturbs the strict search only (matches the CLI's
-% guard_seed_combos): best-effort never reaches the perturbed seam.
-guard_seed_drop(seed(_), best_effort) :- !,
+% guard_seed_combos): best-effort never reaches the perturbed seam. (No cut
+% before the throw: the throw prunes the clause-2 choicepoint itself, so a
+% cut there is dead — the lint X6.B2 class.)
+guard_seed_drop(seed(_), best_effort) :-
     throw(error(seed_with_best_effort, _)).
 guard_seed_drop(_, _).
 
@@ -315,22 +428,11 @@ resolve_profile(Params, Profile) :-
     ).
 
 resolve_allow_asymmetry(Params, Allow) :-
-    (   get_dict(allowAsymmetry, Params, A)
-    ->  (   A == true  -> Allow = true
-        ;   A == false -> Allow = false
-        ;   throw(error(bad_allow_asymmetry(A), _))
-        )
-    ;   Allow = false
-    ).
+    resolve_bool(Params, allowAsymmetry, bad_allow_asymmetry, true-false, Allow).
 
 resolve_export_to(Params, To) :-
-    (   get_dict(to, Params, T0)
-    ->  (   T0 == "ipuz"   -> To = ipuz
-        ;   T0 == "exolve" -> To = exolve
-        ;   throw(error(bad_to(T0), _))
-        )
-    ;   throw(error(missing_to, _))
-    ).
+    resolve_enum(Params, to, required(missing_to),
+                 ["ipuz"-ipuz, "exolve"-exolve], bad_to, To).
 
 % --- the capabilities verb -----------------------------------------------------
 % Engine-sourced (OQ-4): the verb list comes from the loaded engine's verb/1
@@ -383,14 +485,16 @@ outcome_envelope(Verb, Id, failed(_), Env) :- !,
                    'dispatch failed without tagging an outcome (engine bug)',
                    Env).
 outcome_envelope(Verb, Id, Other, Env) :-        % totality net
-    term_to_atom(Other, OtherA),
-    format(atom(Msg), "unrecognised outcome term: ~w", [OtherA]),
+    format(atom(Msg), "unrecognised outcome term: ~q", [Other]),
     error_envelope(Verb, Id, internal, Msg, Env).
 
-thrown_envelope(Verb, Id, error(Formal, _), Env) :-
+thrown_envelope(Verb, Id, Err, Env) :-
+    Err = error(Formal, _),
     thrown_type(Formal, Type),
     !,
-    formal_message(Formal, Msg),
+    % the WHOLE caught term (context intact), not a rebuilt error(Formal, _):
+    % SWI's machinery needs the bound context to render ISO formals (C53)
+    formal_message(Err, Msg),
     error_envelope(Verb, Id, Type, Msg, Env).
 thrown_envelope(Verb, Id, Err, Env) :-           % unmatched formal / bare throw
     term_to_atom(Err, Msg),
@@ -405,6 +509,7 @@ thrown_type(duplicate_answer(_),    validation).
 thrown_type(bad_request(_),         validation).
 thrown_type(bad_params(_),          validation).
 thrown_type(bad_size(_),            validation).
+thrown_type(size_over_cap(_),       validation).
 thrown_type(bad_mode(_),            validation).
 thrown_type(bad_seed(_),            validation).
 thrown_type(bad_best_effort(_),     validation).
@@ -425,28 +530,44 @@ thrown_type(lint_no_cells(_),           validation).
 thrown_type(lint_invalid_cell(_, _),    validation).
 thrown_type(export_invalid_layout,      validation).
 thrown_type(syntax_error(_),        validation).    % request JSON didn't parse
+% dict_create/3 rejects duplicate names while the request parses (RFC 8259
+% leaves them undefined; SWI dicts refuse). A client-input defect, so
+% validation — without this row it fell through to `internal` and leaked the
+% dict_create context onto the wire (audit C55, probe p08).
+thrown_type(duplicate_key(_),       validation).
 thrown_type(resource_error(_),      resource_exhausted).
 thrown_type(unknown_verb(_),        unknown_verb).
 thrown_type(unsupported_version(_), unsupported_version).
 
-% Render a formal through the same prolog:error_message//1 hooks the CLI uses
-% (core.pl et al. + the browser-local clauses below), so the envelope's message
-% matches the native rendering; unhooked formals degrade to term_to_atom.
-% syntax_error is special-cased (ISO formals are rendered by SWI's own message
-% machinery, not the project hook — and only the envelope wants this wording,
-% so no global hook clause that would restyle the CLI's rendering).
-formal_message(syntax_error(What), Msg) :- !,
+% Render the caught error via message_to_string/2 — the same message
+% machinery the CLI uses, so every prolog:error_message//1 hook (core.pl et
+% al. + the browser-local clauses below) renders identically to its native
+% text (probe-verified, no trailing newline), and ISO formals a project hook
+% never covers gain SWI's own rendering: a real resource_error(stack) now
+% reads "Stack limit (256Mb) exceeded" instead of the raw term (§4.2's
+% mobile priority). Caveats, both probe-verified (audit C53):
+%   - the WHOLE caught term goes in, context intact: SWI needs the bound
+%     stack_overflow context to render a resource error, and with an UNBOUND
+%     context message_to_string throws instantiation_error — hence the
+%     catch(...,_,fail) guard and the term_to_atom fallback (which also
+%     keeps today's wording for unhooked formals).
+%   - only the FIRST line rides the wire: hook messages are single-line by
+%     convention, and the multi-line ISO renderings tail off into engine
+%     frames and CLI advice ("Use the --stack_limit=size[KMG] command line
+%     option ...") that are wrong inside a browser envelope.
+% syntax_error / duplicate_key are special-cased: custom envelope wording
+% for the two request-parse-level defects — deliberately NOT global hook
+% clauses, which would restyle the CLI's own rendering of those errors.
+formal_message(error(syntax_error(What), _), Msg) :- !,
     format(atom(Msg), "request is not valid JSON (~w)", [What]).
-formal_message(Formal, Msg) :-
-    (   catch(phrase(prolog:error_message(Formal), Lines), _, fail),
-        catch(with_output_to(atom(Msg0),
-                             print_message_lines(current_output, '', Lines)),
-              _, fail)
-    ->  % print_message_lines appends a newline the wire message must not carry
-        atom_string(Msg0, S0),
-        split_string(S0, "", " \n\t", [S1]),
-        atom_string(Msg, S1)
-    ;   term_to_atom(Formal, Msg)
+formal_message(error(duplicate_key(Key), _), Msg) :- !,
+    format(atom(Msg), "request JSON has a duplicate key (~w)", [Key]).
+formal_message(Err, Msg) :-
+    (   catch(message_to_string(Err, S), _, fail)
+    ->  split_string(S, "\n", " \t", [Line1|_]),
+        atom_string(Msg, Line1)
+    ;   Err = error(Formal, _),
+        term_to_atom(Formal, Msg)
     ).
 
 :- multifile prolog:error_message//1.
@@ -456,6 +577,11 @@ prolog:error_message(bad_params(V)) -->
     [ 'params: expected a JSON object (got ~q)'-[V] ].
 prolog:error_message(bad_size(V)) -->
     [ 'size must be a positive integer (got ~q)'-[V] ].
+prolog:error_message(size_over_cap(V)) -->
+    % the cap is read from max_browser_size/1 at message time ({}/1), so the
+    % message cannot drift from what resolve_size/2 actually enforces
+    { max_browser_size(Cap) },
+    [ 'size must be at most ~w in the browser (got ~q); larger grids exceed the device memory budget'-[Cap, V] ].
 prolog:error_message(bad_mode(V)) -->
     [ 'mode must be "fixed" or "max" (got ~q)'-[V] ].
 prolog:error_message(bad_seed(V)) -->
