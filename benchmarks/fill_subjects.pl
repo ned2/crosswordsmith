@@ -35,6 +35,18 @@
 :- use_module(library(lists)).
 :- use_module(library(apply)).
 
+% The engine seams this harness measures. Exported by fill.pl for exactly
+% this consumer (fill-seam export promotion, 2026-07-06 - the fill analogue
+% of the arrange C25 promotion); loaded here through the `crosswordsmith`
+% alias that load.pl registers before run_fill.pl use_module's this file.
+% Every recorded fill baseline count (fill_baseline.json search_inf /
+% load_inf / grid_inf, fill_identity.sha256) is defined against THESE
+% predicates - never re-point the seams at another entry (e.g. fill_solve/4
+% or fill_attempt_masked/9): the counts would silently move.
+:- use_module(crosswordsmith(fill),
+              [ load_dict/3, fill_grid/4, fill_attempt/8,
+                apply_seeds/4, seeded_slot/2 ]).
+
 % COMMAND layer. process_sampler returns the raw exit code; we assert it against
 % Expected here (not inside bench_core) and record only wall+rss. rss (peak RSS,
 % KiB) is a whole-process footprint, not a search-memory metric.
@@ -59,14 +71,14 @@ expected_exit(Expected, Got) :-
 % once/1 (adds an inference; bench_core's inproc_sampler note).
 fill_load_sampler(DictFile, Sample) :-
     bench_core:inproc_sampler(
-        crosswordsmith_fill:load_dict(DictFile, _DictByLen, _Index),
+        load_dict(DictFile, _DictByLen, _Index),
         Sample).
 
 % GRID layer. Each sample re-derives the slots from the mask (fresh shared cell
 % variables); grid_inf is deterministic.
 fill_grid_sampler(GridFile, Sample) :-
     bench_core:inproc_sampler(
-        crosswordsmith_fill:fill_grid(GridFile, _Size, _Slots, _CellVar),
+        fill_grid(GridFile, _Size, _Slots, _CellVar),
         Sample).
 
 % SEARCH layer. Rebuild FRESH slots (+ seeds) OUTSIDE the timed goal, then time
@@ -74,8 +86,8 @@ fill_grid_sampler(GridFile, Sample) :-
 fill_search_sampler(GridFile, Seeds, DictByLen, Index, Budget-Expected, Sample) :-
     build_search_slots(GridFile, Seeds, slots(SearchSlots, AllSlots)),
     bench_core:inproc_sampler(
-        crosswordsmith_fill:fill_attempt(SearchSlots, AllSlots, DictByLen, Index,
-                                         Budget, Outcome, _Numbered, _InputWords),
+        fill_attempt(SearchSlots, AllSlots, DictByLen, Index,
+                     Budget, Outcome, _Numbered, _InputWords),
         Sample),
     ( Outcome == Expected -> true
     ; throw(error(bench_fill_outcome(expected(Expected), got(Outcome)), _)) ).
@@ -84,11 +96,11 @@ fill_search_sampler(GridFile, Seeds, DictByLen, Index, Budget-Expected, Sample) 
 % included); SearchSlots are what the engine fills (AllSlots minus seed pins).
 % Slots are passed as plain args downstream, so the crossing cells stay shared.
 build_search_slots(GridFile, Seeds, slots(SearchSlots, AllSlots)) :-
-    crosswordsmith_fill:fill_grid(GridFile, Size, AllSlots, _CellVar),
+    fill_grid(GridFile, Size, AllSlots, _CellVar),
     ( Seeds == none
     ->  SearchSlots = AllSlots
-    ;   crosswordsmith_fill:apply_seeds(Seeds, Size, AllSlots, SeededKeys),
-        exclude(crosswordsmith_fill:seeded_slot(SeededKeys), AllSlots, SearchSlots) ).
+    ;   apply_seeds(Seeds, Size, AllSlots, SeededKeys),
+        exclude(seeded_slot(SeededKeys), AllSlots, SearchSlots) ).
 
 :- multifile prolog:error_message//1.
 prolog:error_message(bench_fill_exit(expected(E), exit(G))) -->

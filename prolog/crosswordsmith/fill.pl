@@ -11,17 +11,31 @@
 % (the shared variable), and dead-ends backtrack. MRV ordering (fewest matching
 % candidates first) + a node/inference budget make it deterministic and bounded.
 %
-% Exports: fill_solve/4 (the CLI seam) plus the prebuilt-index seams
-% (fill_solve_index/5, fill_save_index/2,3); every other predicate is
-% internal (tests reach them as crosswordsmith_fill:Pred(...)). All
-% project dependencies are explicit imports below (stockgrid, metrics,
-% arrange, core).
+% Exports: fill_solve/4 (the CLI seam), the prebuilt-index seams
+% (fill_solve_index/5, fill_save_index/2,3), and the five benchmark
+% measurement seams (load_dict/3, fill_grid/4, fill_attempt/8, apply_seeds/4,
+% seeded_slot/2) the fill product bench times directly — see the export list
+% below. Every other predicate is internal (tests reach them as
+% crosswordsmith_fill:Pred(...)). All project dependencies are explicit
+% imports below (stockgrid, metrics, arrange, core).
 
 :- module(crosswordsmith_fill,
           [ fill_solve/4,
             fill_solve_index/5,
             fill_save_index/2,
-            fill_save_index/3
+            fill_save_index/3,
+            % the benchmark measurement seams (benchmarks/fill_subjects.pl,
+            % run_fill.pl): the dict_load/grid/search buckets time load_dict,
+            % fill_grid and fill_attempt directly, and the search sampler
+            % rebuilds fresh seeded slots via apply_seeds + seeded_slot.
+            % Every recorded fill baseline count (fill_baseline.json,
+            % fill_identity.sha256) is defined against THESE predicates —
+            % benchmarks must never re-point the seams elsewhere.
+            load_dict/3,
+            fill_grid/4,
+            fill_attempt/8,
+            apply_seeds/4,
+            seeded_slot/2
           ]).
 
 % All library imports carry explicit import lists so a
@@ -76,9 +90,16 @@ fill_budget(800_000_000).   % inference budget (determinism via INV-2, bounded)
 
 
 % --- build the slots from a stock-grid mask ----------------------------------
-% Each slot is slot(Start, Dir, Cells, Vars): Vars are the shared per-cell
-% logical variables (so an across and a down slot crossing at a cell share that
-% cell's variable). Returns the slots + the cell->var assoc.
+
+%!  fill_grid(+GridFile:atom, -Size:integer, -Slots:list, -CellVar:assoc) is det.
+%
+%   Derive the slot set of the stock-grid mask GridFile (§8.3). Each slot is
+%   slot(Start, Dir, Cells, Vars): Vars are the shared per-cell logical
+%   variables (so an across and a down slot crossing at a cell share that
+%   cell's variable). Returns the slots + the cell->var assoc. Throws on a
+%   malformed grid file (stockgrid_load/2). Benchmark seam: the fill bench's
+%   `grid` bucket (grid_inf) times exactly this goal, and its search sampler
+%   rebuilds fresh slots through it outside the timed window.
 fill_grid(GridFile, Size, Slots, CellVar) :-
     stockgrid_load(GridFile, grid(_Name, Size, Mask)),
     mask_white_cells(Mask, Size, WhiteSet),
@@ -114,16 +135,24 @@ cell_var(CellVar, Cell, Var) :- get_assoc(Cell, CellVar, Var).
 
 
 % --- seeds: pin fragment words at their slots (hard pins, OD-3) ---------------
-% A seed answer is unified into the slot whose cells/direction match; a seed that
-% matches no slot, or clashes with another seed at a crossing, is an error.
-% Pin every seed. SeededKeys collects each pinned slot's Start-Dir so the search
-% and the unfillable report can EXEMPT them: a seed is a hard pin (a setter's
-% theme/own word) and need NOT be a dictionary word (R2/OD-3). Its letters still
-% constrain crossing slots via the shared cell variables, and a slot completed
-% by crossings (not a seed) is still validated against the dictionary.
-% Size is the fill grid's own side, passed as load_fragment's SizeCtx: it
-% frames a thin seed file's desugar so its cell numbers land on THIS grid
-% (a canonical file ignores it - matching stays purely by cells/direction).
+
+%!  apply_seeds(+SeedFile:atom, +Size:integer, +Slots:list,
+%!              -SeededKeys:list) is det.
+%
+%   Pin every seed of the §6.6 fragment file SeedFile into Slots. A seed
+%   answer is unified into the slot whose cells/direction match; a seed that
+%   matches no slot, clashes with another seed at a crossing, or duplicates
+%   another seed's answer THROWS (hooked errors, reported before searching).
+%   SeededKeys collects each pinned slot's Start-Dir so the search and the
+%   unfillable report can EXEMPT them: a seed is a hard pin (a setter's
+%   theme/own word) and need NOT be a dictionary word (R2/OD-3). Its letters
+%   still constrain crossing slots via the shared cell variables, and a slot
+%   completed by crossings (not a seed) is still validated against the
+%   dictionary. Size is the fill grid's own side, passed as load_fragment's
+%   SizeCtx: it frames a thin seed file's desugar so its cell numbers land on
+%   THIS grid (a canonical file ignores it - matching stays purely by
+%   cells/direction). Benchmark seam: the search sampler's seeded-rung slot
+%   rebuild (benchmarks/fill_subjects.pl build_search_slots/3).
 apply_seeds(SeedFile, Size, Slots, SeededKeys) :-
     load_fragment(SeedFile, Size, _FragGridLen, Frags),
     check_unique_seed_answers(Frags),
@@ -151,16 +180,27 @@ apply_seed(Slots, frag(Answer, Dir, _Start, CellNums), SeededIn, SeededOut) :-
         ;   throw(error(fill_seed_clash(Answer), _)) )
     ;   throw(error(fill_seed_no_slot(Answer), _)) ).
 
-% A slot is a seed pin (exempt from search + empty_slots) iff its Start-Dir was
-% recorded by apply_seed (Start+Dir uniquely identify a slot).
+%!  seeded_slot(+SeededKeys:list, +Slot) is semidet.
+%
+%   A slot is a seed pin (exempt from search + empty_slots) iff its Start-Dir
+%   was recorded by apply_seed (Start+Dir uniquely identify a slot).
+%   Benchmark seam: the search sampler's exclude/3 filter that derives
+%   SearchSlots from AllSlots, mirroring fill_prepare's own use.
 seeded_slot(SeededKeys, slot(Start, Dir, _, _)) :- memberchk(Start-Dir, SeededKeys).
 
 
 % --- dictionary: in-memory pattern index (OD-2) ------------------------------
-% DictByLen: assoc Len -> list of words (each a list of upper-case char atoms).
-% Index: assoc k(Len,Pos,Char) -> ordset of indices into DictByLen[Len]. A slot's
-% candidates = the words of its length matching its already-bound positions
-% (intersection of the index sets), or all words of that length if nothing bound.
+
+%!  load_dict(+File:atom, -DictByLen:assoc, -Index:assoc) is det.
+%
+%   Read the text dictionary File into the in-memory pattern index.
+%   DictByLen: assoc Len -> list of words (each a list of upper-case char
+%   atoms). Index: assoc k(Len,Pos,Char) -> ordset of indices into
+%   DictByLen[Len]. A slot's candidates = the words of its length matching
+%   its already-bound positions (intersection of the index sets), or all
+%   words of that length if nothing bound. Throws on an unreadable File.
+%   Benchmark seam: the fill bench's `dict_load` bucket (load_inf) times
+%   exactly this goal - it is the gated load path (F-L1).
 load_dict(File, DictByLen, Index) :-
     read_file_lines(File, Lines),
     % convlist, not findall+member+guard (C32): the same word list in the same
@@ -526,9 +566,19 @@ fill_attempt(SearchSlots, AllSlots, DictByLen, Index, Outcome, Numbered, InputWo
     fill_budget(B),
     fill_attempt(SearchSlots, AllSlots, DictByLen, Index, B, Outcome, Numbered, InputWords).
 
-% Budget-explicit form: Budget is the inference budget. The default /7 reads
-% fill_budget/1; passing a tiny Budget drives the AC-FILL-1 "not proven within
-% budget" path (tests/fill.plt).
+%!  fill_attempt(+SearchSlots:list, +AllSlots:list, +DictByLen:assoc,
+%!               +Index:assoc, +Budget:integer,
+%!               -Outcome:oneof([filled,infeasible,not_proven]),
+%!               -Numbered:list, -InputWords:list) is det.
+%
+%   Budget-explicit form: Budget is the inference budget. The default /7
+%   above reads fill_budget/1 and stays internal (the default-budget
+%   delegate, mirroring arrange_best_layout/5); passing a tiny Budget drives
+%   the AC-FILL-1 "not proven within budget" path (tests/fill.plt). Always
+%   succeeds with exactly one Outcome - infeasible is an Outcome, never a
+%   failure. Benchmark seam: the fill bench's GATED `search` bucket
+%   (search_inf, the metric of record) times exactly this goal with a
+%   pre-loaded dict and fresh slots rebuilt outside the timed window.
 fill_attempt(SearchSlots, AllSlots, DictByLen, Index, Budget, Outcome, Numbered, InputWords) :-
     % No catch/3: see construct_one/7 in arrange.pl - call_with_inference_limit/3
     % binds Limit = inference_limit_exceeded on the budget path and only re-throws
