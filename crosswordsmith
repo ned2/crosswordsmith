@@ -15,6 +15,9 @@
 
 % Load the whole implementation via load.pl (the single owner of load order),
 % resolved relative to this script so it works from any cwd.
+% directory_file_path/3 is autoload-only (library(filesex)); explicit so this
+% root also loads under autoload(false) (P11/C5, matching load.pl).
+:- use_module(library(filesex), [directory_file_path/3]).
 :- prolog_load_context(directory, Dir),
    directory_file_path(Dir, 'load.pl', LoadFile),
    ensure_loaded(LoadFile).

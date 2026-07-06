@@ -21,6 +21,10 @@
 :- use_module(library(statistics)).
 :- use_module(library(time)).        % call_with_time_limit/2 (per-cell guard)
 
+% directory_file_path/3 is autoload-only (library(filesex)); explicit so this
+% root also loads under autoload(false) (P11/C5, matching load.pl).
+:- use_module(library(filesex), [directory_file_path/3]).
+
 :- dynamic repo_root/1.
 
 :- prolog_load_context(directory, BenchDir),

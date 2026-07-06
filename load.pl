@@ -9,6 +9,12 @@
 % The `crosswordsmith` file-search alias points at prolog/crosswordsmith/,
 % resolved relative to this file's own directory (prolog_load_context/2), so
 % loads are cwd-independent.
+%
+% directory_file_path/3 is autoload-only (library(filesex), module files_ex),
+% so it must be imported explicitly: under autoload(false) — the qsave/WASM
+% deployment discipline (P11/C5) — the alias directive below would otherwise
+% die and NOTHING loads.
+:- use_module(library(filesex), [directory_file_path/3]).
 :- prolog_load_context(directory, Dir),
    directory_file_path(Dir, 'prolog/crosswordsmith', LibDir),
    (   user:file_search_path(crosswordsmith, LibDir)

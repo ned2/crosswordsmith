@@ -13,7 +13,13 @@
 % regression lives in the golden files (tests/golden/arrange_*.json).
 
 :- use_module(library(plunit)).
-:- use_module(library(http/json)).
+:- use_module(library(json)).
+% lists/apply: test-body helpers; explicit so the suite also runs under
+% autoload(false) (P11/C5).
+:- use_module(library(lists)).
+:- use_module(library(apply)).
+:- use_module(library(yall)).    % test-body lambdas
+:- use_module(library(debug)).   % assertion/1
 
 arrange_bundled(Words) :- load_clues('fixtures/bundled_17_clues.pl', Words).
 arrange_toc(Words)     :- load_clues('fixtures/toc_demo.pl', Words).

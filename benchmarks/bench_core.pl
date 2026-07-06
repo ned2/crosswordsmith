@@ -13,6 +13,10 @@
 :- use_module(library(apply)).
 :- use_module(library(process)).
 :- use_module(library(readutil)).
+% call_time/2 (inproc_sampler's measurement wrapper) is autoload-only
+% (library(statistics)); explicit so the bench roots also run under
+% autoload(false) (P11/C5).
+:- use_module(library(statistics), [call_time/2]).
 
 % measure(+Sampler, +Opts, -Summary)
 %   Sampler : called as call(Sampler, Sample); Sample is a dict metric->number.

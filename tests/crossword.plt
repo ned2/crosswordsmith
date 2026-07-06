@@ -10,7 +10,14 @@
 % utilities, the solver, and clue numbering.
 
 :- use_module(library(plunit)).
-:- use_module(library(http/json)).
+:- use_module(library(json)).
+% lists/apply/assoc/aggregate: test-body helpers; explicit so the suite also
+% runs under autoload(false) (P11/C5).
+:- use_module(library(lists)).
+:- use_module(library(apply)).
+:- use_module(library(assoc)).
+:- use_module(library(aggregate)).
+:- use_module(library(solution_sequences)).   % limit/2 in the count_upto2 unit
 
 bundled_words(Words) :-
     load_clues('fixtures/bundled_17_clues.pl', Words).

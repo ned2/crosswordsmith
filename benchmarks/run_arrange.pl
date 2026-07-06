@@ -23,7 +23,11 @@
 :- use_module(library(lists)).
 :- use_module(library(apply)).
 :- use_module(library(optparse)).
-:- use_module(library(http/json)).
+:- use_module(library(json)).
+
+% directory_file_path/3 is autoload-only (library(filesex)); explicit so this
+% root also loads under autoload(false) (P11/C5, matching load.pl).
+:- use_module(library(filesex), [directory_file_path/3]).
 
 :- dynamic repo_root/1.
 

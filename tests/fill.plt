@@ -11,6 +11,10 @@
 :- use_module(library(plunit)).
 :- use_module(library(fastrw)).   % F-L2 tests hand-craft artifacts to prove refusals
 :- use_module(library(assoc)).
+% lists/apply: test-body helpers; explicit so the suite also runs under
+% autoload(false) (P11/C5).
+:- use_module(library(lists)).
+:- use_module(library(apply)).
 
 % Run a fill and return the across/down answer lists (deterministic).
 do_fill(GridFile, SeedFile, DictFile, Across, Down) :-

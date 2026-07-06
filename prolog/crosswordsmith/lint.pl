@@ -19,13 +19,18 @@
             lint_dict_layout/3
           ]).
 
-:- use_module(library(http/json)).
-:- use_module(library(apply)).
-:- use_module(library(aggregate)).
-:- use_module(library(ordsets)).
+% All library imports carry explicit import lists so a
+% qsave_program(..., [autoload(false)]) build resolves them (P11/C5).
+% library(json), NOT the legacy library(http/json) alias — the alias does not
+% resolve in the WASM image (C6).
+:- use_module(library(json), [json_read_dict/2, json_write_dict/2]).
+:- use_module(library(apply), [include/3, maplist/3]).
+:- use_module(library(aggregate), [aggregate_all/3]).
+:- use_module(library(lists), [append/3, member/2, nth1/3, reverse/2]).
+:- use_module(library(ordsets), [ord_memberchk/2]).
 % vertices_edges_to_ugraph/3 + reachable/3: the connectivity rule's
 % reachability check (connected/2).
-:- use_module(library(ugraphs)).
+:- use_module(library(ugraphs), [reachable/3, vertices_edges_to_ugraph/3]).
 
 % The shared metric layer plus the placed-word record accessors (spec §4
 % boundary: the measurement + data-type layers, never the search substrate).

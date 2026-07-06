@@ -32,12 +32,21 @@
             emit_arrange/4
           ]).
 
-:- use_module(library(apply)).
-:- use_module(library(aggregate)).
+% All library imports carry explicit import lists so a
+% qsave_program(..., [autoload(false)]) build resolves them (P11/C5).
+% library(json), NOT the legacy library(http/json) alias — the alias does not
+% resolve in the WASM image (C6): fragment load + the JSON emits.
+:- use_module(library(json), [json_read_dict/2, json_write_dict/2]).
+:- use_module(library(apply), [foldl/4, maplist/3]).
+:- use_module(library(aggregate), [aggregate_all/3]).
+:- use_module(library(assoc),
+              [assoc_to_keys/2, empty_assoc/1, get_assoc/3, list_to_assoc/2]).
+:- use_module(library(lists),
+              [append/3, member/2, numlist/3, reverse/2, selectchk/3]).
+:- use_module(library(ordsets), [ord_union/3]).
 % map_list_to_pairs/3, pairs_values/2 (fragment ordering, candidate rescore,
-% and the greedy constructor's seed selection); imported explicitly (not via
-% autoload) to survive a qsave_program(..., [autoload(false)]) (P11).
-:- use_module(library(pairs)).
+% and the greedy constructor's seed selection).
+:- use_module(library(pairs), [map_list_to_pairs/3, pairs_values/2]).
 
 % The shared metric layer: optimizer signals (word_checked_count/3,
 % placed_bbox/4, word_cells/5), the answer footprint (word_letters/3), and

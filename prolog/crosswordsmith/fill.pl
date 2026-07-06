@@ -23,14 +23,23 @@
             fill_save_index/3
           ]).
 
-:- use_module(library(http/json)).
-:- use_module(library(apply)).
-:- use_module(library(lists)).
-:- use_module(library(ordsets)).
-:- use_module(library(assoc)).
-:- use_module(library(pairs)).
-:- use_module(library(sha)).        % F-L2: dict-file SHA-256 (artifact integrity)
-:- use_module(library(fastrw)).     % F-L2: fast_write/fast_read artifact I/O
+% All library imports carry explicit import lists so a
+% qsave_program(..., [autoload(false)]) build resolves them (P11/C5). (No JSON
+% import: this module's emit delegates to core's emit_json/3 / arrange's
+% emit_arrange/4 — the old library(http/json) line here was vestigial.)
+:- use_module(library(apply), [exclude/3, foldl/4, maplist/3]).
+:- use_module(library(lists), [append/3, member/2, nth0/3, select/3]).
+:- use_module(library(ordsets),
+              [list_to_ord_set/2, ord_intersect/2, ord_intersection/3]).
+:- use_module(library(assoc),
+              [ assoc_to_list/2, assoc_to_values/2, empty_assoc/1, gen_assoc/3,
+                get_assoc/3, list_to_assoc/2, put_assoc/4 ]).
+:- use_module(library(pairs), [group_pairs_by_key/2, map_list_to_pairs/3]).
+% F-L2: dict-file SHA-256 (artifact integrity). NB library(sha)'s file defines
+% module `crypto_hash` on 10.1.10; both predicates are on its export list.
+:- use_module(library(sha), [sha_hash/3, hash_atom/2]).
+% F-L2: fast_write/fast_read artifact I/O.
+:- use_module(library(fastrw), [fast_read/2, fast_write/2]).
 % option/2,3: the artifact Meta is a keyed list of unary Key(Value) terms -
 % literally an SWI option list - and fill_save_index's Options is one too.
 :- use_module(library(option), [option/2, option/3]).

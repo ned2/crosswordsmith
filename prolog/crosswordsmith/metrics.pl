@@ -36,12 +36,12 @@
             word_cells/5
           ]).
 
-:- use_module(library(ordsets)).
-:- use_module(library(apply)).
-% pairs_keys_values/3 lives here; imported explicitly (not via autoload) to
-% match fill.pl's style and survive a qsave_program(..., [autoload(false)])
-% (P11).
-:- use_module(library(pairs)).
+% All library imports carry explicit import lists so a
+% qsave_program(..., [autoload(false)]) build resolves them (P11/C5).
+:- use_module(library(ordsets), [ord_intersection/3, ord_memberchk/2]).
+:- use_module(library(apply), [exclude/3, maplist/3]).
+:- use_module(library(lists), [max_list/2, member/2, min_list/2, sum_list/2]).
+:- use_module(library(pairs), [pairs_keys_values/3]).
 
 % next_cell/4 (word_cells/5's stepper) plus the placed-word record (pw/8)
 % field accessors — the metric predicates read cells/dir off each placed word.

@@ -7,6 +7,10 @@
 % regression - that every bundled grid validates as legal.
 
 :- use_module(library(plunit)).
+% lists/apply: test-body helpers; explicit so the suite also runs under
+% autoload(false) (P11/C5).
+:- use_module(library(lists)).
+:- use_module(library(apply)).
 
 % The shipped library (OD-6): a small curated, lint-validated starter set.
 bundled_grid('grids/blocked_13a.json').

@@ -28,8 +28,17 @@
 :- use_module(library(lists)).
 :- use_module(library(apply)).
 :- use_module(library(optparse)).
-:- use_module(library(http/json)).
+:- use_module(library(json)).
 :- use_module(library(assoc)).
+% yall: dict_word_count's metadata fold uses a lambda; explicit import so this
+% root also runs under autoload(false) (P11/C5). NB importing yall also
+% compile-expands the lambda — harness metadata only, outside every sampler
+% (the bench-fill-check ratchet locks the measured counts bit-identical).
+:- use_module(library(yall)).
+
+% directory_file_path/3 is autoload-only (library(filesex)); explicit so this
+% root also loads under autoload(false) (P11/C5, matching load.pl).
+:- use_module(library(filesex), [directory_file_path/3]).
 
 :- dynamic repo_root/1.
 

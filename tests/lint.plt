@@ -10,6 +10,9 @@
 % byte-exact report live in the golden (tests/golden/lint_bundled_17_toc.json).
 
 :- use_module(library(plunit)).
+% lists: test-body helpers; explicit so the suite also runs under
+% autoload(false) (P11/C5).
+:- use_module(library(lists)).
 
 % A tiny controlled layout on a 5x5 grid: across CAT (cells 1,2,3) crossing down
 % COT (cells 1,6,11) at cell 1. Each word is checked at only its shared cell, so

@@ -8,6 +8,9 @@
 % by the goldens (tests/golden/export_bundled_17.{ipuz,exolve}).
 
 :- use_module(library(plunit)).
+% lists: test-body helpers (memberchk); explicit so the suite also runs under
+% autoload(false) (P11/C5).
+:- use_module(library(lists)).
 
 % A tiny canonical layout: CAT across row0 + COW down col0 of a 3x3, crossing at
 % C. Blocks are the bare atom `null` (a non-dict cell), as in a parsed layout.

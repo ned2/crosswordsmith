@@ -8,7 +8,7 @@
 %
 % Enumerations are derived from the answer's spaces/hyphens (§6.3); clue text
 % rides in meta.clue. Nothing is invented (AC-EXP-3): a missing clue is empty.
-% Zero project dependencies (it only needs JSON + lists).
+% Zero project dependencies (it only needs JSON + list/pairs utilities).
 %
 % Exports: export_solve/2 is the CLI seam; export_layout_dict/2 is the
 % file-free shape gate (browser.pl's params path); the layout_to_*/2
@@ -23,9 +23,14 @@
             answer_enumeration/2
           ]).
 
-:- use_module(library(http/json)).
-:- use_module(library(apply)).
-:- use_module(library(lists)).
+% All library imports carry explicit import lists so a
+% qsave_program(..., [autoload(false)]) build resolves them (P11/C5).
+% library(json), NOT the legacy library(http/json) alias — the alias does not
+% resolve in the WASM image (C6).
+:- use_module(library(json), [json_read_dict/2, json_write_dict/2]).
+:- use_module(library(apply), [maplist/2, maplist/3]).
+:- use_module(library(lists), [append/2, member/2]).
+:- use_module(library(pairs), [pairs_values/2]).
 
 
 % --- load + validate a canonical layout --------------------------------------

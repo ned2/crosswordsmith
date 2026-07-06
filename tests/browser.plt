@@ -24,6 +24,14 @@
                 json_write_dict/2
               ]).
 :- use_module(library(process)).
+% lists/apply/aggregate: test-body helpers; explicit so the suite also runs
+% under autoload(false) (P11/C5).
+:- use_module(library(lists)).
+:- use_module(library(apply)).
+:- use_module(library(aggregate)).
+:- use_module(library(yall)).    % test-body lambdas
+:- use_module(library(debug)).   % assertion/1
+:- use_module(library(readutil)). % read_file_to_string/3 (golden parity)
 
 % --- helpers (bt_ prefix: .plt helpers share the `user` namespace) -----------
 

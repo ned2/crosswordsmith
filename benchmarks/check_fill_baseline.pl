@@ -48,7 +48,11 @@
 :- use_module(library(apply)).
 :- use_module(library(process)).
 :- use_module(library(readutil)).
-:- use_module(library(http/json)).
+:- use_module(library(json)).
+
+% directory_file_path/3 is autoload-only (library(filesex)); explicit so this
+% root also runs under autoload(false) (P11/C5, matching load.pl).
+:- use_module(library(filesex), [directory_file_path/3]).
 
 :- dynamic bench_dir/1.
 :- prolog_load_context(directory, D), asserta(bench_dir(D)).

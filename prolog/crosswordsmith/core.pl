@@ -86,8 +86,16 @@
 % GIn and GOut are one and the same term (the old immutable-version threading
 % collapses onto the trail). See docs/experiments.md (E-H2).
 
-% Used by the JSON output emitter (canonically library(json) on SWI 10+).
-:- use_module(library(http/json)).
+% All library imports below carry explicit import lists so a
+% qsave_program(..., [autoload(false)]) build resolves them (P11/C5).
+
+% Used by the JSON output emitter — library(json), NOT the legacy
+% library(http/json) alias: the alias does not resolve in the WASM image
+% (C6; wasm/README.md "Browser gotchas"). NB the swap moves the CLI fill's
+% one-off index build across a global-stack growth threshold (one extra stack
+% SHIFT, a transient ~30 MB peak-RSS blip on the ENABLE-scale build); live
+% usage (statistics globalused) and all gated inference counts are identical.
+:- use_module(library(json), [json_read_dict/2, json_write_dict/2]).
 
 % library(random) serves only set_shuffle_seed/1's entropy draw (which WANTS
 % unpredictability). The seeded search deliberately does NOT use the VM RNG:
@@ -98,10 +106,22 @@
 % seeded path draws from a module-owned portable PRNG instead (splitmix64,
 % below). Neither is reached on the deterministic path (search_seed/1 unset ->
 % identity), so a default run never draws from — nor even seeds — any RNG.
-:- use_module(library(random)).
+% (set_random/1 itself is a system builtin, not a library import.)
+:- use_module(library(random), [random_between/3]).
 
 % aggregate_all/3, used to count solutions in all_crossword/5.
-:- use_module(library(aggregate)).
+:- use_module(library(aggregate), [aggregate_all/3]).
+
+% The list/assoc/pairs workhorses (previously autoload-supplied).
+:- use_module(library(apply),
+              [exclude/3, foldl/4, foldl/5, include/3, maplist/3]).
+:- use_module(library(assoc),
+              [empty_assoc/1, get_assoc/3, list_to_assoc/2, put_assoc/4]).
+:- use_module(library(lists),
+              [ append/2, append/3, intersection/3, last/2, list_to_set/2,
+                member/2, nth1/3, numlist/3 ]).
+:- use_module(library(pairs),
+              [group_pairs_by_key/2, map_list_to_pairs/3, pairs_values/2]).
 
 % program predicates.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

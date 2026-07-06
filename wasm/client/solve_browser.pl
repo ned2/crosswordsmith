@@ -19,12 +19,19 @@
 % in BOTH directions here: JS strings arrive as Prolog ATOMS (breaking core's
 % string("answer") check) and Prolog null/true/false come back as the JS
 % strings "null"/"true"/"false" (corrupting the layout schema's empty cells).
-% (json_read_dict/atom_json_dict autoload from library(json) under wasm even
-% though `use_module(library(http/json))` cannot resolve the compat shim there
-% - see wasm/README.md "Browser gotchas".)
+% (atom_json_dict lives in core library(json) — imported explicitly below. The
+% legacy library(http/json) compat shim does not resolve under wasm at all -
+% see wasm/README.md "Browser gotchas"; C6 swapped every import to the core
+% library.)
 
 % Load the whole implementation via load.pl, resolved relative to this file so
 % it works from any cwd and under `node src/swipl.js` in the WASM build tree.
+% directory_file_path/3 is autoload-only (library(filesex)); explicit so this
+% root also loads under autoload(false) (P11/C5, matching load.pl).
+:- use_module(library(filesex), [directory_file_path/3]).
+% library(json), NOT the legacy library(http/json) alias (C6): the selftest
+% below round-trips the dispatch envelope through atom_json_dict/3.
+:- use_module(library(json), [atom_json_dict/3]).
 :- prolog_load_context(directory, Dir),
    directory_file_path(Dir, '../../load.pl', LoadRel),
    absolute_file_name(LoadRel, LoadFile),

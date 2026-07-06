@@ -28,10 +28,16 @@
             stockgrid_report/1
           ]).
 
-:- use_module(library(http/json)).
-:- use_module(library(apply)).
-:- use_module(library(lists)).
-:- use_module(library(ordsets)).
+% All library imports carry explicit import lists so a
+% qsave_program(..., [autoload(false)]) build resolves them (P11/C5).
+% library(json), NOT the legacy library(http/json) alias — the alias does not
+% resolve in the WASM image (C6).
+:- use_module(library(json), [json_read_dict/2]).
+:- use_module(library(apply), [maplist/2, maplist/3]).
+:- use_module(library(lists),
+              [append/2, append/3, member/2, nth0/3, numlist/3]).
+:- use_module(library(ordsets),
+              [list_to_ord_set/2, ord_memberchk/2, ord_subtract/3]).
 
 % lint_run/5: the blocked-uk template validation.
 :- use_module(crosswordsmith(lint), [lint_run/5]).
