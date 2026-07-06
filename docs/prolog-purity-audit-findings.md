@@ -1040,6 +1040,480 @@ opportunistically; goldens verify. (`reconcile_fragment_size` A4/A5 are handled 
 
 ---
 
+## Addendum (2026-07-06): browser.pl lane
+
+`prolog/crosswordsmith/browser.pl` (456 lines — the WASM dispatch spine,
+`browser_dispatch/3` + the discriminated envelope) landed on main **after** the C1–C47
+sweep; the [remediation log](#remediation-log)'s rebase entry flagged it as the first
+candidate for a follow-up lane. This addendum is that lane, folded back into the main
+doc. Same two-lane method as Phase 1 (one idiomatic-style/stdlib-reuse agent; one
+cut/impurity-census + §10-invariant + state-hygiene/determinism agent), same
+discipline: every claim grounded in `docs/reference/swi-manual/` **and** live-probed on
+SWI-Prolog 10.1.10 (browser.pl is plain Prolog; probes ran natively via `load.pl`,
+scripts + raw transcripts archived with the lane reports). **No performance experiments
+were run, by design**: this is a dispatch/validation layer, not a search hot path — per
+§[1(g)](#g-bottom-line--taste-vs-pragmatism)'s doctrine the cut question here is
+correctness/robustness/taste, not measurable pruning. The "would indexing carry it"
+analysis was still probe-verified (cut-free replica predicates, 60-call warm-up,
+`deterministic/1` + solution counts), because probe-don't-assume is the method. Line
+numbers in this addendum are against the **current rebased tree** (post-`85906da`), not
+the `69a3a2d` baseline used by C1–C47.
+
+### Headline verdicts
+
+**The §10 never-crash invariant survived, adversarially: 94/94 hostile probes + 5
+resource bombs, zero escapes.** Every probe — malformed/non-object JSON, duplicate keys,
+trailing garbage, version shapes, exotic ids (including a 500,000-char id), verb shapes,
+params/clue-schema garbage, hostile sizes/modes/seeds, 200k-char answers, 16 lint and 8
+export garbage layouts, non-text payloads, a pre-bound wrong output — returned **exactly
+one** well-formed JSON envelope with a tagged `status`; nothing threw out of
+`browser_dispatch/3`, nothing plain-failed, nothing hung, nothing yielded a second
+solution. (Transcript-hygiene note from the lane: an apparent first-battery death at p61
+was the harness's own `tee | head` SIGPIPE, not a hang — re-verified; the slowest
+hostile input completes in 2.5 s.) `browser_dispatch/3` probed **det=true** on the
+happy, validation-error, parse-error and unknown-verb paths (1st/2nd/3rd calls,
+post-JIT), every internal det=true, and the seam is **steadfast** (p94: a wrong
+pre-bound output fails cleanly — no throw, no partial state). Resource bombs under a
+256 MB stack cap emulating the worker: `size:2000` (4M cells) → 2.54 s → a typed
+`resource_exhausted` envelope; `size:10^5`/`size:10^8` → the same envelope in 0.001 s; a
+100,000-deep nested params object parses fine → `validation`; and **the dispatch after a
+stack blowout returns an envelope byte-identical to the pre-bomb one** — the persistent
+process survives resource exhaustion cleanly. Exactly **two label-quality deviations**,
+neither an invariant break: duplicate JSON keys → `internal` with leaked engine context
+(→ C55), and the unhooked raw `"resource_error(stack)"` message text (→ C53).
+
+**All 20 cuts KEEP — 2 GREEN, 18 RED-BUT-CONVERTIBLE, none profitably removable.** This
+is the counterpoint to the main audit's headline: the same empirical rules that deleted
+14 cuts elsewhere (§[1](#1-the-headline--are-our-cuts-appropriate-and-does-removing-them-help-performance))
+*ratify* every cut here, because the dispatch shape sits outside §1(b)'s indexable
+boundary three ways, probe-verified (`probe_census.pl`, cut-free replicas warmed 60×):
+(a) `dispatch/3`'s first clause takes a **var** first argument (discrimination is the
+arg-2 `invalid/1` functor — non-first-arg, the E8 class), so every candidate set keeps
+both the verb clause and the var-head catch-all — cut-free replica: **2 solutions,
+det=false** even after warm-up; (b) `outcome_envelope/4` discriminates on argument 3,
+and **hoisting the outcome to argument 1 does not fix it**: with the :345 var-head
+totality net retained, the replica is *still* det=false / 2 solutions (a var head
+defeats first-arg indexing); only *deleting* the net greens it — which would sacrifice
+the §10 totality contract the net exists to provide; (c) cuts #1/#3 (`request_id/2`
+cl.1, `dispatch/3`'s `invalid` clause) are **quiet exception guards**: cut-free, a
+forced backtrack does not yield wrong answers — it **throws**
+`error(type_error(dict, invalid(err)), context(system:get_dict/3, _))` out of
+`browser_dispatch/3` (probe `rid`); the cuts are what keep the p94 steadfastness
+failure *clean* rather than a throw. Worth a comment at those sites if anyone ever
+"cleans them up". The one dead cut (`guard_seed_drop/2` :218 — the body is a bare
+throw, which unwinds the choicepoint regardless; probe-identical without it) is
+recorded as cosmetic in C63(c). Census delta vs §2.1 (left as-written — it is a
+baseline snapshot): that table's group row counted the zero-cut solve_browser spike;
+browser.pl alone now carries these 20. The group-level claim transfers intact: **no cut
+in browser.pl changes the first-solution semantics of any caller** — the 94-probe
+findall check found no extra solutions anywhere.
+
+Rest-of-census, for the record: 29 real ITE arrows (~25 constructs; grep says 45 but 16
+are DCG `-->` heads in the message hooks) — all three patterns cold and idiomatic per
+§2.3's taxonomy (validate-or-throw resolvers; outcome selection, including the §10
+fail-backstop itself at :65–68; render-with-fallback), no bare `(Cond -> Then)` without
+else, no side-effecting conditions, zero ITE findings. 4 `catch/3`, all protocol
+machinery (:63, :65, :401, :402). **Zero** findall/once/bagof/setof/forall/`\+`. Zero
+dynamics declared in-module; two write sites to core/arrange-owned state
+(`reset_request_state/0` :85–88, `apply_seed/1` :224), both single-writer,
+sentinel-cleared.
+
+**State hygiene: C3 is closed by this module** (probe matrix in the
+[fallout](#what-main-already-shipped--c-tracker-fallout) below), and **C2 is now
+concrete**: repeated `bestEffort:true` dispatches in a **single-engine** process grow
+`pair_crossings/3` monotonically and unboundedly — **98,184 B after 1 → 1,086,840 B
+after 10 → 5,589,120 B after 50** fresh-vocab 12-word dispatches (same-vocab repetition
+plateaus at 98,184 B; one strict dispatch flushes to 185,328 B as a side effect of
+`mrv_inc`'s entry abolish). The shipped Worker survives only because `{engine:true}`
+tables are **engine-private** — probe-verified (**0 variants** survive engine teardown)
+and documented nowhere. The full measurement and the single actionable fix now live as
+**C48**; the C2 tracker row is closed as *relocated, not fixed*.
+
+### What main already shipped — C-tracker fallout
+
+Verified against both lane reports (and spot-checked against the tree):
+
+- **C3 — RESOLVED on main.** `reset_request_state/0` (browser.pl:85–88) is literally
+  the C3 remedy — unconditional `set_search_seed(-1), set_check_target(-1),
+  set_verbose(false)` at the top of the browser entry — plus the same-worker
+  determinism tests C3 asked for (tests/browser.plt:246–301). Probe matrix
+  (`variant_sha1` of envelopes, three processes): fresh unseeded = `46b852b2…`;
+  unseeded → seeded(42) → unseeded in one process = `46b852b2…` / `5319aeb8…` /
+  `46b852b2…` (**no leak**); externally poisoning **all three** globals and then
+  dispatching unseeded = `46b852b2…` (== fresh) with all three reporting cleared after
+  — the reset neutralizes even poison the module never wrote. `prng_state/1` is
+  cleared transitively via `set_search_seed(-1)` (core.pl:524–526, probed). Residue,
+  benign and plt-locked: reset is on-*entry*, so request N's state lingers until
+  request N+1's reset — a same-process caller mixing dispatch with direct engine calls
+  inherits the last request's seed. Ticked in the tracker. The tabled-memo caveat is
+  **not** covered by this reset (→ C48).
+- **C10 — resolved for the browser formals.** The two unhooked spike formals
+  (`browser_missing_size`, `browser_max_mode_unsupported`) were deleted with the spike;
+  **every formal browser.pl mints has a `prolog:error_message//1` hook**
+  (browser.pl:412–444). Ticked in the tracker.
+- **C25 — half done.** The module promotion shipped: solve_browser.pl is rewritten as
+  the thin qcompile root (its *filename* is load-bearing —
+  `wasm/build/build-wasm.sh:106–113`) and no longer reaches unexported internals
+  (grep-verified: the `Module:Pred` reach is gone). The `benchmarks/subjects.pl:57`
+  half remains open. Row annotated.
+- **C6 / C9 — line refs stale.** `solve_browser.pl:40` and `:96` no longer exist (file
+  rewritten). C6's strongest case is now **browser.pl:35** (+ tests/browser.plt:19) →
+  **C52**; the C6 row stays open for the sibling modules. C9's original site is
+  **deleted**; the pattern is re-instantiated ×2 in browser.pl → **C51** is the
+  actionable item (C9's row annotated accordingly).
+- **C4 / C5 extend unchanged** into the new module: mode/determinism headers in plain
+  `%` not `%!` (→ C63(d), no separate action); the lone library import carries no
+  explicit import list while the module's project imports (:36–54) are exemplary
+  (folded into C52's fix).
+
+### New findings (C48–C63) — med-first, deduplicated across the two lanes
+
+Synthesis notes: the two lanes overlapped in four places, merged here. Both
+independently flagged the absent-`v` acceptance (style F6 / census F5b → **C59**). The
+style lane's serialization-outside-the-catch (its F4, rated **low**) and the census
+lane's post-classifier-tail-outside-both-catches (its F8, rated **nit**) are the same
+hole at two granularities → merged at the higher severity as **C54** — **the lanes' one
+severity disagreement, flagged rather than smoothed**. The style lane's
+explicit-import-list note (E3) folds into C52's fix; its PlDoc note (E4, extends C4)
+folds into C63(d). No factual contradictions were found between the lanes; everything
+else below is single-sourced and probe-backed.
+
+#### C48 — Unbounded `pair_crossings/3` growth in single-engine embeddings; the shipped Worker is saved by an undocumented engine-privacy accident (C2, concretized & relocated)
+`browser.pl:85–88` (`reset_request_state/0` clears the dynamics, never touches tables);
+tables `core.pl:646` (`pair_crossings/3`), `:595` (`answer_letters/2`); strict-entry
+abolish `core.pl:303–304` · **med** · behaviour preserving · flags: **WASM** · **open**
+· (census F1 + style E5 — the lanes agree; supersedes **C2**; confidence: high,
+empirically verified)
+
+Measured growth, single process, `bestEffort:true`, 12 fresh-vocab 5-letter clue words
+per dispatch, size 9 (bytes = summed `trie_property(size)` over both memos): **77
+variants / 98,184 B after 1 → 825 / 1,086,840 B after 10 → 4,235 / 5,589,120 B after
+50** — monotonic and unbounded, ~112 KB per dispatch, all of it `pair_crossings/3`
+(`answer_letters/2` stays at 0 on the greedy path); pairs scale quadratically in word
+count (a 30-word list ≈ 6.6×, ~0.7 MB/dispatch worst case). Same-vocab repetition
+plateaus at 77 / 98,184 B. The strict path is bounded (`find_crossword(mrv_inc)`
+abolishes at entry), and one strict dispatch mid-stream flushes the greedy accumulation
+as a side effect (1,086,840 → 185,328 B). `table_space` flag default: 1 GB.
+`reset_request_state/0` does not touch tables — and strategy §3.2 never promised it
+would: its red-team claim "[RT verified — this is the ONLY mutable global state]" is
+true for *output determinism* only and missed the tabled memos (as does the :80
+comment, → C61). **The shipped Worker dodges all of this by accident of architecture**:
+`wasm/client/worker.js` runs every request in a throwaway `{engine:true}` engine, and
+tables are engine-private — probe-verified natively: 5 best-effort dispatches inside
+created-then-destroyed engines leave **0 variants** visible afterwards, and a fresh
+engine sees 0. That load-bearing property is documented nowhere (worker.js credits
+`engine:true` only with "per-run state doesn't accumulate", in passing). Where it
+lands: any single-engine embedding looping `browser_dispatch/3` — `tests/browser.plt`
+itself, the native seam any Node/CLI-side SDK consumer would use, any future worker
+that drops `engine:true` — accumulates the measured 5.59 MB@50 case. **Fix (the one
+open actionable item for the ex-C2 complex):** abolish both memos in
+`reset_request_state/0` (two `abolish_table_subgoals/1` calls or
+`abolish_module_tables(crosswordsmith_core)`), and/or document the engine-privacy
+dependency in both browser.pl and worker.js. Implementation trap, probe-verified:
+`current_table/2` **variant-matches** its `:Variant` — an open pattern like
+`pair_crossings(_,_,_)` finds nothing, so a reset/test emptiness check written that way
+silently passes; enumerate `current_table(M:G, T)` unbound and filter.
+
+#### C49 — The verb registry is triplicated; the header's "adding a verb = one dispatch clause" additivity claim is false
+`browser.pl:131–140` (dispatch clauses) vs `:300` (`engine_capabilities` literal
+`[arrange, lint, export, capabilities]`) vs `:441–442` (unknown_verb message text) vs
+`:24–29` (header claim) · **med** · behaviour preserving (message/capabilities drift
+hazard) · **open** · (style F1; pattern kin of C14; confidence: high)
+
+Three hand-maintained copies of the verb list. A new verb (e.g. `fill`, strategy §6
+phase 4) added per the header's own instruction ("one dispatch/3 clause + classifier
+rows … never new message wiring") silently leaves `capabilities` **lying** — the
+precise failure OQ-4 built the verb to prevent ("not a JS hardcode that lies after a
+qlf swap"; a Prolog hardcode lies identically) — and leaves the unknown_verb diagnostic
+stale (C14's exact message-vs-registry pattern, new site). **Fix:** one fact table
+`verb(arrange). verb(lint). verb(export). verb(capabilities).`; `engine_capabilities`
+collects it (`findall(V, verb(V), Verbs)`); the unknown_verb DCG renders the list at
+message time via `{}/1` (the C14 remedy, `printmsg.md` §4.11.1); dispatch clauses stay
+as-is. Update the header to "one dispatch clause + one `verb/1` fact".
+
+#### C50 — Export's shallow shape gate turns gate-passing garbage into a mislabelled `internal` "engine bug" envelope — or a degenerate success
+`browser.pl:246–251` + `export.pl:38–45` (`export_layout_dict/2`) · **med** · behaviour
+**risk** (the fix changes the CLI's failure mode on garbage files — for the better) ·
+flags: **WASM**, contract-affecting · **open** · (style F2; cross-ref C17(b);
+confidence: high, probe-verified)
+
+The gate checks only `gridLength`/`grid`/`words` presence and listness. Two
+probe-verified gate-passing payloads: `{gridLength:1, grid:[5], words:[]}` →
+`layout_to_ipuz/2` and `layout_to_exolve/2` **fail** → the never-plain-fail backstop
+fires → `{status:"error", error:{type:"internal", message:"dispatch failed without
+tagging an outcome (engine bug)"}}` for plainly bad user input — the invariant holds
+(no bare fail reaches JS) but §4.2's classifier promise "never crash, **never
+mislabel**" (also browser.pl:307) is broken on input any SDK consumer can send
+(`cw.export({layout: garbage})`). And `{gridLength:3, grid:[], words:[{bogus:1}]}` →
+**`status:"success"`** with a degenerate ipuz (empty `puzzle`/`solution`/`clues`) —
+garbage blessed as success. That half is CLI-parity by construction (same shared gate,
+the "no drifting twin" design :243–245), so the root cause lives in export.pl; the wire
+contract makes it newly visible. lint is NOT affected (`lint_dict_layout/3` validates
+per-word and throws mapped `lint_*` formals; tests/browser.plt:442–454 fuzzes exactly
+this). **Fix:** deepen `export_layout_dict/2` (each grid row a list; each word entry
+has `answer`/`direction`/`cells`) so both CLI and browser throw
+`export_invalid_layout` — one gate, no twin; or minimally wrap `export_transform/3`'s
+call site so a failure re-throws `error(bad_layout(...), _)` instead of falling to the
+backstop. Extend browser.plt's `lint_export_param_fuzz` table with the two probe
+payloads (→ C58).
+
+#### C51 — Both wire directions hand-roll `atom_json_dict/3` (C9's pattern, re-instantiated ×2)
+parse: `browser.pl:98–102`; emit: `:76–77` · **med** · behaviour preserving (probe:
+byte-identical) · flags: **WASM** · **open** · (style E2; extends C9, whose original
+site is deleted — this is now the actionable item; confidence: high)
+
+Read: `setup_call_cleanup(open_string(Payload, In), json_read_dict(In, Req0,
+[default_tag(json)]), close(In))` ≡ `atom_json_dict(Payload, Req0,
+[default_tag(json)])` — probe-verified for atom AND string payloads (the Worker binds
+the payload as an atom, worker.js:120–122), non-object JSON (array → list, no throw, so
+the `is_dict` gate still works), and garbage (`syntax_error(json(...))`, the same
+formal the classifier maps at :387). Write: `with_output_to(atom(JsonEnvelope),
+json_write_dict(current_output, Envelope, [width(0)]))` ≡
+`atom_json_dict(JsonEnvelope, Envelope, [width(0)])` — output **bytes identical**,
+`width(0)` passes through, and the result is an atom (the §4.3 atom-not-string
+contract; add `as(atom)` to make that explicit rather than default). Manual:
+`packages/json.md:236–240`. The test suite itself already uses `atom_json_dict/3` for
+the identical round-trip (tests/browser.plt:34,39). **Fix:** 5 lines → 1 on each side,
+one fewer stream to manage; coordinate with C52.
+
+#### C52 — Legacy `library(http/json)` alias in the one module qcompiled into the WASM image (C6's strongest case, relocated) — and no explicit import list
+`browser.pl:35`; also `tests/browser.plt:19` · **med** · behaviour preserving
+(load-time only) · flags: **WASM** · **open** · (style E1 + E3; extends C6 and C5;
+confidence: high)
+
+C6 named `solve_browser.pl:40` as the strongest case; that file was rewritten —
+**browser.pl:35 is now the strongest case**: browser.pl is *the* module qcompiled into
+the WASM image, where the `http/json` alias **does not resolve at all** (the
+`wasm/README.md`-documented "source_sink library(http/json) does not exist" load
+noise), working only because the predicates autoload from core `library(json)`. Manual:
+`packages/json.md:56`. The same directive is also the module's only library import
+without an explicit import list, while its project imports (:36–54) all carry exemplary
+lists — the C5/P11 qsave-`autoload(false)` discipline (style E3, folded here). **Fix:**
+`:- use_module(library(json), [json_read_dict/3, json_write_dict/3]).` (add
+`atom_json_dict/3` if C51 lands); same swap in tests/browser.plt:19.
+
+#### C53 — `formal_message/2` hand-rolls `message_to_string/2` and discards the error context
+`browser.pl:398–410` · **low** · behaviour preserving on all hooked formals (probe:
+identical text) · **open** · (style F3; confidence: high)
+
+The 13-line dance — direct hook `phrase`, `print_message_lines` capture, `split_string`
+newline trim — is `message_to_string/2` (`printmsg.md:141`; probe: exactly the hook
+text, **no trailing newline**). The swap also upgrades the one error type the strategy
+doc singles out for mobile: today a real `resource_error` envelope carries the message
+`"resource_error(stack)"` because `thrown_envelope` strips the context (:350) and no
+project hook exists; rendering the **whole caught error term** (context intact) gives
+`"Not enough resources: …"` for free. Two probe-verified caveats shape the fix — keep
+them: (a) `message_to_string(error(resource_error(stack), _), _)` with an **unbound**
+context throws `instantiation_error` (probe4), so KEEP the `catch(..., _, fail)` guard
+and the `term_to_atom` fallback, and pass the *original* error term rather than
+rebuilding `error(Formal, _)`; (b) unhooked non-ISO formals render as `"Unknown error
+term: …"` — the retained fallback keeps today's wording if preferred. Keep the
+`syntax_error` special case (:398–399) — its custom wording is deliberate. Net: ~13
+lines → ~5, better messages for `resource_exhausted` (§4.2's mobile priority).
+
+#### C54 — The post-classifier tail (including the final `json_write_dict`) runs outside both catches — the never-crash totality has a last-step hole
+`browser.pl:64` (`request_id`), `:71–77` (`envelope_verb`, `outcome_envelope`, the
+`with_output_to`/`json_write_dict` emit) · **low** · flags: **WASM** · **open** ·
+(merged: style F4 **low** + census F8 **nit** — the lanes' one severity disagreement,
+merged at the higher; confidence: hole certain, reachability currently nil per the
+94-probe evidence)
+
+Everything through classification is armoured, but the envelope build and serialization
+execute after both catches close, so the header's "never throw out of
+`browser_dispatch/3`" is carried by *convention* in that tail (total classifier,
+`term_to_atom` flattening), not by a catch. `json_write_dict/3` itself can throw
+(`packages/json.md`: an unknown term "raises a type error" unless `serialize_unknown`).
+A result dict carrying a non-JSON term or an unbound var — impossible today
+(arrange/lint/export dicts are golden-locked JSON-clean), but one future verb away —
+would escape `browser_dispatch/3` raw; worker.js then reports a bare string / its own
+synthesized envelope (worker.js:132–134), not this module's. The strategy §3 sketch
+shares the shape, so the hole is contract-consistent — and still a hole. **Fix:** wrap
+the emit (or widen catch #2's scope to the envelope build); on exception fall back to a
+literal-only `internal` envelope, which cannot fail to serialize — or at minimum a
+one-line comment making the tail's no-throw convention explicit.
+
+#### C55 — Duplicate JSON keys map to `internal` and leak engine internals onto the wire
+`browser.pl:361ff` (the `thrown_type/2` table lacks a row) · **low** · behaviour
+preserving · **open** · (census F3, probe p08; confidence: high)
+
+p08 `{"v":1,"v":2,…}` →
+`{"error":{"message":"error(duplicate_key(v),context(system:dict_create/3,_16328))","type":"internal"},…}`
+— every other client-input defect maps to `validation`, and a raw Prolog variable plus
+`system:dict_create/3` context reach the wire. One `thrown_type/2` row
+(`duplicate_key(_)` → `validation`) fixes the label and strips the internals;
+optionally add a message hook for wording. Pin in browser.plt (→ C58).
+
+#### C56 — No upper bound on `size`: a cap converts a whole resource class into cheap validation
+`browser.pl:176` (`resolve_size/2` accepts any positive integer) · **low** · flags:
+**WASM** · **open** · (census F4; confidence: high, probe-verified natively)
+
+`size:2000` (4M cells) burns 2.54 s then yields the typed `resource_exhausted`
+envelope; `size:10^5`/`size:10^8` fail fast (0.001 s, same envelope — allocation fails
+immediately); and the worker stays healthy after (next dispatch byte-identical). So the
+invariant holds natively under the 256 MB cap — but on device, strategy §4.2 itself
+warns the stack cap is best-effort against the **uncatchable WASM `abort()`**, which a
+cap-free `size` lets the user race. An upper bound on `size` (a CLI-parity decision)
+beats a device abort.
+
+#### C57 — Two resolver shapes duplicated clause-for-clause
+boolean: `browser.pl:198–205` (`resolve_best_effort`) ≡ `:279–286`
+(`resolve_allow_asymmetry`); enum: `:189–196` (`resolve_mode`) ≡ `:288–295`
+(`resolve_export_to`) · **low** · behaviour preserving · **open** · (style F5;
+confidence: high)
+
+Six get_dict/validate/throw resolvers share one skeleton; these two pairs are identical
+modulo key, accepted values, default, and formal name. The header's
+accepted-duplication note (:167–174) covers browser-vs-CLI resolver duplication
+(parity-matrix-locked), not intra-file. **Fix:** `resolve_bool(Params, Key, Default,
+ErrFormal, Bool)` + `resolve_enum(Params, Key, Default, Pairs, ErrFormal, Value)` —
+halves the resolver block while keeping the per-key formals the classifier and hooks
+key on. Deliberately NOT `library(option)` (params are dicts, not option lists) and NOT
+`./3` functional notation (the codebase avoids it); the size/seed resolvers have
+genuinely distinct guards — leave them.
+
+#### C58 — browser.plt coverage gaps (consolidated)
+`tests/browser.plt` (51 tests, **all pass** on this tree, run natively this session) ·
+**low** · behaviour preserving (tests only) · **open** · (census §6 + style E1 note;
+confidence: high)
+
+Credit first: the suite is a model contract suite, strong on the happy/sad contract
+paths — 13 covered areas including table-driven invariant fuzz, the 14-case bad-param
+matrix, CLI resolver-parity via `process_create` exit codes, DEC-8 value-equality
+golden parity, the C3 same-instance determinism locks, and classifier-totality
+white-box rows. The gaps (✱ = has a matching finding): **table growth / memory across
+dispatches** — no test at all; the determinism tests do ≤3 dispatches (✱C48);
+**end-to-end `resource_exhausted`** — only white-box at the classifier; no
+dispatch-level huge-size test and no worker-health-after-blowout test (✱C56 — the
+probes show the envelope correct and the next dispatch byte-identical; pin both);
+**duplicate-key mislabel** (✱C55); **version-tolerance pins** — missing `v` accepted /
+trailing garbage accepted / `v:1.0` rejected, none pinned (✱C59); **unbound or non-atom
+`Verb` argument** (✱C60); **`prng_state/1`** absent from the reset white-box test —
+it checks 3 of what are now 4 facts (✱C61); **id wrong-type shapes**
+(object/array/bool/number → null-or-echo; only absent-id is tested); **no
+`deterministic/1` lock** anywhere on the spine (the main audit added det-probes
+elsewhere); **`""` answer → `words:[""]` envelope** unpinned (✱C62); Verb-argument vs
+payload `verb`-field disagreement unpinned; capabilities-with-unparseable-payload
+(dispatch cl.1 ordering) unpinned; non-text payload (number/var → `internal` envelope,
+defensive path) unpinned. Also: the plt's own `library(http/json)` alias at :19 — fold
+into C52.
+
+#### C59 — Protocol leniencies neither documented nor pinned: absent `v` ⇒ v1, trailing garbage accepted, `v:1.0` rejected, `request.verb` never cross-checked
+`browser.pl:98–110` (parse + version gate), `:125` (verb echo) · **nit** · behaviour
+preserving (contract clarification) · **open** · (merged: style F6 + census F5 — both
+lanes independently flagged the absent-`v` acceptance; confidence: high, probes
+p09/p10/p12 + probe2)
+
+(a) A request with **no** `v` key dispatches successfully — the :107 gate only fires
+when `v` is present and ≠ 1, so the "v1 handshake" is unenforced for clients that omit
+it. (b) Trailing garbage after the JSON value is accepted (the parser reads one value,
+remainder ignored). (c) `v:1.0` → `unsupported_version` — unreachable from a JS facade
+(serializes as `1`); noted for hand-rolled clients. (d) A request whose `verb` field
+contradicts the bound `Verb` argument dispatches the argument and echoes it, silently
+masking a facade bug. All defensible (lenient reader; the facade always sends both
+consistently) — but neither the wire-contract header (:10–13) nor strategy §4.1 records
+"absent `v` ⇒ v1" or "request.verb is documentation only". **Fix:** one comment line
+each, or a `bad_request` throw on the verb mismatch; pin in browser.plt (→ C58).
+
+#### C60 — An unbound `Verb` argument silently dispatches `arrange`
+`browser.pl:132` (first verb clause of `dispatch/3`) · **nit** · behaviour preserving
+(Worker-impossible today) · **open** · (census F6, probe p25; confidence: high)
+
+An unbound var unifies with the first verb clause's head and runs arrange to success;
+string/compound/number verbs correctly yield `unknown_verb` with a `term_to_atom` echo
+(e.g. verb `"\"arrange\""`). Worker-impossible (worker.js binds
+`typeof req.verb === "string" ? req.verb : ""`), but this is the one hole in
+`dispatch/3`'s otherwise-total head discipline. **Fix:** an `atom(Verb)` guard or
+`must_be(atom, Verb)` at the seam; pin (→ C58).
+
+#### C61 — ":80 the ONLY three mutable module globals" is stale — `prng_state/1` is a fourth
+`browser.pl:80–84`; `core.pl:512`; also strategy §3.2's state table and the 3-fact
+white-box plt test · **nit** · behaviour preserving (comment/test drift; reset
+sufficiency itself holds) · **open** · (census F7; confidence: high, probed)
+
+Since the splitmix64 change, `prng_state/1` is a fourth dynamic fact — cleared
+transitively by `set_search_seed(-1)` (core.pl:524–526; probe: present with an advanced
+value after a seeded dispatch, cleared by the next dispatch's reset). The :80 comment,
+strategy §3.2's "[RT verified — this is the ONLY mutable global state]" red-team claim,
+and the 3-fact white-box test all under-count the state inventory. **Fix:** correct the
+comment, extend the white-box test to 4 facts (→ C58), flag the strategy-doc line.
+
+#### C62 — `""` as an answer rides the wire as `failure/unplaceable_words` with `words:[""]`
+core `doc_to_words/2` domain, surfaced at the browser seam · **nit** · behaviour
+preserving (CLI-parity holds) · **open** · (census F9, probes p40/p41; confidence:
+high)
+
+An empty-string answer is accepted by validation and surfaces as
+`failure/unplaceable_words` with `words:[""]`; `"A B"` (embedded space) places as a
+layout. Both are core's domain and identical CLI-side, so browser parity holds —
+flagged because `words:[""]` on the wire reads like a bug to a client. A
+`json_invalid_answer` for empty/whitespace answers would be kinder, but that is a
+**core-lane decision**, not a browser fix; pin the current shape meanwhile (→ C58).
+
+#### C63 — Cosmetic batch, browser.pl
+(a) `:345–348` the totality net double-converts — `term_to_atom(Other, OtherA)` then
+`format(..., "…~w", [OtherA])`, where `format(atom(Msg), "unrecognised outcome term:
+~q", [Other])` is one step with the same quoting; (b) `:11` the header describes the
+success arm as "result: {...} a live layout dict" — arrange-specific wording now that
+lint reports, export docs and capabilities ride the same arm (the §4.1 text it
+paraphrases scopes "live layout dict" to arrange); (c) `:218–219` `guard_seed_drop/2`'s
+cut before an unconditional throw is inert — the census's one GREEN dead cut (the throw
+unwinds the choicepoint regardless; probe-identical cut-free; the lint.pl X6.B2 class)
+— deletable, or leave as an intent marker; (d) mode/determinism headers are plain `%`
+not `%!` — C4's project-wide convention decision applies unchanged to the new module
+(style E4; no separate action). · **nit** · behaviour preserving · **open** · (style F7
++ census census-row #8 + style E4; confidence: high)
+
+### What browser.pl does well
+
+The lanes' independent positives, recorded so future audits don't re-litigate them:
+
+- **The C3 remedy, delivered as prescribed and test-locked** — see the
+  [fallout](#what-main-already-shipped--c-tracker-fallout) probe matrix; it neutralizes
+  even externally-poisoned globals.
+- **Custom shaped formals over `must_be/2` is load-bearing classifier design, not a
+  style gap**: the classifier keys on formal functors (:361–390), and mapping ISO
+  `type_error(_)` → `validation` would mislabel genuine engine bugs as user error. It
+  also follows the codebase-wide convention (zero `must_be` anywhere under
+  `prolog/crosswordsmith/`) — and **every formal the module mints has a
+  `prolog:error_message//1` hook** (:412–444), the exact gap C10 flagged in the old
+  spike, pre-fixed here.
+- **`thrown_type/2` is a first-arg-indexed, total fact table** with an explicit
+  `internal` fallback clause — precisely the indexable-dispatch shape this audit's
+  headline experiments endorsed (probe: det=true with no cut needed), white-box
+  test-locked (classifier totality, browser.plt:479–508).
+- **The never-plain-fail invariant is engineered, not hoped for**: parse errors reified
+  as `invalid(Err)` and re-threaded through the *same* classifier (:63, :131), the
+  dispatch ITE fail-backstop (:65–68), and the `failed/1` → "engine bug" envelope
+  (:341–344). One error path, no drift — and it held under 94 hostile probes + 5 bombs,
+  including byte-identical recovery after a stack blowout.
+- **Wire-type discipline**: `json_read_dict(..., [default_tag(json)])` so strings stay
+  strings (core's `answer` guard keeps working), comparisons wire-type-exact
+  (`M == "fixed"`), envelope atoms/`null` serialize to the right JSON literals
+  (:447–449), and the atom-out contract (§4.3) is documented at the signature.
+- **Shared validation seams, no drifting twins**: lint and export route through the
+  same `lint_dict_layout/3` / `export_layout_dict/2` the CLI uses (C50 asks that gate
+  to be *deeper*, not different); lint's profile is pre-validated via
+  `lint_known_profile/1` (:272), dodging C17(a)'s silent failure instead of inheriting
+  it.
+- **tests/browser.plt is a model suite for this contract** (51 tests): table-driven
+  invariant fuzz, CLI resolver-parity via `process_create` exit codes, DEC-8
+  value-equality golden parity (never byte diffs), classifier-totality white-box rows,
+  and the documented never-export-for-a-test policy. C58 lists what to *add*, not what
+  to fix.
+- **solve_browser.pl is correctly reduced to the thin qcompile root** (53 lines by
+  `wc -l`; the lane report counted 54 — off-by-one, immaterial): the *filename* is
+  load-bearing (`wasm/build/build-wasm.sh:106–113` qcompiles it with `include(user)`
+  into `crosswordsmith.qlf`), the native `browser_selftest` smoke goal is retained, and
+  **zero duplication** with browser.pl remains (grep-verified: the old
+  `solve_browser_json`/`solve_browser_str`, the hand-rolled JSON string reader, the
+  spike formals, and the `Module:Pred` internals reach are all gone). Superseded as an
+  API, correctly retained as the load root — no factoring needed.
+- **Comment discipline matches the house standard** the main audit praised: nearly
+  every choice carries its strategy-doc cross-reference (DEC-6/DEC-8/OQ-4/§10),
+  including the honest history of the bare-fail masquerade the module exists to kill.
+
+---
+
 ## Verified-deliberate hand-rolls — do NOT swap
 
 Extends the P-audit's Appendix A. Each of these *looks* like a finding; each was checked
@@ -1199,21 +1673,26 @@ Tick as landed. `→ §Cn` links to the finding; X-steps link to
 
 **Open — med**
 - [ ] **C1** `med` — table abolition strategy-local; run-order-dependent inference counts → `core.pl:280`
-- [ ] **C2** `med·WASM` — unbounded table growth on greedy path in persistent process → `core.pl:646,595`
-- [ ] **C3** `med·WASM` — browser dynamic-state reset seam missing → `solve_browser.pl:71` · `core.pl:479` · `arrange.pl:101`
+- [x] **C2** `med·WASM` — unbounded table growth on greedy path in persistent process → `core.pl:646,595` · *2026-07-06: **concretized & relocated → C48** (browser.pl lane: growth measured 98,184 B → 1,086,840 B → 5,589,120 B over 1/10/50 fresh-vocab dispatches; Worker's engine-privacy dependency probe-verified). Closed here as relocated, **not fixed** — the single open actionable item is C48*
+- [x] **C3** `med·WASM` — browser dynamic-state reset seam missing → `solve_browser.pl:71` · `core.pl:479` · `arrange.pl:101` · ***resolved on main (`browser.pl:85–88` `reset_request_state/0` + browser.plt determinism locks), probe-verified 2026-07-06** incl. externally-poisoned globals; on-entry-reset residue benign + plt-locked. The tabled-memo caveat is NOT covered → C48*
 - [ ] **C4** `med` — no PlDoc/determinism annotations project-wide (or record the convention)
 - [ ] **C5** `med` — P11 explicit-import follow-through; `load.pl` dies under autoload(false) → `load.pl:12` + module headers
-- [ ] **C6** `med·WASM` — `library(http/json)` → `library(json)` → `solve_browser.pl:40` +siblings
+- [ ] **C6** `med·WASM` — `library(http/json)` → `library(json)` → ~~`solve_browser.pl:40`~~ +siblings · *2026-07-06: ref stale — that file was rewritten; the strongest case is now `browser.pl:35` (tracked as **C52**); this row stays open for the siblings (lint/export/stockgrid/core/fill)*
 - [ ] **C7** `med` — `meta_value/3`+`meta_value_or/4` → `library(option)` → `fill.pl:669`
 - [ ] **C8** `med` — lint BFS → `library(ugraphs)` → `lint.pl:248`
-- [ ] **C9** `med·WASM` — `solve_browser_str/2` → `atom_json_dict/3` → `solve_browser.pl:96`
-- [ ] **C10** `med·WASM` — browser error_message hooks for the two unhooked formals → `solve_browser.pl:105`
+- [ ] **C9** `med·WASM` — `solve_browser_str/2` → `atom_json_dict/3` → ~~`solve_browser.pl:96`~~ · *2026-07-06: ref stale — original site **deleted** on main (file rewritten); the pattern is re-instantiated ×2 in `browser.pl` — the actionable item is **C51**, no separate action here; close this row with C51*
+- [x] **C10** `med·WASM` — browser error_message hooks for the two unhooked formals → `solve_browser.pl:105` · ***resolved on main (browser.pl), probe-verified 2026-07-06**: the spike formals were deleted with the spike, and every formal `browser.pl` mints has a `prolog:error_message//1` hook (`browser.pl:412–444`)*
 - [ ] **C11** `med` — stockgrid_report double load → `stockgrid.pl:156`
 - [ ] **C12** `med` — stockgrid quadratic report re-pairing → `stockgrid.pl:136`
 - [ ] **C13** `med·perf` — interpreted yall pair → `arrange.pl:131` · `fill.pl:159`
 - [ ] **C14** `med` — require_strategy message hard-codes the registry → `core.pl:236`
 - [ ] **C15** `med·test` — `assign_word/10` dead arg 7 → `core.pl:665`
 - [ ] **C16** `med·perf` — deprecated `delete/3` letter-normalization → `core.pl:596` · `metrics.pl:56`
+- [ ] **C48** `med·WASM` — unbounded `pair_crossings/3` growth in single-engine embeddings (ex-C2, concretized): abolish-in-reset and/or document the engine-privacy dependency → `browser.pl:85` · `core.pl:646,595` · `wasm/client/worker.js`
+- [ ] **C49** `med` — verb registry triplicated (dispatch clauses / capabilities literal / unknown_verb message) → one `verb/1` fact table → `browser.pl:131,300,441`
+- [ ] **C50** `med·WASM·risk` — export shallow shape gate: gate-passing garbage → mislabelled `internal` envelope or degenerate success → `browser.pl:246` · `export.pl:38`
+- [ ] **C51** `med·WASM` — both wire directions hand-roll `atom_json_dict/3` (ex-C9 pattern) → `browser.pl:98,76`
+- [ ] **C52** `med·WASM` — `library(http/json)` alias in the qcompiled module + no explicit import list → `browser.pl:35` · `tests/browser.plt:19`
 
 **Open — low**
 - [ ] **C17** `low` — silent-failure exports: lint_run profile / export_solve format / set_search_seed+set_verbose
@@ -1224,7 +1703,7 @@ Tick as landed. `→ §Cn` links to the finding; X-steps link to
 - [ ] **C22** `low` — unused exports `pw_end/2`, `valid_strategy/1` → `core.pl:47,56`
 - [ ] **C23** `low·perf` — redundant once() post-X6.B4 → `fill.pl:392` · `stockgrid.pl:79`
 - [ ] **C24** `low` — stale comments (10.0.2 pin, word-dicts, gs/2 header, fill export header)
-- [ ] **C25** `low·WASM` — solve_browser module promotion (plan §9) + subjects.pl internals
+- [ ] **C25** `low·WASM` — solve_browser module promotion (plan §9) + subjects.pl internals · *2026-07-06: **half done on main** — the module promotion shipped (`browser.pl`; solve_browser.pl is now the thin qcompile root with no internals reach, grep-verified); the `benchmarks/subjects.pl:57` half remains*
 - [ ] **C26** `low·perf` — per-node search_seed dynamic lookup hoist → `core.pl:519`
 - [ ] **C27** `low` — arrange findall-as-map/filter → maplist/exclude (6 sites)
 - [ ] **C28** `low·risk` — greedy argmax sort → strict-@> fold (golden-check)
@@ -1240,6 +1719,12 @@ Tick as landed. `→ §Cn` links to the finding; X-steps link to
 - [ ] **C38** `low` — read-clues loop ×5 → read_file_to_terms/3
 - [ ] **C39** `low·perf` — read_file_lines/sha → read_file_to_string/3 → `fill.pl:129,681`
 - [ ] **C40** `low` — bench harness string-JSON → atom_json_dict/3
+- [ ] **C53** `low` — formal_message → `message_to_string/2` (keep the catch+fallback; pass the error context intact) → `browser.pl:398`
+- [ ] **C54** `low·WASM` — post-classifier tail incl. the final `json_write_dict` outside both catches (never-crash last-step hole) → `browser.pl:64,71–77`
+- [ ] **C55** `low` — duplicate JSON keys → `internal` + leaked dict_create context; add a `thrown_type/2` row → `browser.pl:361`
+- [ ] **C56** `low·WASM` — no upper bound on `size`; a cap beats the device abort() → `browser.pl:176`
+- [ ] **C57** `low` — boolean/enum resolver clauses duplicated intra-file → `browser.pl:189–295`
+- [ ] **C58** `low` — browser.plt gap batch (memory growth, e2e resource path + post-blowout health, dup-key, version pins, unbound-Verb, prng_state, id shapes, det lock, …) → `tests/browser.plt`
 
 **Open — nit**
 - [ ] **C41** `nit` — duplicate detection via nextto/3 → `core.pl:909` · `arrange.pl:637`
@@ -1249,6 +1734,11 @@ Tick as landed. `→ §Cn` links to the finding; X-steps link to
 - [ ] **C45** `nit` — arrange nit batch (emit_payload DRY / crossing_weight constant / report near-dupes)
 - [ ] **C46** `nit` — recorded-only stdlib notes (subtract / crypto_file_hash / dict_word_count / verbose_report)
 - [ ] **C47** `nit` — cold RED-convertible cut conversions (optional guard restructures)
+- [ ] **C59** `nit` — protocol leniencies undocumented/unpinned (absent-`v` ⇒ v1, trailing garbage, `v:1.0`, verb field never cross-checked) → `browser.pl:98–125`
+- [ ] **C60** `nit` — unbound `Verb` argument silently dispatches arrange → `browser.pl:132`
+- [ ] **C61** `nit` — ":80 only three mutable globals" stale — `prng_state/1` is a fourth → `browser.pl:80` · `core.pl:512`
+- [ ] **C62** `nit` — `""` answer → `failure/unplaceable` `words:[""]` wire shape (core-lane decision) → core `doc_to_words/2`
+- [ ] **C63** `nit` — browser.pl cosmetic batch (double-convert, header success-arm wording, inert cut, plain-`%` headers) → `browser.pl:345,11,218`
 
 ## Remediation log
 
@@ -1279,3 +1769,17 @@ one-line note`. Update the finding's status line and tick its box above at the s
   baseline + history ledger updated). NOTE: `prolog/crosswordsmith/browser.pl` (456
   lines, new on main) postdates the audit sweep and is unaudited — first candidate for
   a follow-up lane.
+
+- 2026-07-06 · browser.pl lane · **addendum added** · — · the follow-up lane promised
+  above, delivered: two-lane audit (style/stdlib + census/§10-invariant/state) of
+  `prolog/crosswordsmith/browser.pl`, same manual-grounded + live-probe discipline, no
+  perf experiments by design (dispatch layer, not search path — §1g doctrine). See the
+  [Addendum](#addendum-2026-07-06-browserpl-lane). Verdicts: the §10 never-crash
+  invariant **survived 94/94 hostile probes + 5 resource bombs** (det=true and
+  steadfast on every path; two label-quality deviations only); **all 20 cuts KEEP**
+  (2 GREEN / 18 RBC, none profitably removable — probe-verified that clause indexing
+  cannot carry this dispatch shape). Tracker fallout: **C3 and C10 closed**
+  (resolved on main, probe-verified); **C2 concretized & relocated → C48** (closed as
+  relocated); C9's site deleted (pattern → C51, row annotated); C25 half-done and C6
+  stale-ref annotated. **16 new findings opened, C48–C63 (5 med · 6 low · 5 nit)**,
+  all `open`.
