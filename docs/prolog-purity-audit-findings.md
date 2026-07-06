@@ -1267,3 +1267,15 @@ one-line note`. Update the finding's status line and tick its box above at the s
   **Owed after commit:** `make bench-fill-record`; idle-machine serial wall A/B for §1d.
   Dropped by measurement (not applied): X5-E2 (+55.4% search_inf), X5-E4 (+0.21%, no GC
   to save), X6-E8 (negative control, reverted by design).
+
+- **2026-07-06 (later)** — serial idle-machine wall A/B added to §1d (arrange strict
+  −0.4…−2.3% all rungs; greedy −13…−18%). Work committed and **rebased onto main
+  `85906da`** (post `dd74206` seeded-PRNG + wasm-SDK merge): zero textual conflicts;
+  full suite (incl. new `browser.plt`) green; goldens byte-identical. Arrange ratchet
+  vs main's re-recorded PRNG-era baseline: +0.01% (+4…+28 inf/rung, ~+1 per placed
+  word) — within tolerance; noted as an interaction between the rebased steps and the
+  PRNG-era counts, not a regression signal. Fill ratchet unchanged (fill.pl untouched
+  by the merge): 6 WINs re-confirmed and **recorded** (`make bench-fill-record`,
+  baseline + history ledger updated). NOTE: `prolog/crosswordsmith/browser.pl` (456
+  lines, new on main) postdates the audit sweep and is unaudited — first candidate for
+  a follow-up lane.
