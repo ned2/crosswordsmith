@@ -200,15 +200,31 @@ seeded_slot(SeededKeys, slot(Start, Dir, _, _)) :- memberchk(Start-Dir, SeededKe
 %   DictByLen[Len]. A slot's candidates = the words of its length matching
 %   its already-bound positions (intersection of the index sets), or all
 %   words of that length if nothing bound. Throws on an unreadable File.
+%
+%   The File is DEFINED as UTF-8 (decoded with an explicit encoding(utf8)
+%   pin - never the process locale). Each line is normalized fold-then-strict
+%   into A-Z letters: ASCII case-mapped, Latin-1/Extended-A diacritics folded
+%   through the explicit fold_char/2 table (NFC and NFD forms normalize
+%   identically), ASCII punctuation/digits and a small typographic set
+%   squeezed; a word containing any letter that cannot be faithfully folded
+%   (Cyrillic, Greek, un-tabled Latin, orphan combining marks) is DROPPED
+%   whole, and the drop count is reported unconditionally on stderr (INV-3:
+%   dropped words are a compromise, never verbose-gated). Pure-ASCII
+%   dictionaries normalize exactly as before this hardening. Policy + review
+%   record: docs/plans/fill-dict-unicode-normalization.md.
 %   Benchmark seam: the fill bench's `dict_load` bucket (load_inf) times
 %   exactly this goal - it is the gated load path (F-L1).
 load_dict(File, DictByLen, Index) :-
     read_file_lines(File, Lines),
     % convlist, not findall+member+guard (C32): the same word list in the same
     % order with no findall record/copy per word. NB named helper, not a yall
-    % lambda (the F-L1 rationale, alpha_chars/2 below) - this is the gated
-    % load_inf path.
+    % lambda (the F-L1 rationale, fold_chars/3 below) - this is the gated
+    % load_inf path. The drop counter is nb_ state (zeroed here, bumped only
+    % on the drop path, read once after): zero inference cost per kept word.
+    nb_setval(fill_dict_dropped_words, 0),
     convlist(line_word, Lines, Ws0),
+    nb_getval(fill_dict_dropped_words, Dropped),
+    warn_dropped_words(Dropped, File),
     sort(Ws0, Words),                       % dedupe + a stable, deterministic order
     map_list_to_pairs(length, Words, LPairs),
     keysort(LPairs, LSorted),
@@ -216,34 +232,397 @@ load_dict(File, DictByLen, Index) :-
     list_to_assoc(LGroups, DictByLen),
     build_index(DictByLen, Index).
 
+% encoding(utf8), NOT the locale default: under LC_ALL=C the default decode
+% mangles multibyte input into U+FFFD mojibake, making the loaded dictionary
+% depend on the invoking environment. Dictionary files are DEFINED as UTF-8
+% (fixtures/dict/README.md); pure-ASCII files decode identically either way.
 read_file_lines(File, Lines) :-
-    read_file_to_string(File, Str, []),
+    read_file_to_string(File, Str, [encoding(utf8)]),
     split_string(Str, "\n", "\r \t", Parts),
     exclude(==(""), Parts, Lines).
 
-% One dictionary line -> its normalized letters; fails (and convlist skips the
-% line) when nothing alphabetic remains.
+% One dictionary line -> its normalized letters. Two distinct failure kinds,
+% both making convlist skip the line:
+%   - nothing left after squeezing (punctuation/digit-only line): plain skip,
+%     uncounted - exactly the pre-hardening behavior;
+%   - normalize_word/2 FAILED (a letter that cannot be faithfully folded to
+%     A-Z): the whole word is dropped and counted; load_dict reports the
+%     count unconditionally on stderr per INV-3 (see core.pl's verbose_report
+%     contract note: dropped words must NOT go through verbose_report).
 line_word(Line, Letters) :-
-    normalize_word(Line, Letters),
-    Letters \== [].
+    (   normalize_word(Line, Letters0)
+    ->  Letters0 \== [],
+        Letters = Letters0
+    ;   dict_drop_note,
+        fail
+    ).
+
+% Bump the dropped-word counter. nb_ globals, not assert/retract: runs ONLY
+% on the (rare) drop path, so the ASCII fast path pays nothing; WASM-safe.
+% The load-time init below makes the global always exist (load_dict re-zeroes
+% it per call); without it a white-box line_word call would error on the
+% first-ever drop.
+:- nb_setval(fill_dict_dropped_words, 0).
+dict_drop_note :-
+    nb_getval(fill_dict_dropped_words, N0),
+    N is N0 + 1,
+    nb_setval(fill_dict_dropped_words, N).
+
+% Unconditional stderr per INV-3 (a compromise report, like arrange's dropped
+% words) - quiet exactly when nothing was dropped, so pure-ASCII dictionaries
+% keep fill's quiet-by-default stderr contract.
+warn_dropped_words(Dropped, File) :-
+    (   Dropped =:= 0
+    ->  true
+    ;   format(user_error,
+               "fill: dropped ~w dictionary word(s) from ~w (unrepresentable in A-Z after folding)~n",
+               [Dropped, File])
+    ).
 
 % NB first-order on purpose: an include([C]>>char_type(C,alpha), ...) filter
 % pays the yall meta-call + lambda copy PER CHARACTER (this module never
 % imports library(yall), so the lambda is not compile-expanded): ~12 inf/char
 % = 19.4M of full ENABLE's 26.6M dict-load inferences (P-F1 attribution).
-% alpha_chars/2 makes the identical char_type(C, alpha) decision per char at
-% ~2.2 inf/char (F-L1: load_inf 26.60M -> 10.72M at 172k, output-identical).
+% The az/1 first-arg-indexed fact lookup makes the keep/other decision per
+% char at the same measured ~2.1 inf/char as the char_type(C, alpha) scan it
+% replaced (F-L1: load_inf 26.60M -> 10.72M at 172k, output-identical), and
+% unlike char_type it is LOCALE-INDEPENDENT: both string_upper/2 and
+% char_type/2 classify non-ASCII differently under LC_ALL=C vs UTF-8 locales,
+% so no non-ASCII decision below consults either (string_upper is retained
+% only for its locale-stable ASCII a-z -> A-Z mapping; the fold table is
+% double-cased to cover non-ASCII letters whether or not the locale's
+% string_upper case-mapped them).
 normalize_word(Line, Letters) :-
     string_upper(Line, U), string_chars(U, Cs),
-    alpha_chars(Cs, Letters).
+    fold_chars(Cs, none, Letters).
 
-alpha_chars([], []).
-alpha_chars([C|Cs], Letters) :-
-    (   char_type(C, alpha)
-    ->  Letters = [C|Rest]
-    ;   Letters = Rest
-    ),
-    alpha_chars(Cs, Rest).
+% fold_chars(+Chars, +PrevKept, -Letters): fold-then-strict walk. PrevKept is
+% the immediately preceding kept A-Z char (the only legal combining-mark
+% base), or none - reset by every char that is not a kept A-Z letter, so mark
+% chains never squeeze. Together with the PAIR-keyed allowed_mark/2 test this
+% makes NFC and NFD forms agree for EVERY input class: a decomposed sequence
+% squeezes its mark only when the recomposed letter is in the fold table
+% (allowed_mark holds the (base, mark) pairs of the table's own NFD
+% decompositions), and anything else - orphan marks, mark chains, marks on
+% the wrong base - drops the word exactly as its precomposed form would.
+% Fails (word dropped) on any char that is neither kept, folded, a legal
+% mark, nor squeezable punctuation.
+fold_chars([], _, []).
+fold_chars([C|Cs], Prev, Letters) :-
+    (   az(C)
+    ->  Letters = [C|Rest],
+        fold_chars(Cs, C, Rest)
+    ;   fold_other(C, Prev, Cs, Letters)
+    ).
+
+% Non-A-Z char (rare path; never entered for pure-ASCII dictionaries).
+fold_other(C, Prev, Cs, Letters) :-
+    (   fold_char(C, F)
+    ->  append(F, Rest, Letters),
+        fold_chars(Cs, none, Rest)
+    ;   combining_mark(C)
+    ->  Prev \== none,
+        allowed_mark(Prev, C),
+        fold_chars(Cs, none, Letters)
+    ;   squeeze_char(C),
+        fold_chars(Cs, none, Letters)
+    ).
+
+combining_mark(C) :-
+    char_code(C, Code),
+    Code >= 0x0300, Code =< 0x036F.
+
+% ASCII non-letters (digits, punctuation - a-z cannot appear post-upper) plus
+% an explicit typographic set squeeze silently, matching the pre-hardening
+% punctuation behavior ("don't" with either the ASCII or the U+2019 apostrophe -> DONT).
+squeeze_char(C) :-
+    char_code(C, Code),
+    (   Code < 0x80
+    ->  true
+    ;   typographic_squeeze(Code)
+    ).
+
+typographic_squeeze(0x00AD).    % soft hyphen
+typographic_squeeze(0x2013).    % en dash
+typographic_squeeze(0x2014).    % em dash
+typographic_squeeze(0x2018).    % left single quote
+typographic_squeeze(0x2019).    % right single quote (typographic apostrophe)
+
+% The A-Z fast path: 26 first-arg-indexed facts, measured inference-identical
+% to the char_type(C, alpha) call they replace (see normalize_word note).
+az('A'). az('B'). az('C'). az('D'). az('E'). az('F'). az('G'). az('H').
+az('I'). az('J'). az('K'). az('L'). az('M'). az('N'). az('O'). az('P').
+az('Q'). az('R'). az('S'). az('T'). az('U'). az('V'). az('W'). az('X').
+az('Y'). az('Z').
+
+% The fold table: every NFD-decomposable Latin-1 / Latin Extended-A letter ->
+% its A-Z base, DOUBLE-CASED (both the upper- and lower-case precomposed char
+% appear, so the outcome does not depend on whether the locale's string_upper
+% case-mapped it), plus five explicitly anchored specials: sharp-s->SS (Unicode
+% casefold), AE/OE ligatures (established English orthographic equivalence),
+% IJ ligature (NFKC), O-slash->O. Thorn/Eth are EXCLUDED by
+% review: no normative crossword-convention source for a transliteration, so
+% words containing them drop. GENERATED from library(unicode) (utf8proc,
+% Unicode 16) by the plan's generator script and verified against the same
+% library by the fill.plt oracle test - never hand-edit an entry; regenerate.
+% \uXXXX escapes keep every FACT byte-ASCII: a table entry can never be
+% corrupted by source-encoding mishandling, and diffs stay greppable.
+fold_char('\u00c0', ['A']).
+fold_char('\u00c1', ['A']).
+fold_char('\u00c2', ['A']).
+fold_char('\u00c3', ['A']).
+fold_char('\u00c4', ['A']).
+fold_char('\u00c5', ['A']).
+fold_char('\u00c6', ['A','E']).
+fold_char('\u00c7', ['C']).
+fold_char('\u00c8', ['E']).
+fold_char('\u00c9', ['E']).
+fold_char('\u00ca', ['E']).
+fold_char('\u00cb', ['E']).
+fold_char('\u00cc', ['I']).
+fold_char('\u00cd', ['I']).
+fold_char('\u00ce', ['I']).
+fold_char('\u00cf', ['I']).
+fold_char('\u00d1', ['N']).
+fold_char('\u00d2', ['O']).
+fold_char('\u00d3', ['O']).
+fold_char('\u00d4', ['O']).
+fold_char('\u00d5', ['O']).
+fold_char('\u00d6', ['O']).
+fold_char('\u00d8', ['O']).
+fold_char('\u00d9', ['U']).
+fold_char('\u00da', ['U']).
+fold_char('\u00db', ['U']).
+fold_char('\u00dc', ['U']).
+fold_char('\u00dd', ['Y']).
+fold_char('\u00df', ['S','S']).
+fold_char('\u00e0', ['A']).
+fold_char('\u00e1', ['A']).
+fold_char('\u00e2', ['A']).
+fold_char('\u00e3', ['A']).
+fold_char('\u00e4', ['A']).
+fold_char('\u00e5', ['A']).
+fold_char('\u00e6', ['A','E']).
+fold_char('\u00e7', ['C']).
+fold_char('\u00e8', ['E']).
+fold_char('\u00e9', ['E']).
+fold_char('\u00ea', ['E']).
+fold_char('\u00eb', ['E']).
+fold_char('\u00ec', ['I']).
+fold_char('\u00ed', ['I']).
+fold_char('\u00ee', ['I']).
+fold_char('\u00ef', ['I']).
+fold_char('\u00f1', ['N']).
+fold_char('\u00f2', ['O']).
+fold_char('\u00f3', ['O']).
+fold_char('\u00f4', ['O']).
+fold_char('\u00f5', ['O']).
+fold_char('\u00f6', ['O']).
+fold_char('\u00f8', ['O']).
+fold_char('\u00f9', ['U']).
+fold_char('\u00fa', ['U']).
+fold_char('\u00fb', ['U']).
+fold_char('\u00fc', ['U']).
+fold_char('\u00fd', ['Y']).
+fold_char('\u00ff', ['Y']).
+fold_char('\u0100', ['A']).
+fold_char('\u0101', ['A']).
+fold_char('\u0102', ['A']).
+fold_char('\u0103', ['A']).
+fold_char('\u0104', ['A']).
+fold_char('\u0105', ['A']).
+fold_char('\u0106', ['C']).
+fold_char('\u0107', ['C']).
+fold_char('\u0108', ['C']).
+fold_char('\u0109', ['C']).
+fold_char('\u010a', ['C']).
+fold_char('\u010b', ['C']).
+fold_char('\u010c', ['C']).
+fold_char('\u010d', ['C']).
+fold_char('\u010e', ['D']).
+fold_char('\u010f', ['D']).
+fold_char('\u0112', ['E']).
+fold_char('\u0113', ['E']).
+fold_char('\u0114', ['E']).
+fold_char('\u0115', ['E']).
+fold_char('\u0116', ['E']).
+fold_char('\u0117', ['E']).
+fold_char('\u0118', ['E']).
+fold_char('\u0119', ['E']).
+fold_char('\u011a', ['E']).
+fold_char('\u011b', ['E']).
+fold_char('\u011c', ['G']).
+fold_char('\u011d', ['G']).
+fold_char('\u011e', ['G']).
+fold_char('\u011f', ['G']).
+fold_char('\u0120', ['G']).
+fold_char('\u0121', ['G']).
+fold_char('\u0122', ['G']).
+fold_char('\u0123', ['G']).
+fold_char('\u0124', ['H']).
+fold_char('\u0125', ['H']).
+fold_char('\u0128', ['I']).
+fold_char('\u0129', ['I']).
+fold_char('\u012a', ['I']).
+fold_char('\u012b', ['I']).
+fold_char('\u012c', ['I']).
+fold_char('\u012d', ['I']).
+fold_char('\u012e', ['I']).
+fold_char('\u012f', ['I']).
+fold_char('\u0130', ['I']).
+fold_char('\u0132', ['I','J']).
+fold_char('\u0133', ['I','J']).
+fold_char('\u0134', ['J']).
+fold_char('\u0135', ['J']).
+fold_char('\u0136', ['K']).
+fold_char('\u0137', ['K']).
+fold_char('\u0139', ['L']).
+fold_char('\u013a', ['L']).
+fold_char('\u013b', ['L']).
+fold_char('\u013c', ['L']).
+fold_char('\u013d', ['L']).
+fold_char('\u013e', ['L']).
+fold_char('\u0143', ['N']).
+fold_char('\u0144', ['N']).
+fold_char('\u0145', ['N']).
+fold_char('\u0146', ['N']).
+fold_char('\u0147', ['N']).
+fold_char('\u0148', ['N']).
+fold_char('\u014c', ['O']).
+fold_char('\u014d', ['O']).
+fold_char('\u014e', ['O']).
+fold_char('\u014f', ['O']).
+fold_char('\u0150', ['O']).
+fold_char('\u0151', ['O']).
+fold_char('\u0152', ['O','E']).
+fold_char('\u0153', ['O','E']).
+fold_char('\u0154', ['R']).
+fold_char('\u0155', ['R']).
+fold_char('\u0156', ['R']).
+fold_char('\u0157', ['R']).
+fold_char('\u0158', ['R']).
+fold_char('\u0159', ['R']).
+fold_char('\u015a', ['S']).
+fold_char('\u015b', ['S']).
+fold_char('\u015c', ['S']).
+fold_char('\u015d', ['S']).
+fold_char('\u015e', ['S']).
+fold_char('\u015f', ['S']).
+fold_char('\u0160', ['S']).
+fold_char('\u0161', ['S']).
+fold_char('\u0162', ['T']).
+fold_char('\u0163', ['T']).
+fold_char('\u0164', ['T']).
+fold_char('\u0165', ['T']).
+fold_char('\u0168', ['U']).
+fold_char('\u0169', ['U']).
+fold_char('\u016a', ['U']).
+fold_char('\u016b', ['U']).
+fold_char('\u016c', ['U']).
+fold_char('\u016d', ['U']).
+fold_char('\u016e', ['U']).
+fold_char('\u016f', ['U']).
+fold_char('\u0170', ['U']).
+fold_char('\u0171', ['U']).
+fold_char('\u0172', ['U']).
+fold_char('\u0173', ['U']).
+fold_char('\u0174', ['W']).
+fold_char('\u0175', ['W']).
+fold_char('\u0176', ['Y']).
+fold_char('\u0177', ['Y']).
+fold_char('\u0178', ['Y']).
+fold_char('\u0179', ['Z']).
+fold_char('\u017a', ['Z']).
+fold_char('\u017b', ['Z']).
+fold_char('\u017c', ['Z']).
+fold_char('\u017d', ['Z']).
+fold_char('\u017e', ['Z']).
+
+% allowed_mark(BaseUpper, Mark): the (base, mark) NFD-decomposition pairs of
+% the fold table's single-base entries - the ONLY combining marks fold_chars
+% squeezes, and only immediately after that base. Generated + oracle-checked
+% alongside fold_char/2.
+allowed_mark('A', '\u0300').
+allowed_mark('A', '\u0301').
+allowed_mark('A', '\u0302').
+allowed_mark('A', '\u0303').
+allowed_mark('A', '\u0304').
+allowed_mark('A', '\u0306').
+allowed_mark('A', '\u0308').
+allowed_mark('A', '\u030a').
+allowed_mark('A', '\u0328').
+allowed_mark('C', '\u0301').
+allowed_mark('C', '\u0302').
+allowed_mark('C', '\u0307').
+allowed_mark('C', '\u030c').
+allowed_mark('C', '\u0327').
+allowed_mark('D', '\u030c').
+allowed_mark('E', '\u0300').
+allowed_mark('E', '\u0301').
+allowed_mark('E', '\u0302').
+allowed_mark('E', '\u0304').
+allowed_mark('E', '\u0306').
+allowed_mark('E', '\u0307').
+allowed_mark('E', '\u0308').
+allowed_mark('E', '\u030c').
+allowed_mark('E', '\u0328').
+allowed_mark('G', '\u0302').
+allowed_mark('G', '\u0306').
+allowed_mark('G', '\u0307').
+allowed_mark('G', '\u0327').
+allowed_mark('H', '\u0302').
+allowed_mark('I', '\u0300').
+allowed_mark('I', '\u0301').
+allowed_mark('I', '\u0302').
+allowed_mark('I', '\u0303').
+allowed_mark('I', '\u0304').
+allowed_mark('I', '\u0306').
+allowed_mark('I', '\u0307').
+allowed_mark('I', '\u0308').
+allowed_mark('I', '\u0328').
+allowed_mark('J', '\u0302').
+allowed_mark('K', '\u0327').
+allowed_mark('L', '\u0301').
+allowed_mark('L', '\u030c').
+allowed_mark('L', '\u0327').
+allowed_mark('N', '\u0301').
+allowed_mark('N', '\u0303').
+allowed_mark('N', '\u030c').
+allowed_mark('N', '\u0327').
+allowed_mark('O', '\u0300').
+allowed_mark('O', '\u0301').
+allowed_mark('O', '\u0302').
+allowed_mark('O', '\u0303').
+allowed_mark('O', '\u0304').
+allowed_mark('O', '\u0306').
+allowed_mark('O', '\u0308').
+allowed_mark('O', '\u030b').
+allowed_mark('R', '\u0301').
+allowed_mark('R', '\u030c').
+allowed_mark('R', '\u0327').
+allowed_mark('S', '\u0301').
+allowed_mark('S', '\u0302').
+allowed_mark('S', '\u030c').
+allowed_mark('S', '\u0327').
+allowed_mark('T', '\u030c').
+allowed_mark('T', '\u0327').
+allowed_mark('U', '\u0300').
+allowed_mark('U', '\u0301').
+allowed_mark('U', '\u0302').
+allowed_mark('U', '\u0303').
+allowed_mark('U', '\u0304').
+allowed_mark('U', '\u0306').
+allowed_mark('U', '\u0308').
+allowed_mark('U', '\u030a').
+allowed_mark('U', '\u030b').
+allowed_mark('U', '\u0328').
+allowed_mark('W', '\u0302').
+allowed_mark('Y', '\u0301').
+allowed_mark('Y', '\u0302').
+allowed_mark('Y', '\u0308').
+allowed_mark('Z', '\u0301').
+allowed_mark('Z', '\u0307').
+allowed_mark('Z', '\u030c').
 
 build_index(DictByLen, Index) :-
     findall(k(Len, P, Ch)-Idx,
@@ -783,7 +1162,16 @@ empty_slots(Slots, DictByLen, Index, Bad) :-
 % hard break - a v1 artifact (or any Version != 2) is refused by the loader with
 % the existing rebuild message. Masks are built ONLY here (the amortized
 % --save-index step - the gate probe's binding condition), never at load or fill.
-fill_index_format_version(2).
+%
+% Schema version 3 (Unicode hardening): the TERM SHAPE is identical to v2; the
+% bump is SEMANTIC. The artifact bakes in normalize_word's output, and the
+% dict_sha256 staleness check hashes the SOURCE file, so it cannot see a
+% normalization-policy change - v2 artifacts built from a non-ASCII dictionary
+% embed the old locale-dependent normalization. The bump routes them into the
+% existing fill_index_version refusal (explicit rebuild, never silent misread).
+% For pure-ASCII dictionaries a rebuilt artifact is ==-identical to its v2
+% predecessor (the hardening changes nothing for ASCII input).
+fill_index_format_version(3).
 
 %!  fill_save_index(+DictFile:atom, +OutFile:atom) is det.
 %!  fill_save_index(+DictFile:atom, +OutFile:atom, +Options:list) is det.
