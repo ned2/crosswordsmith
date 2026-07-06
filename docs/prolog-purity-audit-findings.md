@@ -1676,9 +1676,9 @@ Tick as landed. `→ §Cn` links to the finding; X-steps link to
 - [x] **C1** `med` — table abolition strategy-local; run-order-dependent inference counts → `core.pl:280` · *2026-07-06: **fixed** — one `reset_search_memos/0` seam (`abolish_module_tables(crosswordsmith_core)`, tabling-preds.md) at every top-level search entry: `find_crossword/6` (all four strategies) + arrange's five entries; the old per-corner strict abolish consolidated to exactly one reset per external call. Warm==cold locked: in-process strict is 112,642–112,644 inferences regardless of history (pre-fix drift on the same fixture: 11,454 cold vs 4,237 warm baseline). plt lock `arrange:inference_counts_history_independent`; arrange ratchet 12/12 PASS, −0.04%…−10.58% all-WIN (cross-corner memo sharing)*
 - [x] **C2** `med·WASM` — unbounded table growth on greedy path in persistent process → `core.pl:646,595` · *2026-07-06: **concretized & relocated → C48** (browser.pl lane: growth measured 98,184 B → 1,086,840 B → 5,589,120 B over 1/10/50 fresh-vocab dispatches; Worker's engine-privacy dependency probe-verified). Closed here as relocated, **not fixed** — the single open actionable item is C48*
 - [x] **C3** `med·WASM` — browser dynamic-state reset seam missing → `solve_browser.pl:71` · `core.pl:479` · `arrange.pl:101` · ***resolved on main (`browser.pl:85–88` `reset_request_state/0` + browser.plt determinism locks), probe-verified 2026-07-06** incl. externally-poisoned globals; on-entry-reset residue benign + plt-locked. The tabled-memo caveat is NOT covered → C48*
-- [ ] **C4** `med` — no PlDoc/determinism annotations project-wide (or record the convention)
-- [ ] **C5** `med` — P11 explicit-import follow-through; `load.pl` dies under autoload(false) → `load.pl:12` + module headers
-- [ ] **C6** `med·WASM` — `library(http/json)` → `library(json)` → ~~`solve_browser.pl:40`~~ +siblings · *2026-07-06: ref stale — that file was rewritten; the strongest case is now `browser.pl:35` (tracked as **C52**); this row stays open for the siblings (lint/export/stockgrid/core/fill)*
+- [x] **C4** `med` — no PlDoc/determinism annotations project-wide (or record the convention) · *fixed 2026-07-06 (742465b): `%!` mode+determinism headers on all 84 exported PIs, probe-verified (incl. one honest semidet downgrade: `placed_bbox/4` fails on empty placements); all headers parse as doc_comment objects; convention recorded in AGENTS.md*
+- [x] **C5** `med` — P11 explicit-import follow-through; `load.pl` dies under autoload(false) → `load.pl:12` + module headers · *fixed 2026-07-06 (34fb08b): explicit import lists across all modules, harness roots, and plt files; `load.pl` fixed via explicit `library(filesex)` import — all 9 compile roots + full suite (296 tests) pass under autoload(false)*
+- [x] **C6** `med·WASM` — `library(http/json)` → `library(json)` → ~~`solve_browser.pl:40`~~ +siblings · *2026-07-06: ref stale — that file was rewritten; the strongest case is now `browser.pl:35` (tracked as **C52**); this row stays open for the siblings (lint/export/stockgrid/core/fill)* · *fixed 2026-07-06 (34fb08b): all sibling modules swapped to `library(json)` (fill's alias was vestigial — dropped); ratchets bit-identical*
 - [x] **C7** `med` — `meta_value/3`+`meta_value_or/4` → `library(option)` → `fill.pl:669` · *fixed 2026-07-06 (b02a057): library(option); `=..` and an RBC cut deleted; fill benches bit-identical*
 - [x] **C8** `med` — lint BFS → `library(ugraphs)` → `lint.pl:248` · *fixed 2026-07-06 (b02a057): ugraphs `reachable/3`; 500-case verdict fuzz identical; lint golden byte-identical*
 - [x] **C9** `med·WASM` — `solve_browser_str/2` → `atom_json_dict/3` → ~~`solve_browser.pl:96`~~ · *2026-07-06: ref stale — original site **deleted** on main (file rewritten); the pattern is re-instantiated ×2 in `browser.pl` — the actionable item is **C51**, no separate action here; close this row with C51* · *closed 2026-07-06 with **C51***
@@ -1831,3 +1831,14 @@ one-line note`. Update the finding's status line and tick its box above at the s
   −29..−817 inf/rung core, heavy tail −0.01..−0.03%); fill ratchet PASS
   (load_inf −0.54% all 7 rungs from C13, search_inf ±0). Baselines re-recorded
   (`0a1c79b`). Remaining med rows: C4, C5, C6-siblings — next pass.
+
+- **2026-07-06 (backlog, C4+C5+C6)** — final med rows closed (`34fb08b` imports/json,
+  `742465b` PlDoc). Project-wide explicit import lists; `library(http/json)` fully
+  retired; `load.pl` + every compile root now load AND the full suite passes under
+  `autoload(false)`. All 84 exported PIs carry probe-verified `%!` mode+determinism
+  headers (parsed as doc_comment objects); convention in AGENTS.md. Gates: suite
+  green ×2 (agent + orchestrator), both ratchets bit-identical (+0.00% every count),
+  goldens 8/8. Non-gated note: core's json swap shifts one fill-CLI global-stack
+  growth threshold (global_shifts 7→8, transient RSS blip; globalused byte-identical)
+  — documented at the import site. **All 16 med findings are now closed.** Open:
+  lows/nits + build-time follow-ups (WASM image load-noise check for C52/C6).
