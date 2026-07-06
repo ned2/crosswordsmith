@@ -20,6 +20,7 @@ from xword.convert import convert_text
 from xword.formats import parse_board
 
 FIXTURES = Path(__file__).parent / "fixtures"
+GOLDEN = Path(__file__).parent / "golden"
 NATIVE = FIXTURES / "bundled_17.native.json"
 IPUZ = FIXTURES / "bundled_17.ipuz.json"
 EXOLVE = FIXTURES / "bundled_17.exolve"
@@ -60,6 +61,22 @@ def native_without_links(src: str) -> dict:
     for word in obj["words"]:
         word["meta"].pop("link", None)
     return obj
+
+
+class TestNoFeatureByteIdentity:
+    """D6 acceptance gate for the serializer-gap work: `bundled_17` carries no
+    rebus / prefill / shading, so its convert output must stay byte-identical
+    as the three gaps land. The goldens were captured before any gap change;
+    the new directives/fields must be emitted *only* when the feature is present.
+    """
+
+    def test_no_feature_ipuz_byte_identical(self):
+        out, _ = convert_text(NATIVE.read_text(), "ipuz")
+        assert out == (GOLDEN / "convert_bundled_17_no_feature.ipuz.json").read_text()
+
+    def test_no_feature_exolve_byte_identical(self):
+        out, _ = convert_text(NATIVE.read_text(), "exolve")
+        assert out == (GOLDEN / "convert_bundled_17_no_feature.exolve").read_text()
 
 
 class TestStructuralFailures:
