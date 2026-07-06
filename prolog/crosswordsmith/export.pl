@@ -34,15 +34,36 @@ export_load(File, Dict) :-
     export_layout_dict(Dict0, Dict).
 
 % The shape gate, factored file-free so the browser path validates through the
-% SAME predicate the CLI does (no duplicated validation to drift).
+% SAME predicate the CLI does (no duplicated validation to drift). Depth (C50):
+% a cheap SHAPE check on everything the transforms dereference structurally —
+% each grid row must be a list and each words[] entry an object carrying
+% answer/direction/cells — so gate-passing garbage can no longer surface as a
+% mislabelled internal "engine bug" (a non-list grid row made both transforms
+% plain-fail into browser.pl's never-plain-fail backstop) or as a degenerate
+% success (a schema-less words entry was silently skipped by the clue
+% collectors, blessing garbage with an empty ipuz). CONTENT stays the
+% transforms' domain: on a malformed cell they still fail by design with no
+% partial output (P17) — this is a shape gate, not schema validation.
 export_layout_dict(Dict0, Dict) :-
     (   is_dict(Dict0),
         get_dict(gridLength, Dict0, N), integer(N), N > 0,
         get_dict(grid, Dict0, Rows), is_list(Rows),
-        get_dict(words, Dict0, Ws), is_list(Ws)
+        maplist(is_list, Rows),
+        get_dict(words, Dict0, Ws), is_list(Ws),
+        maplist(export_word_shape, Ws)
     ->  Dict = Dict0
     ;   throw(error(export_invalid_layout, _))
     ).
+
+% One canonical words[] entry: an object with the keys the transforms (and the
+% enumeration deriver) read. Mirrors lint_word/3's required key set — answer,
+% direction, cells — `number` is optional there and likewise unchecked here.
+export_word_shape(W) :-
+    is_dict(W),
+    get_dict(answer, W, _),
+    get_dict(direction, W, _),
+    get_dict(cells, W, Cells),
+    is_list(Cells).
 
 % A grid cell is white iff it is a dict (a filled cell object); anything else
 % (JSON null, however the reader represents it) is a black square. This keeps
@@ -220,4 +241,4 @@ export_solve(File, exolve) :-
 % --- error messages ----------------------------------------------------------
 :- multifile prolog:error_message//1.
 prolog:error_message(export_invalid_layout) -->
-    [ 'export: input is not a canonical layout (needs gridLength, grid, words)' ].
+    [ 'export: input is not a canonical layout (needs gridLength, grid rows, and words each carrying answer/direction/cells)' ].

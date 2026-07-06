@@ -16,7 +16,13 @@
 % bytes), resolver parity with the CLI binary, and classifier totality.
 
 :- use_module(library(plunit)).
-:- use_module(library(http/json)).
+% library(json), not the legacy library(http/json) alias (mirrors browser.pl,
+% the module under test — the alias does not resolve in the WASM image).
+:- use_module(library(json),
+              [ atom_json_dict/3,
+                json_read_dict/3,
+                json_write_dict/2
+              ]).
 :- use_module(library(process)).
 
 % --- helpers (bt_ prefix: .plt helpers share the `user` namespace) -----------
@@ -492,10 +498,42 @@ test(lint_export_param_fuzz) :-
           export-_{to: "ipuz"},                            % layout absent
           export-_{layout: Layout},                        % to absent
           export-_{layout: Layout, to: "pdf"},             % unknown format
-          export-_{layout: _{}, to: "ipuz"}                % fails the shape gate
+          export-_{layout: _{}, to: "ipuz"},               % fails the shape gate
+          % the two C50 probe payloads: gate-passing garbage used to reach the
+          % transforms (non-list grid row -> mislabelled internal "engine bug";
+          % schema-less words entry -> degenerate SUCCESS ipuz), now rejected
+          % by the deepened shared gate as typed validation errors
+          export-_{layout: _{gridLength: 1, grid: [5], words: []}, to: "ipuz"},
+          export-_{layout: _{gridLength: 1, grid: [5], words: []}, to: "exolve"},
+          export-_{layout: _{gridLength: 3, grid: [], words: [_{bogus: 1}]}, to: "ipuz"},
+          % obvious same-class shapes
+          export-_{layout: _{gridLength: 2, grid: [[null, null], "xy"],
+                             words: []}, to: "ipuz"},      % one row a string
+          export-_{layout: _{gridLength: 3, grid: [], words: [7]}, to: "ipuz"},
+          export-_{layout: _{gridLength: 3, grid: [],    % word: cells not a list
+                             words: [_{answer: "CAT", direction: "across",
+                                       cells: "garbage"}]}, to: "exolve"}
         ]),
         ( bt_dispatch(V, _{v: 1, id: "f-le", verb: V, params: P}, Env),
           bt_error(Env, "validation") )).
+
+% The C50 regression locks, asserting the exact pre-fix mislabels can't return:
+% the non-list-grid-row payload must NOT map to internal (the never-plain-fail
+% backstop's "engine bug" wording), and the schema-less-word payload must NOT
+% be blessed as success (the degenerate empty ipuz).
+test(export_gate_nonlist_grid_row_not_internal) :-
+    forall(member(To, ["ipuz", "exolve"]),
+           ( bt_export(_{layout: _{gridLength: 1, grid: [5], words: []},
+                         to: To}, Env),
+             bt_error(Env, "validation"),
+             get_dict(error, Env, E),
+             get_dict(message, E, Msg),
+             \+ sub_string(Msg, _, _, _, "engine bug") )).
+test(export_gate_schemaless_word_not_success) :-
+    bt_export(_{layout: _{gridLength: 3, grid: [], words: [_{bogus: 1}]},
+                to: "ipuz"}, Env),
+    \+ get_dict(status, Env, "success"),
+    bt_error(Env, "validation").
 
 % lint's own layout gate (lint_dict_layout/3's lint_* formals) maps to typed
 % validation envelopes with the project's hook-rendered messages.
@@ -522,6 +560,39 @@ test(cli_parity_lint_export_rejects) :-
           [export, 'tests/golden/arrange_bundled_17_fixed.json']
         ]),
         ( bt_cli_exit(Args, Code), Code =\= 0 )).
+
+% --- the verb registry (the C49 lock) ------------------------------------------
+% verb/1 is THE verb list: white-box, every verb/1 fact must have a dispatch/3
+% clause keyed on it and every verb-keyed dispatch clause must be registered
+% (clause/2 leaves the head arg unbound for the invalid-request and unknown-verb
+% catch-alls, so atom/1 selects exactly the per-verb clauses). Capabilities and
+% the unknown_verb message render the same registry, so with this bijection
+% locked none of the three can drift.
+test(verb_registry_dispatch_bijection) :-
+    findall(V, crosswordsmith_browser:verb(V), Registry),
+    Registry \== [],
+    is_set(Registry),
+    findall(V,
+            ( clause(crosswordsmith_browser:dispatch(V, _, _), _),
+              atom(V) ),
+            DispatchVerbs),
+    msort(Registry, Sorted),
+    msort(DispatchVerbs, Sorted).
+
+% The wire copies source the registry: capabilities returns exactly the
+% registered verbs (in registry order) and the unknown-verb diagnostic renders
+% every one of them.
+test(verb_registry_sources_capabilities_and_message) :-
+    findall(V, crosswordsmith_browser:verb(V), Registry),
+    maplist([A, S]>>atom_string(A, S), Registry, RegistryStrings),
+    bt_dispatch(capabilities, _{v: 1, id: "c-r", verb: "capabilities"}, CEnv),
+    bt_success_result(CEnv, R),
+    get_dict(verbs, R, RegistryStrings),
+    bt_dispatch(nope, _{v: 1, id: "u-r", verb: "nope", params: _{}}, UEnv),
+    bt_error(UEnv, "unknown_verb"),
+    get_dict(error, UEnv, E),
+    get_dict(message, E, Msg),
+    forall(member(VS, RegistryStrings), sub_string(Msg, _, _, _, VS)).
 
 % --- the capabilities verb (engine-sourced, OQ-4) -----------------------------
 

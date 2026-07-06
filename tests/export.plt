@@ -97,4 +97,32 @@ test(export_rejects_non_layout, [throws(error(export_invalid_layout, _))]) :-
     tmp_file_stream(text, F, S), write(S, '{"foo": 1}'), close(S),
     call_cleanup(crosswordsmith_export:export_load(F, _), delete_file(F)).
 
+% The C50 gate depth: export_layout_dict/2 is a SHAPE gate over everything the
+% transforms dereference structurally — each grid row a list, each words[]
+% entry an object carrying answer/direction/cells. Pre-fix, the first payload
+% below made both transforms plain-fail (surfacing as browser.pl's mislabelled
+% internal "engine bug" envelope) and the second was blessed as a degenerate
+% empty-ipuz success; both (and the same-class shapes) must throw the same
+% typed formal the presence checks already threw.
+test(export_gate_rejects_nonlist_grid_row,          % C50 probe payload 1
+     [throws(error(export_invalid_layout, _))]) :-
+    export_layout_dict(_{gridLength: 1, grid: [5], words: []}, _).
+test(export_gate_rejects_schemaless_word,           % C50 probe payload 2
+     [throws(error(export_invalid_layout, _))]) :-
+    export_layout_dict(_{gridLength: 3, grid: [], words: [_{bogus: 1}]}, _).
+test(export_gate_rejects_word_not_object,
+     [throws(error(export_invalid_layout, _))]) :-
+    export_layout_dict(_{gridLength: 3, grid: [], words: [7]}, _).
+test(export_gate_rejects_word_cells_not_list,
+     [throws(error(export_invalid_layout, _))]) :-
+    export_layout_dict(_{gridLength: 3, grid: [],
+                         words: [_{answer: "CAT", direction: "across",
+                                   cells: "garbage"}]}, _).
+% ...and the canonical shape still passes, unchanged (the happy-path lock; the
+% golden suite pins the full-size layouts).
+test(export_gate_accepts_canonical_layout) :-
+    mini_canonical(D),
+    export_layout_dict(D, D2),
+    D2 == D.
+
 :- end_tests(export).

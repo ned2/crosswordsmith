@@ -21,8 +21,10 @@
 % instead of leaning on a builtin failing (set_search_seed/1 FAILS on a bad
 % seed — strategy §4.2's correction).
 %
-% Adding a verb = one dispatch/3 clause (+ classifier rows if it introduces new
-% outcome tags) — never new message wiring. `arrange` is the first verb;
+% Adding a verb = one verb/1 fact + one dispatch/3 clause (+ classifier rows if
+% it introduces new outcome tags) — never new message wiring: the capabilities
+% result and the unknown_verb diagnostic both read the verb/1 registry, so
+% neither can drift from what actually dispatches. `arrange` is the first verb;
 % `capabilities` rides along so the JS facade's capabilities() is
 % engine-sourced, not a JS hardcode that lies after a qlf swap (OQ-4); `lint`
 % and `export` (strategy §6 phases 2–3) prove the spine generalises: both are
@@ -32,7 +34,15 @@
           [ browser_dispatch/3
           ]).
 
-:- use_module(library(http/json)).
+% library(json), NOT the legacy library(http/json) alias: this module is
+% qcompiled into the WASM image, where the alias does not resolve at all
+% ("source_sink library(http/json) does not exist" load noise — wasm/README.md)
+% and the predicates only worked by autoloading from core library(json).
+% Explicit import list per the project imports below (qsave autoload(false)
+% discipline).
+:- use_module(library(json),
+              [ atom_json_dict/3
+              ]).
 :- use_module(crosswordsmith(core),
               [ doc_to_words/2,
                 set_verbose/1,
@@ -72,9 +82,9 @@ browser_dispatch(Verb, Payload, JsonEnvelope) :-
     outcome_envelope(VerbA, Id, Outcome, Envelope),
     % width(0): a single-line wire envelope — nothing downstream reads the
     % bytes (JSON.parse both ways, DEC-8), so pretty-printing only costs
-    % transport size and breaks line-oriented harnesses.
-    with_output_to(atom(JsonEnvelope),
-                   json_write_dict(current_output, Envelope, [width(0)])).
+    % transport size and breaks line-oriented harnesses. as(atom) makes the
+    % §4.3 atom-not-string contract explicit (it is also the default).
+    atom_json_dict(JsonEnvelope, Envelope, [width(0), as(atom)]).
 
 % --- per-request state reset (strategy §3.2) ---------------------------------
 % Unconditionally clear the mutable module globals before every dispatch: a
@@ -100,17 +110,15 @@ reset_request_state :-
 
 % --- request parsing ---------------------------------------------------------
 
-% Parse the request JSON. json_read_dict lands every value with the right
+% Parse the request JSON. atom_json_dict lands every value with the right
 % Prolog type (strings stay strings, so core's `answer` guard works; numbers,
-% null and booleans survive). Throws syntax_error(_) on malformed JSON,
+% null and booleans survive; non-object JSON parses to a non-dict, so the
+% is_dict gate below still fires). Throws syntax_error(_) on malformed JSON,
 % bad_request(_) on a non-object, unsupported_version(_) on a v we don't speak
 % — all mapped by the classifier, so a garbage payload still gets a typed
 % envelope.
 parse_request(Payload, Req) :-
-    setup_call_cleanup(
-        open_string(Payload, In),
-        json_read_dict(In, Req0, [default_tag(json)]),
-        close(In)),
+    atom_json_dict(Payload, Req0, [default_tag(json)]),
     (   is_dict(Req0)
     ->  Req = Req0
     ;   throw(error(bad_request(Req0), _))
@@ -136,9 +144,22 @@ request_id(Req, Id) :-
 envelope_verb(Verb, Verb) :- atom(Verb), !.
 envelope_verb(Verb, VerbA) :- term_to_atom(Verb, VerbA).
 
+% --- the verb registry ---------------------------------------------------------
+% THE one verb list (there used to be three hand-maintained copies — dispatch
+% clauses, the capabilities literal, the unknown_verb message text — a
+% capabilities-that-lies hazard, exactly what OQ-4 built the verb to prevent).
+% engine_capabilities/1 collects these facts and the unknown_verb hook renders
+% them at message time; dispatch/3 keys one clause per fact, and browser.plt's
+% registry test locks the fact/clause bijection. Source order is wire order
+% (the capabilities envelope is plt-locked).
+verb(arrange).
+verb(lint).
+verb(export).
+verb(capabilities).
+
 % --- dispatch ----------------------------------------------------------------
-% dispatch(+Verb, +Req, -Outcome): one clause per verb, unknown-verb catch-all
-% LAST. Every clause unifies a tagged Outcome or throws a mapped term.
+% dispatch(+Verb, +Req, -Outcome): one clause per verb/1 fact, unknown-verb
+% catch-all LAST. Every clause unifies a tagged Outcome or throws a mapped term.
 dispatch(_Verb, invalid(Err), thrown(Err)) :- !.   % request never parsed
 dispatch(arrange, Req, Outcome) :- !,
     arrange_browser(Req, Outcome).
@@ -306,10 +327,12 @@ resolve_export_to(Params, To) :-
     ).
 
 % --- the capabilities verb -----------------------------------------------------
-% Engine-sourced (OQ-4): the verb list comes from the loaded engine, so a stale
-% cached qlf answers for itself instead of a JS constant lying about it.
-engine_capabilities(_{ verbs: [arrange, lint, export, capabilities],
+% Engine-sourced (OQ-4): the verb list comes from the loaded engine's verb/1
+% registry, so a stale cached qlf answers for itself instead of a JS constant
+% (or a Prolog literal) lying about it.
+engine_capabilities(_{ verbs: Verbs,
                        engine: _{ swipl: Swipl } }) :-
+    findall(V, verb(V), Verbs),
     current_prolog_flag(version_data, swi(Major, Minor, Patch, _)),
     format(atom(Swipl), "~w.~w.~w", [Major, Minor, Patch]).
 
@@ -450,7 +473,11 @@ prolog:error_message(bad_to(V)) -->
 prolog:error_message(missing_to) -->
     [ 'requires "to": ipuz or exolve' ].
 prolog:error_message(unknown_verb(V)) -->
-    [ 'unknown verb ~q; this engine supports: arrange, lint, export, capabilities'-[V] ].
+    % The supported list is rendered from the verb/1 registry at message time
+    % ({}/1), so this diagnostic cannot go stale when a verb lands.
+    { findall(Verb, verb(Verb), Verbs),
+      atomic_list_concat(Verbs, ', ', Supported) },
+    [ 'unknown verb ~q; this engine supports: ~w'-[V, Supported] ].
 prolog:error_message(unsupported_version(V)) -->
     [ 'unsupported envelope version ~q; this engine speaks v1'-[V] ].
 
