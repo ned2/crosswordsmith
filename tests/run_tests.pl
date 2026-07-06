@@ -14,7 +14,7 @@
 
 run_suite :-
     consult('load.pl'),                % the whole implementation, known-good order
-    consult('tests/crossword.plt'),
+    consult('tests/core.plt'),
     consult('tests/arrange.plt'),
     consult('tests/lint.plt'),
     consult('tests/export.plt'),

@@ -138,6 +138,15 @@
 %   original input-order search; `mrv`, `mrv_capped` and `mrv_inc` are the
 %   fail-first variants (see select_word/9 and assign_words_inc/9). Adding a
 %   strategy is a one-line entry here plus a select_word/9 clause.
+%
+%   PRODUCTION resolves through default_strategy/1 (mrv_inc) only; the others
+%   are the research surface - the recorded evidence base for choosing
+%   mrv_inc. Live consumers of the non-default strategies: `make bench-matrix`
+%   (benchmarks/run_matrix.pl - this registry's only out-of-module caller),
+%   benchmarks/start_sensitivity.pl (baseline-vs-mrv_inc sweep), and
+%   tests/core.plt's enumeration-count oracle (baseline as the independent
+%   check on all_crossword/5 - which is itself PRODUCTION, the arrange
+%   --enumerate seam).
 strategies([baseline, mrv, mrv_capped, mrv_inc]).
 
 %!  default_strategy(-Strategy:atom) is det.
@@ -286,7 +295,7 @@ doc_to_words(Doc, Words) :-
 % be a string; `meta` is an optional object (default _{}), copied verbatim.
 %
 % The gate is SHAPE-only: the degenerate empty answer "" passes (-> the empty
-% atom ''). That is the pinned wire contract (audit C62; tests/crossword.plt
+% atom ''). That is the pinned wire contract (audit C62; tests/core.plt
 % json_empty_answer_accepted_as_empty_atom): a zero-letter word can never
 % cross anything, so it surfaces downstream as a strict no-possible-crossing
 % failure or a best-effort drop - never as a silently placed ghost word.
@@ -329,10 +338,20 @@ prolog:error_message(prolog_no_clues_term(File)) -->
     [ 'Prolog clues file ~q does not contain a clues/1 term'-[File] ].
 
 
-% Top level predicate for solving the crossword with a specified
-% starting position. Emits the solution as a single JSON object.
-% crossword/3 uses the production default strategy (default_strategy/1);
-% crossword/4 takes an explicit strategy.
+% --- LEGACY TOP-LEVEL: RESEARCH/BENCHMARK-ONLY SURFACE -----------------------
+% crossword/3,4 - the pre-arrange top level: solve for one start position and
+% emit the solution as a single JSON object. crossword/3 resolves the
+% production default strategy (default_strategy/1); crossword/4 takes an
+% explicit strategy. INTERNAL by design (not exported; never add an export for
+% a test) and NOT a production path - the CLI verbs route through
+% arrange.pl/fill.pl. Kept per the de-accretion roadmap's recorded decision
+% (docs/STATUS.md) as the top level over the research strategies (see
+% strategies/1); sanctioned consumers: this repo's tests only (tests/core.plt,
+% research-surface section). It ROUTES THROUGH the production driver
+% find_crossword/6 and its C1/C48 reset seam (THE SEAM INVARIANT below) - a
+% thin research veneer over production machinery, not an isolated copy. The
+% search is nondet (find_crossword/6 backtracks over solutions); callers take
+% the first. docs/plans/legacy-surface-dissolution.md.
 crossword(GridLen, Words, StartLoc) :-
     default_strategy(Strategy),
     crossword(Strategy, GridLen, Words, StartLoc).
@@ -1336,9 +1355,9 @@ build_words(PlacedWords, Words, GridLen, WordObjs) :-
 %!  answer_meta_assoc(+Words:list, -Assoc:assoc) is det.
 %
 %   answer -> metadata dict for every input entry. An entry may omit metadata
-%   ([Answer] -> _{}); answers are unique (check_unique_answers/1 runs on the
-%   solve path in crossword/4 AND on the fill path in fill's emit_fill/4), so
-%   no key clash.
+%   ([Answer] -> _{}); answers are unique (every emit path runs
+%   check_unique_answers/1 upstream: the CLI input paths, fill's emit_fill/4,
+%   and the legacy research driver crossword/4), so no key clash.
 answer_meta_assoc(Words, Assoc) :-
     findall(A-Meta,
             ( member(Entry, Words), Entry = [A|_],

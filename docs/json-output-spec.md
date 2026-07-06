@@ -282,6 +282,11 @@ treat it as metadata-class content (drop-and-warn).
 
 ## 8. Implementation sketch
 
+*Point-in-time record (pre-module-split): file/line references below name the
+old layout — root `crossword.pl` is now `prolog/crosswordsmith/core.pl`, and
+`tests/crossword.plt` is now `tests/core.plt` (legacy-surface dissolution,
+2026-07-07). The sketch itself was executed; kept as the design record.*
+
 The solver *algorithm* is unchanged — placement, intersection, and clue
 numbering all stay as-is. What changes is the shape of the data the solver
 carries (the placed-word tuple loses its metadata slots) and the I/O edges
