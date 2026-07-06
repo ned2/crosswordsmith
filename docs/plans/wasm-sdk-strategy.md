@@ -387,7 +387,7 @@ the committed CLI goldens. `fill` is the only unbrowserified verb.)*
 
 ---
 
-## 7. The arrange-first slice (next PR)
+## 7. The arrange-first slice (landed 2026-07-06)
 
 Product shape (decided with the user): **strict path is the randomisable one**
 (`seed` = reproducible; the app draws a random seed in JS for "regenerate"), **both
@@ -483,8 +483,9 @@ being intact — confirm first.
   after `JSON.parse`**, not byte-identity.
 
 **Open:**
-- **OQ-1:** SDK package boundary — in-repo `wasm/sdk/` + npm publish, or an in-repo
-  module the app imports directly.
+- **OQ-1 — decided (2026-07-06, user):** in-repo module — `wasm/sdk/` with
+  `crosswordsmith.mjs` + `crosswordsmith.d.ts`, imported directly (serve `wasm/` as
+  the web root). npm packaging deferred; OQ-5/OQ-6 gate the eventual publish.
 - **OQ-2 — decided (2026-07-06):** `seed` lives in `params` (landed with the
   arrange slice).
 - **OQ-3:** fill's `fastrw`-index vs `.qlf` carrier under wasm (measurement, Phase 4).

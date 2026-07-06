@@ -36,6 +36,11 @@ Requirements).
 The implementation lives under `prolog/crosswordsmith/`, driven by the
 `crosswordsmith` CLI.
 
+The same engine also runs **client-side in the browser** (SWI-Prolog compiled
+to WASM, in a Web Worker) behind a typed JS SDK — `arrange`, `lint`, and
+`export` today, value-locked against the CLI's output. See
+[`wasm/README.md`](wasm/README.md).
+
 Words — and optional per-word metadata (a clue, a link, anything) — are supplied
 to `arrange` as a JSON file or a Prolog `clues/1` fixture. The bundled
 `fixtures/bundled_17_clues.pl` attaches a URL to each word (it was originally for

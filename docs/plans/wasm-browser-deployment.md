@@ -590,6 +590,13 @@ is tracked debt (mostly already owned by §9.1).
 
 ### 10.2 Tracked debt — productionization (folds into §9.1)
 
+> **✅ CLOSED 2026-07-06** by the SDK arrange slice (strategy §3/§7): the
+> unconditional `reset_request_state/0` landed (all three globals, white-box
+> locked in `tests/browser.plt`); the error channel is the total
+> `outcome_envelope` classifier (a bare fail can no longer masquerade as
+> "no layout"); the resolver duplication is accepted-until-Phase-B with a CLI
+> parity test matrix. Items kept below for the record.
+
 - **Per-request state-reset invariant is genuinely absent** (3 of 4 reviewers
   converged). `search_seed/1` & `check_target_override/1` are instance-global and
   survive the `{engine:true}` engine — but the browser path never writes them today
@@ -632,6 +639,20 @@ is tracked debt (mostly already owned by §9.1).
   re-extracts over a possibly-dirty source dir (pcre2 branch `rm -rf`s first).
 
 ### 10.4 Tracked debt — test-suite hardening
+
+> **Status 2026-07-06** (SDK slice + lint/export): **closed** — wasm
+> output-correctness (`wasm/test/value_golden.sh` deep-equals wasm results
+> against the CLI across arrange/lint/export cases; supersedes the byte-diff
+> idea per strategy DEC-8), same-worker determinism/state-reset (same-instance
+> interleaved seeded/seedless in value_golden + white-box reset tests in
+> `tests/browser.plt`), the `resource_error(stack)` tightening (error_probe now
+> asserts the typed `resource_exhausted` envelope), and the edge-case list
+> (unicode/empty/duplicate/concurrency all locked in browser.plt + headless).
+> **Still open:** sizing the heavy-capped 300KB constant off a measured peak;
+> the CI entry point (value_golden/headless/probes remain hand-run with a
+> hand-started server; `npm test` runs only headless); the HEAVY 36-word set is
+> now inline-triplicated (headless, error_probe, yield_probe) instead of loaded
+> from `fixtures/ladder_15x15_36w.pl`.
 
 - **No wasm output-*correctness* assertion** — `golden_parity` proves byte-identity
   *natively only*; `headless.mjs` only checks the status contains `placed`. A

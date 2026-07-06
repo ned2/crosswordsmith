@@ -488,7 +488,8 @@ layout_sig(Numbered, Sig) :-
     sort(Sig0, Sig).
 
 % Same seed => identical layout (reproducible). The seed is re-installed before
-% the second run so the global RNG stream restarts from the same point.
+% the second run so the PRNG stream (module-owned splitmix64) restarts from the
+% same point.
 test(seed_reproducible) :-
     arrange_bundled(Words),
     setup_call_cleanup(
@@ -526,7 +527,7 @@ test(seed_can_perturb_layout) :-
            SeedSig \== DetSig )).
 
 % The seed is OFF the deterministic path: after running a seeded search (which
-% mutates the global RNG) and then clearing the seed, the deterministic layout
+% advances the PRNG state) and then clearing the seed, the deterministic layout
 % is byte-for-byte (fingerprint) identical to the pre-seed run.
 test(seed_cleared_restores_deterministic) :-
     arrange_bundled(Words),

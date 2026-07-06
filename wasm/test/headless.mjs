@@ -19,7 +19,7 @@
 // Prereq: a server for the wasm/ tree on $URL's origin (sdk/ and client/ are
 // siblings, so the web root must be wasm/):
 //   ( cd wasm && python3 -m http.server 8080 )
-// and Playwright installed here (see wasm/test/README.md):
+// and Playwright installed here (see wasm/README.md "Test"):
 //   ( cd wasm/test && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install )
 // Run:  node wasm/test/headless.mjs
 
