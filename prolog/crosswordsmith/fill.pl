@@ -159,6 +159,27 @@ build_index(DictByLen, Index) :-
     maplist([K-Is, K-Set]>>list_to_ord_set(Is, Set), Grouped, GroupedSets),
     list_to_assoc(GroupedSets, Index).
 
+% The slot's bound positions as ascending P-V pairs. NB first-order on purpose
+% (the F-L1 rationale, alpha_chars/2 above): the previous
+% findall(P-V, (nth0(P, Vars, V), nonvar(V)), Bound) paid the findall
+% record/collect/copy machinery plus nth0's enumerate-by-backtracking
+% choicepoint per cell, at EVERY recount at EVERY search node - the hottest
+% kernel in the engine. This positional walk makes the identical nonvar/1
+% decision per cell; Bound's content and order (ascending P, V shared not
+% copied - always a ground char atom here) are identical by construction.
+% Shared by slot_bucket/5 and the masks kernel of candidate_count/5.
+bound_positions(Vars, Bound) :-
+    bound_positions(Vars, 0, Bound).
+
+bound_positions([], _, []).
+bound_positions([V|Vs], P, Bound) :-
+    (   nonvar(V)
+    ->  Bound = [P-V|Rest]
+    ;   Bound = Rest
+    ),
+    P1 is P + 1,
+    bound_positions(Vs, P1, Rest).
+
 % Resolve a slot to its length-bucket Words plus a selector Sel over that bucket:
 % `all` (no cell bound yet - every word of the length is a candidate) or
 % idx(Indices) (the ordset of bucket indices matching the bound cells). Shared by
@@ -167,7 +188,7 @@ build_index(DictByLen, Index) :-
 slot_bucket(Vars, DictByLen, Index, Words, Sel) :-
     length(Vars, Len),
     ( get_assoc(Len, DictByLen, Words) -> true ; Words = [] ),
-    findall(P-V, ( nth0(P, Vars, V), nonvar(V) ), Bound),
+    bound_positions(Vars, Bound),
     ( Bound == []
     ->  Sel = all
     ;   index_intersection(Bound, Len, Index, Indices), Sel = idx(Indices)
@@ -200,15 +221,17 @@ nth0_of(Words, I, W) :- nth0(I, Words, W).
 % count seam changes. candidate_count/4 is the ordset reference retained for the
 % white-box tests (P3) and select_mrv/6.
 candidate_count(Vars, DictByLen, Index, Count) :-
-    candidate_count(Vars, DictByLen, Index, none, Count).
+    candidate_count(none, Vars, DictByLen, Index, Count).
 
+% The Masks context is ARGUMENT 1 so SWI's first-argument indexing dispatches
+% `none` vs masks(_) deterministically - no choicepoint, no cut (on this SWI a
+% non-first-argument scan does NOT prune the choicepoint, so the old arg-4
+% shape needed a leading cut and still paid the CP-push per call). The clauses
+% are disjoint by construction, and the reference selector select_mrv/6 stays
+% choicepoint-free (P13).
+%
 % ORDSET kernel (Masks == none): identical work to the pre-F-H2 candidate_count/4.
-% The leading cut commits once the `none` context is matched (none and masks(_)
-% are disjoint, so this changes no answer) and keeps the predicate deterministic -
-% the reference selector select_mrv/6 must leave no choicepoint (P13). A cut is
-% not a logical inference, so the `none` path stays inference-identical.
-candidate_count(Vars, DictByLen, Index, none, Count) :-
-    !,
+candidate_count(none, Vars, DictByLen, Index, Count) :-
     slot_bucket(Vars, DictByLen, Index, Words, Sel),
     ( Sel == all -> length(Words, Count)
     ; Sel = idx(Indices), length(Indices, Count)
@@ -217,9 +240,9 @@ candidate_count(Vars, DictByLen, Index, none, Count) :-
 % slot_bucket's branch structure EXACTLY - the `all` branch (no cell bound) still
 % counts the whole length bucket; the idx branch AND-folds the bound cells' masks
 % and popcounts. No ord_intersection is computed on this path (that is the win).
-candidate_count(Vars, DictByLen, _Index, masks(MaskAssoc), Count) :-
+candidate_count(masks(MaskAssoc), Vars, DictByLen, _Index, Count) :-
     length(Vars, Len),
-    findall(P-V, ( nth0(P, Vars, V), nonvar(V) ), Bound),
+    bound_positions(Vars, Bound),
     ( Bound == []
     ->  ( get_assoc(Len, DictByLen, Words) -> length(Words, Count) ; Count = 0 )
     ;   mask_count(Bound, Len, MaskAssoc, Count)
@@ -295,13 +318,16 @@ fill_search(Slots, DictByLen, Index, Masks, Used) :-
 % one full per-slot recount, paid once at the root; thereafter it is incremental.
 slot_with_count(DictByLen, Index, Masks, Slot, cnt(Count, Slot)) :-
     Slot = slot(_, _, _, Vars),
-    candidate_count(Vars, DictByLen, Index, Masks, Count).
+    candidate_count(Masks, Vars, DictByLen, Index, Count).
 
 % Counted is a list of cnt(Count, Slot). Select the min-count slot, place a word,
 % recount only the crossings the placement disturbed, recurse on the rest.
-fill_search_inc([], _DictByLen, _Index, _Masks, _Used) :- !.
-fill_search_inc(Counted, DictByLen, Index, Masks, Used) :-
-    select_min_count(Counted, cnt(_, Best), Rest),
+% The []/[_|_] head pair is SWI's two-clause special case (jitindex §2.17):
+% clause selection is deterministic with no choicepoint and no cut, and the
+% recursive clause never pays a failed []-head unification per node.
+fill_search_inc([], _DictByLen, _Index, _Masks, _Used).
+fill_search_inc([C0|Cs], DictByLen, Index, Masks, Used) :-
+    select_min_count([C0|Cs], cnt(_, Best), Rest),
     Best = slot(_, _, BestCells, BestVars),
     newly_bound_cells(BestCells, BestVars, NewCells),   % free cells, PRE-placement
     candidates(BestVars, DictByLen, Index, Cands),
@@ -350,17 +376,20 @@ newly_bound_cells([Cell|Cs], [Var|Vs], New) :-
 % Recount EXACTLY the carried slots that cross a newly-bound cell; carry every
 % other count unchanged. cnt(Count, Slot) keeps the ORIGINAL Slot term (shared
 % cell variables survive - no findall/copy). A crossing is a shared cell NUMBER
-% (ground), so detection needs no variable comparison.
+% (ground), so detection needs no variable comparison. Both Cells and NewCells
+% are strictly ascending cell numbers by construction - Cells is a contiguous
+% grid_run row/column run (stockgrid: numlist / col_cells + grab_run), and
+% NewCells is an order-preserving filter of the placed slot's Cells
+% (newly_bound_cells/3) - i.e. both are ordsets, so the shared-cell test is
+% ord_intersect/2: one O(|Cells|+|NewCells|) merge walk, choicepoint-free,
+% instead of a memberchk scan of NewCells per cell.
 recount_crossing([], _NewCells, _DictByLen, _Index, _Masks, []).
 recount_crossing([cnt(C0, Slot)|T], NewCells, DictByLen, Index, Masks, [cnt(C1, Slot)|T1]) :-
     Slot = slot(_, _, Cells, Vars),
-    ( shares_cell(Cells, NewCells)
-    ->  candidate_count(Vars, DictByLen, Index, Masks, C1)
+    ( ord_intersect(Cells, NewCells)
+    ->  candidate_count(Masks, Vars, DictByLen, Index, C1)
     ;   C1 = C0 ),
     recount_crossing(T, NewCells, DictByLen, Index, Masks, T1).
-
-shares_cell([C|_], NewCells) :- memberchk(C, NewCells), !.
-shares_cell([_|Cs], NewCells) :- shares_cell(Cs, NewCells).
 
 % select_mrv/6 is RETAINED as the reference selector: the white-box tests
 % (tests/fill.plt R6/P13) call it directly, and it documents the exact selection
@@ -418,7 +447,7 @@ fill_attempt(SearchSlots, AllSlots, DictByLen, Index, Budget, Outcome, Numbered,
     % work to the pre-F-H2 fill_search/4, so this bench/test seam is inference-
     % identical. The product artifact path uses fill_attempt_masked/9 below.
     call_with_inference_limit(
-        ( once(fill_search(SearchSlots, DictByLen, Index, none, [])) -> R = ok ; R = exhausted ),
+        ( fill_search(SearchSlots, DictByLen, Index, none, []) -> R = ok ; R = exhausted ),
         Budget, Limit),
     (   Limit == inference_limit_exceeded
     ->  Outcome = not_proven, Numbered = [], InputWords = []
@@ -434,7 +463,7 @@ fill_attempt(SearchSlots, AllSlots, DictByLen, Index, Budget, Outcome, Numbered,
 fill_attempt_masked(SearchSlots, AllSlots, DictByLen, Index, Budget, Masks,
                     Outcome, Numbered, InputWords) :-
     call_with_inference_limit(
-        ( once(fill_search(SearchSlots, DictByLen, Index, Masks, [])) -> R = ok ; R = exhausted ),
+        ( fill_search(SearchSlots, DictByLen, Index, Masks, []) -> R = ok ; R = exhausted ),
         Budget, Limit),
     (   Limit == inference_limit_exceeded
     ->  Outcome = not_proven, Numbered = [], InputWords = []

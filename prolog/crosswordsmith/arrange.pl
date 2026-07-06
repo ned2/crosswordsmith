@@ -66,6 +66,7 @@
                 next_cell/4,
                 fits_on_grid/4,
                 assign_word/10,
+                check_word_fits/5,
                 find_intersecting_word/6,
                 assign_words_inc/9,
                 find_crossword/6,
@@ -238,9 +239,7 @@ arrange_best_layout(Words, GridLen, Budget, Numbered, Reward, Outcome) :-
     findall(R-P, member(ok(R, P), Results), OKs),
     (   OKs = [_|_]
     ->  sort(1, @>=, OKs, [Reward-BestPlaced|_]),
-        % once/1: assign_clue_numbers leaves a spurious choicepoint (second-level
-        % list indexing in add_clue_nums); arrange_best_layout is single-valued.
-        once(assign_clue_numbers(BestPlaced, Numbered)),
+        assign_clue_numbers(BestPlaced, Numbered),
         Outcome = placed
     ;   Numbered = [], Reward = -1,
         ( memberchk(budget, Results) -> Outcome = not_proven ; Outcome = infeasible )
@@ -277,7 +276,7 @@ construct_one(Loc, Words, GridLen, WCap, WTail, Budget, Res) :-
     % bug: let it surface (main/0 reports it, exit 1) rather than be silently
     % reclassified as `exhausted`.
     call_with_inference_limit(
-        ( once(find_crossword(mrv_inc, GridLen, Words, Loc, _G, P)) -> Found = P
+        ( find_crossword(mrv_inc, GridLen, Words, Loc, _G, P) -> Found = P
         ; Found = none ),
         Budget, Outcome),
     (   Outcome == inference_limit_exceeded -> Res = budget
@@ -354,7 +353,7 @@ arrange_best_effort(Words, GridLen, Numbered, Reward, NumPlaced, Dropped) :-
             Results),
     Results = [_|_],
     sort(1, @>=, Results, [score(NumPlaced, Reward)-pd(BestPlaced, Dropped)|_]),
-    once(assign_clue_numbers(BestPlaced, Numbered)).
+    assign_clue_numbers(BestPlaced, Numbered).
 
 % Construct the best-effort layout, emit it, report placed/dropped on stderr.
 % Fails only when nothing at all is placeable (AC-ARR-2).
@@ -705,7 +704,7 @@ arrange_fragment_strict(Words, Frags, GridLen, Numbered, Reward, Outcome) :-
     construct_fragment_one(Remaining, SeededPlaced, SeededGrid, GridLen, Budget, Res),
     (   Res = ok(AllPlaced)
     ->  layout_reward(WCap, WTail, AllPlaced, Reward),
-        once(assign_clue_numbers(AllPlaced, Numbered)),
+        assign_clue_numbers(AllPlaced, Numbered),
         Outcome = placed
     ;   Numbered = [], Reward = -1,
         ( Res == budget -> Outcome = not_proven ; Outcome = infeasible )
@@ -717,7 +716,7 @@ construct_fragment_one(Remaining, SeededPlaced, SeededGrid, GridLen, Budget, Res
     % No catch/3: see construct_one/7 - the budget is handled inside
     % call_with_inference_limit/3, and a thrown error is a real bug to surface.
     call_with_inference_limit(
-        ( once(construct_from_seed(Remaining, SeededPlaced, SeededGrid, GridLen, P))
+        ( construct_from_seed(Remaining, SeededPlaced, SeededGrid, GridLen, P)
         ->  Found = P
         ;   Found = none ),
         Budget, Outcome),
@@ -737,7 +736,7 @@ arrange_fragment_best_effort(Words, Frags, GridLen, Numbered, Reward, NumPlaced,
     layout_reward(WCap, WTail, FinalPlaced, Reward),
     length(FinalPlaced, NumPlaced),
     findall(A, member([A|_], DroppedEntries), Dropped),
-    once(assign_clue_numbers(FinalPlaced, Numbered)).
+    assign_clue_numbers(FinalPlaced, Numbered).
 
 
 % --- fragment solve entry points (emit + report) ---------------------------
@@ -915,7 +914,7 @@ arrange_candidates(Words, GridLen, DropContract, K, Numbered, Returned) :-
     length(Words, Total),
     candidate_tau_pct(TauPct),
     pick_diverse(Pool, TauPct, Total, K, Picked),
-    findall(N, ( member(c(P, _), Picked), once(assign_clue_numbers(P, N)) ), Numbered),
+    findall(N, ( member(c(P, _), Picked), assign_clue_numbers(P, N) ), Numbered),
     length(Numbered, Returned).
 
 % Emit the candidates as a JSON ARRAY of canonical layout dicts (each element is
@@ -1021,71 +1020,96 @@ seed_word(Entry, Start, Dir, GridLen, GIn, PW, GOut) :-
 % Place the globally best-scoring placeable word, repeat; drop the rest. The
 % construction is cut-free: instead of an `( Best -> place ; stop )` if-then-else,
 % the next move (or `none`) is reified as a term and dispatched on the mutually
-% exclusive clause heads of best_move/2 ([] vs [_|_]). No !, ->, or \+ here or in
-% word_best_placement below; only findall/sort/arithmetic remain. (This replaced
-% an equivalent cut-based version; it is identical-output and faster - see
-% docs/cryptic-layout-spec.md v1b.1.)
+% exclusive clause heads of best_move/5 ([] vs [_|_]). No !, ->, or \+ here or in
+% word_best_placement below; only findall/sort/arithmetic and the winner's one
+% assign_word remain. (This replaced an equivalent cut-based version; it is
+% identical-output and faster - see docs/cryptic-layout-spec.md v1b.1.)
 greedy_loop(Remaining, Placed, GridLen, Grid, FinalPlaced, Dropped) :-
     next_move(Remaining, Placed, GridLen, Grid, Move),
     apply_move(Move, Remaining, Placed, GridLen, FinalPlaced, Dropped).
 
 apply_move(none, Remaining, Placed, _GridLen, Placed, Remaining).
-apply_move(move(Entry, NewPW, NewGrid), Remaining, Placed, GridLen, FinalPlaced, Dropped) :-
-    % next_move/5 collects candidates with findall, which COPIES each Entry, so
-    % the move's Entry is NOT ==-identical to its term in Remaining when the
-    % entry is non-ground (a .pl fixture's [Answer, _{...}] has an unbound dict
-    % tag). remove_x (==-based) would then drop nothing and greedy_loop would
-    % re-offer the just-placed word forever. Key the removal on the ground
-    % answer atom instead (answers are unique, check_unique_answers/1); selectchk
-    % keeps the original, uncopied tail. (Same term-copy footgun the MRV path
-    % avoids via map_list_to_pairs - see core.pl select_inc.)
-    Entry = [Answer|_],
+apply_move(move(Answer, NewPW, NewGrid), Remaining, Placed, GridLen, FinalPlaced, Dropped) :-
+    % Answer is the winner's ground answer ATOM (atoms survive next_move's
+    % findall copy identically); the full entry in Remaining can be non-ground
+    % (a .pl fixture's [Answer, _{...}] has an unbound dict tag), so an
+    % ==-keyed remove_x on a copied Entry would drop nothing and greedy_loop
+    % would re-offer the just-placed word forever. Key the removal on the
+    % answer atom instead (answers are unique, check_unique_answers/1);
+    % selectchk keeps the original, uncopied tail. (Same term-copy footgun the
+    % MRV path avoids via map_list_to_pairs - see core.pl select_inc.)
     selectchk([Answer|_], Remaining, Remaining1),
     greedy_loop(Remaining1, [NewPW|Placed], GridLen, NewGrid, FinalPlaced, Dropped).
 
-% The best placeable word as move(Entry,PW,Grid), or `none` when nothing fits.
+% The best placeable word as move(Answer,PW,Grid), or `none` when nothing fits.
 % Among remaining words with a legal placement, the one whose best placement
 % scores highest (most new crossings, then least bbox growth). The [] vs [_|_]
-% dispatch in best_move/2 is what lets greedy_loop avoid an if-then-else.
+% dispatch in best_move/5 is what lets greedy_loop avoid an if-then-else.
+%
+% The findall collects only a lightweight GROUND descriptor per word
+% (Score-best(Answer,Letters,WLen,Start,Dir)) - legality inside
+% word_best_placement is the pure probe check_word_fits/5, so no mutated grid
+% is materialized or snapshotted per candidate; assign_word/10 runs ONCE, for
+% the winner, in best_move. (This replaced a version whose findall templates
+% snapshotted the whole gs/2 bundle - 2 x N^2 args - per legal placement AND
+% per word; identical output, the probe/assign accept sets and the stable
+% first-tie-wins sorts are unchanged.) sort(1,@>=) compares KEYS only and is
+% stable, so the winner is the FIRST-generated candidate with the maximal
+% score, exactly as before.
 next_move(Remaining, Placed, GridLen, Grid, Move) :-
     placed_bbox(Placed, GridLen, BBox, _),
-    findall(Score-cand(Entry, PW, G1),
+    findall(Score-Best,
             ( member(Entry, Remaining),
-              word_best_placement(Entry, Placed, GridLen, Grid, BBox, Score, PW, G1) ),
+              word_best_placement(Entry, Placed, GridLen, Grid, BBox, Score, Best) ),
             Cands),
-    best_move(Cands, Move).
+    best_move(Cands, Placed, GridLen, Grid, Move).
 
-best_move([], none).
-best_move([C|Cs], move(Entry, PW, G1)) :-
-    sort(1, @>=, [C|Cs], [_-cand(Entry, PW, G1)|_]).
+best_move([], _Placed, _GridLen, _Grid, none).
+best_move([C|Cs], Placed, GridLen, Grid, move(Answer, PW, G1)) :-
+    sort(1, @>=, [C|Cs], [_-best(Answer, Letters, WLen, Start, Dir)|_]),
+    % Realize the winning placement. check_word_fits/5 accepted exactly this
+    % (Letters, Start, Dir) against exactly this Grid - the probe binds
+    % nothing, so the grid is untouched since - and it accepts iff
+    % assign_word/10 accepts (core.pl check_word_fits doc), so this call
+    % cannot fail. G1 is Grid itself, mutated in place (letter cells bound,
+    % boundary cells marked, undone by the trail on backtracking), not a copy.
+    assign_word(Answer, Letters, WLen, Start, Dir, GridLen, Placed, Grid, PW, G1).
 
-% Best legal placement of one word on the current grid, cut-free: assign_word
-% legality is folded INTO the findall generator so only legal placements are
-% collected (keyed by the density score), and the head of the @>=-sorted list is
-% the best - no first-solution `!` (see spec v1b.1).
+% Best legal placement of one word on the current grid, as the lightweight
+% ground descriptor best(Answer,Letters,WLen,Start,Dir) - cut-free: legality
+% (the pure probe check_word_fits/5, which binds no cell) is folded INTO the
+% findall generator so only legal placements are collected (keyed by the
+% density score), and the head of the @>=-sorted list is the best - no
+% first-solution `!` (see spec v1b.1).
 %
-% Order matters: placement_key MUST score against the PRE-placement Grid, so it
-% runs BEFORE assign_word here. With the var-cell grid, assign_word mutates Grid
-% in place (G1 is the SAME term as Grid, cells bound), so scoring after it would
-% count this word's own just-placed letters as crossings. Scoring first reads
-% the pristine grid; assign_word then binds it and findall snapshots G1 (an
-% independent copy: bound cells -> atoms, empty cells -> fresh vars). The score
-% is still only kept for LEGAL placements (assign_word is in the same
-% conjunction, so an illegal Start drops the whole solution from the findall).
-word_best_placement(Entry, Placed, GridLen, Grid, BBox, Score, PW, GOut) :-
+% This used to run assign_word/10 per legal candidate and let findall snapshot
+% the mutated gs/2 bundle (2 x N^2 args) per placement - the largest copy-term
+% cost in the codebase. check_word_fits/5 answers "would assign_word accept
+% this candidate?" with NO side effects and the SAME accept/reject set
+% (core.pl:731-749), so the collected Key list - and therefore the stable-sort
+% winner - is unchanged, while nothing grid-sized is copied. The winner's
+% assign_word runs once, in best_move above.
+%
+% Order matters: placement_key MUST run BEFORE check_word_fits. Not for grid
+% state (unlike assign_word, the probe never binds a cell), but because
+% find_intersecting_word/6 can hand us an off-grid Start < 1 on which a raw
+% arg/3 read would THROW; both placement_key (crossing_count's Start >= 1
+% guard) and check_word_fits reject it by failure, and keeping the scorer
+% first preserves the old generator's exact evaluation order.
+word_best_placement(Entry, Placed, GridLen, Grid, BBox, Score, Best) :-
     word_letters(Entry, Letters, WLen),
-    Entry = [Word|_],
+    Entry = [Answer|_],
     % Grid is the gs/2 bundle; the scorer reads letters only, so it gets the
-    % letter grid, while assign_word takes (and findall snapshots) the bundle -
-    % the boundary marks travel with the chosen NewGrid copy.
+    % letter grid, while the legality probe reads both grids of the bundle.
     Grid = gs(LGrid, _BGrid),
-    findall(Key-place(PW1, G1),
+    findall(Key-(Start-Dir),
             ( find_intersecting_word(Letters, WLen, Placed, GridLen, Start, Dir),
               placement_key(Letters, Start, Dir, WLen, GridLen, LGrid, BBox, Key),
-              assign_word(Word, Letters, WLen, Start, Dir, GridLen, Placed, Grid, PW1, G1) ),
+              check_word_fits(Letters, Start, Dir, GridLen, Grid) ),
             Keyed),
     Keyed = [_|_],
-    sort(1, @>=, Keyed, [Score-place(PW, GOut)|_]).
+    sort(1, @>=, Keyed, [Score-(BestStart-BestDir)|_]),
+    Best = best(Answer, Letters, WLen, BestStart, BestDir).
 
 % Density score for a candidate placement: crossings dominate, bbox-growth
 % breaks ties (smaller is better). 10000 > any plausible bbox area.

@@ -39,6 +39,7 @@
             fits_on_grid/4,
             % search primitives
             assign_word/10,
+            check_word_fits/5,
             find_intersecting_word/6,
             assign_words_inc/9,
             find_crossword/6,
@@ -285,8 +286,12 @@ find_crossword(GridLen, Words, Loc, Grid, PlacedWords) :-
 
 % mrv_inc threads an incremental count cache, so it has its own driver
 % (assign_words_inc/9) rather than sharing the stateless assign_words/9 path.
+% The strategies are ENUMERATED clauses (one constant head per strategy, no
+% var catch-all, no cut): first-argument indexing selects deterministically,
+% and an unknown strategy FAILS here rather than falling through to the
+% stateless path - require_strategy/1 is the seam that turns an unknown
+% strategy atom into an error, and every CLI/API entry runs it first.
 find_crossword(mrv_inc, GridLen, Words, Loc, Grid, PlacedWords) :-
-    !,
     % Reset the per-search crossing memo (see pair_crossings/3): the tabled
     % (Val,PPos,Pos) sequences are a pure function of two answers' letters and
     % never change, so they amortize across the millions of nodes in THIS
@@ -300,7 +305,15 @@ find_crossword(mrv_inc, GridLen, Words, Loc, Grid, PlacedWords) :-
     init_gs(GridLen, G1),
     start_loc(Loc, GridLen, StartNum, StartDir),
     assign_words_inc(Words, [], none, GridLen, StartNum, StartDir, G1, Grid, PlacedWords).
-find_crossword(Strategy, GridLen, Words, Loc, Grid, PlacedWords) :-
+find_crossword(baseline, GridLen, Words, Loc, Grid, PlacedWords) :-
+    find_crossword_stateless(baseline, GridLen, Words, Loc, Grid, PlacedWords).
+find_crossword(mrv, GridLen, Words, Loc, Grid, PlacedWords) :-
+    find_crossword_stateless(mrv, GridLen, Words, Loc, Grid, PlacedWords).
+find_crossword(mrv_capped, GridLen, Words, Loc, Grid, PlacedWords) :-
+    find_crossword_stateless(mrv_capped, GridLen, Words, Loc, Grid, PlacedWords).
+
+% Shared driver for the stateless (non-incremental) strategies.
+find_crossword_stateless(Strategy, GridLen, Words, Loc, Grid, PlacedWords) :-
     init_gs(GridLen, G1),
     % Get the cell number and direction for start loc
     start_loc(Loc, GridLen, StartNum, StartDir),
@@ -309,8 +322,11 @@ find_crossword(Strategy, GridLen, Words, Loc, Grid, PlacedWords) :-
 
 % Assign all words. The starting location is selected by locating an
 % intersecting word from the words already placed.
+% The [_|_] head keeps the clauses index-disjoint on arg 2 ([] vs cons): a
+% terminal-[] call exits without leaving a choicepoint into this clause.
 assign_words(_Strategy, [], P, _, _, _, G, G, P).
-assign_words(Strategy, Words, PlacedWords, GridLen, Start, Dir, GIn, GOut, PlacedWordsOut) :-
+assign_words(Strategy, [W|Ws], PlacedWords, GridLen, Start, Dir, GIn, GOut, PlacedWordsOut) :-
+    Words = [W|Ws],
     % select_word/9 chooses the next word to place (and the rest, RemWords)
     % according to the strategy; it is the only thing the strategies vary.
     select_word(Strategy, Words, PlacedWords, GridLen, Start, Dir, GIn, Entry, RemWords),
@@ -385,10 +401,10 @@ positive_key(Count-_) :- Count > 0.
 % assign_words_inc/9). The unbounded path keeps aggregate_all/3; the hot Cap=2
 % path uses count_upto2/2, a hand-rolled saturating counter that avoids
 % aggregate_all's spec-checking (error:has_type/2) and limit/2's per-solution
-% nb-state machinery. The cut makes the two clauses mutually exclusive and keeps
-% each call deterministic (a bare variable-cap head would leave a choicepoint).
+% nb-state machinery. The two clauses dispatch on distinct first-arg constants
+% (`unbounded` vs `2`), so clause indexing keeps each call deterministic - no
+% cut needed.
 mrv_count(unbounded, PlacedWords, GridLen, Start, Dir, GIn, Entry, Count) :-
-    !,
     mrv_count_goal(PlacedWords, GridLen, Start, Dir, GIn, Entry, Goal),
     aggregate_all(count, Goal, Count).
 mrv_count(2, PlacedWords, GridLen, Start, Dir, GIn, Entry, Count) :-
@@ -463,8 +479,11 @@ count_upto2(Goal, Count) :-
 % caches automatically. Counts are capped at 2 (as in mrv_capped).
 
 % State is `none` (no cache yet) or state(CountAssoc, LastPlacedLetters).
+% The [_|_] head keeps the clauses index-disjoint on arg 1 ([] vs cons): a
+% terminal-[] call exits without leaving a choicepoint into this clause.
 assign_words_inc([], P, _State, _, _, _, G, G, P).
-assign_words_inc(Words, PlacedWords, StateIn, GridLen, Start, Dir, GIn, GOut, Out) :-
+assign_words_inc([W|Ws], PlacedWords, StateIn, GridLen, Start, Dir, GIn, GOut, Out) :-
+    Words = [W|Ws],
     select_inc(Words, PlacedWords, StateIn, GridLen, Start, Dir, GIn,
                Entry, RemWords, StateOut),
     Entry = [Word|_],
@@ -590,15 +609,17 @@ shuffle_bucket(_Count-Entries, Shuffled) :- seeded_permutation(Entries, Shuffled
 % Seed word (grid empty): branch over all words, as the other MRV strategies
 % do; the next node builds the full cache (StateOut = none).
 select_inc(Words, [], _StateIn, _GridLen, _Start, _Dir, _GIn, Entry, RemWords, none) :-
-    !,
     seed_word_order(Words, SeedOrder),
     member(Entry, SeedOrder),
     remove_x(Entry, Words, RemWords).
 % Otherwise: get current counts (full or incremental), order most-constrained
 % first over the connectable words, pick backtrackably. The cache passed
 % forward is this node's count map tagged with the chosen word's letters, so
-% the next node only recounts words sharing a letter with it.
-select_inc(Words, PlacedWords, StateIn, GridLen, Start, Dir, GIn, Entry, RemWords, StateOut) :-
+% the next node only recounts words sharing a letter with it. The [_|_] head
+% keeps the two clauses index-disjoint on arg 2 ([] vs cons), so no cut is
+% needed to stop a seed-node call falling into this clause on backtracking.
+select_inc(Words, [P|Ps], StateIn, GridLen, Start, Dir, GIn, Entry, RemWords, StateOut) :-
+    PlacedWords = [P|Ps],
     inc_counts(StateIn, Words, PlacedWords, GridLen, Start, Dir, GIn, CountMap),
     % map_list_to_pairs keeps the ORIGINAL word terms (findall would copy them,
     % breaking the ==-based remove_x below and looping forever).
@@ -619,7 +640,6 @@ count_of(CountMap, Word, Count) :-
 % otherwise recount only words sharing a letter with the last-placed word and
 % carry the rest forward from the previous map.
 inc_counts(none, Words, PlacedWords, GridLen, Start, Dir, GIn, CountMap) :-
-    !,
     empty_assoc(A0),
     foldl(full_count(PlacedWords, GridLen, Start, Dir, GIn), Words, A0, CountMap).
 inc_counts(state(PrevMap, LastLetters), Words, PlacedWords, GridLen, Start, Dir, GIn, CountMap) :-
@@ -790,7 +810,8 @@ mark_boundary(Start, End, Dir, GridLen, BGrid) :-
 
 
 % check_word_fits/5: a pure legality PROBE for the mrv_count Cap=2 counting path
-% (mrv_count_goal). It answers "would assign_word/10 accept this candidate?" with
+% (mrv_count_goal) and the greedy constructor's candidate scan (arrange.pl
+% word_best_placement/7). It answers "would assign_word/10 accept this candidate?" with
 % NO side effects - it binds no letter cell, marks no boundary cell, and builds
 % neither the Cells run nor the pw/8 record (all of which assign_word materialized
 % only for count_upto2 to discard) - so it is cheaper per counted candidate and
@@ -822,11 +843,10 @@ check_letters([], Num, Dir, GridLen, _BGrid, LGrid) :-
 check_letters([L|Ls], Num, Dir, GridLen, BGrid, LGrid) :-
     arg(Num, BGrid, Mark), var(Mark),      % not a placed word's boundary cell
     arg(Num, LGrid, Cell),
-    (   nonvar(Cell),
-        Cell == L
-    ;   var(Cell),
-        adj_is_free(Dir, Num, GridLen, LGrid)
-    ), !,
+    (   nonvar(Cell)
+    ->  Cell == L
+    ;   adj_is_free(Dir, Num, GridLen, LGrid)
+    ),
     next_cell(Dir, Num, GridLen, Num2),
     check_letters(Ls, Num2, Dir, GridLen, BGrid, LGrid).
 
@@ -834,26 +854,24 @@ check_letters([L|Ls], Num, Dir, GridLen, BGrid, LGrid) :-
 % Previous cell before start of word. Make sure it doesn't contain
 % anything.
 check_prev_cell(Dir, Num, GridLen, Grid) :-
-    (
-     % don't check if start letter is start of a row/col
-     is_start_cell(Dir, Num, GridLen)
-    ;
-     % otherwise prev cell must be empty (an unbound var)
-     prev_cell(Dir, Num, GridLen, Prev),
-     arg(Prev, Grid, Cell), var(Cell)
-    ), !.
+    (   % don't check if start letter is start of a row/col
+        is_start_cell(Dir, Num, GridLen)
+    ->  true
+    ;   % otherwise prev cell must be empty (an unbound var)
+        prev_cell(Dir, Num, GridLen, Prev),
+        arg(Prev, Grid, Cell), var(Cell)
+    ).
 
 
 % Next cell after end of word. Make sure it doesn't contain anything.
 check_next_cell(Dir, Num, GridLen, Grid) :-
     prev_cell(Dir, Num, GridLen, Prev),
-    (
-     % no need to check if prev was end of row/col
-     is_end_cell(Dir, Prev, GridLen)
-    ;
-     % then this cell must be empty (an unbound var)
-     arg(Num, Grid, Cell), var(Cell)
-    ), !.
+    (   % no need to check if prev was end of row/col
+        is_end_cell(Dir, Prev, GridLen)
+    ->  true
+    ;   % then this cell must be empty (an unbound var)
+        arg(Num, Grid, Cell), var(Cell)
+    ).
 
 
 % Assign each letter of the word, checking that adjacent cells are empty to
@@ -868,18 +886,15 @@ assign_letters([], Num, Dir, GridLen, [], Grid, Grid) :-
 
 assign_letters([L|Ls], Num, Dir, GridLen, [Num|RestCells], Grid, GridOut) :-
     arg(Num, Grid, Cell),
-    (
-     % existing letter in this cell matches letter being placed,
-     % nothing needs doing, we can continue to next letter
-     nonvar(Cell),
-     Cell == L
-    ;
-     % empty cell (an unbound var), so check adjacent cells are free
-     % and then bind this cell to the letter
-     var(Cell),
-     adj_is_free(Dir, Num, GridLen, Grid),
-     Cell = L
-    ), !,
+    (   nonvar(Cell)
+    ->  % existing letter in this cell matches letter being placed,
+        % nothing needs doing, we can continue to next letter
+        Cell == L
+    ;   % empty cell (an unbound var), so check adjacent cells are free
+        % and then bind this cell to the letter
+        adj_is_free(Dir, Num, GridLen, Grid),
+        Cell = L
+    ),
     next_cell(Dir, Num, GridLen, Num2),
     assign_letters(Ls, Num2, Dir, GridLen, RestCells, Grid, GridOut).
 
@@ -941,23 +956,27 @@ assign_clue_numbers(PlacedWords, WordsClues) :-
 % placed words -- [word, letters, cells, dir, len, start, clue_num]
 %
 % Invariant: each key-group (words sharing a start cell) holds 1 or 2 words - a
-% cell begins at most one across AND one down word, never 3+. So there are
-% deliberately only [W] and [W1,W2] clauses; a >2 group is structurally
-% impossible and (by design) has no clause (P17).
+% cell begins at most one across AND one down word, never 3+. The group's first
+% word is consumed here; the tail goes through add_group_tail/4, which has
+% deliberately only [] and [W2] clauses - a >2 group is structurally impossible
+% and (by design) has no clause (P17).
+%
+% Head shapes are []/[_|_] on both predicates, so SWI's two-clause special-case
+% indexing selects deterministically - assign_clue_numbers/2 succeeds WITHOUT a
+% choicepoint, and callers need no defensive once/1 (determinism-audit L2).
 add_clue_nums([], _, []).
-
-% a word whose start cell only belongs to a down or an across word
-add_clue_nums([_-[W]|Rest], ClueNum, [WClue|RestClues]) :-    
+add_clue_nums([_-[W|More]|Rest], ClueNum, [WClue|Clues]) :-
     add_clue_word(W, ClueNum, WClue),
+    add_group_tail(More, ClueNum, Clues, RestClues),
     ClueNum2 is ClueNum + 1,
-    add_clue_nums(Rest, ClueNum2, RestClues).    
-    
-% a word whose start cell belongs to both a down and an across word
-add_clue_nums([_-[W1,W2]|Rest], ClueNum, [WClue1,WClue2|RestClues]) :-
-    add_clue_word(W1, ClueNum, WClue1),
-    add_clue_word(W2, ClueNum, WClue2),
-    ClueNum2 is ClueNum + 1,
-    add_clue_nums(Rest, ClueNum2, RestClues).    
+    add_clue_nums(Rest, ClueNum2, RestClues).
+
+% The group's second word shares the first word's clue number (a cell that
+% starts both an across and a down word). Difference-list tail: RestClues is
+% where the remaining groups' clues continue.
+add_group_tail([], _, Clues, Clues).
+add_group_tail([W2], ClueNum, [WClue2|Clues], Clues) :-
+    add_clue_word(W2, ClueNum, WClue2).
 
 
 % JSON output
@@ -1219,9 +1238,17 @@ init_gs(GridLen, gs(LGrid, BGrid)) :-
 % generic utility predicates
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-% remove_x(X,L,R) :- R is L with first occurrence of X removed from it.
-remove_x(Y,[X|Xs],[X|Tail]) :-
-	Y \== X,
-	remove_x(Y,Xs,Tail).
-remove_x(X,[X|Xs],Xs) :- !.
-remove_x(_,[],[]).
+% remove_x(X,L,R) :- R is L with the first ==-identical occurrence of X
+% removed from it (identity, not unification: entries are selected from L by
+% member/2 upstream, so the match must be the very term, never a unifiable
+% lookalike). The []/[_|_] heads are index-disjoint and the if-then-else
+% leaves no choicepoint, so the traversal is deterministic - the search
+% backtracks straight to member/2's real alternative instead of grinding
+% through one dead remove_x choicepoint per traversed element.
+remove_x(_, [], []).
+remove_x(Y, [X|Xs], R) :-
+	(   Y == X
+	->  R = Xs
+	;   R = [X|Tail],
+	    remove_x(Y, Xs, Tail)
+	).

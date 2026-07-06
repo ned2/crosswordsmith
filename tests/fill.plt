@@ -299,10 +299,10 @@ test(fill_index_v2_default_no_masks_counts_via_ordsets) :-
     % `all` branch and bound branch agree with the /4 reference kernel
     length(Free, 3),
     crosswordsmith_fill:candidate_count(Free, DBL, Idx, NAll),
-    crosswordsmith_fill:candidate_count(Free, DBL, Idx, Masks, NAll),
+    crosswordsmith_fill:candidate_count(Masks, Free, DBL, Idx, NAll),
     Bound = ['C', _, _],
     crosswordsmith_fill:candidate_count(Bound, DBL, Idx, NB),
-    crosswordsmith_fill:candidate_count(Bound, DBL, Idx, Masks, NB),
+    crosswordsmith_fill:candidate_count(Masks, Bound, DBL, Idx, NB),
     NB =:= 2,
     % and a no-masks artifact-mode fill completes on the ordset kernel
     crosswordsmith_fill:fill_grid('fixtures/fill_grid_3.json', _Size, Slots, _),

@@ -110,7 +110,7 @@ lint_word(GridLen, Entry, pw(A, _Letters, CellNums, Dir, Len, _Start, _End, Num)
     ( get_dict(number, Entry, Num0), integer(Num0) -> Num = Num0 ; Num = 0 ).
 
 lint_atom(X, A) :- atom(X), !, A = X.
-lint_atom(X, A) :- string(X), !, atom_string(A, X).
+lint_atom(X, A) :- string(X), atom_string(A, X).
 lint_dir(X, D) :- lint_atom(X, A), ( A == across -> D = across ; A == down, D = down ).
 lint_cell_num(GridLen, A, Pair, Num) :-
     (   Pair = [R, C], integer(R), integer(C),
@@ -247,7 +247,7 @@ eval_grid_rule(symmetry, CS, Filled, GridLen, result(symmetry, Sev, Detail)) :-
     ; Sev = CS, format(atom(Detail), "180-rotational asymmetry at ~w cell(s)", [Deficit]) ).
 
 % All filled cells reachable from the first via 4-adjacency through filled cells.
-connected([], _GridLen) :- !.
+connected([], _GridLen).
 connected(Filled, GridLen) :-
     Filled = [Start|_],
     % Filled is already an ordset (filled_cells/2 sorts it), so use it directly (P16).
