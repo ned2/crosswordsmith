@@ -321,9 +321,11 @@ test(fill_index_version_mismatch_refused,
 test(fill_index_swi_mismatch_refused,
      [throws(error(fill_index_swi('0.0.0', _), _))]) :-
     empty_assoc(E), tmp_path(AF),
-    % version 2 (current schema) so the SWI gate is reached, not the version gate.
+    % the CURRENT schema version so the SWI gate is reached, not the version
+    % gate (hardcoding it broke once, at the v2->v3 Unicode-hardening bump).
+    crosswordsmith_fill:fill_index_format_version(V),
     setup_call_cleanup(open(AF, write, S, [type(binary)]),
-                       fast_write(S, fill_index(2, [swi_version('0.0.0'), dict_sha256(x)], E, E)),
+                       fast_write(S, fill_index(V, [swi_version('0.0.0'), dict_sha256(x)], E, E)),
                        close(S)),
     setup_call_cleanup(true,
                        crosswordsmith_fill:fill_load_index(AF, none, _, _),
@@ -400,6 +402,188 @@ sample_pattern(Len, [P-C]) :-
 sample_pattern(Len, [0-C0, P1-C1]) :-
     member(Len, [4,5,6]), between(1, 5, P1), P1 < Len,
     member(C0, ['S','C','T','B']), member(C1, ['A','E','O']).
+
+
+% --- Unicode/locale hardening (docs/plans/fill-dict-unicode-normalization.md)
+% Policy: fold-then-strict. NFC and NFD forms must agree for EVERY class;
+% pure-ASCII dictionaries must normalize exactly as before the hardening;
+% dropped words warn unconditionally on stderr (INV-3), silent when zero.
+% NB every non-ASCII char below is a \uXXXX escape, never a literal: the
+% locale-matrix run consults this file under LC_ALL=C, where literal UTF-8
+% source bytes would themselves mojibake - and escapes make the NFC-vs-NFD
+% pairs visibly different in source.
+
+% Write a temp dict with EXPLICIT utf8 encoding (tmp_dict/2 writes in the
+% locale encoding - wrong vehicle for non-ASCII fixtures under LC_ALL=C).
+tmp_dict_utf8(Text, Path) :-
+    tmp_file_stream(binary, Path, S0), close(S0),
+    setup_call_cleanup(open(Path, write, S, [encoding(utf8)]),
+                       write(S, Text), close(S)).
+
+% Capture user_error during Goal (the drop warning is unconditional stderr).
+with_stderr_string(Goal, Str) :-
+    stream_property(OldErr, alias(user_error)),
+    with_output_to(string(Str),
+        ( current_output(Cap),
+          setup_call_cleanup(set_stream(Cap, alias(user_error)),
+                             Goal,
+                             set_stream(OldErr, alias(user_error))) )).
+
+% The pre-hardening pipeline, verbatim (string_upper + char_type(alpha)
+% squeeze): the ASCII-freeze witness below proves the new pipeline is
+% output-identical to it on every shipped dictionary line.
+old_line_word(Line, Letters) :-
+    string_upper(Line, U), string_chars(U, Cs),
+    old_alpha_chars(Cs, Letters),
+    Letters \== [].
+old_alpha_chars([], []).
+old_alpha_chars([C|Cs], Letters) :-
+    (   char_type(C, alpha)
+    ->  Letters = [C|Rest]
+    ;   Letters = Rest
+    ),
+    old_alpha_chars(Cs, Rest).
+
+% cafe with precomposed e-acute (NFC) vs e + combining acute (NFD): same
+% text, historically different letter lists by byte encoding.
+test(norm_nfc_nfd_agree_cafe) :-
+    crosswordsmith_fill:line_word("caf\u00e9", L1),
+    crosswordsmith_fill:line_word("cafe\u0301", L2),
+    L1 == ['C','A','F','E'],
+    L2 == L1.
+
+test(norm_sharp_s_folds_to_ss) :-
+    crosswordsmith_fill:line_word("Stra\u00dfe", L),
+    L == ['S','T','R','A','S','S','E'].
+
+test(norm_multichar_fold_mid_word) :-
+    crosswordsmith_fill:line_word("\u0132sselmeer", L),   % IJ ligature
+    L == ['I','J','S','S','E','L','M','E','E','R'].
+
+test(norm_typographic_apostrophe_squeezes) :-
+    crosswordsmith_fill:line_word("don't", L1),
+    crosswordsmith_fill:line_word("don\u2019t", L2),
+    L1 == ['D','O','N','T'],
+    L2 == L1.
+
+% Unfoldable letters drop the WORD - in both encodings (the review's
+% consistency requirement): Romanian s-comma is Latin Ext-B (not in the
+% table) and its NFD mark U+0326 is not an allowed pair.
+test(norm_unfoldable_drops_nfc, [fail]) :-
+    crosswordsmith_fill:line_word("\u0219ir", _).
+test(norm_unfoldable_drops_nfd, [fail]) :-
+    crosswordsmith_fill:line_word("s\u0326ir", _).
+
+% Pair-keyed marks: w-acute is a real letter (U+1E83) but NOT in the table,
+% so BOTH its precomposed and decomposed forms drop - squeezing the mark just
+% because "acute is a known mark" would keep NFD while dropping NFC.
+test(norm_untabled_pair_drops_nfc, [fail]) :-
+    crosswordsmith_fill:line_word("\u1e83ord", _).
+test(norm_untabled_pair_drops_nfd, [fail]) :-
+    crosswordsmith_fill:line_word("w\u0301ord", _).
+
+% Mark chains never squeeze (e-acute + a second acute has no table home in
+% either form; marks reset the previous-kept-char state).
+test(norm_mark_chain_drops, [fail]) :-
+    crosswordsmith_fill:line_word("caf\u00e9\u0301", _).
+
+test(norm_cyrillic_word_drops, [fail]) :-
+    crosswordsmith_fill:line_word("\u0434\u043e\u043c", _).   % "dom"
+
+% Digit/punctuation squeeze is UNCHANGED (pre-hardening behavior).
+test(norm_ascii_squeeze_unchanged) :-
+    crosswordsmith_fill:line_word("3d", L),
+    L == ['D'].
+
+% A line with nothing representable is a silent SKIP (uncounted), while an
+% unfoldable word is a counted DROP - load_dict distinguishes them: the mixed
+% dict below has one skip (123), one drop (Cyrillic), two keeps.
+test(load_dict_drop_count_and_skip,
+     [cleanup(delete_file(DF))]) :-
+    tmp_dict_utf8("CAT\n123\n\u0434\u043e\u043c\ncaf\u00e9\n", DF),
+    with_stderr_string(crosswordsmith_fill:load_dict(DF, DBL, _), Err),
+    assoc_to_list(DBL, Buckets),
+    Buckets == [3-[['C','A','T']], 4-[['C','A','F','E']]],
+    once(sub_string(Err, _, _, _, "dropped 1 dictionary word")),
+    nb_getval(fill_dict_dropped_words, 1).
+
+% Pure-ASCII dictionaries load in SILENCE (fill's quiet-by-default stderr
+% contract rests on the zero-drop path printing nothing).
+test(load_dict_ascii_silent) :-
+    with_stderr_string(
+        crosswordsmith_fill:load_dict('fixtures/wordlist_sample.txt', _, _),
+        Err),
+    Err == "".
+
+% The encoding(utf8) pin: raw UTF-8 bytes (0xC3 0xA9 = e-acute) written with
+% NO Prolog encoding layer load identically regardless of the process locale
+% (without the pin, LC_ALL=C decodes these bytes as two mojibake chars and
+% the word is dropped instead of folded).
+test(load_dict_utf8_pin,
+     [cleanup(delete_file(DF))]) :-
+    tmp_file_stream(binary, DF, S),
+    format(S, "caf~s~n", [[0xC3, 0xA9]]),
+    close(S),
+    crosswordsmith_fill:load_dict(DF, DBL, _),
+    assoc_to_list(DBL, [4-[['C','A','F','E']]]).
+
+% ASCII-freeze witness: on every line of the CLI default dictionary AND the
+% full frozen ENABLE list, the new pipeline is output-identical to the
+% pre-hardening pipeline (the hard no-output-change acceptance).
+test(norm_ascii_freeze_shipped_dicts) :-
+    forall(member(F, ['fixtures/wordlist_sample.txt', 'fixtures/dict/enable1.txt']),
+           ( crosswordsmith_fill:read_file_lines(F, Lines),
+             convlist(old_line_word, Lines, Old),
+             convlist(crosswordsmith_fill:line_word, Lines, New),
+             New == Old )).
+
+% Oracle: the generated fold table and mark pairs agree with the Unicode
+% database (library(unicode)/utf8proc - native-only, NEVER imported by
+% fill.pl: the WASM build does not ship it). Guards against a hand-edited or
+% regeneration-drifted table.
+unicode_oracle_available :-
+    catch(use_module(library(unicode)), _, fail).
+
+test(fold_table_matches_unicode_oracle, [condition(unicode_oracle_available)]) :-
+    forall(crosswordsmith_fill:fold_char(C, F), fold_oracle_ok(C, F)),
+    forall(crosswordsmith_fill:allowed_mark(B, M), mark_oracle_ok(B, M)).
+
+% The explicitly anchored specials (casefold / NFKC / orthographic
+% convention): sharp-s, AE + OE ligatures, IJ ligature, O-slash.
+special_fold('\u00df', ['S','S']).   % sharp s
+special_fold('\u00c6', ['A','E']).   % AE ligature
+special_fold('\u00e6', ['A','E']).
+special_fold('\u0152', ['O','E']).   % OE ligature
+special_fold('\u0153', ['O','E']).
+special_fold('\u0132', ['I','J']).   % IJ ligature
+special_fold('\u0133', ['I','J']).
+special_fold('\u00d8', ['O']).       % O with stroke
+special_fold('\u00f8', ['O']).
+
+% Every non-special table entry must be exactly base + one combining mark
+% under unicode_nfd/2, folding to the upcased base.
+fold_oracle_ok(C, F) :-
+    (   special_fold(C, SF)
+    ->  F == SF
+    ;   atom_chars(A, [C]),
+        unicode_nfd(A, D),
+        atom_codes(D, [Base, Mark]),
+        Mark >= 0x0300, Mark =< 0x036F,
+        (   Base >= 0'a, Base =< 0'z
+        ->  Up is Base - 32
+        ;   Up = Base
+        ),
+        char_code(UC, Up),
+        F == [UC]
+    ).
+
+% Every allowed (base, mark) pair must recompose to a fold-table letter that
+% folds back to exactly that base (the pair-keyed consistency invariant).
+mark_oracle_ok(B, M) :-
+    atom_chars(Decomposed, [B, M]),
+    unicode_nfc(Decomposed, Composed),
+    atom_chars(Composed, [P]),
+    crosswordsmith_fill:fold_char(P, [B]).
 
 :- end_tests(fill).
 

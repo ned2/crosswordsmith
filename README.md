@@ -208,7 +208,7 @@ with `lint`/`export`.
 | --- | --- |
 | `--grid <file>` | **required** — the grid template (a `grids/` black-square mask). |
 | `--seeds <file>` | seed words to pin (a fragment, §6.6, canonical or thin form — a thin `[{answer,row,col,dir}]` list is framed by the grid itself, no `gridLength` needed); filled around as hard pins. |
-| `--dict <file>` | word list, one per line (default: a small bundled sample; real fills: `--dict UKACD18`). |
+| `--dict <file>` | word list, one per line, **UTF-8** (default: a small bundled sample; real fills: `--dict UKACD18`). Words are normalized to A–Z: accented Latin letters fold to their base (café → CAFE, Straße → STRASSE), punctuation/digits are squeezed; a word with letters that cannot be folded (Cyrillic, Greek, …) is dropped, and the drop count is reported on stderr (unconditionally — pure-ASCII lists load in silence). |
 | `--out <file>` | write to `<file>` instead of stdout. |
 | `--verbose` | report the success summary (grid, filled slots) on stderr; a clean success is silent there by default. Failures print regardless. |
 

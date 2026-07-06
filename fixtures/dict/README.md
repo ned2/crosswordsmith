@@ -19,11 +19,15 @@ Lexicon), a widely used **public-domain** Scrabble/word-game lexicon.
   authors (M. Kantrowitz / A. Truscott lineage); it carries no copyright and is
   redistributed freely (it is the basis of many open word-game dictionaries).
 
-fill's `normalize_word/2` uppercases and strips non-alpha, then `sort/2` dedupes
-(fill.pl:129-131, 114-122); ENABLE is already lowercase, de-duplicated, and
-sorted, so the load is a clean 1:1 (172823 distinct words). ASCII-only, so the
-`char_type(alpha)` / `string_upper` locale fragility noted in the campaign plan
-does not bite here.
+Dictionary files are **defined as UTF-8** (fill pins `encoding(utf8)` on the
+read — the process locale never affects decoding). fill's `normalize_word/2`
+folds each line to A–Z letters locale-independently — ASCII is upcased and
+non-letters squeezed; accented Latin letters fold through an explicit,
+Unicode-derived table; words with unfoldable letters are dropped with an
+unconditional stderr count — then `sort/2` dedupes (see `load_dict/3` in
+fill.pl and docs/plans/fill-dict-unicode-normalization.md for the policy).
+ENABLE is already lowercase ASCII, de-duplicated, and sorted, so the load is a
+clean 1:1 (172823 distinct words, zero drops, no folding path taken).
 
 ## Frozen subsets — a size-scaling knob
 

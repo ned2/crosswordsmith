@@ -173,7 +173,8 @@ Fill has no bench: a 3x3 toy grid, a 26-word list. Deliverables:
 - Envelope/completability work (restarts, AC-strength pruning — both
   output-changing or out of scope; see thesis).
 - Any change to fill's output or infeasible/not_proven semantics.
-- Unicode/locale hardening of dictionary normalization (noted, deferred).
+- Unicode/locale hardening of dictionary normalization (noted, deferred)
+  *(resolved 2026-07-07 → [fill-dict-unicode-normalization.md](./fill-dict-unicode-normalization.md))*.
 
 ## Execution model
 
