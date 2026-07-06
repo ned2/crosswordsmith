@@ -18,8 +18,8 @@
 
 % Run a fill and return the across/down answer lists (deterministic).
 do_fill(GridFile, SeedFile, DictFile, Across, Down) :-
-    crosswordsmith_fill:fill_grid(GridFile, _Size, Slots, _CellVar),
-    ( SeedFile == none -> SeededKeys = [] ; crosswordsmith_fill:apply_seeds(SeedFile, Slots, SeededKeys) ),
+    crosswordsmith_fill:fill_grid(GridFile, Size, Slots, _CellVar),
+    ( SeedFile == none -> SeededKeys = [] ; crosswordsmith_fill:apply_seeds(SeedFile, Size, Slots, SeededKeys) ),
     exclude(crosswordsmith_fill:seeded_slot(SeededKeys), Slots, SearchSlots),
     crosswordsmith_fill:load_dict(DictFile, DictByLen, Index),
     crosswordsmith_fill:fill_attempt(SearchSlots, Slots, DictByLen, Index, filled, Numbered, _),
@@ -120,8 +120,8 @@ test(fill_seed_no_slot_throws, [throws(error(fill_seed_no_slot('CAT'), _))]) :-
 % silently no-ops the dedup and this test would see COW twice), not just
 % no-throw.
 test(fill_seed_answer_reused_takes_alternative) :-
-    crosswordsmith_fill:fill_grid('fixtures/fill_grid_split3.json', _Size, Slots, _),
-    crosswordsmith_fill:apply_seeds('fixtures/fill_seed_cow_top.json', Slots, SeededKeys),
+    crosswordsmith_fill:fill_grid('fixtures/fill_grid_split3.json', Size, Slots, _),
+    crosswordsmith_fill:apply_seeds('fixtures/fill_seed_cow_top.json', Size, Slots, SeededKeys),
     exclude(crosswordsmith_fill:seeded_slot(SeededKeys), Slots, SearchSlots),
     crosswordsmith_fill:load_dict('fixtures/dict_cow_pig.txt', DictByLen, Index),
     crosswordsmith_fill:fill_attempt(SearchSlots, Slots, DictByLen, Index, Outcome, Numbered, _),
@@ -135,8 +135,8 @@ test(fill_seed_answer_reused_takes_alternative) :-
 % fails an uncaught error, so this is the direct crash-regression guard (it
 % threw domain_error(unique_key_pairs) before the fix).
 test(fill_seed_answer_only_word_is_infeasible) :-
-    crosswordsmith_fill:fill_grid('fixtures/fill_grid_split3.json', _Size, Slots, _),
-    crosswordsmith_fill:apply_seeds('fixtures/fill_seed_cow_top.json', Slots, SeededKeys),
+    crosswordsmith_fill:fill_grid('fixtures/fill_grid_split3.json', Size, Slots, _),
+    crosswordsmith_fill:apply_seeds('fixtures/fill_seed_cow_top.json', Size, Slots, SeededKeys),
     exclude(crosswordsmith_fill:seeded_slot(SeededKeys), Slots, SearchSlots),
     crosswordsmith_fill:load_dict('fixtures/dict_cow.txt', DictByLen, Index),
     crosswordsmith_fill:fill_attempt(SearchSlots, Slots, DictByLen, Index, Outcome, _, _),
@@ -147,8 +147,32 @@ test(fill_seed_answer_only_word_is_infeasible) :-
 % catch this shape; reported before searching, like fill_seed_no_slot/clash).
 test(fill_duplicate_seed_answers_rejected,
      [throws(error(fill_seed_duplicate('COW'), _))]) :-
-    crosswordsmith_fill:fill_grid('fixtures/fill_grid_split3.json', _Size, Slots, _),
-    crosswordsmith_fill:apply_seeds('fixtures/fill_seed_cow_both.json', Slots, _).
+    crosswordsmith_fill:fill_grid('fixtures/fill_grid_split3.json', Size, Slots, _),
+    crosswordsmith_fill:apply_seeds('fixtures/fill_seed_cow_both.json', Size, Slots, _).
+
+% --- thin seed form (§6.6 convenience form at the fill boundary) --------------
+
+% The AC-FRAG-4 analogue for fill: the thin spelling of the COW seed (desugared
+% on the fill grid's own side, the SizeCtx apply_seeds passes) produces the
+% identical fill as the canonical spelling. Asserts the expected answers too,
+% so identical-but-wrong cannot pass.
+test(fill_thin_seed_identical_to_canonical) :-
+    do_fill('fixtures/fill_grid_split3.json', 'fixtures/fill_seed_cow_top.json',
+            'fixtures/dict_cow_pig.txt', AC, DC),
+    do_fill('fixtures/fill_grid_split3.json', 'fixtures/fill_seed_cow_top_thin.json',
+            'fixtures/dict_cow_pig.txt', AT, DT),
+    AC-DC == AT-DT,
+    AC == ['COW', 'PIG'],
+    DC == [].
+
+% A thin seed is framed by THIS grid's side (3 here): COW from [0,1] across
+% runs off it and is rejected at parse with the grid's own dimensions in the
+% error. (The other thin parse errors - bad dir, bad row/col, bad top level -
+% are consumer-independent and covered in arrange.plt.)
+test(fill_thin_seed_off_grid_throws,
+     [throws(error(fragment_thin_off_grid('COW', 0, 1, across, 3), _))]) :-
+    crosswordsmith_fill:fill_grid('fixtures/fill_grid_3.json', Size, Slots, _),
+    crosswordsmith_fill:apply_seeds('fixtures/fill_seed_cow_off_thin.json', Size, Slots, _).
 
 % Defense in depth: the fill emit boundary re-runs core's unique-answers check
 % (the solve path already does, in crossword/4), so a duplicate that ever
@@ -379,6 +403,6 @@ sample_pattern(Len, [0-C0, P1-C1]) :-
 
 :- end_tests(fill).
 
-% Helper: apply a list of frag/4 seeds directly (mirrors apply_seeds/3 minus the
+% Helper: apply a list of frag/4 seeds directly (mirrors apply_seeds/4 minus the
 % file read), for the no-slot test; the seeded-key accumulator is discarded.
 apply_seeds_frags(Slots, Frags) :- foldl(crosswordsmith_fill:apply_seed(Slots), Frags, [], _).

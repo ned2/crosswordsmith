@@ -84,10 +84,10 @@ fill_search_sampler(GridFile, Seeds, DictByLen, Index, Budget-Expected, Sample) 
 % included); SearchSlots are what the engine fills (AllSlots minus seed pins).
 % Slots are passed as plain args downstream, so the crossing cells stay shared.
 build_search_slots(GridFile, Seeds, slots(SearchSlots, AllSlots)) :-
-    crosswordsmith_fill:fill_grid(GridFile, _Size, AllSlots, _CellVar),
+    crosswordsmith_fill:fill_grid(GridFile, Size, AllSlots, _CellVar),
     ( Seeds == none
     ->  SearchSlots = AllSlots
-    ;   crosswordsmith_fill:apply_seeds(Seeds, AllSlots, SeededKeys),
+    ;   crosswordsmith_fill:apply_seeds(Seeds, Size, AllSlots, SeededKeys),
         exclude(crosswordsmith_fill:seeded_slot(SeededKeys), AllSlots, SearchSlots) ).
 
 :- multifile prolog:error_message//1.

@@ -57,9 +57,12 @@
 % word_letters/3: the separator-stripped placement footprint of a seed answer.
 :- use_module(crosswordsmith(metrics), [word_letters/3]).
 
-% load_fragment/3: seeds arrive in the §6.6 fragment format. emit_arrange/4:
-% emit_fill's `max` mode delegates the cropped emit to arrange.
-:- use_module(crosswordsmith(arrange), [load_fragment/3, emit_arrange/4]).
+% load_fragment/4: seeds arrive in either §6.6 fragment form - canonical, or
+% the thin [{answer,row,col,dir}] list desugared on the fill grid's own side
+% (the SizeCtx apply_seeds passes), so thin seeds land on exactly the grid
+% they pin. emit_arrange/4: emit_fill's `max` mode delegates the cropped
+% emit to arrange.
+:- use_module(crosswordsmith(arrange), [load_fragment/4, emit_arrange/4]).
 
 % Numbering + the canonical JSON emit for the filled layout, plus the placed-word
 % record (pw/8) accessor fill uses to recover each answer for the emit metadata.
@@ -118,8 +121,11 @@ cell_var(CellVar, Cell, Var) :- get_assoc(Cell, CellVar, Var).
 % theme/own word) and need NOT be a dictionary word (R2/OD-3). Its letters still
 % constrain crossing slots via the shared cell variables, and a slot completed
 % by crossings (not a seed) is still validated against the dictionary.
-apply_seeds(SeedFile, Slots, SeededKeys) :-
-    load_fragment(SeedFile, _GridLen, Frags),
+% Size is the fill grid's own side, passed as load_fragment's SizeCtx: it
+% frames a thin seed file's desugar so its cell numbers land on THIS grid
+% (a canonical file ignores it - matching stays purely by cells/direction).
+apply_seeds(SeedFile, Size, Slots, SeededKeys) :-
+    load_fragment(SeedFile, Size, _FragGridLen, Frags),
     check_unique_seed_answers(Frags),
     foldl(apply_seed(Slots), Frags, [], SeededKeys).
 
@@ -605,7 +611,7 @@ fill_prepare(GridFile, SeedFileOrNone, Size, Slots, SearchSlots) :-
     fill_grid(GridFile, Size, Slots, _CellVar),
     ( SeedFileOrNone == none
     ->  SeededKeys = []
-    ;   apply_seeds(SeedFileOrNone, Slots, SeededKeys) ),
+    ;   apply_seeds(SeedFileOrNone, Size, Slots, SeededKeys) ),
     exclude(seeded_slot(SeededKeys), Slots, SearchSlots).
 
 % Search + emit, shared by both entry points. Fails (no stdout) on any

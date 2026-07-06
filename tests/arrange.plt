@@ -371,6 +371,64 @@ test(fragment_invalid_cell_throws,
             _{answer:"BIAS", direction:"across", cells:[[0,9],[0,10],[0,11],[0,12]]}]},
         _, _).
 
+% --- thin convenience form (§6.6, AC-FRAG-4) ---------------------------------
+
+% AC-FRAG-4 (desugar level): the thin spelling of the bundled two-word
+% fragment desugars to EXACTLY the frag/4 terms the canonical dict parses to
+% (same terms in -> the same deterministic search out, INV-2). Also exercises
+% the separator-stripped footprint ('GNOSTIC GOSPELS' = 14 cells, not 15).
+test(fragment_thin_desugars_to_canonical, [true(GL-Frags == 17-Expected)]) :-
+    bundled_two_word_fragment(Expected),
+    crosswordsmith_arrange:fragment_json(
+        [ _{answer:"GNOSTIC GOSPELS", row:0, col:3, dir:"down"},
+          _{answer:"ETERNAL RETURN",  row:4, col:2, dir:"across"} ],
+        17, GL, Frags).
+
+% AC-FRAG-4 (solve level, through the file boundary): the thin fixture and the
+% canonical fixture produce byte-identical emits on the same 17 frame. (The
+% golden check pins the same identity end to end through the CLI.)
+test(fragment_thin_solve_identical_to_canonical) :-
+    arrange_bundled(Words),
+    crosswordsmith_arrange:load_fragment('fixtures/bundled_17_fragment.json', 17, GL, FragsC),
+    crosswordsmith_arrange:load_fragment('fixtures/bundled_17_fragment_thin.json', 17, GL, FragsT),
+    crosswordsmith_arrange:arrange_fragment_strict(Words, FragsC, GL, N1, _R1, placed),
+    crosswordsmith_arrange:arrange_fragment_strict(Words, FragsT, GL, N2, _R2, placed),
+    with_output_to(string(S1), crosswordsmith_arrange:emit_arrange(N1, Words, GL, fixed)),
+    with_output_to(string(S2), crosswordsmith_arrange:emit_arrange(N2, Words, GL, fixed)),
+    S1 == S2.
+
+% No size frame given (SizeCtx = none): a thin fragment desugars on the
+% default 15x15 frame, the same frame a bare invocation resolves to.
+test(fragment_thin_default_frame_15,
+     [true(GL-Frags == 15-[frag('BIAS', across, 1, [1,2,3,4])])]) :-
+    crosswordsmith_arrange:fragment_json(
+        [_{answer:"BIAS", row:0, col:0, dir:"across"}], none, GL, Frags).
+
+% A thin entry needs the key "dir" (the canonical "direction" spelling is the
+% likely authoring slip; the error names the thin key).
+test(fragment_thin_direction_key_throws,
+     [throws(error(fragment_thin_invalid_dir('BIAS'), _))]) :-
+    crosswordsmith_arrange:fragment_json(
+        [_{answer:"BIAS", row:0, col:0, direction:"across"}], 9, _, _).
+
+% row/col must be 0-based integers within the frame.
+test(fragment_thin_bad_position_throws,
+     [throws(error(fragment_thin_invalid_position('BIAS', 9), _))]) :-
+    crosswordsmith_arrange:fragment_json(
+        [_{answer:"BIAS", row:9, col:0, dir:"across"}], 9, _, _).
+
+% A word running off the frame from its start cell is a parse-time error
+% naming the entry's own coordinates (not a downstream cells-inconsistent).
+test(fragment_thin_off_grid_throws,
+     [throws(error(fragment_thin_off_grid('BIAS', 0, 7, across, 9), _))]) :-
+    crosswordsmith_arrange:fragment_json(
+        [_{answer:"BIAS", row:0, col:7, dir:"across"}], 9, _, _).
+
+% The top level must be an object (canonical) or a list (thin).
+test(fragment_bad_toplevel_throws,
+     [throws(error(fragment_bad_toplevel, _))]) :-
+    crosswordsmith_arrange:fragment_json("junk", 9, _, _).
+
 % Best-effort with a fragment: the seed is pinned, the rest greedily placed;
 % on a roomy grid nothing is dropped and the pins are kept.
 test(fragment_best_effort_places_all) :-

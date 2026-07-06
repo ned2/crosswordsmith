@@ -12,7 +12,7 @@
 % descope decision was recorded in the implementation plan.)
 %
 % Exports: the four *_solve CLI seams, the fragment API the driver and fill
-% share (load_fragment/3, reconcile_fragment_size/3), and set_check_target/1
+% share (load_fragment/4, reconcile_fragment_size/3), and set_check_target/1
 % (the only sanctioned writer of the module-private check_target_override/1
 % dynamic). White-box test helpers are NOT exported — arrange.plt reaches
 % them as crosswordsmith_arrange:Pred(...).
@@ -25,7 +25,7 @@
             % the browser/WASM envelope seam (no emit, tagged outcome) —
             % crosswordsmith_browser is its consumer
             arrange_outcome/5,
-            load_fragment/3,
+            load_fragment/4,
             reconcile_fragment_size/3,
             set_check_target/1,
             % fill's emit_fill(max) delegates its cropped emit here
@@ -587,8 +587,10 @@ arrange_outcome(Words, GridLen, best_effort, SizeMode, Outcome) :-
 % Phase 5 - fragment-grid seeding (the anchor mechanism). design-spec §6.6.
 %
 % A fragment grid is the emit JSON made partial (words-only v1): presence =
-% fixed. The engine pins every fragment word at exactly its cells, then solves
-% the unmatched remainder with the SAME construct path as the unseeded engine.
+% fixed. A thin hand-authorable [{answer,row,col,dir}] spelling (AC-FRAG-4)
+% desugars to the same terms at the parse boundary below. The engine pins
+% every fragment word at exactly its cells, then solves the unmatched
+% remainder with the SAME construct path as the unseeded engine.
 % This generalises the single seed: instead of seeding one word at a start
 % corner, we seed the whole fragment into (Placed, Grid) and shrink Words.
 %
@@ -603,10 +605,35 @@ arrange_outcome(Words, GridLen, best_effort, SizeMode, Outcome) :-
 
 :- multifile prolog:error_message//1.
 
-% --- fragment schema parsing (the emit format, made partial) ----------------
-% A fragment dict -> GridLen + [frag(Answer, Dir, Start, CellNums)]. Validates
-% shape only; reconciliation against --input and legality are seed_from_fragment's
-% job. Throws shaped error/2 terms (rendered by the hooks at the foot of file).
+% --- fragment schema parsing (canonical + thin forms) ------------------------
+% Canonical: the emit format made partial - a {gridLength, words:[{answer,
+% direction, cells}...]} object. Thin (§6.6 convenience form, AC-FRAG-4): a
+% top-level JSON LIST of {answer, row, col, dir} entries - hand-authorable, no
+% gridLength; the caller's size frame provides N. The top-level JSON type is
+% the form discriminator. Both forms converge on the same frag(Answer, Dir,
+% Start, CellNums) terms HERE, at the parse boundary, so seed_from_fragment
+% and everything downstream are form-agnostic. Validates shape only;
+% reconciliation against --input and legality are seed_from_fragment's job.
+% Throws shaped error/2 terms (rendered by the hooks at the foot of file).
+
+% Dispatch on the decoded top level: dict = canonical, list = thin.
+fragment_json(Json, _SizeCtx, GridLen, Frags) :-
+    is_dict(Json), !,
+    fragment_dict_words(Json, GridLen, Frags).
+fragment_json(Json, SizeCtx, GridLen, Frags) :-
+    is_list(Json), !,
+    thin_size(SizeCtx, GridLen),
+    maplist(fragment_thin_word(GridLen), Json, Frags).
+fragment_json(_Json, _SizeCtx, _, _) :-
+    throw(error(fragment_bad_toplevel, _)).
+
+% The thin form carries no gridLength, so the consumer's size frame sets N:
+% arrange passes its explicit --size/--max-size value, or `none` when neither
+% is given - the default 15, the same frame a bare invocation resolves to
+% (the CLI's resolve_size/2, design-spec §7.1); fill passes its grid's own
+% side, so thin seeds desugar to cell numbers on exactly the grid they pin.
+thin_size(none, 15) :- !.
+thin_size(N, N).
 
 fragment_dict_words(Dict, GridLen, Frags) :-
     (   is_dict(Dict), get_dict(gridLength, Dict, GridLen),
@@ -658,15 +685,47 @@ cell_pair_to_num(GridLen, Answer, Pair, Num) :-
     ;   throw(error(fragment_invalid_cell(Answer, Pair), _))
     ).
 
-%!  load_fragment(+File:atom, -GridLen:integer, -Frags:list) is det.
+% One thin entry {answer, row, col, dir} -> frag(Answer, Dir, Start, CellNums).
+% row/col are the 0-based start cell; the run is GENERATED (word_cells/5, over
+% the answer's separator-stripped footprint - the same footprint the pin path
+% checks), not declared, so a thin entry cannot be internally inconsistent -
+% it can only fall off the N-grid, rejected here with a precise error. Extra
+% keys are ignored, like canonical's number/meta.
+fragment_thin_word(GridLen, Entry, frag(Answer, Dir, Start, CellNums)) :-
+    (   is_dict(Entry), get_dict(answer, Entry, RawAns), fragment_atom(RawAns, Answer)
+    ->  true
+    ;   throw(error(fragment_invalid_answer(Entry), _))
+    ),
+    (   get_dict(dir, Entry, RawDir), fragment_dir(RawDir, Dir)
+    ->  true
+    ;   throw(error(fragment_thin_invalid_dir(Answer), _))
+    ),
+    (   get_dict(row, Entry, Row), integer(Row), Row >= 0, Row < GridLen,
+        get_dict(col, Entry, Col), integer(Col), Col >= 0, Col < GridLen
+    ->  true
+    ;   throw(error(fragment_thin_invalid_position(Answer, GridLen), _))
+    ),
+    Start is Row * GridLen + Col + 1,
+    word_letters([Answer], _Letters, WLen),
+    (   fits_on_grid(Dir, Start, WLen, GridLen)
+    ->  word_cells(Start, Dir, WLen, GridLen, CellNums)
+    ;   throw(error(fragment_thin_off_grid(Answer, Row, Col, Dir, GridLen), _))
+    ).
+
+%!  load_fragment(+File:atom, +SizeCtx, -GridLen:integer, -Frags:list) is det.
 %
-%   Read a fragment file (JSON - the emit format, made partial) into its
-%   GridLen and frag(Answer, Dir, Start, CellNums) terms. Validates shape
-%   only (throws the shaped fragment_* errors below); reconciliation against
-%   --input and legality are seed_from_fragment's job.
-load_fragment(File, GridLen, Frags) :-
-    setup_call_cleanup(open(File, read, S), json_read_dict(S, Dict), close(S)),
-    fragment_dict_words(Dict, GridLen, Frags).
+%   Read a fragment file (JSON) into its GridLen and frag(Answer, Dir,
+%   Start, CellNums) terms. Accepts BOTH §6.6 forms: the canonical
+%   emit-made-partial object (SizeCtx ignored; the declared gridLength is
+%   returned) and the thin hand-authorable [{answer,row,col,dir}] list,
+%   desugared on the SizeCtx frame - a positive integer (arrange's
+%   --size/--max-size value; fill's own grid side) or `none` (default 15).
+%   Validates shape only (throws the shaped fragment_* errors below);
+%   reconciliation against --input and legality are seed_from_fragment's
+%   job (fill reconciles by slot instead: apply_seeds).
+load_fragment(File, SizeCtx, GridLen, Frags) :-
+    setup_call_cleanup(open(File, read, S), json_read_dict(S, Json), close(S)),
+    fragment_json(Json, SizeCtx, GridLen, Frags).
 
 %!  reconcile_fragment_size(+FragGridLen:integer, +OptSize, -GridLen:integer) is det.
 %
@@ -856,7 +915,7 @@ arrange_fragment_best_effort(Words, Frags, GridLen, Numbered, Reward, NumPlaced,
 %!                         +SizeMode:oneof([fixed,max])) is semidet.
 %
 %   The fragment-seeded `arrange` CLI seam: pin every fragment word of Frags
-%   (load_fragment/3) at exactly its cells, solve the remaining Words around
+%   (load_fragment/4) at exactly its cells, solve the remaining Words around
 %   the seed under the Drop contract, and emit/report exactly as
 %   arrange_solve/4 does - emit on stdout, report on stderr; on any
 %   non-placed outcome report and FAIL with no stdout layout. Throws
@@ -934,6 +993,14 @@ prolog:error_message(fragment_illegal_pin(Answer)) -->
     [ 'fragment: word ~q cannot be legally pinned (it abuts or merges with another pinned word)'-[Answer] ].
 prolog:error_message(fragment_size_mismatch(FragGridLen, OptSize)) -->
     [ 'fragment: gridLength ~w disagrees with the requested --size ~w'-[FragGridLen, OptSize] ].
+prolog:error_message(fragment_bad_toplevel) -->
+    [ 'fragment: expected a canonical fragment object ({gridLength, words}) or a thin list of {answer, row, col, dir} entries' ].
+prolog:error_message(fragment_thin_invalid_dir(Answer)) -->
+    [ 'fragment: thin entry ~q needs a "dir" of "across" or "down"'-[Answer] ].
+prolog:error_message(fragment_thin_invalid_position(Answer, GridLen)) -->
+    [ 'fragment: thin entry ~q needs 0-based integer "row" and "col" within the ~wx~w grid'-[Answer, GridLen, GridLen] ].
+prolog:error_message(fragment_thin_off_grid(Answer, Row, Col, Dir, GridLen)) -->
+    [ 'fragment: thin entry ~q does not fit on the ~wx~w grid from [~w,~w] going ~w'-[Answer, GridLen, GridLen, Row, Col, Dir] ].
 
 
 % ===========================================================================

@@ -1,0 +1,32 @@
+{
+  "grid": [
+    [
+      {"across":1,"down":null,"letter":"C","number":1},
+      {"across":1,"down":null,"letter":"O","number":null},
+      {"across":1,"down":null,"letter":"W","number":null}
+    ],
+    [null, null, null ],
+    [
+      {"across":2,"down":null,"letter":"P","number":2},
+      {"across":2,"down":null,"letter":"I","number":null},
+      {"across":2,"down":null,"letter":"G","number":null}
+    ]
+  ],
+  "gridLength":3,
+  "words": [
+    {
+      "answer":"COW",
+      "cells": [ [0, 0 ],  [0, 1 ],  [0, 2 ] ],
+      "direction":"across",
+      "meta": {},
+      "number":1
+    },
+    {
+      "answer":"PIG",
+      "cells": [ [2, 0 ],  [2, 1 ],  [2, 2 ] ],
+      "direction":"across",
+      "meta": {},
+      "number":2
+    }
+  ]
+}

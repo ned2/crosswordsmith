@@ -88,6 +88,12 @@ set, run it as `swipl crosswordsmith <args…>`.
     $ ./crosswordsmith arrange --fragment fixtures/bundled_17_fragment.json \
         --input fixtures/bundled_17_clues.pl
 
+    # The same pins in the thin hand-authorable form - a JSON list of
+    # {answer, row, col, dir} (0-based start cell). No gridLength, so
+    # --size/--max-size frames it (default 15). Identical output (AC-FRAG-4).
+    $ ./crosswordsmith arrange --fragment fixtures/bundled_17_fragment_thin.json \
+        --size 17 --input fixtures/bundled_17_clues.pl
+
     # Up to K meaningfully-distinct layouts, emitted as a JSON array.
     $ ./crosswordsmith arrange --candidates 3 --size 17 \
         --input fixtures/bundled_17_clues.pl
@@ -110,7 +116,7 @@ accept the `--flag=value` form):
 | `--best-effort` | place a maximal subset; the dropped words are recorded in the output's `diagnostics` property. |
 | `--size <N>` | exact grid side — an N×N grid, uncovered cells emitted as blocks (default `15`, a standard crossword side). Mutually exclusive with `--max-size`. |
 | `--max-size <N>` | build up to N×N, then crop to the tight enclosing square (`≤ N`). Mutually exclusive with `--size`. |
-| `--fragment <file>` | seed from a partial-layout fragment (JSON — the emit format made partial). Its `gridLength` sets `N`; `--size`/`--max-size` are then redundant, and an error if they disagree. |
+| `--fragment <file>` | seed from a partial-layout fragment (JSON), in either §6.6 form. **Canonical** (the emit format made partial): its `gridLength` sets `N`; `--size`/`--max-size` are then redundant, and an error if they disagree. **Thin** (hand-authorable): a top-level list of `{answer, row, col, dir}` entries (0-based start cell, `dir` = `across`/`down`); it carries no `gridLength`, so `--size`/`--max-size` frames it (default 15). Both produce identical results for the same pins (AC-FRAG-4). |
 | `--candidates <K>` | emit up to `K` diverse layouts as a JSON array. Returns fewer than `K` (reported on stderr) when fewer ≥τ-distinct layouts exist. |
 | `--enumerate` | count every feasible full placement instead of emitting a layout. |
 | `--out <file>` | write output to `<file>` instead of stdout. |
@@ -192,15 +198,16 @@ with `lint`/`export`.
     # Fill a grid from a word list (a tiny sample ships; real fills want UKACD18).
     $ ./crosswordsmith fill --grid grids/blocked_13a.json --dict UKACD18.txt
 
-    # Pin some answers (a fragment, the same format arrange consumes) and fill
-    # around them.
+    # Pin some answers (a §6.6 fragment, canonical or thin form) and fill
+    # around them. A thin seed file is just [{"answer": "COW", "row": 0,
+    # "col": 0, "dir": "across"}, ...], framed by the grid itself.
     $ ./crosswordsmith fill --grid grids/blocked_13a.json --seeds seeds.json \
         --dict UKACD18.txt
 
 | flag | meaning |
 | --- | --- |
 | `--grid <file>` | **required** — the grid template (a `grids/` black-square mask). |
-| `--seeds <file>` | seed words to pin (a fragment, §6.6); filled around as hard pins. |
+| `--seeds <file>` | seed words to pin (a fragment, §6.6, canonical or thin form — a thin `[{answer,row,col,dir}]` list is framed by the grid itself, no `gridLength` needed); filled around as hard pins. |
 | `--dict <file>` | word list, one per line (default: a small bundled sample; real fills: `--dict UKACD18`). |
 | `--out <file>` | write to `<file>` instead of stdout. |
 | `--verbose` | report the success summary (grid, filled slots) on stderr; a clean success is silent there by default. Failures print regardless. |

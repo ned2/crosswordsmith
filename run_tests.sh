@@ -82,6 +82,11 @@ check_golden "arrange max" \
 check_golden "arrange fragment" \
     tests/golden/arrange_bundled_17_fragment.json \
     ./crosswordsmith arrange --strict --fragment fixtures/bundled_17_fragment.json --input fixtures/bundled_17_clues.pl
+# The thin spelling of the same fragment against the SAME golden file:
+# byte-identity between the two forms is AC-FRAG-4 itself.
+check_golden "arrange fragment (thin form)" \
+    tests/golden/arrange_bundled_17_fragment.json \
+    ./crosswordsmith arrange --strict --fragment fixtures/bundled_17_fragment_thin.json --size 17 --input fixtures/bundled_17_clues.pl
 check_golden "arrange candidates" \
     tests/golden/arrange_bundled_17_candidates.json \
     ./crosswordsmith arrange --strict --candidates 3 --size 17 --input fixtures/bundled_17_clues.pl
@@ -97,6 +102,14 @@ check_golden "export exolve" \
 check_golden "fill 3x3" \
     tests/golden/fill_3.json \
     ./crosswordsmith fill --grid fixtures/fill_grid_3.json --dict fixtures/wordlist_sample.txt
+# Seeded fill, canonical and thin seed spellings against the SAME golden file:
+# byte-identity between the two forms is the fill analogue of AC-FRAG-4.
+check_golden "fill seeded (canonical)" \
+    tests/golden/fill_3_seeded.json \
+    ./crosswordsmith fill --grid fixtures/fill_grid_split3.json --seeds fixtures/fill_seed_cow_top.json --dict fixtures/dict_cow_pig.txt
+check_golden "fill seeded (thin form)" \
+    tests/golden/fill_3_seeded.json \
+    ./crosswordsmith fill --grid fixtures/fill_grid_split3.json --seeds fixtures/fill_seed_cow_top_thin.json --dict fixtures/dict_cow_pig.txt
 # Scale golden (fill bench Phase 0): a 15x15 stock grid filled from full ENABLE.
 # Locks byte-identity of a realistic-scale fill (~10.7M search inferences, a few
 # seconds CLI). Stdout byte-compared; stderr (the --verbose summary path) discarded.
