@@ -29,7 +29,8 @@
 % import: this module's emit delegates to core's emit_json/3 / arrange's
 % emit_arrange/4 — the old library(http/json) line here was vestigial.)
 :- use_module(library(apply), [convlist/3, exclude/3, foldl/4, maplist/3]).
-:- use_module(library(lists), [append/3, member/2, nth0/3, select/3]).
+:- use_module(library(lists),
+              [append/3, member/2, nextto/3, nth0/3, select/3, subtract/3]).
 :- use_module(library(ordsets),
               [list_to_ord_set/2, ord_intersect/2, ord_intersection/3]).
 :- use_module(library(assoc),
@@ -62,8 +63,11 @@
 
 % Numbering + the canonical JSON emit for the filled layout, plus the placed-word
 % record (pw/8) accessor fill uses to recover each answer for the emit metadata.
+% check_unique_answers/1: the emit-boundary unique-answers guard the solve path
+% runs in crossword/4; fill bypasses crossword/4, so emit_fill/4 runs it itself.
 :- use_module(crosswordsmith(core),
-              [assign_clue_numbers/2, emit_json/3, verbose_report/2, pw_answer/2]).
+              [ assign_clue_numbers/2, check_unique_answers/1, emit_json/3,
+                verbose_report/2, pw_answer/2 ]).
 
 fill_budget(800_000_000).   % inference budget (determinism via INV-2, bounded)
 
@@ -116,7 +120,22 @@ cell_var(CellVar, Cell, Var) :- get_assoc(Cell, CellVar, Var).
 % by crossings (not a seed) is still validated against the dictionary.
 apply_seeds(SeedFile, Slots, SeededKeys) :-
     load_fragment(SeedFile, _GridLen, Frags),
+    check_unique_seed_answers(Frags),
     foldl(apply_seed(Slots), Frags, [], SeededKeys).
+
+% Two seeds pinning the SAME answer would collide at emit (crosswords do not
+% repeat answers; the emit metadata join is keyed on the answer), and neither
+% slot is searched, so the search-side dedup (seed_used/3) cannot catch that
+% shape. Reject up front with a clean hooked error, consistent with
+% fill_seed_no_slot / fill_seed_clash. Detection mirrors core's
+% check_unique_answers/1: msort keeps duplicates, equal neighbours = a dup.
+check_unique_seed_answers(Frags) :-
+    findall(A, member(frag(A, _, _, _), Frags), Answers),
+    msort(Answers, Sorted),
+    (   nextto(Dup, Dup, Sorted)
+    ->  throw(error(fill_seed_duplicate(Dup), _))
+    ;   true
+    ).
 
 apply_seed(Slots, frag(Answer, Dir, _Start, CellNums), SeededIn, SeededOut) :-
     ( member(slot(SStart, Dir, CellNums, Vars), Slots)
@@ -468,10 +487,29 @@ slot_to_word(slot(Start, Dir, Cells, Vars),
 
 
 % --- entry point -------------------------------------------------------------
+% seed_used(+AllSlots, +SearchSlots, -Used0): the search's INITIAL no-duplicate
+% set = the seed answers. The seeded slots are exactly AllSlots minus
+% SearchSlots (fill_prepare's exclude/3 keeps the same slot terms, so
+% subtract/3's memberchk recovers them; Start+Dir are ground and unique, so no
+% free cell variable can be bound by the scan). A seeded slot's Vars are fully
+% bound by apply_seed and ARE the placed word in the exact shape Used holds (a
+% list of char atoms), so fill_search_inc's `\+ memberchk(Word, Used)` now
+% dedups searched slots against the seed pins too (regression: a seed answer
+% the dictionary could also place was re-placed in a searched slot and the
+% duplicate blew up the emit; see docs/plans/fill-seed-pin-crash-fix.md).
+% Do NOT collapse Vars to an atom (atom_chars): Used holds char LISTS and an
+% atom never matches, silently disabling the dedup. With no seeds,
+% SearchSlots == AllSlots, so Used0 == [] and the search starts as before.
+seed_used(AllSlots, SearchSlots, Used0) :-
+    subtract(AllSlots, SearchSlots, SeededSlots),
+    maplist(slot_word, SeededSlots, Used0).
+
+slot_word(slot(_, _, _, Vars), Vars).
+
 % Outcome: filled | infeasible | not_proven. seeds/dict applied before search;
-% a seed clash / no-slot throws (reported before searching).
-% SearchSlots are the slots the engine fills (all slots minus seed pins);
-% AllSlots are emitted (so seed pins appear in the layout too).
+% a seed clash / no-slot / duplicate-answer seed throws (reported before
+% searching). SearchSlots are the slots the engine fills (all slots minus seed
+% pins); AllSlots are emitted (so seed pins appear in the layout too).
 fill_attempt(SearchSlots, AllSlots, DictByLen, Index, Outcome, Numbered, InputWords) :-
     fill_budget(B),
     fill_attempt(SearchSlots, AllSlots, DictByLen, Index, B, Outcome, Numbered, InputWords).
@@ -487,8 +525,11 @@ fill_attempt(SearchSlots, AllSlots, DictByLen, Index, Budget, Outcome, Numbered,
     % Ordset entry (Masks == none): fill_search/5 with `none` does byte-identical
     % work to the pre-F-H2 fill_search/4, so this bench/test seam is inference-
     % identical. The product artifact path uses fill_attempt_masked/9 below.
+    % Used0 is computed BEFORE call_with_inference_limit/3 so it is never
+    % charged against the search Budget.
+    seed_used(AllSlots, SearchSlots, Used0),
     call_with_inference_limit(
-        ( fill_search(SearchSlots, DictByLen, Index, none, []) -> R = ok ; R = exhausted ),
+        ( fill_search(SearchSlots, DictByLen, Index, none, Used0) -> R = ok ; R = exhausted ),
         Budget, Limit),
     (   Limit == inference_limit_exceeded
     ->  Outcome = not_proven, Numbered = [], InputWords = []
@@ -503,8 +544,9 @@ fill_attempt(SearchSlots, AllSlots, DictByLen, Index, Budget, Outcome, Numbered,
 % above stays byte-identical for the ratchet.
 fill_attempt_masked(SearchSlots, AllSlots, DictByLen, Index, Budget, Masks,
                     Outcome, Numbered, InputWords) :-
+    seed_used(AllSlots, SearchSlots, Used0),
     call_with_inference_limit(
-        ( fill_search(SearchSlots, DictByLen, Index, Masks, []) -> R = ok ; R = exhausted ),
+        ( fill_search(SearchSlots, DictByLen, Index, Masks, Used0) -> R = ok ; R = exhausted ),
         Budget, Limit),
     (   Limit == inference_limit_exceeded
     ->  Outcome = not_proven, Numbered = [], InputWords = []
@@ -522,7 +564,8 @@ fill_attempt_masked(SearchSlots, AllSlots, DictByLen, Index, Budget, Masks,
 %   filled canonical layout on stdout framed by SizeMode. FAILS (no stdout)
 %   on any non-filled outcome - not_proven (budget) or infeasible - after
 %   reporting the unfillable slot(s) on stderr (INV-3, never silent). Throws
-%   on a malformed grid/seed file or an unmatchable seed.
+%   on a malformed grid/seed file, an unmatchable seed, or two seeds pinning
+%   the same answer (fill_seed_duplicate).
 fill_solve(GridFile, SeedFileOrNone, DictFile, SizeMode) :-
     fill_prepare(GridFile, SeedFileOrNone, Size, Slots, SearchSlots),
     load_dict(DictFile, DictByLen, Index),
@@ -581,11 +624,25 @@ fill_place_and_emit(Size, Slots, SearchSlots, DictByLen, Index, Masks, SizeMode)
         fail
     ).
 
+% The fill emit boundary. First re-assert the unique-answers invariant the
+% solve path checks in crossword/4 (fill bypasses crossword/4, so without this
+% it never ran here): any duplicate that still reaches emit reports as the
+% clean hooked duplicate_answer error (exit 1), never the raw
+% domain_error(unique_key_pairs) from core's answer_meta_assoc/2. Defense in
+% depth only - seed_used/3 + check_unique_seed_answers/1 are the real fixes,
+% and this guard alone could NOT be (it would fail solvable grids the search
+% must instead fill with a non-duplicate word). The check sits HERE, outside
+% fill_attempt/8, so the gated bench window (call_time over fill_attempt/8)
+% is untouched on every rung.
+emit_fill(Numbered, InputWords, Size, SizeMode) :-
+    check_unique_answers(InputWords),
+    emit_fill_mode(SizeMode, Numbered, InputWords, Size).
+
 % fixed: the exact Size x Size canonical layout (blocks as null). (`max` would
 % crop, but a stock grid is already its own frame, so fixed is the norm.)
-emit_fill(Numbered, InputWords, Size, fixed) :-
+emit_fill_mode(fixed, Numbered, InputWords, Size) :-
     emit_json(Numbered, InputWords, Size).
-emit_fill(Numbered, InputWords, Size, max) :-
+emit_fill_mode(max, Numbered, InputWords, Size) :-
     emit_arrange(Numbered, InputWords, Size, max).
 
 fill_report_failure(not_proven, _Slots, _D, _I, Size) :-
@@ -784,6 +841,8 @@ prolog:error_message(fill_seed_no_slot(A)) -->
     [ 'fill: seed ~q does not match any slot of the grid (check its cells/direction)'-[A] ].
 prolog:error_message(fill_seed_clash(A)) -->
     [ 'fill: seed ~q clashes with another seed at a shared cell'-[A] ].
+prolog:error_message(fill_seed_duplicate(A)) -->
+    [ 'fill: seed ~q is pinned more than once; answers must be unique'-[A] ].
 % F-L2 index-artifact integrity failures (refuse, never silently rebuild).
 prolog:error_message(fill_index_missing(F)) -->
     [ 'fill: index artifact ~w not found (build one with `fill --dict DICT --save-index ~w`)'-[F, F] ].

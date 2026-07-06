@@ -1079,6 +1079,14 @@ byte-identity on every rung).
   error, e.g. pinning AAH against ENABLE). The seed fixture avoids the
   overlap. Deserves a product fix ticket (clean report, not a throw);
   output-semantics territory, so not this campaign's to change.
+  **RESOLVED (2026-07-06, fix/fill-seed-pin-crash;
+  docs/plans/fill-seed-pin-crash-fix.md):** the throw site was
+  answer_meta_assoc/2 (core.pl), not assign_clue_numbers. Seed answers now
+  pre-seed the search's Used set (fill.pl seed_used/3 — a correctness fix:
+  the search takes the non-duplicate alternative), duplicate seed answers
+  are rejected up front (fill_seed_duplicate, hooked), and fill's emit
+  boundary re-runs check_unique_answers/1 as defense in depth. The
+  g11_full_seed baseline was re-recorded (correctness-driven).
 - **Orchestrator decision (2026-07-05):** the plan's pre-campaign
   "--budget CLI hook or reconcile 800M/500M" fix is DEFERRED: the bench
   drives the budget-explicit fill_attempt/8 in-process, so no CLI surface

@@ -105,6 +105,59 @@ test(fill_seed_no_slot_throws, [throws(error(fill_seed_no_slot('CAT'), _))]) :-
     % run that no slot has -> no match.
     apply_seeds_frags(Slots, [frag('CAT', across, 2, [2, 3])]).
 
+% --- seed answers vs the search's no-duplicate rule (fill-seed-pin-crash-fix) --
+% fill_grid_split3 (mask ["...","###","..."]) has two INDEPENDENT 3-cell across
+% slots (the blocked middle row leaves no down run >= 2), so the searched row is
+% filled independently of the row-0 seed. Before the fix the search's Used set
+% started empty (seed answers were exempt from the no-duplicate rule), so it
+% could re-place the seed word and the duplicate blew up the emit with an
+% uncaught domain_error(unique_key_pairs).
+
+% Trigger A on a SOLVABLE grid: with dict [COW,PIG] and COW pinned, the searched
+% slot must take the non-duplicate alternative PIG (the search used to pick COW
+% - alphabetically first - and crash). Asserting the exact answer set guards the
+% CORRECTNESS of the fix, incl. the char-list-vs-atom trap (an atom-shaped Used
+% silently no-ops the dedup and this test would see COW twice), not just
+% no-throw.
+test(fill_seed_answer_reused_takes_alternative) :-
+    crosswordsmith_fill:fill_grid('fixtures/fill_grid_split3.json', _Size, Slots, _),
+    crosswordsmith_fill:apply_seeds('fixtures/fill_seed_cow_top.json', Slots, SeededKeys),
+    exclude(crosswordsmith_fill:seeded_slot(SeededKeys), Slots, SearchSlots),
+    crosswordsmith_fill:load_dict('fixtures/dict_cow_pig.txt', DictByLen, Index),
+    crosswordsmith_fill:fill_attempt(SearchSlots, Slots, DictByLen, Index, Outcome, Numbered, _),
+    Outcome == filled,
+    findall(A, ( member(W, Numbered), pw_answer(W, A) ), Answers0),
+    msort(Answers0, Answers),
+    Answers == ['COW', 'PIG'].
+
+% Trigger A when NO non-duplicate fill exists (the dictionary holds only the
+% seed word): a clean infeasible outcome. The body must not throw - plunit
+% fails an uncaught error, so this is the direct crash-regression guard (it
+% threw domain_error(unique_key_pairs) before the fix).
+test(fill_seed_answer_only_word_is_infeasible) :-
+    crosswordsmith_fill:fill_grid('fixtures/fill_grid_split3.json', _Size, Slots, _),
+    crosswordsmith_fill:apply_seeds('fixtures/fill_seed_cow_top.json', Slots, SeededKeys),
+    exclude(crosswordsmith_fill:seeded_slot(SeededKeys), Slots, SearchSlots),
+    crosswordsmith_fill:load_dict('fixtures/dict_cow.txt', DictByLen, Index),
+    crosswordsmith_fill:fill_attempt(SearchSlots, Slots, DictByLen, Index, Outcome, _, _),
+    Outcome == infeasible.
+
+% Trigger B: two seeds pinning the SAME answer are rejected up front with the
+% clean hooked error (neither slot is searched, so the Used-set fix cannot
+% catch this shape; reported before searching, like fill_seed_no_slot/clash).
+test(fill_duplicate_seed_answers_rejected,
+     [throws(error(fill_seed_duplicate('COW'), _))]) :-
+    crosswordsmith_fill:fill_grid('fixtures/fill_grid_split3.json', _Size, Slots, _),
+    crosswordsmith_fill:apply_seeds('fixtures/fill_seed_cow_both.json', Slots, _).
+
+% Defense in depth: the fill emit boundary re-runs core's unique-answers check
+% (the solve path already does, in crossword/4), so a duplicate that ever
+% reaches emit again reports the clean hooked duplicate_answer error - never
+% the raw domain_error(unique_key_pairs) from answer_meta_assoc/2.
+test(fill_emit_boundary_rejects_duplicate_answers,
+     [throws(error(duplicate_answer('COW'), _))]) :-
+    crosswordsmith_fill:emit_fill([], [['COW'], ['COW']], 3, fixed).
+
 % R11 (revamp audit): AC-FILL-1 "not proven within budget". A budget too small
 % to complete the search yields Outcome==not_proven - distinct from infeasible
 % (a genuinely 0-candidate slot) and from filled.

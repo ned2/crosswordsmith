@@ -37,14 +37,18 @@
 %   GridFile   - stock-grid mask, path relative to repo root
 %   DictFile   - word list, path relative to repo root (byte-frozen)
 %   Seeds      - none | a fragment file path (the seeds path; a rung must still
-%                complete). CAUTION (measured, Phase 0): a pinned answer is EXEMPT
-%                from the search's no-duplicate rule (fill.pl:196 guards searched
-%                slots only), so seeding a word the search would place anyway
-%                (e.g. AAH - the alphabetically FIRST word, every open 3-slot's
-%                first candidate) makes the search re-place it and the CLI emit
-%                then throws unique_key_pairs on the duplicate answer (exit 1).
-%                Seed distinctive later-alphabet words from the rung's own
-%                unseeded solution (fill_seed_11a: CYANO/TOMMY/READD).
+%                complete). The Phase 0 fixture trap (a pinned answer was EXEMPT
+%                from the search's no-duplicate rule, so seeding a word the
+%                search would place anyway - e.g. AAH - made it re-place the
+%                word and the CLI emit threw unique_key_pairs, exit 1) is
+%                CLOSED: seed answers now pre-seed the search's Used set
+%                (fill.pl seed_used/3 feeds fill_search_inc/5's
+%                `\+ memberchk(Word, Used)` dedup; see
+%                docs/plans/fill-seed-pin-crash-fix.md), so such a rung fills
+%                with the next candidate instead of crashing. The current seeds
+%                (fill_seed_11a: CYANO/TOMMY/READD, distinctive later-alphabet
+%                words from the rung's own unseeded solution) are kept - the
+%                rung's tree and output are unchanged.
 %   Iterations - measured repetitions (the gated metrics search_inf/load_inf are
 %                deterministic - 1 sample is exact; extra samples confirm + median the wall)
 %   Warmup     - unmeasured warmup repetitions. The first in-process fill_attempt
