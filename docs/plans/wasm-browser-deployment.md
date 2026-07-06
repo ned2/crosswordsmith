@@ -615,28 +615,50 @@ is tracked debt (mostly already owned by §9.1).
 
 ### 10.3 Tracked debt — build reproducibility & supply-chain (`build-wasm.sh`)
 
-- **swipl-devel *submodules* are unpinned** (HIGH). The HEAD guard checks only the
-  superproject sha, but the wasm build compiles `packages/{pcre,http,json,clib,…}`,
-  which are submodules; `git checkout <pin>` doesn't update them and the guard never
-  inspects their SHAs. Two runs can compile different sources with zero signal. Add a
-  `git submodule status` assertion (gated by `SWIPL_ALLOW_CHECKOUT` since it mutates
-  the shared tree), and fail loudly on a dirty submodule.
-- **zlib tarball has no integrity check and a rotating URL** (HIGH) —
-  `curl -sL zlib.net/… | tar` (no `--fail`, no sha256; `zlib.net` moves old releases
-  to `/fossils/`). Future 404 breakage + supply-chain exposure. Pin the fossils URL,
-  add `sha256sum -c`, use `curl -fsSL`.
-- **Pin guard ignores working-tree dirtiness** — a dirty tree at the right sha builds
-  modified sources while reporting success; also assert `git status --porcelain`
-  empty.
-- **Test toolchain not reproducible** — `package-lock.json` is gitignored, Playwright
-  is `^1.55`, README uses `npm install`. Commit the lockfile, pin exact, use `npm ci`.
-- **No artifact provenance / cache-busting** — the qlf/wasm/data/js carry no build id
-  tying them together; a redeploy that changes one and long-caches the rest "loads
-  and misbehaves" (the docs' own warning). Stamp a build manifest + content-hash the
-  filenames before any CDN deploy.
-- Lower: emsdk repo cloned unpinned; no `emcc --version` assertion after activation;
-  not standalone-CI-runnable (assumes a pre-existing `~/src/swipl-devel`); zlib branch
-  re-extracts over a possibly-dirty source dir (pcre2 branch `rm -rf`s first).
+> **Status 2026-07-06** (Batch 1 supply-chain hardening): the two HIGHs + quick
+> wins are **closed** — guards extracted into `wasm/build/verify-pin.sh` (each
+> unit-testable in ~1s without the ninja build) and called from `build-wasm.sh`;
+> see [`wasm-supply-chain-hardening.md`](./wasm-supply-chain-hardening.md). **Still
+> OPEN (Batch 2, OQ-5-gated — do before any npm/CDN publish, not before):**
+> reproducible test toolchain, artifact-provenance manifest, standalone-CI clone
+> path, and the optional emsdk repo-tag pin.
+
+- ✅ **CLOSED (Batch 1).** **swipl-devel *submodules* are unpinned** (HIGH). The HEAD
+  guard checked only the superproject sha, but the wasm build compiles
+  `packages/{pcre,http,json,clib,…}`, which are submodules; `git checkout <pin>`
+  doesn't update them and the guard never inspected their SHAs — two runs could
+  compile different sources with zero signal. `verify_submodules` now asserts the nine
+  WASM-compiled submodules sit at the superproject's recorded gitlinks
+  (`git submodule status`, leading-space = in-sync); auto-sync gated by
+  `SWIPL_ALLOW_CHECKOUT`.
+- ✅ **CLOSED (Batch 1).** **zlib tarball has no integrity check and a rotating URL**
+  (HIGH) — `curl -sL zlib.net/… | tar` (no `--fail`, no sha256; `zlib.net` moves old
+  releases to `/fossils/`). Now: pinned fossils URL, `curl -fsSL`, download →
+  `sha256sum -c` (`ZLIB_SHA256`) → extract.
+- ✅ **CLOSED (Batch 1).** **Pin guard ignores working-tree dirtiness** — a dirty tree
+  at the right sha built modified sources while reporting success. `verify_clean_tree`
+  now asserts `git status --porcelain` empty (`SWIPL_ALLOW_DIRTY=1` escape hatch).
+- ✅ **CLOSED (Batch 1).** **zlib re-extracts over a possibly-dirty source dir** (was
+  in the lower note) — the zlib block now `rm -rf`s the extract dir first, matching the
+  pcre2 branch.
+- ✅ **CLOSED (Batch 1).** **No `emcc --version` assertion after activation** (was in
+  the lower note) — `verify_emcc_version` now asserts the active compiler matches the
+  pinned `EMSDK_VERSION` (the load-bearing emsdk guard; activation resolves the
+  toolchain from the version number, not the repo HEAD).
+- ✅ **CLOSED (Batch 1) — new hardening beyond the listed rows.** **pcre2 tag is
+  movable with no commit assertion** — `git clone --branch pcre2-10.47` could compile a
+  retagged upstream silently. `verify_pcre2_commit` now asserts the clone resolved to
+  the pinned `PCRE2_COMMIT`.
+- ⏳ **OPEN (Batch 2).** **Test toolchain not reproducible** — `package-lock.json` is
+  gitignored, Playwright is `^1.55`, README uses `npm install`. Commit the lockfile,
+  pin exact, use `npm ci`.
+- ⏳ **OPEN (Batch 2).** **No artifact provenance / cache-busting** — the qlf/wasm/data/js
+  carry no build id tying them together; a redeploy that changes one and long-caches
+  the rest "loads and misbehaves" (the docs' own warning). Stamp a build manifest +
+  content-hash the filenames before any CDN deploy.
+- ⏳ **OPEN (Batch 2, lower).** emsdk repo cloned unpinned (cosmetic given the `emcc`
+  assert above — optional `--branch "$EMSDK_VERSION"`); not standalone-CI-runnable
+  (assumes a pre-existing `~/src/swipl-devel`).
 
 ### 10.4 Tracked debt — test-suite hardening
 

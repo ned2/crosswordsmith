@@ -81,9 +81,14 @@ wasm/build/build-wasm.sh          # verifies the swipl-devel pin; won't move a s
 
 It's idempotent-ish (skips already-staged deps) and drops all outputs into
 `client/` (gitignored). Overridable via env: `WASM_HOME`, `SWIPL_SRC`,
-`SWIPL_ALLOW_CHECKOUT=1`. The prose rationale (emsdk 6.0.1 pin, no native friend,
-qlf word-size, cmake-4.2.x noise) lives in the deployment plan §2 — the script
-is the executable record of it.
+`SWIPL_ALLOW_CHECKOUT=1` (let the script `git checkout` the pin + sync the
+WASM submodules on a shared tree), `SWIPL_ALLOW_DIRTY=1` (build despite a dirty
+`swipl-devel` working tree — the escape hatch for intentional local hacking;
+otherwise the build refuses to compile modified sources). The prose rationale
+(emsdk 6.0.1 pin, no native friend, qlf word-size, cmake-4.2.x noise) lives in
+the deployment plan §2 — the script is the executable record of it. The
+supply-chain guards themselves live in `wasm/build/verify-pin.sh` (sourced by
+the build script; see the hardening plan for the rationale).
 
 > **Why the app `.qlf` must be wasm-produced:** QLF is word-size-specific. The
 > file the browser loads must come from the *wasm* build's own swipl (run under
