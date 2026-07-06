@@ -1,5 +1,6 @@
 # Built WASM artifacts + qlf — reproducible from the build (see README), not source.
-swipl-web.js
-swipl-web.wasm
-swipl-web.data
+# swipl-web.* also covers the content-hashed copies (swipl-web.<sha256:12>.js …)
+# stamped by wasm/build/stamp-manifest.sh, as *.qlf does for the hashed qlf.
+swipl-web.*
 *.qlf
+build-manifest.json

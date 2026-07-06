@@ -11,7 +11,7 @@
     "check-types": "node golden_type_check.mjs"
   },
   "devDependencies": {
-    "playwright": "^1.55.0",
+    "playwright": "1.61.1",
     "typescript": "^5.6.0"
   }
 }

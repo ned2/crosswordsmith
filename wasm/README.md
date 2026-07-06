@@ -21,7 +21,8 @@ VM cost model: [`docs/research/swi-vm-wasm-performance.md`](../docs/research/swi
 |---|---|
 | `sdk/` | the JS/TS SDK: `crosswordsmith.mjs` (`createCrosswordsmith()` facade) + hand-written `crosswordsmith.d.ts` |
 | `client/` | the engine assets — served as static files; `harness.html` is the minimal SDK consumer (smoke/diagnostic page) |
-| `build/build-wasm.sh` | reproducible build: emsdk + deps → `swipl-web` → app `.qlf` |
+| `build/build-wasm.sh` | reproducible build: emsdk + deps → `swipl-web` → app `.qlf` → provenance manifest. Pins in `build/pins.sh`; guards in `build/verify-pin.sh`; manifest stamping in `build/stamp-manifest.sh` |
+| `THIRD_PARTY_NOTICES.md` | redistribution manifest for what the built bundle ships (SWI BSD-2-Clause, zlib, PCRE2, Emscripten glue; future UKACD18 obligation) — draft until publish (OQ-6) |
 | `test/` | native + headless-Chrome regression tests (Playwright + system Chrome); `run_all.sh` is the one-command battery (`make test-wasm`) |
 
 ### `sdk/`
@@ -38,6 +39,7 @@ VM cost model: [`docs/research/swi-vm-wasm-performance.md`](../docs/research/swi
 | `harness.html` | minimal SDK consumer + test host (`?noauto` for the raw-worker probes) |
 | `probe.html` | diagnostic page (library resolution / json autoload); use if the browser path breaks |
 | `swipl-web.{js,wasm,data}`, `crosswordsmith.qlf` | **build outputs — gitignored**, produced by `build/build-wasm.sh` |
+| `build-manifest.json` + content-hashed copies (`swipl-web.<sha256:12>.js` …) | **build outputs — gitignored**, stamped by `build/stamp-manifest.sh`: per-artifact sha256 + buildId + swipl commit/submodule SHAs + toolchain pins. `worker.js` prefers the hashed names when the manifest is present (unhashed fallback for a hand-staged dir) — a CDN deploy ships the hashed set + `worker.js` + the manifest, so a partial redeploy can't pair a new js with a stale cached wasm/qlf |
 
 ## Wire contract (v1)
 
@@ -80,15 +82,21 @@ wasm/build/build-wasm.sh          # verifies the swipl-devel pin; won't move a s
 ```
 
 It's idempotent-ish (skips already-staged deps) and drops all outputs into
-`client/` (gitignored). Overridable via env: `WASM_HOME`, `SWIPL_SRC`,
-`SWIPL_ALLOW_CHECKOUT=1` (let the script `git checkout` the pin + sync the
-WASM submodules on a shared tree), `SWIPL_ALLOW_DIRTY=1` (build despite a dirty
-`swipl-devel` working tree — the escape hatch for intentional local hacking;
-otherwise the build refuses to compile modified sources). The prose rationale
-(emsdk 6.0.1 pin, no native friend, qlf word-size, cmake-4.2.x noise) lives in
-the deployment plan §2 — the script is the executable record of it. The
-supply-chain guards themselves live in `wasm/build/verify-pin.sh` (sourced by
-the build script; see the hardening plan for the rationale).
+`client/` (gitignored), finishing with `build-manifest.json` + content-hashed
+artifact names (`wasm/build/stamp-manifest.sh` — provenance + CDN cache
+safety). **Cold runner:** when `$SWIPL_SRC` is absent it clones swipl-devel at
+the pin and inits the WASM submodules itself (`SWIPL_REPO_URL` overrides the
+remote), so a standalone CI box needs no pre-existing checkout. Overridable via
+env: `WASM_HOME`, `SWIPL_SRC`, `SWIPL_ALLOW_CHECKOUT=1` (let the script
+`git checkout` the pin + sync the WASM submodules on a shared tree),
+`SWIPL_ALLOW_DIRTY=1` (build despite a dirty `swipl-devel` working tree — the
+escape hatch for intentional local hacking; otherwise the build refuses to
+compile modified sources). The prose rationale (emsdk 6.0.1 pin, no native
+friend, qlf word-size, cmake-4.2.x noise) lives in the deployment plan §2 — the
+script is the executable record of it. Every pin lives in `wasm/build/pins.sh`
+(one source of truth); the supply-chain guards live in
+`wasm/build/verify-pin.sh` (sourced by the build script; see the hardening
+plan for the rationale).
 
 > **Why the app `.qlf` must be wasm-produced:** QLF is word-size-specific. The
 > file the browser loads must come from the *wasm* build's own swipl (run under
@@ -128,11 +136,13 @@ re-qcompiles `crosswordsmith.qlf` **with the WASM node swipl** (see "Why the
 app `.qlf` must be wasm-produced" above) — both skipped when nothing changed —
 then runs the value golden, the type lock, and the headless-Chrome probes
 behind a self-managed static server on a free port, aggregating exit codes
-(any failing step ⇒ non-zero). One-time prereq — the tests drive **system
-Chrome** (Playwright `channel:'chrome'`), so skip the browser download:
+(any failing step ⇒ non-zero). One-time prereq — install the pinned test
+toolchain from the **committed lockfile** (`npm ci`, reproducible; Playwright
+is pinned exact). The tests drive **system Chrome** (Playwright
+`channel:'chrome'`), so skip the browser download:
 
 ```bash
-( cd wasm/test && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install )
+( cd wasm/test && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm ci )
 ```
 
 The same battery layer by layer, cheapest first — useful when bisecting a
@@ -258,8 +268,12 @@ request from SWI's URL consult — the qlf still loads, and results are correct.
 - `fill` is the one unbrowserified verb (strategy §6 phase 4 — hard: dict
   delivery, memory ceiling, fastrw-under-wasm). `lint` and `export` landed
   2026-07-06 as additive dispatch clauses, proving the spine generalises.
-- npm packaging (asset-copy step, dual exports map, licensing manifest) is
-  deferred: the SDK is consumed in-repo (OQ-1 decision 2026-07-06; OQ-5/OQ-6
-  gate the publish).
+- npm packaging (asset-copy step, dual exports map) is deferred: the SDK is
+  consumed in-repo (OQ-1 decision 2026-07-06). The OQ-5 publish blockers are
+  now in place (provenance manifest + hashed names, cold-runner build,
+  committed lockfile — supply-chain Batch 2); the licensing manifest is
+  seeded as `wasm/THIRD_PARTY_NOTICES.md` (verbatim texts inline at publish —
+  OQ-6).
 - The JS↔qlf version assert / honoured-params echo (OQ-7) lands with
-  version-stamped asset paths at packaging time.
+  version-stamped asset paths at packaging time (`build-manifest.json` now
+  provides the stamped paths + qlf hash to assert against).

@@ -15,6 +15,9 @@
 #                  specific, a native x86-64 qlf would load-and-misbehave
 #                  under wasm32 (wasm/README.md "Why the app .qlf must be
 #                  wasm-produced"). Skipped when no input is newer.
+#   2.5 stamp      build-manifest.json + content-hashed artifact names
+#                  (wasm/build/stamp-manifest.sh) so the battery drives the
+#                  manifest-preferring load path in worker.js
 #   3. battery     value_golden.sh (21 checks), golden_type_check.mjs (4
 #                  goldens), then a self-managed static server on a free port
 #                  for headless.mjs (16 scenarios) + error_probe.mjs (4 cases).
@@ -67,9 +70,9 @@ done
 
 if [ ! -d "$HERE/node_modules" ]; then
   echo "test-wasm FAILED: wasm/test/node_modules missing (typescript + playwright)." >&2
-  echo "  Install once - the tests drive system Chrome (Playwright channel:'chrome')," >&2
-  echo "  so skip the browser download:" >&2
-  echo "    ( cd wasm/test && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install )" >&2
+  echo "  Install once from the committed lockfile - the tests drive system Chrome" >&2
+  echo "  (Playwright channel:'chrome'), so skip the browser download:" >&2
+  echo "    ( cd wasm/test && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm ci )" >&2
   exit 1
 fi
 
@@ -108,6 +111,13 @@ if [ -n "$stale" ]; then
 else
   echo "  fresh  crosswordsmith.qlf - skip qcompile"
 fi
+
+# --- 2.5 stamp provenance (build-manifest.json + content-hashed names) ---------
+# Steps 1-2 may have replaced artifacts, so re-stamp; worker.js prefers the
+# manifest's hashed names when present, so the battery below exercises the
+# real manifest-driven load path (supply-chain Batch 2). Deterministic and ~1s.
+CLIENT_DIR="$CLIENT" SWIPL_SRC="$(dirname "$WASM_BUILD")" \
+  "$ROOT/wasm/build/stamp-manifest.sh"
 
 # --- 3. the battery ------------------------------------------------------------
 status=0

@@ -1,6 +1,10 @@
 # Plan: WASM build supply-chain hardening
 
-Status: **spec / pre-implementation** · Drafted 2026-07-06.
+Status: **Batch 1 landed** (guards in `wasm/build/verify-pin.sh`, zlib
+fossils-URL + sha256 — on `main`); **Batch 2 landed** (provenance manifest,
+cold-runner bootstrap, committed lockfile — see
+[`wasm-supply-chain-batch2.md`](./wasm-supply-chain-batch2.md)) · Drafted
+2026-07-06.
 
 Scope: close the still-OPEN build-reproducibility / supply-chain debt tracked in
 [`wasm-browser-deployment.md`](./wasm-browser-deployment.md) §10.3. Every change
@@ -435,10 +439,11 @@ standalone-CI-runnable') + the asset-copy-into-tarball / package-size step":
 
 | Item | Notes |
 |---|---|
-| standalone-CI-runnable | clone `swipl-devel` @ pin + `submodule update --init` when `SWIPL_SRC` absent (`:24`, `:70`). §6's from-clean run is the first step. **This is OQ-5.** |
-| artifact provenance manifest + content-hash filenames | stamp SWIPL_COMMIT + submodule SHAs + emsdk/zlib/pcre2 pins + qlf sha256; hash `swipl-web.{js,wasm,data}` + `crosswordsmith.qlf`. Prevents partial-CDN "load-and-misbehave" (`wasm-browser-deployment.md:270-278`, "before any CDN deploy" `:636`). **OQ-5 asset step.** Touches `worker.js`/`sdk/` loader. |
-| committed `package-lock.json` + `npm ci` | un-ignore `wasm/test/.gitignore:2` + commit lock + pin Playwright exact; supports reproducible CI under OQ-5. |
-| (optional) emsdk repo `--branch` pin | §5.3; cosmetic given the emcc assert. |
+| ✅ **DONE** standalone-CI-runnable | `bootstrap_swipl_src` (verify-pin.sh): clone `swipl-devel` @ pin + `submodule update --init` the nine WASM submodules when `SWIPL_SRC` absent; `SWIPL_REPO_URL` overridable; never mutates a pre-existing tree. §6's from-clean run remains owed at first real CI/CDN use. **This is OQ-5.** |
+| ✅ **DONE** artifact provenance manifest + content-hash filenames | `wasm/build/stamp-manifest.sh` (pins single-sourced in `wasm/build/pins.sh`): `build-manifest.json` = buildId + per-artifact sha256 + swipl commit/submodule SHAs + toolchain pins; `<stem>.<sha256:12><ext>` copies; `worker.js` prefers hashed names when the manifest is present (unhashed fallback). Called by `build-wasm.sh` step 5 + `run_all.sh` step 2.5. **OQ-5 asset step.** |
+| ✅ **DONE** committed `package-lock.json` + `npm ci` | lockfile un-ignored + committed; Playwright pinned exact (`1.61.1`); `run_all.sh` preflight + wasm/README say `npm ci`. |
+| ✅ **DONE** (optional) emsdk repo `--branch` pin | fresh clones use `--branch "$EMSDK_VERSION" --depth 1`; cosmetic given the emcc assert. |
+| ✅ **SEEDED** OQ-6 licensing manifest | `wasm/THIRD_PARTY_NOTICES.md` (SWI BSD-2-Clause, zlib, PCRE2, Emscripten glue; recorded future UKACD18 verbatim obligation); verbatim texts inlined at publish. |
 
 There is **no dependency from Batch 1 into Batch 2** — Batch 1 hardens today's
 local build and can ship immediately; Batch 2 is only worth building when

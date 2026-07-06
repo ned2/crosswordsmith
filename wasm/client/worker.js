@@ -24,8 +24,9 @@
 //
 // Requires, sitting next to this file: swipl-web.js / swipl-web.wasm /
 // swipl-web.data (built with `ninja swipl-web`) and crosswordsmith.qlf (the
-// qcompiled app - see wasm/README.md). Falls back to consulting
-// solve_browser.pl if the qlf is absent.
+// qcompiled app - see wasm/README.md) — resolved through the content-hashed
+// names in build-manifest.json when that is present (see loadBuildManifest
+// below). Falls back to consulting solve_browser.pl if the qlf is absent.
 
 // SWI's WASM URL helpers (e.g. prolog.url_properties, used by consult(URL))
 // reach for a browser `window`, which does not exist inside a Worker — without
@@ -34,8 +35,32 @@
 // resolves to this worker's URL. Must run BEFORE importScripts.
 self.window = self;
 
+// Artifact provenance (supply-chain Batch 2): build-manifest.json, stamped by
+// wasm/build/stamp-manifest.sh, maps each artifact to its content-hashed name
+// (swipl-web.<sha256:12>.js …). Prefer those when the manifest is present so a
+// CDN redeploy can never pair a new js with a long-cached stale wasm/data/qlf;
+// fall back to the unhashed names when it is absent (hand-staged dev dir).
+// Fetched with SYNCHRONOUS XHR on purpose: importScripts below is synchronous,
+// so an async fetch cannot precede it at top level — and sync XHR is legal and
+// jank-free off the main thread.
+function loadBuildManifest() {
+  try {
+    const xhr = new XMLHttpRequest();
+    xhr.open("GET", new URL("./build-manifest.json", self.location.href).href,
+             false /* synchronous */);
+    xhr.send();
+    if (xhr.status >= 200 && xhr.status < 300) return JSON.parse(xhr.responseText);
+  } catch (_) { /* no manifest — unhashed fallback below */ }
+  return null;
+}
+const MANIFEST = loadBuildManifest();
+function assetName(name) {
+  const entry = MANIFEST && MANIFEST.artifacts && MANIFEST.artifacts[name];
+  return (entry && entry.hashed) || name;
+}
+
 // Emscripten MODULARIZE output defines the global SWIPL after importScripts.
-importScripts("./swipl-web.js");
+importScripts("./" + assetName("swipl-web.js"));
 
 let Prolog = null;
 let ready = null;
@@ -44,8 +69,9 @@ function init() {
   if (ready) return ready;
   ready = SWIPL({
     arguments: ["-q"],
-    // Resolve swipl-web.wasm / swipl-web.data relative to this worker.
-    locateFile: (file) => new URL("./" + file, self.location.href).href,
+    // Resolve swipl-web.wasm / swipl-web.data relative to this worker,
+    // through the manifest's hashed names when stamped.
+    locateFile: (file) => new URL("./" + assetName(file), self.location.href).href,
   }).then(async (module) => {
     Prolog = module.prolog;
     // NB: the search's stack cap is NOT set here. Prolog stacks are heap-backed and
@@ -60,7 +86,8 @@ function init() {
     // Use an ABSOLUTE URL: inside a Worker there is no `window`, so SWI cannot
     // derive a base URL for a relative consult path (it logs "window is not
     // defined") and "./crosswordsmith.qlf" would 404. Resolve it ourselves.
-    await Prolog.consult(new URL("./crosswordsmith.qlf", self.location.href).href);
+    await Prolog.consult(
+      new URL("./" + assetName("crosswordsmith.qlf"), self.location.href).href);
     return Prolog;
   });
   return ready;

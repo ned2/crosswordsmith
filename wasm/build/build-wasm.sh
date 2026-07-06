@@ -3,9 +3,11 @@
 #
 # Turns the prose recipe in docs/plans/wasm-browser-deployment.md §2 into one
 # runnable script. It (0) activates emsdk, (1) stages zlib+pcre2 into $WASM_HOME,
-# (2) builds swipl-web from our pinned swipl-devel commit, (3) copies the three
-# web artifacts into wasm/client/, and (4) qcompiles the app into
-# wasm/client/crosswordsmith.qlf using the *wasm* swipl (correct pointer size).
+# (2) builds swipl-web from our pinned swipl-devel commit (cloning it first on a
+# cold runner), (3) copies the three web artifacts into wasm/client/, (4)
+# qcompiles the app into wasm/client/crosswordsmith.qlf using the *wasm* swipl
+# (correct pointer size), and (5) stamps build-manifest.json + content-hashed
+# artifact names (provenance — see wasm/build/stamp-manifest.sh).
 #
 # Everything it produces under wasm/client/ is gitignored (see .gitignore) — the
 # repo tracks this recipe, not the 3.9 MB of binaries.
@@ -18,21 +20,21 @@
 #   SWIPL_ALLOW_CHECKOUT=1 …            # allow the script to `git checkout` the pin
 #   SWIPL_ALLOW_DIRTY=1 …               # build despite a dirty swipl-devel tree
 #   WASM_HOME=… SWIPL_SRC=… …          # override locations
+#   SWIPL_REPO_URL=…                    # remote for the cold-runner clone
 set -euo pipefail
 
 # --- configuration (override via env) ---------------------------------------
 : "${WASM_HOME:=$HOME/wasm}"                 # staging prefix for cross-compiled deps
 : "${SWIPL_SRC:=$HOME/src/swipl-devel}"      # the swipl-devel checkout to build from
-SWIPL_COMMIT="aa6289399"                     # our pin (V10.1.10-17-g…, 2026-07-01)
-EMSDK_VERSION="6.0.1"                         # npm-swipl-wasm's pin; swipl-devel has no wasm CI
-ZLIB_VERSION="1.3.2"
-ZLIB_SHA256="bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16"
-PCRE2_VERSION="10.47"
-PCRE2_COMMIT="f454e231fe5006dd7ff8f4693fd2b8eb94333429"
 
 # repo root = two levels up from this script (wasm/build/ -> repo root)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+# every supply-chain pin (SWIPL_COMMIT, EMSDK/ZLIB/PCRE2 versions + hashes)
+# lives in pins.sh — one source of truth shared with stamp-manifest.sh.
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/pins.sh"
 CLIENT_DIR="$REPO_ROOT/wasm/client"
 BUILD_DIR="$SWIPL_SRC/build.wasm"
 
@@ -47,7 +49,10 @@ source "$SCRIPT_DIR/verify-pin.sh"
 # --- 0. toolchain: emsdk -----------------------------------------------------
 log "0. emsdk $EMSDK_VERSION"
 if [ ! -d "$WASM_HOME/emsdk" ]; then
-  git clone https://github.com/emscripten-core/emsdk "$WASM_HOME/emsdk"
+  # --branch pins the repo tag too (emsdk tags per SDK version) — cosmetic
+  # defense-in-depth; verify_emcc_version below is the load-bearing guard.
+  git clone --branch "$EMSDK_VERSION" --depth 1 \
+      https://github.com/emscripten-core/emsdk "$WASM_HOME/emsdk"
 fi
 ( cd "$WASM_HOME/emsdk" && ./emsdk install "$EMSDK_VERSION" && ./emsdk activate "$EMSDK_VERSION" )
 # shellcheck disable=SC1091
@@ -89,6 +94,9 @@ fi
 
 # --- 2. build swipl-web from OUR pinned commit ------------------------------
 log "2. swipl-web from $SWIPL_SRC @ $SWIPL_COMMIT"
+# Cold runner / standalone CI (Batch 2): when $SWIPL_SRC is absent, clone the
+# pin + init the WASM submodules (never mutates a pre-existing tree).
+bootstrap_swipl_src "$SWIPL_SRC" "$SWIPL_COMMIT"
 # Supply-chain guards (all read-only unless SWIPL_ALLOW_CHECKOUT=1), each in
 # verify-pin.sh so they unit-test in ~1s without the ninja build:
 #  1. superproject at the pin (won't move a shared HEAD unless allowed);
@@ -128,5 +136,13 @@ node "$BUILD_DIR/src/swipl.js" \
   -g "qcompile('$CLIENT_DIR/solve_browser.pl', [include(user)]), halt" \
   -t 'halt(1)'
 mv "$CLIENT_DIR/solve_browser.qlf" "$CLIENT_DIR/crosswordsmith.qlf"
+
+# --- 5. provenance: build-manifest.json + content-hashed names ---------------
+# Ties the four outputs together (buildId, per-artifact sha256, swipl commit +
+# submodule SHAs, toolchain pins) and emits <stem>.<sha256:12><ext> copies the
+# worker prefers when the manifest is present — a CDN redeploy can no longer
+# pair a new js with a long-cached stale wasm/qlf.
+log "5. provenance -> $CLIENT_DIR/build-manifest.json"
+CLIENT_DIR="$CLIENT_DIR" SWIPL_SRC="$SWIPL_SRC" "$SCRIPT_DIR/stamp-manifest.sh"
 
 log "done — serve wasm/client/ (see wasm/README.md) and open the page."
