@@ -1,0 +1,38 @@
+{
+  "gridLength": 3,
+  "title": "Sample Puzzle",
+  "author": "A. Setter",
+  "grid": [
+    [
+      {"across": 1, "down": 1, "letter": "C", "number": 1},
+      {"across": 1, "down": null, "letter": "A", "number": null},
+      {"across": 1, "down": null, "letter": "T", "number": null}
+    ],
+    [
+      {"across": null, "down": 1, "letter": "O", "number": null},
+      null,
+      null
+    ],
+    [
+      {"across": null, "down": 1, "letter": "W", "number": null},
+      null,
+      null
+    ]
+  ],
+  "words": [
+    {
+      "number": 1,
+      "direction": "across",
+      "answer": "CAT",
+      "cells": [[0, 0], [0, 1], [0, 2]],
+      "meta": {"clue": "Feline"}
+    },
+    {
+      "number": 1,
+      "direction": "down",
+      "answer": "COW",
+      "cells": [[0, 0], [1, 0], [2, 0]],
+      "meta": {}
+    }
+  ]
+}

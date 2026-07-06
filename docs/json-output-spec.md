@@ -267,6 +267,38 @@ contract: a consumer may ignore `diagnostics` wholesale and lose nothing but
 provenance. Downstream converters that cannot represent it (ipuz, Exolve)
 treat it as metadata-class content (drop-and-warn).
 
+### 6.5 `title` and `author`
+
+Two **optional** top-level strings naming the puzzle and its setter:
+
+| Field    | Type             | Meaning |
+|----------|------------------|---------|
+| `title`  | string \| absent | the puzzle's title |
+| `author` | string \| absent | the setter / author |
+
+Both are **absent by default**, and `arrange` never emits them — it has no
+source for a title or a setter (there is no title input flag). They exist so
+downstream tools that *do* have this data (hand edits, the `xword` native
+emitter) can carry it on the canonical layout, and so `export` can pass it
+through to interchange formats that model it: ipuz `title` / `author`, Exolve
+`exolve-title` / `exolve-setter`.
+
+`export` treats a missing value — an absent key **or** a JSON `null` — as
+absent and **invents nothing**, with one documented exception: Exolve's
+`exolve-title` falls back to `Untitled` when no title is present, *because
+Exet's Save crashes on a null/absent title* (see
+[`exet-verification.md`](./exet-verification.md)). The ipuz side and the Exolve
+`exolve-setter` invent nothing; a title-less layout therefore emits no ipuz
+`title` key at all.
+
+**Additive-optional compatibility rule.** This payload carries no `version`
+field; the compatibility story is instead that **every schema addition is
+additive-optional**. A new field is always optional, its absence means today's
+semantics, no previously-valid payload is invalidated by adding it, and a
+consumer that does not recognise a field ignores it (exactly as with
+`diagnostics`, §6.4). `title` / `author` are the first fields added under this
+rule.
+
 ## 7. Mapping from the current format
 
 | Current | New |

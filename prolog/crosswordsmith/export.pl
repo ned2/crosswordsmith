@@ -95,6 +95,16 @@ word_dir(W, Dir) :-
 word_clue_text(W, Text) :-
     ( get_dict(meta, W, M), is_dict(M), get_dict(clue, M, C) -> Text = C ; Text = "" ).
 
+% Optional top-level anchor fields (json-output-spec §6.5): the layout MAY
+% carry a `title` and/or `author` string. "Present" means bound to a string;
+% an absent key OR a JSON null (however the reader spells it) both count as
+% ABSENT, so nothing is invented at read time. The transforms below decide
+% per-format what an absent value means (ipuz: omit; exolve: title falls back
+% to the Exet-safe default, author is simply omitted).
+layout_string_field(Dict, Key, Value) :-
+    get_dict(Key, Dict, Value),
+    string(Value).
+
 
 % --- enumeration: derive "(5,5)" / "(4-5)" from spaces/hyphens (§6.3) ---------
 
@@ -147,30 +157,35 @@ enum_clean_pairs([S, R | Rest], Emitted, Out) :-
 %   Transform a canonical layout dict (export_layout_dict/2-validated) into
 %   an ipuz v2 crossword dict: invert null->"#", split the merged cell into
 %   parallel puzzle/solution arrays, group words by direction into a clues
-%   dict, add version/kind/dimensions. ipuz carries no symmetry field -
-%   symmetry stays a crosswordsmith lint concept. On gate-passing malformed
-%   CONTENT (e.g. a bad cell) it FAILS by design with no partial output
-%   (P17) - the shape gate is not schema validation.
-layout_to_ipuz(Dict,
-    _{ version: "http://ipuz.org/v2",
-       kind: ["http://ipuz.org/crossword#1"],
-       % A default title (optional in ipuz, so kotwords is unaffected). Exet
-       % imports ipuz by converting it to Exolve and its format-agnostic
-       % fileTitle() crashes on a null title, so a non-null one keeps the ipuz
-       % round-trippable through Exet too - mirrors the Exolve default (V1).
-       title: "Untitled",
-       dimensions: _{width:N, height:N},
-       empty: 0,
-       puzzle: Puzzle,
-       solution: Solution,
-       clues: _{'Across':Across, 'Down':Down} }) :-
+%   dict, add version/kind/dimensions. `title`/`author` ride through ONLY
+%   when the layout carries them (both optional in ipuz, so kotwords is
+%   unaffected either way) - nothing is invented (AC-EXP-3). The Exet-crash
+%   rationale that once forced a default here now lives on the Exolve side
+%   (exolve_title_line/2), where the ecosystem requirement actually is.
+%   ipuz carries no symmetry field - symmetry stays a crosswordsmith lint
+%   concept. On gate-passing malformed CONTENT (e.g. a bad cell) it FAILS by
+%   design with no partial output (P17) - the shape gate is not schema
+%   validation.
+layout_to_ipuz(Dict, Ipuz) :-
     get_dict(gridLength, Dict, N),
     get_dict(grid, Dict, Rows),
     maplist(ipuz_puzzle_row, Rows, Puzzle),
     maplist(ipuz_solution_row, Rows, Solution),
     get_dict(words, Dict, Words),
     ipuz_clues(Words, across, Across),
-    ipuz_clues(Words, down, Down).
+    ipuz_clues(Words, down, Down),
+    % Pass through title/author only when present; put_dict/3 adds the pairs
+    % to the base dict (json_write_dict re-sorts all keys, so order is moot).
+    findall(K-V, ( member(K, [title, author]), layout_string_field(Dict, K, V) ), Anchors),
+    put_dict(Anchors,
+        _{ version: "http://ipuz.org/v2",
+           kind: ["http://ipuz.org/crossword#1"],
+           dimensions: _{width:N, height:N},
+           empty: 0,
+           puzzle: Puzzle,
+           solution: Solution,
+           clues: _{'Across':Across, 'Down':Down} },
+        Ipuz).
 
 ipuz_puzzle_row(Row, Out) :- maplist(ipuz_puzzle_cell, Row, Out).
 ipuz_puzzle_cell(Cell, Out) :-
@@ -226,15 +241,15 @@ layout_to_exolve(Dict, Text) :-
     exolve_clue_lines(Words, down, DownLines),
     format(atom(WLine), "  exolve-width: ~w", [N]),
     format(atom(HLine), "  exolve-height: ~w", [N]),
-    append([ ['exolve-begin',
-              '  exolve-id: crosswordsmith-export',
-              % A default title: Exet requires a non-null title to save (its
-              % fileTitle() does title.replace(...) and crashes on a null/absent
-              % title), so emit one even though the canonical layout has none.
-              % It is an editable placeholder in any downstream tool. (AC-EXP-2.)
-              '  exolve-title: Untitled',
-              WLine, HLine,
-              '  exolve-grid:' ],
+    exolve_title_line(Dict, TitleLine),
+    exolve_setter_lines(Dict, SetterLines),
+    % No exolve-id: Exolve documents it as optional and auto-derives it from a
+    % content signature, so a constant `crosswordsmith-export` id carried no
+    % information and did not preserve solving state across edits (xword-spec
+    % ~:242). Head is `exolve-begin`, the title line, then the setter line iff
+    % an author is present.
+    append([ ['exolve-begin', TitleLine | SetterLines],
+             [WLine, HLine, '  exolve-grid:'],
              GridLines,
              ['  exolve-across:'], AcrossLines,
              ['  exolve-down:'],   DownLines,
@@ -242,6 +257,26 @@ layout_to_exolve(Dict, Text) :-
            AllLines),
     atomic_list_concat(AllLines, '\n', Body),
     atom_concat(Body, '\n', Text).
+
+% exolve-title: the layout's title when present, else an Exet-safe default.
+% The default exists ONLY because Exet's Save crashes on a null/absent title
+% (its format-agnostic fileTitle() does title.replace(...) — see
+% docs/exet-verification.md:144); it is an editable placeholder in any
+% downstream tool. This is the one place the engine invents a value, and it is
+% a format-ecosystem requirement, not parity-chasing (AC-EXP-2 / xword-spec Q5).
+exolve_title_line(Dict, Line) :-
+    ( layout_string_field(Dict, title, Title) -> true ; Title = "Untitled" ),
+    format(atom(Line), "  exolve-title: ~w", [Title]).
+
+% exolve-setter: the layout's author when present; omitted otherwise (nothing
+% invented — the Exet default defends the title alone). Returns a one- or
+% zero-element line list so the caller can splice it inline.
+exolve_setter_lines(Dict, Lines) :-
+    (   layout_string_field(Dict, author, Author)
+    ->  format(atom(Line), "  exolve-setter: ~w", [Author]),
+        Lines = [Line]
+    ;   Lines = []
+    ).
 
 exolve_grid_row(Row, Line) :-
     maplist(exolve_cell_char, Row, Chars),
