@@ -361,21 +361,24 @@ Consequences of the table:
   native→ipuz→native preserves the whole puzzle but drops `link`/`meta` at the
   ipuz hop; native→Exolve→native likewise. Payload-lossless round-trips need a
   format that carries the metadata (today only native→native qualifies).
-- **v1 serializer coverage gaps fail strict, never drop silently.** The one
-  remaining structural property the *format* can hold but the v1 *serializer*
-  does not yet emit — rebus → Exolve — fails with a "not supported yet" error
-  naming a capable target, per the D7 rule (a serializer gap must behave like a
-  `✗` cell, not like metadata). Closing it is ordinary later work, not a
-  deferred decision. **Prefilled cells → ipuz is now closed**: a given cell
-  serializes to a puzzle-cell `value` and round-trips back (the ipuz parser
-  reads that `value` as a prefilled letter). **Shaded/styled cells → Exolve is
-  now closed serialize-only**: a background-shade `color` style emits a
-  top-level `exolve-colour` directive (text/border colour, `imagebg`, `mark`,
-  boolean `highlight`, … still fail-strict — a narrow, not a removal). Exolve's
-  colour model is strictly coarser than the ipuz StyleSpec, so `exolve→ipuz`
-  cannot reconstruct the exact StyleSpec; that direction is **puzzle-lossless
-  only**, and because a shade is *structure* not metadata it never warns — the
-  serializer either maps the shade or fails-strict on an unmappable style key.
+- **The three former v1 serializer coverage gaps are now closed** — they each
+  emit the target's native representation instead of fail-striking as a `✗`
+  would (the D7 rule that a serializer gap behaves like a `✗` cell still governs
+  anything genuinely unmappable):
+  - **prefilled cells → ipuz** — a given cell serializes to a puzzle-cell
+    `value` and round-trips back (the ipuz parser reads that `value` as a
+    prefilled letter).
+  - **rebus → Exolve** — a multi-char cell flips the whole grid into
+    `exolve-option: rebus-cells` mode (space-separated tokens) and round-trips
+    back through the rebus-mode tokeniser; a grid with no rebus cell stays in
+    the compact non-spaced form byte-for-byte (D6).
+  - **shaded/styled cells → Exolve** (**serialize-only**) — a background-shade
+    `color` style emits a top-level `exolve-colour` directive. Exolve's colour
+    model is strictly coarser than the ipuz StyleSpec, so `exolve→ipuz` cannot
+    reconstruct the exact StyleSpec — that direction is **puzzle-lossless only**.
+    A shade is *structure* not metadata, so it never warns: the serializer maps
+    the `color` shade or fails-strict on an unmappable style key (text/border
+    colour, `imagebg`, `mark`, boolean `highlight`, … — a narrow, not a removal).
 
 **Deferred escape hatches** (not rejected): (a) **best-effort *structural***
 conversion (crop/flatten with warnings); (b) **uplifting native's model** (add

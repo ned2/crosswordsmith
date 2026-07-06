@@ -111,10 +111,6 @@ class TestStructuralFailures:
         with pytest.raises(XwordError, match="unfilled.*ipuz or exolve"):
             convert_text(src, "native")
 
-    def test_rebus_blocks_exolve(self, fixtures):
-        with pytest.raises(XwordError, match="rebus.*ipuz"):
-            convert_text((fixtures / "sample.ipuz.json").read_text(), "exolve")
-
     def test_foreign_styling_blocks_native_and_exolve(self):
         # `colortext` (text colour) is a real ipuz StyleSpec key with no Exolve
         # home — exolve-colour sets background only — so it stays fail-strict
@@ -158,6 +154,27 @@ class TestPrefilledToIpuz:
         via, _ = convert_text(src, "ipuz")
         back, _ = convert_text(via, "exolve")
         assert parse_board(back, "exolve") == parse_board(src, "exolve")
+
+
+class TestRebusToExolve:
+    """Gap 1 (closed): a rebus (multi-char) cell serializes to Exolve via a
+    whole-grid `exolve-option: rebus-cells` switch (space-separated tokens) and
+    round-trips back through the rebus-mode tokeniser."""
+
+    def test_rebus_serializes_and_parses_back(self, fixtures):
+        src = (fixtures / "sample.ipuz.json").read_text()
+        out, _ = convert_text(src, "exolve")
+        assert "  exolve-option: rebus-cells" in out
+        assert "    PH E F" in out  # grid switched to space-separated tokens
+        board = parse_board(out, "exolve")
+        assert board.grid[1][0].letter == "PH"  # rebus survives the parse-back
+        assert board.grid[0][1].circle  # a decorator still rides its token (B@)
+
+    def test_no_rebus_stays_compact(self):
+        # a grid with no multi-char cell must NOT switch modes (byte-level D6)
+        out, _ = convert_text(mini_exolve("CAB", "A.U", "BUS"), "exolve")
+        assert "exolve-option" not in out
+        assert "    CAB" in out  # compact, non-spaced row
 
 
 class TestShadedToExolve:
