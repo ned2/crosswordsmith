@@ -62,15 +62,32 @@ verify_clean_tree() {
 # prefixes drift with '+' (checked-out != recorded), '-' (uninitialised) or 'U'
 # (conflict); an in-sync submodule shows a leading space. So: fail on any line
 # that is not leading-space. Auto-tracks a SWIPL_COMMIT bump (no SHA list here).
+#
+# SWIPL_ALLOW_CHECKOUT=1 makes this guard SYNC a drift rather than just fail,
+# mirroring verify_superproject_pin's opt-in mutation of the shared tree. This
+# also covers the already-at-pin case: verify_superproject_pin only syncs the
+# submodules it drags along a superproject checkout, so when HEAD is already the
+# pin but a submodule has drifted, THIS is the function that honours the flag.
 verify_submodules() {
   local src="$1" drift
   drift="$(git -C "$src" submodule status $WASM_SUBMODULES | grep -vE '^ ' || true)"
   if [ -n "$drift" ]; then
-    echo "ERROR: swipl-devel WASM submodule(s) drifted or uninitialized:" >&2
-    echo "$drift" >&2
-    echo "  Sync them:  git -C $src submodule update --init -- $WASM_SUBMODULES" >&2
-    echo "  (or re-run with SWIPL_ALLOW_CHECKOUT=1 to let this script sync them)" >&2
-    return 1
+    if [ "${SWIPL_ALLOW_CHECKOUT:-0}" = "1" ]; then
+      echo "  syncing drifted WASM submodule(s) (SWIPL_ALLOW_CHECKOUT=1)"
+      git -C "$src" submodule update --init -- $WASM_SUBMODULES
+      drift="$(git -C "$src" submodule status $WASM_SUBMODULES | grep -vE '^ ' || true)"
+      if [ -n "$drift" ]; then
+        echo "ERROR: WASM submodule(s) still drifted after sync:" >&2
+        echo "$drift" >&2
+        return 1
+      fi
+    else
+      echo "ERROR: swipl-devel WASM submodule(s) drifted or uninitialized:" >&2
+      echo "$drift" >&2
+      echo "  Sync them:  git -C $src submodule update --init -- $WASM_SUBMODULES" >&2
+      echo "  (or re-run with SWIPL_ALLOW_CHECKOUT=1 to let this script sync them)" >&2
+      return 1
+    fi
   fi
 }
 
