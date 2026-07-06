@@ -133,12 +133,18 @@ stockgrid_validate(grid(_Name, Size, Mask), Verdict, Fails) :-
     lint_run(Words, Size, 'blocked-uk', false, Report),
     get_dict(verdict, Report, V),
     ( Isolated == [] -> Verdict = V ; Verdict = 'FAIL' ),
+    % lint_run reports words in input order, so pair each report entry back to
+    % its source pw/8 POSITIONALLY (nth0/3 as an in-order index/element
+    % generator) - no re-search of Ws, and no reliance on report dicts being
+    % pairwise distinct.
     findall(fail(Rule, Num, Cells),
-            ( get_dict(words, Report, Ws), member(WR, Ws),
+            ( get_dict(words, Report, Ws),
+              nth0(I, Ws, WR),
+              nth0(I, Words, SrcW),
               get_dict(results, WR, Rs), member(Res, Rs),
               get_dict(severity, Res, 'FAIL'), get_dict(rule, Res, Rule),
-              get_dict(number, WR, Num), nth0(I, Ws, WR),
-              nth0(I, Words, SrcW), pw_cells(SrcW, Cells) ),
+              get_dict(number, WR, Num),
+              pw_cells(SrcW, Cells) ),
             WordFails),
     findall(fail(Rule, grid, none),
             ( get_dict(grid, Report, GRs), member(GR, GRs),
@@ -154,8 +160,9 @@ stockgrid_validate_file(File, Verdict, Fails) :-
 % Design-time report on stderr for one grid file (the "draft -> lint -> iterate"
 % loop); succeeds iff the grid is legal (Verdict \== 'FAIL').
 stockgrid_report(File) :-
-    stockgrid_load(File, grid(Name, Size, _Mask)),
-    stockgrid_validate_file(File, Verdict, Fails),
+    stockgrid_load(File, Grid),
+    Grid = grid(Name, Size, _Mask),
+    stockgrid_validate(Grid, Verdict, Fails),
     format(user_error, "~w (~wx~w): ~w~n", [Name, Size, Size, Verdict]),
     forall(member(F, Fails), format(user_error, "    ~q~n", [F])),
     Verdict \== 'FAIL'.

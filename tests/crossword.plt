@@ -229,18 +229,18 @@ test(duplicate_answer_rejected, [throws(error(duplicate_answer('CAT'), _))]) :-
 % Regression for I5: a word must stay a MAXIMAL run. Placing DFEEE across over
 % an already-placed DFEE (same start cell) would make DFEE a "word inside a
 % word" - two same-direction answers at one start, which assign_clue_numbers/2
-% cannot number. assign_word/10 must reject it (no_word_merge_bg/2 via the
+% cannot number. assign_word/9 must reject it (no_word_merge_bg/2 via the
 % boundary grid marks maintained by mark_boundary/5).
 test(rejects_collinear_prefix_overlap, [fail]) :-
     init_gs(10, G0),
-    assign_word('DFEE',  [d,f,e,e],   4, 1, across, 10, [],   G0, P1, G1),
-    assign_word('DFEEE', [d,f,e,e,e], 5, 1, across, 10, [P1], G1, _, _).
+    assign_word('DFEE',  [d,f,e,e],   4, 1, across, 10, G0, _P1, G1),
+    assign_word('DFEEE', [d,f,e,e,e], 5, 1, across, 10, G1, _, _).
 
 % ...but a collinear word separated by the required empty boundary cell is fine.
 test(allows_separated_collinear_word, [nondet]) :-
     init_gs(10, G0),
-    assign_word('DFEE', [d,f,e,e], 4, 1, across, 10, [],   G0, P1, G1),
-    assign_word('DOG',  [d,o,g],   3, 6, across, 10, [P1], G1, _, _).
+    assign_word('DFEE', [d,f,e,e], 4, 1, across, 10, G0, _P1, G1),
+    assign_word('DOG',  [d,o,g],   3, 6, across, 10, G1, _, _).
 
 % The boundary grid after a placement: exactly the word's on-grid before-start /
 % after-end cells are marked, edge-abutting sides are omitted, and the LETTER
@@ -249,16 +249,16 @@ test(allows_separated_collinear_word, [nondet]) :-
 test(boundary_marks_after_placement, [nondet]) :-
     init_gs(10, G0), G0 = gs(L, B),
     % starts at column 1 (grid edge: no before-start mark), ends at cell 4
-    assign_word('DFEE', [d,f,e,e], 4, 1, across, 10, [], G0, _P1, _G1),
+    assign_word('DFEE', [d,f,e,e], 4, 1, across, 10, G0, _P1, _G1),
     arg(5, B, M5), nonvar(M5),          % after-end boundary marked
     arg(5, L, C5), var(C5),             % ...but still EMPTY in the letter grid
     forall(between(1, 100, N), (N =:= 5 -> true ; arg(N, B, M), var(M))).
 
 % check_word_fits/5 (the counting path's non-binding legality probe) must agree
-% with assign_word/10 on accept AND reject, and must leave the grid untouched.
+% with assign_word/9 on accept AND reject, and must leave the grid untouched.
 test(check_word_fits_agrees_with_assign_word, [nondet]) :-
     init_gs(10, GS), GS = gs(L, B),
-    assign_word('DFEE', [d,f,e,e], 4, 1, across, 10, [], GS, _P1, _),
+    assign_word('DFEE', [d,f,e,e], 4, 1, across, 10, GS, _P1, _),
     % DOG down crossing the D at cell 1: legal for both
     crosswordsmith_core:check_word_fits([d,o,g], 1, down, 10, GS),
     % DFEEE across at 1 fills DFEE's boundary cell 5: illegal for both
@@ -278,9 +278,9 @@ test(check_word_fits_agrees_with_assign_word, [nondet]) :-
 test(rejects_down_word_ending_above_filled_cell, [fail]) :-
     init_gs(5, G0),
     % fill the whole bottom row across, so cell 25 (below cell 20) is occupied
-    assign_word('VWXYZ', [v,w,x,y,z], 5, 21, across, 5, [], G0, PA, G1),
+    assign_word('VWXYZ', [v,w,x,y,z], 5, 21, across, 5, G0, _PA, G1),
     % a down word ending exactly at cell 20 must be rejected: cell 25 is filled
-    assign_word('PQR', [p,q,r], 3, 10, down, 5, [PA], G1, _, _).
+    assign_word('PQR', [p,q,r], 3, 10, down, 5, G1, _, _).
 
 % all_crossword/5 (the --all/count path) totals every solution for a start
 % position. It must agree with independently enumerating find_crossword's

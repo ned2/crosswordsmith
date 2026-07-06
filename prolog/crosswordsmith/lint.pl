@@ -23,6 +23,9 @@
 :- use_module(library(apply)).
 :- use_module(library(aggregate)).
 :- use_module(library(ordsets)).
+% vertices_edges_to_ugraph/3 + reachable/3: the connectivity rule's
+% reachability check (connected/2).
+:- use_module(library(ugraphs)).
 
 % The shared metric layer plus the placed-word record accessors (spec §4
 % boundary: the measurement + data-type layers, never the search substrate).
@@ -246,24 +249,25 @@ eval_grid_rule(symmetry, CS, Filled, GridLen, result(symmetry, Sev, Detail)) :-
     ( Deficit =:= 0 -> Sev = pass, Detail = null
     ; Sev = CS, format(atom(Detail), "180-rotational asymmetry at ~w cell(s)", [Deficit]) ).
 
-% All filled cells reachable from the first via 4-adjacency through filled cells.
+% All filled cells reachable from the first via 4-adjacency through filled
+% cells. Reachability is library(ugraphs)' reachable/3 over the filled-cell
+% graph (replacing a hand-rolled BFS whose frontier append was O(|Q|) per
+% node). cell_neighbour/3 enumerates all four directions per cell, so the
+% edge list carries both directions of every adjacency (symmetric graph), and
+% vertices_edges_to_ugraph/3 keeps edge-less vertices, so an isolated filled
+% cell still fails connectivity, as before.
 connected([], _GridLen).
-connected(Filled, GridLen) :-
-    Filled = [Start|_],
+connected([Start|Rest], GridLen) :-
     % Filled is already an ordset (filled_cells/2 sorts it), so use it directly (P16).
-    reach([Start], Filled, GridLen, [Start], Reached),
-    length(Filled, N), length(Reached, N).
-
-reach([], _FilledSet, _GridLen, Acc, Acc).
-reach([Cell|Q], FilledSet, GridLen, Acc, Reached) :-
-    findall(Nb,
-            ( cell_neighbour(Cell, GridLen, Nb),
-              ord_memberchk(Nb, FilledSet), \+ ord_memberchk(Nb, Acc) ),
-            NewNbs0),
-    sort(NewNbs0, NewNbs),
-    ord_union(Acc, NewNbs, Acc1),
-    append(Q, NewNbs, Q1),
-    reach(Q1, FilledSet, GridLen, Acc1, Reached).
+    Filled = [Start|Rest],
+    findall(C-Nb,
+            ( member(C, Filled),
+              cell_neighbour(C, GridLen, Nb),
+              ord_memberchk(Nb, Filled) ),
+            Edges),
+    vertices_edges_to_ugraph(Filled, Edges, G),
+    reachable(Start, G, Reached),
+    Reached == Filled.        % both ordsets over the same universe
 
 cell_neighbour(Cell, GridLen, Nb) :-
     cell_rc(Cell, GridLen, R, C),

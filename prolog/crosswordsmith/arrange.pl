@@ -65,7 +65,7 @@
                 start_locs/1,
                 next_cell/4,
                 fits_on_grid/4,
-                assign_word/10,
+                assign_word/9,
                 check_word_fits/5,
                 find_intersecting_word/6,
                 assign_words_inc/9,
@@ -133,9 +133,16 @@ word_reward(WCap, WTail, PW, Placed, R) :-
 
 % Total objective over a complete (or partial) placement - the from-scratch
 % oracle Phase 2's incremental delta must match.
+% NB named helper, not a yall lambda: this module never imports library(yall),
+% so a `>>` here would be interpreted (meta-call + lambda copy per placed word
+% per rescore) - the cost mode fill.pl's alpha_chars/2 comment documents
+% avoiding. First-order closure instead.
 layout_reward(WCap, WTail, Placed, Reward) :-
-    foldl([PW, A, A1]>>( word_reward(WCap, WTail, PW, Placed, R), A1 is A + R ),
-          Placed, 0, Reward).
+    foldl(add_word_reward(WCap, WTail, Placed), Placed, 0, Reward).
+
+add_word_reward(WCap, WTail, Placed, PW, A0, A) :-
+    word_reward(WCap, WTail, PW, Placed, R),
+    A is A0 + R.
 
 % How many placed words reach their cap (checked >= ceil(L/2)) - the
 % reachability probe: if this is ~0, the cap is inert and the objective has
@@ -643,7 +650,7 @@ pin_fragment_word(Words, GridLen, frag(Answer, Dir, Start, FragCellNums),
     ;   throw(error(fragment_cells_inconsistent(Answer), _))
     ),
     (   assign_word(Answer, Letters, WLen, Start, Dir, GridLen,
-                    PlacedIn, GridIn, PW, GridOut)
+                    GridIn, PW, GridOut)
     ->  true
     ;   fragment_conflict(Answer, Letters, Start, Dir, WLen, GridLen, GridIn)
     ).
@@ -1055,7 +1062,7 @@ seed_word(Entry, Start, Dir, GridLen, GIn, PW, GOut) :-
     word_letters(Entry, Letters, WLen),
     fits_on_grid(Dir, Start, WLen, GridLen),
     Entry = [Word|_],
-    assign_word(Word, Letters, WLen, Start, Dir, GridLen, [], GIn, PW, GOut).
+    assign_word(Word, Letters, WLen, Start, Dir, GridLen, GIn, PW, GOut).
 
 % Place the globally best-scoring placeable word, repeat; drop the rest. The
 % construction is cut-free: instead of an `( Best -> place ; stop )` if-then-else,
@@ -1089,7 +1096,7 @@ apply_move(move(Answer, NewPW, NewGrid), Remaining, Placed, GridLen, FinalPlaced
 % The findall collects only a lightweight GROUND descriptor per word
 % (Score-best(Answer,Letters,WLen,Start,Dir)) - legality inside
 % word_best_placement is the pure probe check_word_fits/5, so no mutated grid
-% is materialized or snapshotted per candidate; assign_word/10 runs ONCE, for
+% is materialized or snapshotted per candidate; assign_word/9 runs ONCE, for
 % the winner, in best_move. (This replaced a version whose findall templates
 % snapshotted the whole gs/2 bundle - 2 x N^2 args - per legal placement AND
 % per word; identical output, the probe/assign accept sets and the stable
@@ -1105,15 +1112,15 @@ next_move(Remaining, Placed, GridLen, Grid, Move) :-
     best_move(Cands, Placed, GridLen, Grid, Move).
 
 best_move([], _Placed, _GridLen, _Grid, none).
-best_move([C|Cs], Placed, GridLen, Grid, move(Answer, PW, G1)) :-
+best_move([C|Cs], _Placed, GridLen, Grid, move(Answer, PW, G1)) :-
     sort(1, @>=, [C|Cs], [_-best(Answer, Letters, WLen, Start, Dir)|_]),
     % Realize the winning placement. check_word_fits/5 accepted exactly this
     % (Letters, Start, Dir) against exactly this Grid - the probe binds
     % nothing, so the grid is untouched since - and it accepts iff
-    % assign_word/10 accepts (core.pl check_word_fits doc), so this call
+    % assign_word/9 accepts (core.pl check_word_fits doc), so this call
     % cannot fail. G1 is Grid itself, mutated in place (letter cells bound,
     % boundary cells marked, undone by the trail on backtracking), not a copy.
-    assign_word(Answer, Letters, WLen, Start, Dir, GridLen, Placed, Grid, PW, G1).
+    assign_word(Answer, Letters, WLen, Start, Dir, GridLen, Grid, PW, G1).
 
 % Best legal placement of one word on the current grid, as the lightweight
 % ground descriptor best(Answer,Letters,WLen,Start,Dir) - cut-free: legality
@@ -1122,7 +1129,7 @@ best_move([C|Cs], Placed, GridLen, Grid, move(Answer, PW, G1)) :-
 % density score), and the head of the @>=-sorted list is the best - no
 % first-solution `!` (see spec v1b.1).
 %
-% This used to run assign_word/10 per legal candidate and let findall snapshot
+% This used to run assign_word/9 per legal candidate and let findall snapshot
 % the mutated gs/2 bundle (2 x N^2 args) per placement - the largest copy-term
 % cost in the codebase. check_word_fits/5 answers "would assign_word accept
 % this candidate?" with NO side effects and the SAME accept/reject set

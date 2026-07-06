@@ -54,8 +54,14 @@
 % The original answer atom is carried to emit (placed_to_word/4) so export still
 % derives the enumeration; only the placed run/length drops the separators.
 word_letters([Word|_], Letters, WLen) :-
-    atom_chars(Word, L0), delete(L0, ' ', L1), delete(L1, '-', Letters),
+    atom_chars(Word, L0),
+    exclude(separator_char, L0, Letters),
     length(Letters, WLen).
+
+% Word-separator characters: enumeration markers, not grid cells. (delete/3,
+% the previous strip, is deprecated in SWI 10 and took two passes.)
+separator_char(' ').
+separator_char('-').
 
 % The run of cell numbers a word occupies from Start in Dir.
 word_cells(_, _, 0, _, []) :- !.

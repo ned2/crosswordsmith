@@ -31,6 +31,9 @@
 :- use_module(library(pairs)).
 :- use_module(library(sha)).        % F-L2: dict-file SHA-256 (artifact integrity)
 :- use_module(library(fastrw)).     % F-L2: fast_write/fast_read artifact I/O
+% option/2,3: the artifact Meta is a keyed list of unary Key(Value) terms -
+% literally an SWI option list - and fill_save_index's Options is one too.
+:- use_module(library(option), [option/2, option/3]).
 
 % Slot derivation from a stock-grid mask.
 :- use_module(crosswordsmith(stockgrid),
@@ -156,8 +159,13 @@ build_index(DictByLen, Index) :-
             Triples),
     keysort(Triples, Sorted),
     group_pairs_by_key(Sorted, Grouped),
-    maplist([K-Is, K-Set]>>list_to_ord_set(Is, Set), Grouped, GroupedSets),
+    % NB named helper, not a yall lambda (the F-L1 rationale, alpha_chars/2
+    % above): un-imported `>>` is interpreted - a meta-call + lambda copy per
+    % index key group, on the load_inf-gated dict-load path.
+    maplist(pair_ordset, Grouped, GroupedSets),
     list_to_assoc(GroupedSets, Index).
+
+pair_ordset(K-Is, K-Set) :- list_to_ord_set(Is, Set).
 
 % The slot's bound positions as ascending P-V pairs. NB first-order on purpose
 % (the F-L1 rationale, alpha_chars/2 above): the previous
@@ -627,7 +635,7 @@ fill_save_index(DictFile, OutFile, Options) :-
     fill_index_format_version(Version),
     Meta0 = [ dict_sha256(Sha), swi_version(Swi), words(NWords),
               source(DictFile), built_epoch(Epoch) ],
-    (   memberchk(masks(true), Options)
+    (   option(masks(true), Options)
     ->  build_masks(Index, MaskAssoc),
         append(Meta0, [masks(MaskAssoc)], Meta)
     ;   Meta = Meta0
@@ -677,27 +685,22 @@ fill_load_index(IndexFile, DictFileOrNone, DictByLen, Index, Masks) :-
     ( Version == Want -> true
     ; throw(error(fill_index_version(Version, Want), _)) ),
     fill_swi_version(CurSwi),
-    ( meta_value(Meta, swi_version, ArtSwi), ArtSwi == CurSwi -> true
-    ; meta_value_or(Meta, swi_version, unknown, ArtSwi2),
+    ( option(swi_version(ArtSwi), Meta), ArtSwi == CurSwi -> true
+    ; option(swi_version(ArtSwi2), Meta, unknown),
       throw(error(fill_index_swi(ArtSwi2, CurSwi), _)) ),
     ( DictFileOrNone == none
     -> true
     ;  fill_file_sha256(DictFileOrNone, CurSha),
-       ( meta_value(Meta, dict_sha256, ArtSha), ArtSha == CurSha -> true
-       ; meta_value_or(Meta, dict_sha256, unknown, ArtSha2),
+       ( option(dict_sha256(ArtSha), Meta), ArtSha == CurSha -> true
+       ; option(dict_sha256(ArtSha2), Meta, unknown),
          throw(error(fill_index_hash(DictFileOrNone, ArtSha2, CurSha), _)) ) ),
     DictByLen = DictByLen0, Index = Index0,
-    ( meta_value(Meta, masks, MaskAssoc) -> Masks = masks(MaskAssoc) ; Masks = none ).
+    ( option(masks(MaskAssoc), Meta) -> Masks = masks(MaskAssoc) ; Masks = none ).
 
 fill_read_artifact(IndexFile, Artifact) :-
     setup_call_cleanup(open(IndexFile, read, S, [type(binary)]),
                        fast_read(S, Artifact),
                        close(S)).
-
-% Meta is a keyed list of unary Key(Value) terms (see the artifact term above).
-meta_value(Meta, Key, Value) :- Probe =.. [Key, Value], memberchk(Probe, Meta).
-meta_value_or(Meta, Key, _Default, Value) :- meta_value(Meta, Key, Value), !.
-meta_value_or(_Meta, _Key, Default, Default).
 
 % Word count over the length buckets (same fold run_fill's metadata uses).
 dict_word_count(DictByLen, N) :-

@@ -38,7 +38,7 @@
             next_cell/4,
             fits_on_grid/4,
             % search primitives
-            assign_word/10,
+            assign_word/9,
             check_word_fits/5,
             find_intersecting_word/6,
             assign_words_inc/9,
@@ -245,8 +245,14 @@ prolog:error_message(json_invalid_answer(Entry)) -->
     [ 'clues file: every entry needs a string "answer" (offending entry: ~q)'-[Entry] ].
 prolog:error_message(json_invalid_meta(Answer)) -->
     [ 'clues file: "meta" for answer ~q must be a JSON object'-[Answer] ].
+% The expected-strategies list is rendered from strategies/1 at message time
+% (via {}/1) so the registry stays the single source of truth: adding a
+% strategy keeps this diagnostic current with no edit here.
 prolog:error_message(unknown_strategy(S)) -->
-    [ 'unknown --strategy ~q; expected one of baseline, mrv, mrv_capped, mrv_inc'-[S] ].
+    { strategies(Ss),
+      atomic_list_concat(Ss, ', ', List)
+    },
+    [ 'unknown --strategy ~q; expected one of ~w'-[S, List] ].
 prolog:error_message(unsupported_clue_file(File, Ext)) -->
     [ 'clues file ~q has unsupported extension ~q; expected .json or .pl'-
       [File, Ext] ].
@@ -392,7 +398,7 @@ assign_words(Strategy, [W|Ws], PlacedWords, GridLen, Start, Dir, GIn, GOut, Plac
     % on first pass, Start and Dir will be grounded with the start values
     % then afterwards will be unground, with find_intersecting_word grounding them
     find_intersecting_word(Letters2, WLen, PlacedWords, GridLen, Start, Dir),
-    assign_word(Word, Letters2, WLen, Start, Dir, GridLen, PlacedWords, GIn, Placed, G1),
+    assign_word(Word, Letters2, WLen, Start, Dir, GridLen, GIn, Placed, G1),
     assign_words(Strategy, RemWords, [Placed|PlacedWords], GridLen, _Start, _Dir, G1, GOut, PlacedWordsOut).
 
 
@@ -474,7 +480,7 @@ mrv_count(2, PlacedWords, GridLen, Start, Dir, GIn, Entry, Count) :-
 % bindings.
 %
 % Counting only needs to know whether a candidate placement is LEGAL, not to
-% realize it: check_word_fits/5 runs the SAME checks as assign_word/10 but
+% realize it: check_word_fits/5 runs the SAME checks as assign_word/9 but
 % binds no grid cell and builds neither the Cells list nor the pw/8 record
 % (all of which assign_word materialized only for count_upto2 to discard).
 % Same accept/reject set in the same enumeration order -> every count is
@@ -546,7 +552,7 @@ assign_words_inc([W|Ws], PlacedWords, StateIn, GridLen, Start, Dir, GIn, GOut, O
     entry_letters(Entry, Letters2),
     length(Letters2, WLen),
     find_intersecting_word(Letters2, WLen, PlacedWords, GridLen, Start, Dir),
-    assign_word(Word, Letters2, WLen, Start, Dir, GridLen, PlacedWords, GIn, Placed, G1),
+    assign_word(Word, Letters2, WLen, Start, Dir, GridLen, GIn, Placed, G1),
     assign_words_inc(RemWords, [Placed|PlacedWords], StateOut, GridLen,
                      _Start, _Dir, G1, GOut, Out).
 
@@ -726,14 +732,18 @@ entry_letters([Word|_], Letters) :-
 % and hyphen separators dropped) of a single answer atom. Word is ground, so
 % this is a pure function of the atom and is tabled: the mrv_inc counting path
 % (mrv_count/select_inc/inc_count) re-derives a word's letters per node, and the
-% atom_chars + two delete/3 passes are memoized to one lookup after the first.
+% atom_chars + separator strip are memoized to one lookup after the first.
 % Reset alongside pair_crossings/3 by reset_search_memos/0 at every top-level
 % search entry, so inference counts stay self-contained per entry.
 :- table answer_letters/2.
 answer_letters(Word, Letters) :-
     atom_chars(Word, L0),
-    delete(L0, ' ', L1),
-    delete(L1, '-', Letters).
+    exclude(separator_char, L0, Letters).
+
+% Word-separator characters: enumeration markers, not grid cells. (delete/3,
+% the previous strip, is deprecated in SWI 10 and took two passes.)
+separator_char(' ').
+separator_char('-').
 
 shares_letter(Letters, OtherLetters) :-
     member(L, Letters),
@@ -799,7 +809,11 @@ pair_crossings(Letters, PLetters, Crossings) :-
 % - it never inspects the grid, only carries it - so only the sites that actually
 % read cells (assign_word, check_word_fits, the greedy scorer, the fragment pin)
 % destructure the bundle.
-assign_word(Word, Letters, WLen, Start, Dir, GridLen, _PlacedWords,
+% NB no placed-words argument: placement legality depends only on the grid
+% state - the boundary grid subsumed the old placed-words scan, and the
+% vestigial _PlacedWords parameter the arity-10 signature still advertised
+% was dropped with it (C15).
+assign_word(Word, Letters, WLen, Start, Dir, GridLen,
             gs(LGrid, BGrid), Placed, gs(LGrid, BGrid)) :-
     % Reject an off-grid (underflow) start cell. find_intersecting_word/6 can
     % compute a Start < 1 that still passes fits_on_grid (the end lands on-grid),
@@ -867,7 +881,7 @@ mark_boundary(Start, End, Dir, GridLen, BGrid) :-
 
 % check_word_fits/5: a pure legality PROBE for the mrv_count Cap=2 counting path
 % (mrv_count_goal) and the greedy constructor's candidate scan (arrange.pl
-% word_best_placement/7). It answers "would assign_word/10 accept this candidate?" with
+% word_best_placement/7). It answers "would assign_word/9 accept this candidate?" with
 % NO side effects - it binds no letter cell, marks no boundary cell, and builds
 % neither the Cells run nor the pw/8 record (all of which assign_word materialized
 % only for count_upto2 to discard) - so it is cheaper per counted candidate and
