@@ -361,12 +361,14 @@ Consequences of the table:
   native→ipuz→native preserves the whole puzzle but drops `link`/`meta` at the
   ipuz hop; native→Exolve→native likewise. Payload-lossless round-trips need a
   format that carries the metadata (today only native→native qualifies).
-- **v1 serializer coverage gaps fail strict, never drop silently.** Three
-  structural properties the *format* can hold but the v1 *serializer* does not
-  yet emit — rebus → Exolve, prefilled cells → ipuz, shaded/arbitrary-styled
-  cells → Exolve — fail with a "not supported yet" error naming a capable
-  target, per the D7 rule (a serializer gap must behave like a `✗` cell, not
-  like metadata). Closing them is ordinary later work, not a deferred decision.
+- **v1 serializer coverage gaps fail strict, never drop silently.** Structural
+  properties the *format* can hold but the v1 *serializer* does not yet emit —
+  rebus → Exolve, shaded/arbitrary-styled cells → Exolve — fail with a "not
+  supported yet" error naming a capable target, per the D7 rule (a serializer
+  gap must behave like a `✗` cell, not like metadata). Closing them is ordinary
+  later work, not a deferred decision. **Prefilled cells → ipuz is now closed**:
+  a given cell serializes to a puzzle-cell `value` and round-trips back (the
+  ipuz parser reads that `value` as a prefilled letter).
 
 **Deferred escape hatches** (not rejected): (a) **best-effort *structural***
 conversion (crop/flatten with warnings); (b) **uplifting native's model** (add

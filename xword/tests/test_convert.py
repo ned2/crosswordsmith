@@ -111,11 +111,6 @@ class TestStructuralFailures:
         with pytest.raises(XwordError, match="unfilled.*ipuz or exolve"):
             convert_text(src, "native")
 
-    def test_prefilled_cell_blocks_ipuz(self):
-        src = mini_exolve("C!AB", "A.U", "BUS")
-        with pytest.raises(XwordError, match="prefilled.*exolve"):
-            convert_text(src, "ipuz")
-
     def test_rebus_blocks_exolve(self, fixtures):
         with pytest.raises(XwordError, match="rebus.*ipuz"):
             convert_text((fixtures / "sample.ipuz.json").read_text(), "exolve")
@@ -134,6 +129,32 @@ class TestStructuralFailures:
         )
         with pytest.raises(XwordError, match="enumeration.*ipuz or exolve"):
             convert_text(src, "native")
+
+
+class TestPrefilledToIpuz:
+    """Gap 2 (closed): a prefilled/given cell serializes to ipuz as a puzzle
+    `value` and survives a full serialize + parse-back round-trip."""
+
+    def test_prefilled_serializes_value_and_round_trips(self):
+        src = mini_exolve("C!AB", "A.U", "BUS")
+        out, warnings = convert_text(src, "ipuz")
+        assert warnings == []
+        obj = json.loads(out)
+        # the given cell carries its letter as a puzzle `value` (+ solution)
+        assert obj["puzzle"][0][0] == {"cell": 1, "value": "C"}
+        assert obj["solution"][0][0] == "C"
+        # parse-back: the prefill flag + letter survive
+        board = parse_board(out, "ipuz")
+        given = board.grid[0][0]
+        assert given.prefilled and given.letter == "C"
+        others = [c for row in board.grid for c in row if c is not None and c is not given]
+        assert not any(c.prefilled for c in others)  # only the given cell is prefilled
+
+    def test_exolve_ipuz_exolve_preserves_prefill(self):
+        src = mini_exolve("C!AB", "A.U", "BUS")
+        via, _ = convert_text(src, "ipuz")
+        back, _ = convert_text(via, "exolve")
+        assert parse_board(back, "exolve") == parse_board(src, "exolve")
 
 
 class TestMetadataDrops:

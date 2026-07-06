@@ -63,8 +63,10 @@ def parse(text: str) -> Board:
         for c, pc in enumerate(row):
             style: dict[str, Any] | None = None
             label = pc
+            value: Any = None
             if isinstance(pc, dict):
                 label = pc.get("cell")
+                value = pc.get("value")
                 raw_style = pc.get("style")
                 if isinstance(raw_style, dict):
                     style = raw_style
@@ -76,11 +78,18 @@ def parse(text: str) -> Board:
             circle = bool(style) and style.get("shapebg") == "circle"
             barred = style.get("barred") if style else None
             barred = barred.upper() if isinstance(barred, str) else ""
+            # A `value` on the puzzle cell is a given/prefilled letter (§4.2);
+            # the matching solution letter reconciles below (they agree).
+            prefilled = isinstance(value, str) and not (
+                _matches(value, block) or _matches(value, empty)
+            )
             cells.append(
                 Cell(
+                    letter=value if prefilled else None,
                     circle=circle,
                     bar_right="R" in barred,
                     bar_below="B" in barred,
+                    prefilled=prefilled,
                     style=style,
                 )
             )
@@ -179,14 +188,21 @@ def serialize(board: Board) -> str:
                 prow.append("#")
                 srow.append("#")
                 continue
-            if cell.prefilled:
-                raise XwordError(
-                    f"ipuz output does not support prefilled cells yet "
-                    f"(at [{r},{c}]) — target exolve instead"
-                )
             label: Any = cell.number if cell.number is not None else 0
             style = cell.style if cell.style is not None else _synth_style(cell)
-            prow.append({"cell": label, "style": style} if style else label)
+            # A prefilled (given) cell shows its letter in the puzzle grid: ipuz
+            # carries it as `value` on the puzzle cell object, alongside the
+            # solution letter (dump_json sorts keys, so the object stays canonical).
+            value = cell.letter if cell.prefilled else None
+            if style or value is not None:
+                pc: dict[str, Any] = {"cell": label}
+                if value is not None:
+                    pc["value"] = value
+                if style:
+                    pc["style"] = style
+                prow.append(pc)
+            else:
+                prow.append(label)
             if cell.letter is None:
                 srow.append(0)
             else:
