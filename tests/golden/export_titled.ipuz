@@ -1,0 +1,14 @@
+{
+  "author":"A. Setter",
+  "clues": {
+    "Across": [ {"clue":"Feline","enumeration":"(3)","number":1} ],
+    "Down": [ {"clue":"","enumeration":"(3)","number":1} ]
+  },
+  "dimensions": {"height":3,"width":3},
+  "empty":0,
+  "kind": ["http://ipuz.org/crossword#1" ],
+  "puzzle": [ [1, 0, 0 ],  [0, "#", "#" ],  [0, "#", "#" ] ],
+  "solution": [ ["C", "A", "T" ],  ["O", "#", "#" ],  ["W", "#", "#" ] ],
+  "title":"Sample Puzzle",
+  "version":"http://ipuz.org/v2"
+}

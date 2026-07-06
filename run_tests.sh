@@ -99,6 +99,14 @@ check_golden "export ipuz" \
 check_golden "export exolve" \
     tests/golden/export_bundled_17.exolve \
     ./crosswordsmith export --to exolve tests/golden/arrange_bundled_17_fixed.json
+# Titled+authored layout: byte-pins the title/author pass-through added in P1
+# (ipuz title+author keys; Exolve exolve-title + exolve-setter).
+check_golden "export ipuz (titled+authored)" \
+    tests/golden/export_titled.ipuz \
+    ./crosswordsmith export --to ipuz fixtures/titled_layout.json
+check_golden "export exolve (titled+authored)" \
+    tests/golden/export_titled.exolve \
+    ./crosswordsmith export --to exolve fixtures/titled_layout.json
 check_golden "fill 3x3" \
     tests/golden/fill_3.json \
     ./crosswordsmith fill --grid fixtures/fill_grid_3.json --dict fixtures/wordlist_sample.txt

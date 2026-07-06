@@ -61,6 +61,12 @@ golden:
 	@diff -u tests/golden/export_bundled_17.exolve \
 		<(./crosswordsmith export --to exolve tests/golden/arrange_bundled_17_fixed.json 2>/dev/null) \
 		&& echo "golden (export exolve): OK"
+	@diff -u tests/golden/export_titled.ipuz \
+		<(./crosswordsmith export --to ipuz fixtures/titled_layout.json 2>/dev/null) \
+		&& echo "golden (export ipuz, titled+authored): OK"
+	@diff -u tests/golden/export_titled.exolve \
+		<(./crosswordsmith export --to exolve fixtures/titled_layout.json 2>/dev/null) \
+		&& echo "golden (export exolve, titled+authored): OK"
 	@diff -u tests/golden/fill_3.json \
 		<(./crosswordsmith fill --grid fixtures/fill_grid_3.json --dict fixtures/wordlist_sample.txt 2>/dev/null) \
 		&& echo "golden (fill 3x3): OK"
@@ -81,9 +87,11 @@ update-golden:
 	./crosswordsmith lint --profile toc tests/golden/arrange_bundled_17_fixed.json 2>/dev/null > tests/golden/lint_bundled_17_toc.json
 	./crosswordsmith export --to ipuz tests/golden/arrange_bundled_17_fixed.json 2>/dev/null > tests/golden/export_bundled_17.ipuz
 	./crosswordsmith export --to exolve tests/golden/arrange_bundled_17_fixed.json 2>/dev/null > tests/golden/export_bundled_17.exolve
+	./crosswordsmith export --to ipuz fixtures/titled_layout.json 2>/dev/null > tests/golden/export_titled.ipuz
+	./crosswordsmith export --to exolve fixtures/titled_layout.json 2>/dev/null > tests/golden/export_titled.exolve
 	./crosswordsmith fill --grid fixtures/fill_grid_3.json --dict fixtures/wordlist_sample.txt 2>/dev/null > tests/golden/fill_3.json
 	./crosswordsmith fill --grid fixtures/fill_grid_split3.json --seeds fixtures/fill_seed_cow_top.json --dict fixtures/dict_cow_pig.txt 2>/dev/null > tests/golden/fill_3_seeded.json
-	@echo "Regenerated golden files (arrange fixed/max/fragment/candidates + lint toc + export ipuz/exolve + fill plain/seeded)"
+	@echo "Regenerated golden files (arrange fixed/max/fragment/candidates + lint toc + export ipuz/exolve + export titled ipuz/exolve + fill plain/seeded)"
 
 # Product benchmark for `arrange`: end-to-end command latency, the in-process
 # search alone, and the CLI-wrapper overhead between them (rest = command -

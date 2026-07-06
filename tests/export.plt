@@ -26,6 +26,12 @@ mini_canonical(
          _{number:1, direction:"across", answer:"CAT", cells:[[0,0],[0,1],[0,2]], meta:_{clue:"Feline"}},
          _{number:1, direction:"down",   answer:"COW", cells:[[0,0],[1,0],[2,0]], meta:_{}} ] }).
 
+% The same layout with the optional top-level title/author anchors (P1 uplift,
+% json-output-spec §6.5). Used to pin pass-through in both transforms.
+mini_titled(D) :-
+    mini_canonical(D0),
+    put_dict(_{title:"Sample Puzzle", author:"A. Setter"}, D0, D).
+
 
 :- begin_tests(export).
 
@@ -50,8 +56,20 @@ test(ipuz_header) :-
     mini_canonical(D), layout_to_ipuz(D, I),
     get_dict(version, I, "http://ipuz.org/v2"),
     get_dict(kind, I, ["http://ipuz.org/crossword#1"]),
-    get_dict(title, I, "Untitled"),   % non-null title (Exet imports ipuz->exolve; V1)
     get_dict(dimensions, I, Dim), get_dict(width, Dim, 3), get_dict(height, Dim, 3).
+
+% A titleless layout emits NO title/author keys — the invented "Untitled" is
+% retired on the ipuz side (both fields optional in ipuz; nothing invented).
+test(ipuz_omits_title_author_when_absent) :-
+    mini_canonical(D), layout_to_ipuz(D, I),
+    \+ get_dict(title, I, _),
+    \+ get_dict(author, I, _).
+
+% ...and a titled+authored layout carries both through verbatim (P1 uplift).
+test(ipuz_carries_title_author_when_present) :-
+    mini_titled(D), layout_to_ipuz(D, I),
+    get_dict(title, I, "Sample Puzzle"),
+    get_dict(author, I, "A. Setter").
 
 % puzzle: clue-start cell -> its number, white-but-unnumbered -> 0, block -> "#".
 test(ipuz_puzzle_cell_encoding) :-
@@ -81,7 +99,9 @@ test(exolve_structure) :-
     mini_canonical(D), layout_to_exolve(D, Text),
     atomic_list_concat(Lines, '\n', Text),
     memberchk('exolve-begin', Lines),
-    memberchk('  exolve-title: Untitled', Lines),  % non-null title (Exet Save needs it; AC-EXP-2)
+    memberchk('  exolve-title: Untitled', Lines),  % titleless -> Exet-safe default (AC-EXP-2)
+    \+ memberchk('  exolve-id: crosswordsmith-export', Lines),  % exolve-id retired (auto-derived)
+    \+ ( member(SL, Lines), atom_concat('  exolve-setter:', _, SL) ),  % authorless -> no setter
     memberchk('  exolve-width: 3', Lines),
     memberchk('  exolve-height: 3', Lines),
     memberchk('    CAT', Lines),                 % row 0: all white
@@ -92,6 +112,15 @@ test(exolve_structure) :-
     memberchk('  exolve-down:', Lines),
     memberchk('    1  (3)', Lines),               % empty clue (no data invented)
     memberchk('exolve-end', Lines).
+
+% A titled+authored layout carries the title into exolve-title (no default) and
+% the author into exolve-setter (P1 uplift).
+test(exolve_carries_title_setter_when_present) :-
+    mini_titled(D), layout_to_exolve(D, Text),
+    atomic_list_concat(Lines, '\n', Text),
+    memberchk('  exolve-title: Sample Puzzle', Lines),
+    memberchk('  exolve-setter: A. Setter', Lines),
+    \+ memberchk('  exolve-title: Untitled', Lines).   % title present -> no default
 
 % --- validation --------------------------------------------------------------
 % export_load/2 is module-internal (not exported); white-box tests reach it

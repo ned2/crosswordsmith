@@ -142,3 +142,17 @@ Record each manual run so AC-EXP-2's status is auditable.
 |---|---|---|---|---|---|
 | 2026-07-01 | exolve engine (`exolve-m.js`, headless Chrome) | `aaf1e88` | `arrange_bundled_17_fixed` (17×17) + `arrange_toc_demo_max` (22×22) | **Load half: PASS** (automated) | The real Exolve engine ingests the export and reconstructs grid + block pattern + solution letters + entry set + enumerations + clue text *exactly*, via `tests/exolve_ingest_check.sh`. **Save-back half (Exet UI Open→Save) NOT run** — it needs a human at a browser; low-risk, still pending. |
 | 2026-07-01 | Exet v1.06 (browser UI) | `aaf1e88` + export title fix | `arrange_bundled_17_fixed` → Exet → `.ipuz` + `.puz` | **Save-back: PASS** | Full Exet Open→Save→export; both re-exports match the source exactly (dimensions, solution grid, 4 across + 2 down entries, all enumerations, all clue text). **Note:** Exet's Save crashed on the null title (`fileTitle`/`updateSavePanel`) until a title was set — export now emits a default `exolve-title` (see revamp-audit V1). AC-EXP-2 fully verified (load + save-back). |
+
+**Addendum (2026-07-07 — P1 native-schema uplift):** the default-title behavior
+recorded above has narrowed. The default `exolve-title: Untitled` is now emitted
+**only when the layout carries no title** (a title-less layout still gets it, so
+the Exet Save defence this log established is intact); a layout that *does* carry
+a top-level `title` now exports that title verbatim, and a top-level `author`
+becomes `exolve-setter`. The **ipuz** side no longer invents a title at all
+(previously `"title": "Untitled"`) — ipuz makes title optional and Exet's crash
+was specific to the Exolve conversion, so the defence stays Exolve-only. Net:
+the load + save-back PASS above is unaffected for the title-less
+`arrange_bundled_17_fixed` artifact (byte-identical `exolve-title` line); the new
+titled/authored path (`fixtures/titled_layout.json`) is golden-pinned but not yet
+manually re-verified through the Exet UI — a low-risk follow-up if a titled
+artifact is ever round-tripped. Ref: `docs/plans/native-schema-uplift-plan.md` P1.
