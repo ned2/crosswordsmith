@@ -81,11 +81,11 @@ on stderr (`-q` silences, stdout untouched); structural engine cross-check.
 | # | Component | Spec | Status | Verified by |
 |---|---|---|---|---|
 | 1 | **`convert` verb wiring** — parse → fidelity → serialize; `--to` required, `--from` optional (detect), stdin/stdout + `--out` on success, `-q` | §6.2, §8 | done | `tests/test_convert.py::TestCli` |
-| 2 | **D7 strict structure** — `→ native` fails on rectangular / title / circled / barred / prefilled / styled / unfilled / rebus / unencodable enum, each naming a capable target; the three former v1 serializer gaps are now closed — rebus→exolve (whole-grid `rebus-cells` mode, round-trip), prefill→ipuz (puzzle `value`, round-trip), styling→exolve (background `color` as `exolve-colour`, serialize-only) | §10, D7 | done | `tests/test_convert.py::TestStructuralFailures` + `TestPrefilledToIpuz` + `TestShadedToExolve` + `TestRebusToExolve` |
+| 2 | **D7 strict structure** — `→ native` fails on rectangular / circled / barred / prefilled / styled / unfilled / rebus / unencodable enum, each naming a capable target; the three former v1 serializer gaps are now closed — rebus→exolve (whole-grid `rebus-cells` mode, round-trip), prefill→ipuz (puzzle `value`, round-trip), styling→exolve (background `color` as `exolve-colour`, serialize-only). **title/author dropped off the fail list** — the native-schema uplift (D9, 2026-07-07) made them optional top-level anchors native parses+serializes | §10, D7, D9 | done | `tests/test_convert.py::TestStructuralFailures` + `TestPrefilledToIpuz` + `TestShadedToExolve` + `TestRebusToExolve` |
 | 3 | **D7 metadata drop-and-warn** — per-word `link`/`meta` keys + top-level `diagnostics` dropped on `→ ipuz/exolve` with one stderr warning each; `-q` silences, stdout byte-identical; native target drops nothing | §6.2, §10 | done | `tests/test_convert.py::TestMetadataDrops` + `TestCli` |
 | 4 | **`diagnostics` passthrough** — carried on `Board`, native→native re-emits verbatim (payload-lossless identity, json-output-spec §6.4) | §6.2, §10 | done | fixture `arrange_bundled_17_fixed.json` (engine golden verbatim) in `TestMetadataDrops`/`TestCli` |
-| 5 | **Puzzle-lossless round-trips** — native→ipuz→native and native→exolve→native = source minus `link`; display answers reconstructed from enumeration (`(5,5)` → `"OMEGA POINT"`), grid wins on enum mismatch; exolve→ipuz→exolve keeps bars/circles/unfilled (barred StyleSpec synthesized) + prefill (`!`↔`value`) + rebus (multi-char↔`rebus-cells`) | §10 | done | `tests/test_convert.py::TestRoundTrips` + `TestPrefilledToIpuz` + `TestRebusToExolve` |
-| 6 | **Engine cross-check (structural)** — convert native→ipuz/exolve agrees with `crosswordsmith export` on grid/numbering/clues/enumeration; since Q5 the exolve title line is also byte-identical (both `exolve-title: Untitled`); remaining divergences = the ipuz title (xword emits none) + the engine's constant `exolve-id` (xword emits none — Exolve auto-derives one, spec §6.2) | §11 | done | `tests/test_convert.py::TestEngineCrossCheck` |
+| 5 | **Puzzle-lossless round-trips** — native→ipuz→native and native→exolve→native = source minus `link`; display answers reconstructed from enumeration (`(5,5)` → `"OMEGA POINT"`), grid wins on enum mismatch; exolve→ipuz→exolve keeps bars/circles/unfilled (barred StyleSpec synthesized) + prefill (`!`↔`value`) + rebus (multi-char↔`rebus-cells`). Since D9 **title/author survive the round-trip** too: a title-less exolve source that gained the Q5 `Untitled` default carries it back through native rather than fail-stricting the way home | §10, D9 | done | `tests/test_convert.py::TestRoundTrips` + `test_native_exolve_native` + `test_titled_exolve_native` + `TestPrefilledToIpuz` + `TestRebusToExolve` |
+| 6 | **Engine cross-check (structural + anchor parity)** — convert native→ipuz/exolve agrees with `crosswordsmith export` on grid/numbering/clues/enumeration; the exolve title line is byte-identical (both `exolve-title: Untitled`). After P1 (D9) retired the invented ipuz title **and** the constant `exolve-id`, title/author agree on both sides and neither emits `exolve-id`; residual gaps are cosmetic — ipuz JSON whitespace + the exolve title line's header position (engine after `exolve-begin`, xword after width/height) — for the byte-parity Stretch | §11 | done | `tests/test_convert.py::TestEngineCrossCheck` |
 
 ---
 
@@ -120,7 +120,9 @@ cairosvg, so the base suite still runs without the extra).
 | Phase | Deliverable | Status |
 |---|---|---|
 | 4 | Interactive **Textual** renderer over the same `Board` (S2 confirmed the seam) | deferred |
-| later | Best-effort **structural** conversion (crop/flatten + warnings) and/or native-model uplift; restores engine byte-parity | deferred |
+| — | **Native-model uplift** (D9) — additive-optional, lossless-only: `title`/`author` **landed** (P1 engine + P2 xword, 2026-07-07); closed-subset cell styling (P3) + `'`/`.` enumeration separators (P4) are the next riders, each with its own go/no-go | in progress (title/author done) |
+| — | Best-effort **structural** conversion (crop/flatten + warnings) | **rejected (D9)** — yields a different/invalid puzzle |
+| Stretch | Byte-parity endgame — close the last two cosmetic engine↔xword gaps (ipuz JSON whitespace; exolve title-line header position) | deferred (own go/no-go) |
 
 ---
 
@@ -131,8 +133,8 @@ cairosvg, so the base suite still runs without the extra).
 | Q1 | Colour scheme & cell geometry for the terminal grid | **resolved by S2** (§6.1) |
 | Q2 | HTML styling surface — built-in stylesheet vs `--css` hook | **resolved (Phase 3)**: one built-in inline `<style>` (self-contained + deterministic, D6); a `--css` hook stays a cheap future add |
 | Q3 | SVG glyphs for raster/PDF: `<text>` vs `<path>` | **resolved (Phase 3)**: `<text>` — cairosvg embeds glyph outlines in the PDF regardless (S6); `<path>` / cross-machine raster byte-goldens stay deferred (§11/§14) |
-| Q4 | Rectangular native — confirmed hard-error; square-padding uplift is deferred best-effort | resolved (hard-error); uplift deferred |
-| Q5 | Engine byte-parity — whether `xword` matches the engine's *invented* default title (ipuz `"Untitled"` + `exolve-title: Untitled`) | **resolved (2026-07-07)**: match on **Exolve only** — title-less boards gain the engine's default at the `convert` boundary (warned, `-q`-silenceable; serializers stay invent-nothing) because Exet's Save crashes on a null title (§6.2/§14). ipuz stays bare; full byte-parity still gated on ipuz title + whitespace + `exolve-id` |
+| Q4 | Rectangular native — confirmed hard-error; square-padding uplift is deferred best-effort | **resolved (permanent hard-error)**: the native-schema uplift (D9, 2026-07-07) **rejected** square-padding/uplift outright — ipuz is the rectangular carrier |
+| Q5 | Engine byte-parity — whether `xword` matches the engine's *invented* default title (ipuz `"Untitled"` + `exolve-title: Untitled`) | **resolved (2026-07-07)**: match on **Exolve only** — title-less boards gain the engine's default at the `convert` boundary (warned, `-q`-silenceable; serializers stay invent-nothing) because Exet's Save crashes on a null title (§6.2/§14). ipuz stays bare. **Follow-on (native-schema uplift P1+P2, D9):** the engine dropped the invented ipuz title **and** `exolve-id`, so byte-parity is no longer gated on either — only the two cosmetic Stretch gaps remain (ipuz JSON whitespace; exolve title-line header position) |
 | Q6 | Textual scope (candidate cycling, `--watch`, clue panes) | open (Phase 4 design) |
 
 ---
@@ -158,8 +160,16 @@ cairosvg, so the base suite still runs without the extra).
   dims/magic (host-font `<text>`, §11). The two Phase-3 open questions are
   resolved and spec'd: **Q2** → one built-in inline stylesheet (self-contained,
   D6); **Q3** → `<text>` glyphs (cairosvg embeds outlines in the PDF anyway).
+- **Native-schema uplift (D9): title/author landed (P1+P2, 2026-07-07).** Both
+  the engine and `xword` now carry optional top-level `title`/`author`
+  losslessly across native/ipuz/exolve; the invented ipuz title and the constant
+  `exolve-id` are retired. `xword` suite green (114 tests). Next riders under the
+  same lossless-only rule: closed-subset cell styling (P3) and `'`/`.`
+  enumeration separators (P4), each with its own go/no-go.
 - **Phase 4 (Textual TUI) is next**; Phase 4 + later: deferred, not yet started.
-- **Nothing in progress; nothing blocked.** §14 open questions resolved so far:
-  Q1 (grid geometry), Q2 (HTML styling), Q3 (SVG glyphs), Q4 (rectangular
-  native), Q5 (engine title: matched on Exolve only, at the convert boundary).
+- **Nothing blocked; the native-model uplift is the one thing in progress**
+  (title/author done, styling/enum riders pending). §14 open questions resolved
+  so far: Q1 (grid geometry), Q2 (HTML styling), Q3 (SVG glyphs), Q4 (rectangular
+  native — permanent hard-error, uplift rejected), Q5 (engine title: Exolve-only
+  at the convert boundary, plus P1/P2 retiring the ipuz title & `exolve-id`).
   Q6 gates Phase 4.

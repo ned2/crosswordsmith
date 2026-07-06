@@ -107,16 +107,34 @@ deterministic Prolog engine whose job is to *feed* tools, not *be* one.
     knows the target can't hold them and accepts the loss.
 
   So there are no `--force`/`--best-effort` fidelity flags in v1, only a
-  `-q/--quiet` to silence the drop warnings. **Best-effort *structural*
-  conversion** (crop/flatten with warnings) and **uplifting native's model**
-  (title/author, rectangular, styling — so structural conversions stop failing)
-  remain deferred escape hatches (§10, §13), not rejected — just later.
+  `-q/--quiet` to silence the drop warnings. The two former "deferred escape
+  hatches" are now decided (D9): **uplifting native's model** is adopted on
+  lossless-only terms (title/author landed P1+P2; styling + enumeration
+  separators follow), while **best-effort *structural* conversion**
+  (crop/flatten with warnings) is **rejected** — it would produce a different
+  or invalid puzzle.
 - **D8. CLI built with [`cyclopts`](https://github.com/BrianPugh/cyclopts).**
   Python-native subcommand dispatch for `view`/`convert`/`render` with typed
   params, enum `--from`/`--to`, and per-verb help. Its idioms and the resulting
   app skeleton (package layout, `xword` console entry point, stdin-as-default,
   exit codes) are pinned down by spike **S1** before Phase 1 (§13,
   [`xword-spikes.md`](xword-spikes.md)).
+- **D9. Native-schema uplift — additive-optional anchors + riders,
+  lossless-only.** (Ratified 2026-07-07,
+  [`plans/native-schema-uplift-plan.md`](plans/native-schema-uplift-plan.md).)
+  The native schema is extended where the engine can *compute-or-carry*, every
+  conversion stays lossless, and the lossy best-effort escape hatch (§10 (a)) is
+  **rejected**, not deferred. **Landed:** optional top-level `title`/`author`
+  (P1 engine + P2 xword). **Coming under the same rule:** closed-subset cell
+  styling (P3) and the `'`/`.` enumeration separators (P4). Every addition is
+  **additive-optional** — an absent field means today's semantics, old layouts
+  stay valid, and nothing new is ever required; since neither the native payload
+  nor json-output-spec carries a `version` field, additive-optional *is* the
+  compatibility story. **Permanent fail-strict** (no uplift, no lossy fallback):
+  rectangular grids and rebus cells — native's model is square-N×N single-letter,
+  and flattening either yields a *different* or *invalid* puzzle (ipuz is the
+  rectangular/rebus carrier). **Bars** stay **gated** on
+  [`cryptic-layout-spec.md`](cryptic-layout-spec.md) landing.
 
 ## 5. Architecture
 
@@ -139,7 +157,7 @@ template has blocks and numbers but no letters or clues).
 | `height`, `width` | grid dimensions. Native is square (`gridLength`); ipuz/Exolve may be rectangular, so the model carries both dims. |
 | `grid[r][c]` | a **block** or a **cell** `{letter?, number?, across_num?, down_num?}`. Row-major, `[row,col]`, 0-indexed — matching the native `grid`. |
 | `words[]` | `{number, direction, cells[], answer?, enumeration, clue?, meta?}`. |
-| `meta` | puzzle-level: `title?`, `author?` (ipuz carries these; native does not). |
+| `meta` | puzzle-level: `title?`, `author?` — **all three formats carry these** (native as optional top-level anchors since the D9 uplift; ipuz/Exolve natively). |
 
 **Numbering is derivable, not required from input.** Standard crossword
 numbering (scan row-major; a cell is numbered iff an across or down word starts
@@ -247,16 +265,19 @@ Common CLI conventions (§8) apply to all three.
   documents the directive as optional: when absent it "create[s] one from a
   signature of the grid and the clues", so consumers require nothing — the
   only cost is that solving state keyed on the auto-id resets if the puzzle
-  is edited, which an invented constant id would not fix anyway.
+  is edited, which an invented constant id would not fix anyway. Since the
+  uplift's P1 (D9) the **engine agrees** — it dropped its constant
+  `exolve-id: crosswordsmith-export`, so neither side emits one.
 - **Engine cross-check** — dropping `link` now matches the engine's own
-  `export`. The engine *invents* a default title on **both** targets
-  (`title:"Untitled"` for ipuz, `exolve-title: Untitled` for Exolve —
-  confirmed S4/S5); since Q5's resolution `xword` matches it on **Exolve
-  only** (the convert-boundary default above), so the title line is
-  byte-identical to the engine's. Remaining divergences: the ipuz title
-  (`xword` emits none) and the engine's constant
-  `exolve-id: crosswordsmith-export` (`xword` emits none, see above) — so the
-  cross-check stays **structural** agreement (§11) plus the exolve title line.
+  `export`. Since the native-schema uplift's P1 (D9) the engine invents a
+  default title on **Exolve only** (`exolve-title: Untitled`, confirmed S5) —
+  the invented ipuz `title:"Untitled"` was retired — and `xword` matches that
+  Exolve default at the convert boundary, so the title line is byte-identical
+  on both sides while ipuz carries no title on either. With `exolve-id` gone
+  from both (above), the cross-check stays **structural** agreement (§11) plus
+  the byte-identical exolve title line; the only residual byte-gaps are
+  cosmetic — ipuz JSON whitespace and the exolve title line's header position
+  (§11, §14 Stretch).
 
 ### 6.3 `render` — visual artefact
 
@@ -331,7 +352,7 @@ different **expressive power**, with native the narrowest box:
 | Rectangular grid | structure | ✗ (square N×N) | ✓ | ✓ |
 | Multi-letter (rebus) cells | structure | ✗ | ✓ | ✓ |
 | Circled / shaded cells, **bars** | structure | ✗ | ✓ | ✓ |
-| Puzzle title / author | structure | ✗ | ✓ | ✓ |
+| Puzzle title / author | structure | ✓ (D9) | ✓ | ✓ |
 | Blocks, numbering, clues, enumeration, single letters | structure | ✓ | ✓ | ✓ |
 | Per-word `link` + arbitrary `meta` | **metadata** | ✓ (only native) | ✗ | ✗ |
 | Top-level `diagnostics` (engine quality caveats, json-output-spec §6.4) | **metadata** | ✓ (only native) | ✗ | ✗ |
@@ -355,8 +376,11 @@ Consequences of the table:
   nothing** — the target holds it all (§6.2), so the identity conversion is
   payload-lossless and silent.
 - **Structural loss is the blocking direction, mostly `→ native`** (native can't
-  hold rectangular grids, rebus, styling, bars, title) — those fail until the
-  deferred structural best-effort / native-uplift work lands.
+  hold rectangular grids, rebus, styling, bars) — the native-schema uplift (D9)
+  splits that list: rectangular and rebus are **permanent** fail-strict, bars
+  wait on cryptic-layout-spec, cell styling gets a lossless closed-subset in P3,
+  and puzzle **title/author** already landed (P1+P2, 2026-07-07) — optional
+  top-level anchors that convert into native losslessly.
 - **Enumeration survives `→ native` by answer reconstruction.** Native encodes
   the enumeration in the answer's display form, so an answer-less source word
   (ipuz/Exolve) has its answer rebuilt from the grid letters split per the
@@ -387,37 +411,51 @@ Consequences of the table:
     the `color` shade or fails-strict on an unmappable style key (text/border
     colour, `imagebg`, `mark`, boolean `highlight`, … — a narrow, not a removal).
 
-**Deferred escape hatches** (not rejected): (a) **best-effort *structural***
-conversion (crop/flatten with warnings); (b) **uplifting native's model** (add
-title/author, rectangular, styling) so structural conversions stop failing.
-The engine's invented title is decided (Q5, §14: matched on Exolve, not ipuz);
-full engine byte-parity now gates on the ipuz title, the engine's whitespace
-style, and its `exolve-id` (§11).
+**Escape hatches — resolved (D9, 2026-07-07).** The two former deferred hatches
+are decided: (a) **best-effort *structural* conversion** (crop/flatten with
+warnings) is **rejected** — dropping structure yields a different or invalid
+puzzle, which the D7 strict rule exists to prevent; (b) **native-model uplift**
+is **adopted on lossless-only terms** — the schema grows where the engine can
+compute-or-carry, additive-optionally. Landed: `title`/`author` (P1 engine + P2
+xword — now ✓ for native above). Coming under the same rule: closed-subset cell
+styling (P3), the `'`/`.` enumeration separators (P4). Staying **permanent**
+fail-strict: rectangular grids and rebus (uplift would break native's
+square-N×N single-letter model — ipuz is their carrier). Bars stay **gated** on
+[`cryptic-layout-spec.md`](cryptic-layout-spec.md). Engine byte-parity: P1
+retired the invented ipuz title and the constant `exolve-id`, so the residual
+engine↔xword gaps are now cosmetic — ipuz JSON whitespace and the exolve title
+line's header position (§11) — and close in the byte-parity endgame (§14).
 
 ## 11. Testing
 
 - **Parser round-trips** — `native → Board → native` is identity where
   lossless; same for ipuz, Exolve.
-- **`convert` fidelity** — assert *structural failures* (rectangular/rebus/bars/
-  title → native error, each naming the property) **and** *metadata drops*
+- **`convert` fidelity** — assert *structural failures* (rectangular/rebus/bars
+  → native error, each naming the property) **and** *metadata drops*
   (`link`-bearing native → ipuz/Exolve succeeds, drops `link`, warns on stderr;
-  `-q` silences the warning but stdout is byte-identical either way). Assert
-  puzzle-lossless round-trips over an intersection fixture. **JSON output rule
-  (S3, D6):** serialize with `json.dumps(obj, sort_keys=True, indent=2,
-  ensure_ascii=False) + "\n"` — deterministic, idempotent (`dump==redump`), and
-  **key-order-identical to the engine** (whose output is already fully key-sorted
-  at every depth), so `convert`'s native/ipuz output matches the engine's key
-  order; residual byte-parity is gated only on the engine's whitespace style +
-  its invented ipuz title (the Exolve title divergence closed with Q5, §14;
-  the ipuz side stays deferred, §10).
-- **Engine cross-check (structural + the Q5 title line)** — the engine's
-  `export` is best-effort (drops `link`, injects a default title), so v1
+  `-q` silences the warning but stdout is byte-identical either way). Since the
+  native-schema uplift (D9) **title/author no longer fail-strict** — assert they
+  round-trip *into* native instead (a title-less source that gains the Q5 Exolve
+  default carries `title: "Untitled"` back through native: gains the ecosystem
+  default, loses nothing). Assert puzzle-lossless round-trips over an
+  intersection fixture. **JSON output rule (S3, D6):** serialize with
+  `json.dumps(obj, sort_keys=True, indent=2, ensure_ascii=False) + "\n"` —
+  deterministic, idempotent (`dump==redump`), and **key-order-identical to the
+  engine** (whose output is already fully key-sorted at every depth), so
+  `convert`'s native/ipuz output matches the engine's key order; residual
+  byte-parity is gated only on the engine's JSON whitespace style now that P1
+  retired the invented ipuz title (§10, §14 Stretch).
+- **Engine cross-check (structural + anchor-field parity)** — the engine's
+  `export` drops `link` and injects the Exolve `Untitled` default (P1), so v1
   asserts that `xword`'s ipuz/Exolve *structurally* agrees with
-  `crosswordsmith export` (grid, numbering, clues, enumeration) — not
-  byte-identity. Since Q5 the Exolve check also asserts the byte-identical
-  `  exolve-title: Untitled` line on both sides; full Exolve byte-parity still
-  gates on the engine's `exolve-id` (§6.2). Byte-parity is a
-  best-effort-phase test.
+  `crosswordsmith export` (grid, numbering, clues, enumeration) — not full
+  byte-identity. After P1 retired the invented ipuz title and the constant
+  `exolve-id`, **title/author agree on both sides**: ipuz carries neither for a
+  title-less layout, Exolve carries the byte-identical `  exolve-title: Untitled`
+  line (both sides), and neither emits `exolve-id`. The residual gaps are
+  cosmetic — ipuz JSON whitespace and the exolve title line's header position
+  (engine after `exolve-begin`, xword after width/height; same line content,
+  different placement) — and close in the byte-parity endgame (§14 Stretch).
 - **`view`** — render to a string and compare golden snapshots (solved and
   `--blank`). **Exact capture recipe (S3):** `Console(width=<pinned>,
   no_color=True, force_terminal=False, record=True, file=io.StringIO(),
@@ -497,8 +535,10 @@ is the plan; the tracker says where we are.
   the PDF (S6), so the PDF is print-quality regardless; `<path>` glyphs (and the
   cross-machine raster byte-goldens they would enable) stay deferred (§11). The
   raster path is therefore tested by dimensions/magic, not byte-identity.
-- **Rectangular native** — confirmed hard-error (structural, D7); a
-  square-padding/uplift option is the deferred best-effort path, not v1.
+- **Rectangular native** — confirmed **permanent** hard-error (structural,
+  D7/D9); the native-schema uplift (2026-07-07) **rejected** the
+  square-padding/uplift option outright — ipuz is the rectangular carrier.
+  Decided, not deferred.
 - ~~**Engine byte-parity** — reachable once we decide whether `xword` should
   match the engine's *invented* default title on **both** ipuz (`"Untitled"`)
   and Exolve (`exolve-title: Untitled`) (currently: no, invent nothing)~~ —
@@ -510,7 +550,14 @@ is the plan; the tracker says where we are.
   engine inject its default — so this is a format-ecosystem requirement, not
   parity-chasing; it also closes the "Exet re-save of `xword`'s title-less
   Exolve" flag once considered for Phase 2. ipuz stays invent-nothing (title
-  optional there, no breakage evidence), so full byte-parity remains gated on
-  the ipuz title, the engine's whitespace style, and its `exolve-id` (§11).
+  optional there, no breakage evidence). **Update (native-schema uplift P1+P2,
+  2026-07-07, D9):** the engine itself dropped the invented ipuz `"Untitled"`
+  and the constant `exolve-id`, and native now carries title/author, so
+  byte-parity is no longer gated on either. The only residual engine↔xword gaps
+  are two cosmetic ones for the **byte-parity endgame (Stretch)**: ipuz JSON
+  whitespace, and the exolve title line's header placement (engine emits it
+  right after `exolve-begin`, xword after width/height — same content, different
+  position; a plan-Stretch finding, since the plan expected only whitespace to
+  remain). Once both close, this entry is done.
 - **Textual scope** (candidate cycling, `--watch`, clue panes) — deferred to
   Phase 4 design.

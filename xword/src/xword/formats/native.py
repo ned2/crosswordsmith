@@ -5,9 +5,12 @@ Numbering/word geometry are re-derived from the block pattern; the source's
 
 The serializer is the structural-fidelity authority for the native target
 (D7, spec §10): native is the narrowest box, so anything it cannot represent
-— rectangular grids, title/author, circled/barred/prefilled/styled cells,
-rebus, unfilled cells — raises an XwordError naming the property and a
-capable target. Native's enumeration lives in the answer's spaces/hyphens,
+— rectangular grids, circled/barred/prefilled/styled cells, rebus, unfilled
+cells — raises an XwordError naming the property and a capable target. The
+optional top-level title/author anchors (json-output-spec §6.5) are the
+exception: native now carries them (parsed into / emitted from board.meta),
+so title/author no longer fail-strict. Native's enumeration lives in the
+answer's spaces/hyphens,
 so an answer-less word (ipuz/Exolve source) is reconstructed from the grid
 letters split per its enumeration; on enum/grid mismatch the grid wins
 (same principle as the Exolve enum disambiguator, spec §5.1).
@@ -94,7 +97,15 @@ def parse(text: str) -> Board:
     diagnostics = obj.get("diagnostics")
     if diagnostics is not None and not isinstance(diagnostics, dict):
         raise XwordError("native: diagnostics must be an object")
-    return Board(height=n, width=n, grid=grid, words=words, diagnostics=diagnostics)
+    board = Board(height=n, width=n, grid=grid, words=words, diagnostics=diagnostics)
+    # Optional top-level anchors (json-output-spec §6.5): read title/author into
+    # board.meta, mirroring ipuz/exolve — the puzzle-level meta store all three
+    # formats round-trip through. A non-string (or absent) value is simply not
+    # carried; nothing is invented at parse time.
+    for key in ("title", "author"):
+        if isinstance(obj.get(key), str):
+            board.meta[key] = obj[key]
+    return board
 
 
 def serialize(board: Board) -> str:
@@ -103,12 +114,6 @@ def serialize(board: Board) -> str:
             f"native cannot hold a rectangular grid ({board.width}x{board.height}); "
             "native is square-only — target ipuz or exolve instead"
         )
-    for key in ("title", "author"):
-        if key in board.meta:
-            raise XwordError(
-                f"native cannot hold a puzzle {key} ({board.meta[key]!r}) — "
-                "target ipuz or exolve instead"
-            )
     grid_out: list[list[Any]] = []
     for r, row in enumerate(board.grid):
         row_out: list[Any] = []
@@ -184,6 +189,14 @@ def serialize(board: Board) -> str:
         "gridLength": board.height,
         "words": words_out,
     }
+    # Optional top-level anchors (json-output-spec §6.5): emit title/author when
+    # the board carries them. native is now a title/author carrier (matching
+    # ipuz/exolve), so native → native is anchor-lossless and a source that
+    # gained a title on an exolve/ipuz hop carries it back. (dump_json sorts
+    # keys, so placement here is cosmetic.)
+    for key in ("title", "author"):
+        if key in board.meta:
+            payload[key] = board.meta[key]
     if board.diagnostics is not None:
         # native -> native keeps diagnostics: the target can hold it, so D7's
         # drop-when-homeless rule never triggers (spec §10)
