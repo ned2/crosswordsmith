@@ -274,10 +274,12 @@ Common CLI conventions (§8) apply to all three.
   the invented ipuz `title:"Untitled"` was retired — and `xword` matches that
   Exolve default at the convert boundary, so the title line is byte-identical
   on both sides while ipuz carries no title on either. With `exolve-id` gone
-  from both (above), the cross-check stays **structural** agreement (§11) plus
-  the byte-identical exolve title line; the only residual byte-gaps are
-  cosmetic — ipuz JSON whitespace and the exolve title line's header position
-  (§11, §14 Stretch).
+  from both (above), the cross-check is **structural** agreement (§11) — the
+  guaranteed contract. **Byte-level parity is best-effort, not claimed either
+  way** (§14): `xword`'s Exolve header now leads with title/setter like the
+  engine's, so in practice the two currently match byte-for-byte; ipuz differs
+  only in JSON serializer formatting (SWI `json_write_dict` vs Python
+  `json.dumps`). Neither is pinned as a byte-identity contract.
 
 ### 6.3 `render` — visual artefact
 
@@ -422,9 +424,11 @@ styling (P3), the `'`/`.` enumeration separators (P4). Staying **permanent**
 fail-strict: rectangular grids and rebus (uplift would break native's
 square-N×N single-letter model — ipuz is their carrier). Bars stay **gated** on
 [`cryptic-layout-spec.md`](cryptic-layout-spec.md). Engine byte-parity: P1
-retired the invented ipuz title and the constant `exolve-id`, so the residual
-engine↔xword gaps are now cosmetic — ipuz JSON whitespace and the exolve title
-line's header position (§11) — and close in the byte-parity endgame (§14).
+retired the invented ipuz title and the constant `exolve-id`; the Exolve header
+was then aligned to lead with title/setter (Stretch), so Exolve currently
+matches the engine byte-for-byte and ipuz differs only in JSON serializer
+formatting. **Byte-level parity is best-effort and not claimed either way** —
+the guaranteed contract is *structural* agreement (§11, §14).
 
 ## 11. Testing
 
@@ -442,9 +446,10 @@ line's header position (§11) — and close in the byte-parity endgame (§14).
   `json.dumps(obj, sort_keys=True, indent=2, ensure_ascii=False) + "\n"` —
   deterministic, idempotent (`dump==redump`), and **key-order-identical to the
   engine** (whose output is already fully key-sorted at every depth), so
-  `convert`'s native/ipuz output matches the engine's key order; residual
-  byte-parity is gated only on the engine's JSON whitespace style now that P1
-  retired the invented ipuz title (§10, §14 Stretch).
+  `convert`'s native/ipuz output matches the engine's key order. Full ipuz
+  byte-identity is **not** a goal: the engine's SWI `json_write_dict` formatting
+  differs from `json.dumps`, and matching it would abandon this clean-JSON rule
+  — byte-level parity is best-effort only (§10, §14).
 - **Engine cross-check (structural + anchor-field parity)** — the engine's
   `export` drops `link` and injects the Exolve `Untitled` default (P1), so v1
   asserts that `xword`'s ipuz/Exolve *structurally* agrees with
@@ -452,10 +457,12 @@ line's header position (§11) — and close in the byte-parity endgame (§14).
   byte-identity. After P1 retired the invented ipuz title and the constant
   `exolve-id`, **title/author agree on both sides**: ipuz carries neither for a
   title-less layout, Exolve carries the byte-identical `  exolve-title: Untitled`
-  line (both sides), and neither emits `exolve-id`. The residual gaps are
-  cosmetic — ipuz JSON whitespace and the exolve title line's header position
-  (engine after `exolve-begin`, xword after width/height; same line content,
-  different placement) — and close in the byte-parity endgame (§14 Stretch).
+  line (both sides), and neither emits `exolve-id`. **Byte-level parity is
+  best-effort, not asserted as a contract** (§14): the test checks structural
+  agreement plus a few order-agnostic line checks, deliberately *not* a
+  whole-file byte-equality (which would couple the suite to the engine's exact
+  output). In practice Exolve currently matches byte-for-byte (header aligned to
+  lead with title/setter); ipuz differs only in JSON serializer formatting.
 - **`view`** — render to a string and compare golden snapshots (solved and
   `--blank`). **Exact capture recipe (S3):** `Console(width=<pinned>,
   no_color=True, force_terminal=False, record=True, file=io.StringIO(),
@@ -514,7 +521,7 @@ line's header position (§11) — and close in the byte-parity endgame (§14).
 | **2** | `convert` any→any (D7): structural failures block; metadata drops warn on stderr (`-q`); structural engine cross-check. |
 | **3** | `render` to SVG + HTML; PNG/PDF behind `xword[raster]`. |
 | **4** | Interactive **Textual** renderer over the same `Board`. |
-| **later** | **Best-effort *structural*** conversion (crop/flatten with warnings) and/or **native-model uplift**; restores engine byte-parity. |
+| **later** | **Native-model uplift** (D9) — additive-optional riders (cell styling P3, enumeration separators P4) after title/author (P1+P2). Best-effort *structural* conversion is **rejected** (D9). Engine byte-parity is best-effort (§14), not a phase deliverable. |
 
 A `STATUS`-style tracker — [`xword-status.md`](xword-status.md) — is the system
 of record for build progress (Phase 0 done; Phase 1 staged). This spec's phasing
@@ -553,11 +560,18 @@ is the plan; the tracker says where we are.
   optional there, no breakage evidence). **Update (native-schema uplift P1+P2,
   2026-07-07, D9):** the engine itself dropped the invented ipuz `"Untitled"`
   and the constant `exolve-id`, and native now carries title/author, so
-  byte-parity is no longer gated on either. The only residual engine↔xword gaps
-  are two cosmetic ones for the **byte-parity endgame (Stretch)**: ipuz JSON
-  whitespace, and the exolve title line's header placement (engine emits it
-  right after `exolve-begin`, xword after width/height — same content, different
-  position; a plan-Stretch finding, since the plan expected only whitespace to
-  remain). Once both close, this entry is done.
+  byte-parity is no longer gated on either. **Byte-parity endgame (Stretch,
+  2026-07-07) — closed as best-effort:** `xword`'s Exolve header was reordered
+  to lead with title/setter (like `export.pl`), so Exolve output currently
+  matches the engine byte-for-byte. For ipuz, a full-payload probe brought the
+  two to within **7 of 697 lines** using engine options `[step(2), tab(80),
+  width(1)]` + Python `separators=(",", ":")`; the residual is SWI
+  `json_write_dict`'s *type-dependent* colon-spacing (`": "` before object/array
+  values, `":"` before scalars), which no `json.dumps` flag reproduces —
+  closing it would need a bespoke `xword` encoder that abandons its own
+  clean-JSON rule (§11, D6) and diverges ipuz from native. **Decision:
+  byte-level parity is best-effort, and no compatibility claim is made either
+  way; the guaranteed contract is *structural* parity (§11).** Not chased
+  further absent a consumer that needs identical bytes.
 - **Textual scope** (candidate cycling, `--watch`, clue panes) — deferred to
   Phase 4 design.
