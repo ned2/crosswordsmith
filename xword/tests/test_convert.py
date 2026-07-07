@@ -315,13 +315,21 @@ class TestRoundTrips:
 
 class TestEngineCrossCheck:
     """§11: structural + anchor-field agreement with `crosswordsmith export`
-    on the same layout. After P1 the engine retired its invented ipuz title
-    and the constant `exolve-id`, so title/author now agree on both sides
-    (ipuz: neither carries one for a title-less layout; exolve: both carry the
-    Q5 `Untitled` default). The residual divergences are cosmetic and left for
-    the byte-parity endgame (Stretch): ipuz JSON whitespace, and the exolve
-    title line's header position — engine emits it right after `exolve-begin`,
-    xword after width/height; same line content, different placement."""
+    on the same layout — that structural agreement is the guarantee. After P1
+    the engine retired its invented ipuz title and the constant `exolve-id`, so
+    title/author now agree on both sides (ipuz: neither carries one for a
+    title-less layout; exolve: both carry the Q5 `Untitled` default).
+
+    Byte-level parity is BEST-EFFORT, not a claimed contract (spec §14). The
+    Exolve header now leads with title/setter like the engine's, so in practice
+    the two currently match byte-for-byte — but this suite does NOT pin that
+    with a whole-file equality assertion (that would couple xword's tests to the
+    engine's exact byte output and break on any engine formatting drift). ipuz
+    differs only in JSON serializer formatting — SWI `json_write_dict` vs Python
+    `json.dumps` — and no byte-compatibility claim is made either way. Hence the
+    checks here are structural plus a few targeted, order-agnostic line checks.
+    xword's own serializer determinism is pinned separately by its own goldens
+    (TestNoFeatureByteIdentity)."""
 
     def _assert_structural_match(self, ours_text: str, engine_text: str, fmt: str):
         ours = parse_board(ours_text, fmt)
@@ -346,12 +354,14 @@ class TestEngineCrossCheck:
     def test_exolve_matches_engine_export(self):
         ours, _ = convert_text(NATIVE.read_text(), "exolve")
         self._assert_structural_match(ours, EXOLVE.read_text(), "exolve")
-        # the title LINE is byte-identical to the engine's (export.pl exolve_title_line/2)
-        assert "\n  exolve-title: Untitled\n" in ours
-        assert "\n  exolve-title: Untitled\n" in EXOLVE.read_text()
         # P1 retired the engine's constant exolve-id — neither side emits one now
         assert "exolve-id" not in ours
         assert "exolve-id" not in EXOLVE.read_text()
+        # Header now leads with the title line as the engine does (best-effort
+        # byte alignment). Order-agnostic presence check only — not a whole-file
+        # equality contract (see class docstring; byte-parity is best-effort).
+        assert "\n  exolve-title: Untitled\n" in ours
+        assert "\n  exolve-title: Untitled\n" in EXOLVE.read_text()
 
 
 class TestExolveTitleDefault:

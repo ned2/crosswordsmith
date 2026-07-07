@@ -219,11 +219,23 @@ def _shade_colour(style: Meta | None) -> str | None:
 # library round-trips through serialize() stay faithful (convert.py, spec §14).
 def serialize(board: Board) -> str:
     lines = ["exolve-begin"]
+    # Header directives lead in the engine's export order (export.pl
+    # exolve_title_line/exolve_setter_lines then width/height) so `xword`'s
+    # Exolve output is byte-identical to `crosswordsmith export`: title and
+    # setter first, then dimensions, then the grid. Exolve is order-tolerant on
+    # framing directives, so this placement is purely for engine byte-parity
+    # (spec §11 cross-check, §14 byte-parity endgame — closed 2026-07-07).
+    if "title" in board.meta:
+        lines.append(f"  exolve-title: {board.meta['title']}")
+    if "author" in board.meta:
+        lines.append(f"  exolve-setter: {board.meta['author']}")
     lines.append(f"  exolve-width: {board.width}")
     lines.append(f"  exolve-height: {board.height}")
     # A multi-char (rebus) cell flips the whole grid into Exolve's rebus-cells
     # mode: every row becomes space-separated tokens (§4.1). With no rebus cell
-    # the compact, non-spaced grid is emitted byte-for-byte as before (D6).
+    # the compact, non-spaced grid is emitted byte-for-byte as before (D6). The
+    # engine never emits this option (it has no rebus), so its placement only
+    # affects `xword`'s own exolve round-trips, which compare by parsed board.
     has_rebus = any(
         cell is not None and cell.letter is not None and len(cell.letter) > 1
         for row in board.grid
@@ -231,10 +243,6 @@ def serialize(board: Board) -> str:
     )
     if has_rebus:
         lines.append("  exolve-option: rebus-cells")
-    if "title" in board.meta:
-        lines.append(f"  exolve-title: {board.meta['title']}")
-    if "author" in board.meta:
-        lines.append(f"  exolve-setter: {board.meta['author']}")
     shades: list[tuple[str, int, int]] = []  # (colour, row, col), 0-indexed
     lines.append("  exolve-grid:")
     for r, row in enumerate(board.grid):

@@ -85,7 +85,7 @@ on stderr (`-q` silences, stdout untouched); structural engine cross-check.
 | 3 | **D7 metadata drop-and-warn** — per-word `link`/`meta` keys + top-level `diagnostics` dropped on `→ ipuz/exolve` with one stderr warning each; `-q` silences, stdout byte-identical; native target drops nothing | §6.2, §10 | done | `tests/test_convert.py::TestMetadataDrops` + `TestCli` |
 | 4 | **`diagnostics` passthrough** — carried on `Board`, native→native re-emits verbatim (payload-lossless identity, json-output-spec §6.4) | §6.2, §10 | done | fixture `arrange_bundled_17_fixed.json` (engine golden verbatim) in `TestMetadataDrops`/`TestCli` |
 | 5 | **Puzzle-lossless round-trips** — native→ipuz→native and native→exolve→native = source minus `link`; display answers reconstructed from enumeration (`(5,5)` → `"OMEGA POINT"`), grid wins on enum mismatch; exolve→ipuz→exolve keeps bars/circles/unfilled (barred StyleSpec synthesized) + prefill (`!`↔`value`) + rebus (multi-char↔`rebus-cells`). Since D9 **title/author survive the round-trip** too: a title-less exolve source that gained the Q5 `Untitled` default carries it back through native rather than fail-stricting the way home | §10, D9 | done | `tests/test_convert.py::TestRoundTrips` + `test_native_exolve_native` + `test_titled_exolve_native` + `TestPrefilledToIpuz` + `TestRebusToExolve` |
-| 6 | **Engine cross-check (structural + anchor parity)** — convert native→ipuz/exolve agrees with `crosswordsmith export` on grid/numbering/clues/enumeration; the exolve title line is byte-identical (both `exolve-title: Untitled`). After P1 (D9) retired the invented ipuz title **and** the constant `exolve-id`, title/author agree on both sides and neither emits `exolve-id`; residual gaps are cosmetic — ipuz JSON whitespace + the exolve title line's header position (engine after `exolve-begin`, xword after width/height) — for the byte-parity Stretch | §11 | done | `tests/test_convert.py::TestEngineCrossCheck` |
+| 6 | **Engine cross-check (structural + anchor parity)** — convert native→ipuz/exolve agrees with `crosswordsmith export` on grid/numbering/clues/enumeration; the exolve title line agrees (both `exolve-title: Untitled`). After P1 (D9) retired the invented ipuz title **and** the constant `exolve-id`, title/author agree on both sides and neither emits `exolve-id`. Byte-level parity is **best-effort, not claimed either way** (§14): the test asserts structural agreement + order-agnostic line checks, deliberately not whole-file byte-equality. In practice Exolve now matches the engine byte-for-byte (header aligned to lead with title/setter, Stretch); ipuz differs only in JSON serializer formatting | §11 | done | `tests/test_convert.py::TestEngineCrossCheck` |
 
 ---
 
@@ -122,7 +122,7 @@ cairosvg, so the base suite still runs without the extra).
 | 4 | Interactive **Textual** renderer over the same `Board` (S2 confirmed the seam) | deferred |
 | — | **Native-model uplift** (D9) — additive-optional, lossless-only: `title`/`author` **landed** (P1 engine + P2 xword, 2026-07-07); closed-subset cell styling (P3) + `'`/`.` enumeration separators (P4) are the next riders, each with its own go/no-go | in progress (title/author done) |
 | — | Best-effort **structural** conversion (crop/flatten + warnings) | **rejected (D9)** — yields a different/invalid puzzle |
-| Stretch | Byte-parity endgame — close the last two cosmetic engine↔xword gaps (ipuz JSON whitespace; exolve title-line header position) | deferred (own go/no-go) |
+| Stretch | Byte-parity endgame | **done, best-effort (2026-07-07)** — Exolve header reordered to lead with title/setter, so Exolve output currently matches the engine byte-for-byte. ipuz probed to within 7/697 lines (engine `[step(2),tab(80),width(1)]` + `separators=(",",":")`); residual is SWI's type-dependent colon-spacing, closable only via a bespoke xword encoder that abandons its clean-JSON rule. **No byte-compatibility claim made either way; structural parity is the guarantee** (§14). Not chased absent a consuming workflow |
 
 ---
 
@@ -134,7 +134,7 @@ cairosvg, so the base suite still runs without the extra).
 | Q2 | HTML styling surface — built-in stylesheet vs `--css` hook | **resolved (Phase 3)**: one built-in inline `<style>` (self-contained + deterministic, D6); a `--css` hook stays a cheap future add |
 | Q3 | SVG glyphs for raster/PDF: `<text>` vs `<path>` | **resolved (Phase 3)**: `<text>` — cairosvg embeds glyph outlines in the PDF regardless (S6); `<path>` / cross-machine raster byte-goldens stay deferred (§11/§14) |
 | Q4 | Rectangular native — confirmed hard-error; square-padding uplift is deferred best-effort | **resolved (permanent hard-error)**: the native-schema uplift (D9, 2026-07-07) **rejected** square-padding/uplift outright — ipuz is the rectangular carrier |
-| Q5 | Engine byte-parity — whether `xword` matches the engine's *invented* default title (ipuz `"Untitled"` + `exolve-title: Untitled`) | **resolved (2026-07-07)**: match on **Exolve only** — title-less boards gain the engine's default at the `convert` boundary (warned, `-q`-silenceable; serializers stay invent-nothing) because Exet's Save crashes on a null title (§6.2/§14). ipuz stays bare. **Follow-on (native-schema uplift P1+P2, D9):** the engine dropped the invented ipuz title **and** `exolve-id`, so byte-parity is no longer gated on either — only the two cosmetic Stretch gaps remain (ipuz JSON whitespace; exolve title-line header position) |
+| Q5 | Engine byte-parity — whether `xword` matches the engine's *invented* default title (ipuz `"Untitled"` + `exolve-title: Untitled`) | **resolved (2026-07-07)**: match on **Exolve only** — title-less boards gain the engine's default at the `convert` boundary (warned, `-q`-silenceable; serializers stay invent-nothing) because Exet's Save crashes on a null title (§6.2/§14). ipuz stays bare. **Follow-on (native-schema uplift P1+P2, D9):** the engine dropped the invented ipuz title **and** `exolve-id`, so byte-parity is no longer gated on either. **Byte-parity endgame (Stretch):** Exolve header aligned → currently byte-matches; ipuz within 7/697 lines but left as best-effort. No byte-compatibility claim either way; structural parity is the guarantee (§14) |
 | Q6 | Textual scope (candidate cycling, `--watch`, clue panes) | open (Phase 4 design) |
 
 ---
@@ -166,6 +166,11 @@ cairosvg, so the base suite still runs without the extra).
   `exolve-id` are retired. `xword` suite green (114 tests). Next riders under the
   same lossless-only rule: closed-subset cell styling (P3) and `'`/`.`
   enumeration separators (P4), each with its own go/no-go.
+- **Byte-parity endgame (Stretch): done as best-effort (2026-07-07).** Exolve
+  header aligned to the engine's order, so Exolve output currently matches
+  byte-for-byte; ipuz probed to 7/697 lines off (SWI's type-dependent
+  colon-spacing). **No byte-compatibility claim made either way** — structural
+  parity is the guarantee; not chased absent a consuming workflow (§14).
 - **Phase 4 (Textual TUI) is next**; Phase 4 + later: deferred, not yet started.
 - **Nothing blocked; the native-model uplift is the one thing in progress**
   (title/author done, styling/enum riders pending). §14 open questions resolved
