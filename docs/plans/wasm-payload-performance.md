@@ -1,6 +1,10 @@
 # Plan: smaller and faster browser payload
 
-Status: **planned** · Drafted 2026-07-14.
+Status: **in progress** · Drafted 2026-07-14. Landed: Phase 0 (benchmark
+harness + committed baseline, `make bench-wasm-payload*`) and Phase 1
+(browser-specific load root; qlf 71,580 → 51,068 bytes raw, fill/stockgrid/
+sha/fastrw out of the closure and gated in `run_all.sh`, the historic
+`http/json` source_sink load warnings gone) — both 2026-07-14.
 
 Goal: make the crosswordsmith browser engine substantially cheaper to fetch,
 compile, and initialise without changing solver semantics, native behaviour, or

@@ -112,6 +112,30 @@ else
   echo "  fresh  crosswordsmith.qlf - skip qcompile"
 fi
 
+# --- 2.1 qlf dependency inventory (payload plan Phase 1) ------------------------
+# The browser load root (solve_browser.pl) imports exactly the browser surface:
+# core/metrics/arrange/lint/export/browser. fill and stockgrid must NOT be in
+# the qlf's folded closure - they drag fill-only baggage (library(sha),
+# library(fastrw), dictionary/stock-grid handling) into every browser cold
+# load, and the reduced preload/package profiles (Phases 2-3) are derived from
+# THIS closure. qlf files embed their source paths (provenance for error
+# messages), so grep -a is a faithful inventory. The browser.pl positive probe
+# keeps this guard honest: if qlf provenance strings ever vanish, the check
+# fails loudly instead of silently passing.
+if ! grep -aq 'crosswordsmith/browser\.pl' "$QLF"; then
+  echo "test-wasm FAILED: qlf inventory probe broken - no browser.pl provenance in $QLF" >&2
+  exit 1
+fi
+LEAKED="$(grep -aoE 'crosswordsmith/(fill|stockgrid)\.pl|library\(sha\)|fastrw' "$QLF" | sort -u || true)"
+if [ -n "$LEAKED" ]; then
+  echo "test-wasm FAILED: fill-only dependencies leaked into the browser qlf:" >&2
+  echo "$LEAKED" | sed 's/^/    /' >&2
+  echo "  the browser load root (wasm/client/solve_browser.pl) must import only" >&2
+  echo "  core/metrics/arrange/lint/export/browser (payload plan Phase 1)." >&2
+  exit 1
+fi
+echo "  qlf inventory OK (no fill/stockgrid/sha/fastrw in the closure)"
+
 # --- 2.5 stamp provenance (build-manifest.json + content-hashed names) ---------
 # Steps 1-2 may have replaced artifacts, so re-stamp; worker.js prefers the
 # manifest's hashed names when present, so the battery below exercises the

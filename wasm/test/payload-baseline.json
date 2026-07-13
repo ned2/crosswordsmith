@@ -1,6 +1,6 @@
 {
   "v": 1,
-  "recorded": "2026-07-13T15:25:18.406Z",
+  "recorded": "2026-07-13T15:44:20.466Z",
   "machine": {
     "platform": "linux 7.0.0-27-generic",
     "cpu": "13th Gen Intel(R) Core(TM) i9-13900K",
@@ -8,7 +8,7 @@
     "chrome": "149.0.7827.200"
   },
   "build": {
-    "buildId": "b2f9e3bb972249198b96012b14a500f102851f6da7ecb7004e2fb806d937bb14",
+    "buildId": "6bd7897518df77d5083164d270496d4f90b267ccf1f9aa15f1d9774d9a069770",
     "swiplCommit": "aa6289399da856e8a585797c46a44d1298480598",
     "packages": [
       "packages/RDF",
@@ -44,7 +44,7 @@
       "file": "build-manifest.json",
       "raw": 1929,
       "gzip": 993,
-      "brotli": 915
+      "brotli": 920
     },
     "swipl-web.js": {
       "file": "swipl-web.e62a4c9df96e.js",
@@ -65,10 +65,10 @@
       "brotli": 1008234
     },
     "crosswordsmith.qlf": {
-      "file": "crosswordsmith.aff993bec5ea.qlf",
-      "raw": 71580,
-      "gzip": 32377,
-      "brotli": 26904
+      "file": "crosswordsmith.10a1886031dd.qlf",
+      "raw": 50995,
+      "gzip": 24026,
+      "brotli": 20447
     }
   },
   "aggregates": {
@@ -78,9 +78,9 @@
       "brotli": 1680777
     },
     "shippedSet": {
-      "raw": 4116041,
-      "gzip": 2064952,
-      "brotli": 1711847
+      "raw": 4095456,
+      "gzip": 2056601,
+      "brotli": 1705395
     }
   },
   "scenarios": {
@@ -94,9 +94,9 @@
         "/client/swipl-web.e62a4c9df96e.js": 2,
         "/client/swipl-web.af73f25eb4ca.data": 2,
         "/client/swipl-web.92f2b8e72744.wasm": 2,
-        "/client/crosswordsmith.aff993bec5ea.qlf": 4
+        "/client/crosswordsmith.10a1886031dd.qlf": 4
       },
-      "modeledColdBrotli": 3477502
+      "modeledColdBrotli": 3451684
     },
     "sdk-eager/immutable": {
       "requests": {
@@ -108,9 +108,9 @@
         "/client/swipl-web.e62a4c9df96e.js": 1,
         "/client/swipl-web.af73f25eb4ca.data": 1,
         "/client/swipl-web.92f2b8e72744.wasm": 1,
-        "/client/crosswordsmith.aff993bec5ea.qlf": 4
+        "/client/crosswordsmith.10a1886031dd.qlf": 4
       },
-      "modeledColdBrotli": 1796725
+      "modeledColdBrotli": 1770907
     },
     "raw-single/no-cache-headers": {
       "requests": {
@@ -122,9 +122,9 @@
         "/client/swipl-web.e62a4c9df96e.js": 1,
         "/client/swipl-web.af73f25eb4ca.data": 1,
         "/client/swipl-web.92f2b8e72744.wasm": 1,
-        "/client/crosswordsmith.aff993bec5ea.qlf": 2
+        "/client/crosswordsmith.10a1886031dd.qlf": 2
       },
-      "modeledColdBrotli": 1738751
+      "modeledColdBrotli": 1725842
     },
     "raw-single/immutable": {
       "requests": {
@@ -136,9 +136,9 @@
         "/client/swipl-web.e62a4c9df96e.js": 1,
         "/client/swipl-web.af73f25eb4ca.data": 1,
         "/client/swipl-web.92f2b8e72744.wasm": 1,
-        "/client/crosswordsmith.aff993bec5ea.qlf": 2
+        "/client/crosswordsmith.10a1886031dd.qlf": 2
       },
-      "modeledColdBrotli": 1738751
+      "modeledColdBrotli": 1725842
     }
   },
   "timing": {
@@ -148,37 +148,37 @@
     "sdkEager": {
       "readinessMs": {
         "n": 10,
-        "median": 118.9,
-        "mean": 120,
-        "min": 104.7,
-        "max": 137,
-        "p95": 137
+        "median": 119.5,
+        "mean": 120.3,
+        "min": 102.8,
+        "max": 132.5,
+        "p95": 132.5
       },
       "firstArrangeMs": {
         "n": 10,
-        "median": 6.3,
-        "mean": 6.1,
+        "median": 6.2,
+        "mean": 7,
         "min": 4.6,
-        "max": 6.7,
-        "p95": 6.7
+        "max": 9.5,
+        "p95": 9.5
       }
     },
     "rawSingleWorker": {
       "readinessMs": {
         "n": 10,
-        "median": 114.2,
-        "mean": 114.8,
-        "min": 96.7,
-        "max": 135.4,
-        "p95": 135.4
+        "median": 104.9,
+        "mean": 104.9,
+        "min": 95,
+        "max": 114.7,
+        "p95": 114.7
       },
       "firstArrangeMs": {
         "n": 10,
         "median": 4.6,
-        "mean": 4.9,
+        "mean": 5,
         "min": 4.5,
-        "max": 6.6,
-        "p95": 6.6
+        "max": 6.7,
+        "p95": 6.7
       }
     }
   },
@@ -187,10 +187,10 @@
     "usedJsHeapBytes": {
       "n": 10,
       "median": 1342834,
-      "mean": 1342814,
-      "min": 1342654,
-      "max": 1342850,
-      "p95": 1342850
+      "mean": 1342825.6,
+      "min": 1342774,
+      "max": 1342834,
+      "p95": 1342834
     }
   }
 }

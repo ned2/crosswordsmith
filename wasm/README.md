@@ -35,7 +35,7 @@ VM cost model: [`docs/research/swi-vm-wasm-performance.md`](../docs/research/swi
 | File | Role |
 |---|---|
 | `worker.js` | the SWI-Prolog WASM instance, off the main thread. Speaks the v1 envelope RPC: `{type:"request", request:{v,id,verb,params}}` → `{type:"response", id, envelope}`; **JSON in, JSON out**, verb/payload as **bound** forEach variables. |
-| `solve_browser.pl` | the qcompile load root (thin adapter): loads `load.pl`, which exports `browser_dispatch/3` into `user` for the Worker's goal. |
+| `solve_browser.pl` | the qcompile load root — browser-specific (payload plan Phase 1): imports exactly `core`/`metrics`/`arrange`/`lint`/`export`/`browser` (NO `stockgrid`/`fill`), exporting `browser_dispatch/3` into `user` for the Worker's goal. `run_all.sh` gates the qlf's folded closure against fill-only leakage (sha/fastrw/stockgrid). |
 | `harness.html` | minimal SDK consumer + test host (`?noauto` for the raw-worker probes) |
 | `probe.html` | diagnostic page (library resolution / json autoload); use if the browser path breaks |
 | `swipl-web.{js,wasm,data}`, `crosswordsmith.qlf` | **build outputs — gitignored**, produced by `build/build-wasm.sh` |
@@ -269,13 +269,16 @@ None of these show up under `node` — they are specific to the browser **Worker
    The worker sends `JSON.stringify(request)`; `browser_dispatch/3` parses it
    with `json_read_dict` and returns the envelope as one JSON **atom**.
 
-Expected non-fatal noise: `source_sink library(http/json) does not exist` warnings
-during qlf load — in the web image the `http/json` *alias* doesn't resolve, but
-`json_write_dict`/`json_read_dict` autoload from `library(json)`, so it all works.
-The warnings cite source locations *baked into the qlf* (provenance for error
-messages) — not live fetches; the qlf is self-contained (`include(user)`). You may
-also see a `crosswordsmith.qlf … net::ERR_ABORTED` line: a cancelled duplicate
-request from SWI's URL consult — the qlf still loads, and results are correct.
+Expected non-fatal noise: a `crosswordsmith.<hash>.qlf … net::ERR_ABORTED` line
+per worker — a cancelled duplicate request from SWI's URL consult; the qlf still
+loads, and results are correct (payload plan Phase 4 targets removing it). Also a
+single unnamed 404: headless Chrome probing `/favicon.ico`. The historic
+`source_sink library(http/json) does not exist` warnings went away with the
+browser-specific load root (payload plan Phase 1); qlf-load noise citing a
+`.pl` source location is a REGRESSION signal now — the locations are baked-in
+provenance, and a qlf-embedded directive that probes the filesystem at load
+time becomes a 404'd URL fetch + error line in the browser (see the
+atom_concat comment in `solve_browser.pl`).
 
 ## Scope / open items (strategy §8)
 
