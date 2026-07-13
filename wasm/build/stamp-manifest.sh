@@ -54,6 +54,12 @@ if git -C "$SWIPL_SRC" rev-parse HEAD >/dev/null 2>&1; then
     | sed 's/^/{ /; s/$/ }/')" || submodules_json="null"
 fi
 
+# licence notice: the deployable bundle must be self-contained — copy the
+# notice in next to the artifacts so "deploy wasm/client/" ships it, and the
+# manifest's "licenses" field can name a SIBLING file a consumer actually has
+# (a repo-relative path is meaningless once the bundle leaves the repo).
+cp "$REPO_ROOT/wasm/THIRD_PARTY_NOTICES.md" "$CLIENT_DIR/THIRD_PARTY_NOTICES.md"
+
 # hash + content-named copies (clean stale hashed copies first — the glob
 # cannot match the unhashed originals: they have no infix between stem and ext)
 rm -f "$CLIENT_DIR"/swipl-web.*.js "$CLIENT_DIR"/swipl-web.*.wasm \
@@ -86,7 +92,7 @@ cat > "$CLIENT_DIR/build-manifest.json" <<EOF
     "pcre2": "$PCRE2_VERSION",
     "pcre2Commit": "$PCRE2_COMMIT"
   },
-  "licenses": "wasm/THIRD_PARTY_NOTICES.md",
+  "licenses": "THIRD_PARTY_NOTICES.md",
   "artifacts": {
 $entries
   }

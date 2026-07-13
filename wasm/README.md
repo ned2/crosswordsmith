@@ -22,7 +22,7 @@ VM cost model: [`docs/research/swi-vm-wasm-performance.md`](../docs/research/swi
 | `sdk/` | the JS/TS SDK: `crosswordsmith.mjs` (`createCrosswordsmith()` facade) + hand-written `crosswordsmith.d.ts` |
 | `client/` | the engine assets — served as static files; `harness.html` is the minimal SDK consumer (smoke/diagnostic page) |
 | `build/build-wasm.sh` | reproducible build: emsdk + deps → `swipl-web` → app `.qlf` → provenance manifest. Pins in `build/pins.sh`; guards in `build/verify-pin.sh`; manifest stamping in `build/stamp-manifest.sh` |
-| `THIRD_PARTY_NOTICES.md` | redistribution manifest for what the built bundle ships (SWI BSD-2-Clause, zlib, PCRE2, Emscripten glue; future UKACD18 obligation) — draft until publish (OQ-6) |
+| `THIRD_PARTY_NOTICES.md` | the redistribution notice for what the built bundle ships — self-contained, verbatim licence texts verified against the pinned sources (SWI-Prolog + its vendored components incl. LGPL isub, zlib, PCRE2, Emscripten runtime, crosswordsmith; future UKACD18 obligation). `stamp-manifest.sh` copies it into `client/` so a deploy of that directory ships it; keep it reachable from any site serving the bundle |
 | `test/` | native + headless-Chrome regression tests (Playwright + system Chrome); `run_all.sh` is the one-command battery (`make test-wasm`) |
 
 ### `sdk/`
@@ -39,7 +39,7 @@ VM cost model: [`docs/research/swi-vm-wasm-performance.md`](../docs/research/swi
 | `harness.html` | minimal SDK consumer + test host (`?noauto` for the raw-worker probes) |
 | `probe.html` | diagnostic page (library resolution / json autoload); use if the browser path breaks |
 | `swipl-web.{js,wasm,data}`, `crosswordsmith.qlf` | **build outputs — gitignored**, produced by `build/build-wasm.sh` |
-| `build-manifest.json` + content-hashed copies (`swipl-web.<sha256:12>.js` …) | **build outputs — gitignored**, stamped by `build/stamp-manifest.sh`: per-artifact sha256 + buildId + swipl commit/submodule SHAs + toolchain pins. `worker.js` prefers the hashed names when the manifest is present (unhashed fallback for a hand-staged dir) — a CDN deploy ships the hashed set + `worker.js` + the manifest, so a partial redeploy can't pair a new js with a stale cached wasm/qlf |
+| `build-manifest.json` + content-hashed copies (`swipl-web.<sha256:12>.js` …) + `THIRD_PARTY_NOTICES.md` copy | **build outputs — gitignored**, stamped by `build/stamp-manifest.sh`: per-artifact sha256 + buildId + swipl commit/submodule SHAs + toolchain pins, plus the licence notice copied in so the bundle is self-contained (`licenses` in the manifest names the sibling file). `worker.js` prefers the hashed names when the manifest is present (unhashed fallback for a hand-staged dir) — a CDN deploy ships the hashed set + `worker.js` + the manifest + the notice, so a partial redeploy can't pair a new js with a stale cached wasm/qlf |
 
 ## Wire contract (v1)
 
@@ -271,9 +271,9 @@ request from SWI's URL consult — the qlf still loads, and results are correct.
 - npm packaging (asset-copy step, dual exports map) is deferred: the SDK is
   consumed in-repo (OQ-1 decision 2026-07-06). The OQ-5 publish blockers are
   now in place (provenance manifest + hashed names, cold-runner build,
-  committed lockfile — supply-chain Batch 2); the licensing manifest is
-  seeded as `wasm/THIRD_PARTY_NOTICES.md` (verbatim texts inline at publish —
-  OQ-6).
+  committed lockfile — supply-chain Batch 2); the licensing notice
+  `wasm/THIRD_PARTY_NOTICES.md` carries the verbatim texts verified against
+  the pins and ships inside `client/` (OQ-6 closed 2026-07-13).
 - The JS↔qlf version assert / honoured-params echo (OQ-7) lands with
   version-stamped asset paths at packaging time (`build-manifest.json` now
   provides the stamped paths + qlf hash to assert against).

@@ -494,8 +494,14 @@ being intact — confirm first.
   piece — a qlf build-hash in the capabilities reply — lands with OQ-7 at packaging.
 - **OQ-5 [RT]:** CI qlf rebuild reproducibility (deployment §10.3 "not standalone-CI-
   runnable") + the asset-copy-into-tarball / package-size step.
-- **OQ-6 [RT]:** redistribution licensing manifest (SWI runtime BSD; future UKACD dict
-  verbatim).
+- **OQ-6 [RT] — RESOLVED (2026-07-13):** `wasm/THIRD_PARTY_NOTICES.md` is now the
+  self-contained redistribution notice: verbatim licence texts verified against the
+  pinned sources, covering the engine, its vendored components (incl. LGPL
+  library(isub) with a static-link compliance statement), zlib, PCRE2, the
+  Emscripten runtime (musl, compiler-rt, dlmalloc, MiniLZ4), and crosswordsmith;
+  `stamp-manifest.sh` copies it into `wasm/client/` and `build-manifest.json`'s
+  `licenses` names the sibling file. The UKACD dict obligation stays recorded for
+  the day `fill` browserifies.
 - **OQ-7 [RT]:** stale-qlf param drift mitigation — engine echoes honoured params
   and/or JS↔qlf version assert at init (§4.1).
 - **OQ-8 [RT] — RESOLVED (2026-07-06):** both halves closed. (a) Variety probed:

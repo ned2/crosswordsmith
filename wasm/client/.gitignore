@@ -4,3 +4,6 @@
 swipl-web.*
 *.qlf
 build-manifest.json
+# copied in by stamp-manifest.sh so the deployable bundle carries its licence
+# notice; the tracked original lives at wasm/THIRD_PARTY_NOTICES.md
+THIRD_PARTY_NOTICES.md
