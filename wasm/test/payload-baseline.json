@@ -1,0 +1,196 @@
+{
+  "v": 1,
+  "recorded": "2026-07-13T15:25:18.406Z",
+  "machine": {
+    "platform": "linux 7.0.0-27-generic",
+    "cpu": "13th Gen Intel(R) Core(TM) i9-13900K",
+    "node": "v24.18.0",
+    "chrome": "149.0.7827.200"
+  },
+  "build": {
+    "buildId": "b2f9e3bb972249198b96012b14a500f102851f6da7ecb7004e2fb806d937bb14",
+    "swiplCommit": "aa6289399da856e8a585797c46a44d1298480598",
+    "packages": [
+      "packages/RDF",
+      "packages/chr",
+      "packages/clib",
+      "packages/clpqr",
+      "packages/http",
+      "packages/json",
+      "packages/nlp",
+      "packages/pcre",
+      "packages/plunit",
+      "packages/semweb",
+      "packages/sgml",
+      "packages/utf8proc",
+      "packages/zlib"
+    ],
+    "toolchain": {
+      "emsdk": "6.0.1",
+      "zlib": "1.3.2",
+      "zlibSha256": "bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16",
+      "pcre2": "10.47",
+      "pcre2Commit": "f454e231fe5006dd7ff8f4693fd2b8eb94333429"
+    }
+  },
+  "sizes": {
+    "worker.js": {
+      "file": "worker.js",
+      "raw": 8635,
+      "gzip": 3797,
+      "brotli": 3251
+    },
+    "build-manifest.json": {
+      "file": "build-manifest.json",
+      "raw": 1929,
+      "gzip": 993,
+      "brotli": 915
+    },
+    "swipl-web.js": {
+      "file": "swipl-web.e62a4c9df96e.js",
+      "raw": 192096,
+      "gzip": 51258,
+      "brotli": 43682
+    },
+    "swipl-web.wasm": {
+      "file": "swipl-web.92f2b8e72744.wasm",
+      "raw": 2195615,
+      "gzip": 796588,
+      "brotli": 628861
+    },
+    "swipl-web.data": {
+      "file": "swipl-web.af73f25eb4ca.data",
+      "raw": 1646186,
+      "gzip": 1179939,
+      "brotli": 1008234
+    },
+    "crosswordsmith.qlf": {
+      "file": "crosswordsmith.aff993bec5ea.qlf",
+      "raw": 71580,
+      "gzip": 32377,
+      "brotli": 26904
+    }
+  },
+  "aggregates": {
+    "engineTrio": {
+      "raw": 4033897,
+      "gzip": 2027785,
+      "brotli": 1680777
+    },
+    "shippedSet": {
+      "raw": 4116041,
+      "gzip": 2064952,
+      "brotli": 1711847
+    }
+  },
+  "scenarios": {
+    "sdk-eager/no-cache-headers": {
+      "requests": {
+        "/client/harness.html": 1,
+        "/sdk/crosswordsmith.mjs": 1,
+        "/favicon.ico": 1,
+        "/client/worker.js": 2,
+        "/client/build-manifest.json": 2,
+        "/client/swipl-web.e62a4c9df96e.js": 2,
+        "/client/swipl-web.af73f25eb4ca.data": 2,
+        "/client/swipl-web.92f2b8e72744.wasm": 2,
+        "/client/crosswordsmith.aff993bec5ea.qlf": 4
+      },
+      "modeledColdBrotli": 3477502
+    },
+    "sdk-eager/immutable": {
+      "requests": {
+        "/client/harness.html": 1,
+        "/sdk/crosswordsmith.mjs": 1,
+        "/favicon.ico": 1,
+        "/client/worker.js": 2,
+        "/client/build-manifest.json": 2,
+        "/client/swipl-web.e62a4c9df96e.js": 1,
+        "/client/swipl-web.af73f25eb4ca.data": 1,
+        "/client/swipl-web.92f2b8e72744.wasm": 1,
+        "/client/crosswordsmith.aff993bec5ea.qlf": 4
+      },
+      "modeledColdBrotli": 1796725
+    },
+    "raw-single/no-cache-headers": {
+      "requests": {
+        "/client/harness.html": 1,
+        "/sdk/crosswordsmith.mjs": 1,
+        "/favicon.ico": 1,
+        "/client/worker.js": 1,
+        "/client/build-manifest.json": 1,
+        "/client/swipl-web.e62a4c9df96e.js": 1,
+        "/client/swipl-web.af73f25eb4ca.data": 1,
+        "/client/swipl-web.92f2b8e72744.wasm": 1,
+        "/client/crosswordsmith.aff993bec5ea.qlf": 2
+      },
+      "modeledColdBrotli": 1738751
+    },
+    "raw-single/immutable": {
+      "requests": {
+        "/client/harness.html": 1,
+        "/sdk/crosswordsmith.mjs": 1,
+        "/favicon.ico": 1,
+        "/client/worker.js": 1,
+        "/client/build-manifest.json": 1,
+        "/client/swipl-web.e62a4c9df96e.js": 1,
+        "/client/swipl-web.af73f25eb4ca.data": 1,
+        "/client/swipl-web.92f2b8e72744.wasm": 1,
+        "/client/crosswordsmith.aff993bec5ea.qlf": 2
+      },
+      "modeledColdBrotli": 1738751
+    }
+  },
+  "timing": {
+    "samplesPerMode": 10,
+    "coldProfilePerSample": true,
+    "cacheHeaders": "immutable",
+    "sdkEager": {
+      "readinessMs": {
+        "n": 10,
+        "median": 118.9,
+        "mean": 120,
+        "min": 104.7,
+        "max": 137,
+        "p95": 137
+      },
+      "firstArrangeMs": {
+        "n": 10,
+        "median": 6.3,
+        "mean": 6.1,
+        "min": 4.6,
+        "max": 6.7,
+        "p95": 6.7
+      }
+    },
+    "rawSingleWorker": {
+      "readinessMs": {
+        "n": 10,
+        "median": 114.2,
+        "mean": 114.8,
+        "min": 96.7,
+        "max": 135.4,
+        "p95": 135.4
+      },
+      "firstArrangeMs": {
+        "n": 10,
+        "median": 4.6,
+        "mean": 4.9,
+        "min": 4.5,
+        "max": 6.6,
+        "p95": 6.6
+      }
+    }
+  },
+  "memory": {
+    "note": "page JS heap after first arrange (sdk mode); quantized, EXCLUDES worker wasm heaps - informational only",
+    "usedJsHeapBytes": {
+      "n": 10,
+      "median": 1342834,
+      "mean": 1342814,
+      "min": 1342654,
+      "max": 1342850,
+      "p95": 1342850
+    }
+  }
+}

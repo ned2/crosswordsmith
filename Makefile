@@ -162,6 +162,28 @@ BENCH_STRATEGIES ?=
 bench-matrix:
 	swipl -q benchmarks/run_matrix.pl -- $(BENCH_STRATEGIES)
 
+# --- browser payload/startup bench (payload plan Phase 0) ---------------------
+# Payload/request/startup benchmark for the browser bundle
+# (docs/plans/wasm-payload-performance.md §4): artifact raw/gzip/brotli sizes,
+# per-scenario cold request counts through a cache-aware counting server, and
+# fresh-Chrome-per-sample readiness/first-arrange timing. Wall-clock numbers
+# are machine-specific and reporting-only; only the deterministic artifact
+# sizes gate (bench-wasm-payload-check). Prereqs: staged + stamped wasm/client/
+# (run `make test-wasm` or the build first) and the wasm/test npm toolchain.
+#   make bench-wasm-payload                             # measure + report
+#   make bench-wasm-payload BENCH_ARGS="--samples 20"
+#   make bench-wasm-payload-record                      # + rewrite the committed baseline
+#   make bench-wasm-payload-check                       # sizes vs baseline (no browser)
+.PHONY: bench-wasm-payload bench-wasm-payload-record bench-wasm-payload-check
+bench-wasm-payload:
+	node wasm/test/payload_bench.mjs $(BENCH_ARGS)
+
+bench-wasm-payload-record:
+	node wasm/test/payload_bench.mjs --record $(BENCH_ARGS)
+
+bench-wasm-payload-check:
+	node wasm/test/payload_bench.mjs --check
+
 # --- fill product bench + ratchet (campaign/fill Phase 0) ---------------------
 # Product benchmark for `fill`: four attribution buckets per ladder rung -
 # command (end-to-end CLI), dict_load (load_dict/3), grid (fill_grid/4), and

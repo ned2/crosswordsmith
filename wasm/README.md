@@ -220,6 +220,20 @@ node ~/src/swipl-devel/build.wasm/src/swipl.js -q wasm/test/inference_parity.pl 
 diff /tmp/nat.csv /tmp/wasm.csv && echo "parity OK"     # (drop --heavy for just the 5 fast core rungs)
 ```
 
+**Payload/request/startup benchmark (payload plan Phase 0)** — sizes every
+shipped artifact (raw / gzip‑9 / brotli‑11), counts actual cold requests per
+scenario ({SDK eager spare, raw single worker} × {no cache headers, immutable})
+through a cache-aware counting server, and times fresh-Chrome-per-sample engine
+readiness + first arrange. The committed machine-readable baseline is
+`wasm/test/payload-baseline.json`; wall-clock is reporting-only (variance not
+yet characterised — plan §4), only deterministic artifact sizes gate:
+
+```bash
+make bench-wasm-payload                 # full report (needs staged+stamped client/)
+make bench-wasm-payload-record         # rewrite the committed baseline (review the diff)
+make bench-wasm-payload-check          # deterministic size gate vs the baseline (no browser)
+```
+
 **Large-search responsiveness + cancel (gate #1)** — a real ~38.3M-inference
 search in headless Chrome: completes, page stays responsive, `terminate()`
 cancels promptly. Needs the server running:
