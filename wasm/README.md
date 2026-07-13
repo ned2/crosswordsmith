@@ -84,7 +84,21 @@ wasm/build/build-wasm.sh          # verifies the swipl-devel pin; won't move a s
 It's idempotent-ish (skips already-staged deps) and drops all outputs into
 `client/` (gitignored), finishing with `build-manifest.json` + content-hashed
 artifact names (`wasm/build/stamp-manifest.sh` — provenance + CDN cache
-safety). **Cold runner:** when `$SWIPL_SRC` is absent it clones swipl-devel at
+safety).
+
+**Preload profile (payload plan Phase 2):** what ships is NOT SWI's default
+full-library image. Step 2.6 assembles the tracked keep-list
+`wasm/build/preload-profile.txt` (~22 files, ~248 KB raw: boot + the exact
+library closure the browser qlf and `library(wasm)` reach) into a clean
+staging dir and replays the ninja-extracted `swipl-web` link against it —
+`swipl-web.data` drops from ~1.6 MB to ~195 KB raw. The pinned SWI tree is
+never patched and its own `wasm-preload/` staging is never touched (its files
+are ninja outputs — in-place pruning would be silently reverted mid-graph).
+A profile entry missing from the staging tree fails the build; a library
+missing from the profile fails the battery (autoload `source_sink` errors in
+the page logs). `build-manifest.json` records `preloadProfile`
+{name, manifestSha256, files}; `run_all.sh` stages the profile image
+automatically when the build tree carries one. **Cold runner:** when `$SWIPL_SRC` is absent it clones swipl-devel at
 the pin and inits the WASM submodules itself (`SWIPL_REPO_URL` overrides the
 remote), so a standalone CI box needs no pre-existing checkout. Overridable via
 env: `WASM_HOME`, `SWIPL_SRC`, `SWIPL_ALLOW_CHECKOUT=1` (let the script

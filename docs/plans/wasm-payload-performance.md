@@ -1,10 +1,16 @@
 # Plan: smaller and faster browser payload
 
 Status: **in progress** · Drafted 2026-07-14. Landed: Phase 0 (benchmark
-harness + committed baseline, `make bench-wasm-payload*`) and Phase 1
+harness + committed baseline, `make bench-wasm-payload*`), Phase 1
 (browser-specific load root; qlf 71,580 → 51,068 bytes raw, fill/stockgrid/
 sha/fastrw out of the closure and gated in `run_all.sh`, the historic
-`http/json` source_sink load warnings gone) — both 2026-07-14.
+`http/json` source_sink load warnings gone), and Phase 2 (minimal preload
+image: strace-derived 22-file keep-list in `wasm/build/preload-profile.txt`,
+deterministic link-command replay in `build-wasm.sh` step 2.6 producing
+`src/profile-crosswordsmith-web/`, provenance in the manifest's
+`preloadProfile`; swipl-web.data 1,646,186 → 195,323 bytes raw. Trio brotli
+1,680,777 → 827,286 (−50.8%) and sdk readiness median 118.9ms → 95.9ms (−19%)
+— both headline targets already met at Phase 2) — all 2026-07-14.
 
 Goal: make the crosswordsmith browser engine substantially cheaper to fetch,
 compile, and initialise without changing solver semantics, native behaviour, or

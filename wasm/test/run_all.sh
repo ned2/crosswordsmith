@@ -77,10 +77,20 @@ if [ ! -d "$HERE/node_modules" ]; then
 fi
 
 # --- 1. stage the engine artifacts (skip when fresh) ---------------------------
-echo "== staging (build tree: $WASM_BUILD) =="
+# Prefer the crosswordsmith-web profile image when the build tree carries one
+# (build-wasm.sh step 2.6, payload plan Phase 2) — that is what production
+# ships, so it is what the battery must gate. The plain src/swipl-web.* set is
+# SWI's full default image (kept for diagnostics/hand-staged trees).
+ENGINE_SRC="$WASM_BUILD/src"
+PRELOAD_PROFILE=""
+if [ -f "$WASM_BUILD/src/profile-crosswordsmith-web/swipl-web.js" ]; then
+  ENGINE_SRC="$WASM_BUILD/src/profile-crosswordsmith-web"
+  PRELOAD_PROFILE="crosswordsmith-web"
+fi
+echo "== staging (build tree: $WASM_BUILD; engine: ${PRELOAD_PROFILE:-full image}) =="
 for a in swipl-web.js swipl-web.wasm swipl-web.data; do
-  if [ ! -f "$CLIENT/$a" ] || [ "$WASM_BUILD/src/$a" -nt "$CLIENT/$a" ]; then
-    cp "$WASM_BUILD/src/$a" "$CLIENT/$a"
+  if [ ! -f "$CLIENT/$a" ] || [ "$ENGINE_SRC/$a" -nt "$CLIENT/$a" ]; then
+    cp "$ENGINE_SRC/$a" "$CLIENT/$a"
     echo "  staged $a"
   else
     echo "  fresh  $a - skip"
@@ -141,6 +151,7 @@ echo "  qlf inventory OK (no fill/stockgrid/sha/fastrw in the closure)"
 # manifest's hashed names when present, so the battery below exercises the
 # real manifest-driven load path (supply-chain Batch 2). Deterministic and ~1s.
 CLIENT_DIR="$CLIENT" SWIPL_SRC="$(dirname "$WASM_BUILD")" \
+  PRELOAD_PROFILE="$PRELOAD_PROFILE" \
   "$ROOT/wasm/build/stamp-manifest.sh"
 
 # --- 3. the battery ------------------------------------------------------------

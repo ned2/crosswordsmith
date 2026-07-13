@@ -41,6 +41,24 @@ for a in $ARTIFACTS; do
   fi
 done
 
+# preload-profile provenance (payload plan Phase 2) — recorded ONLY when the
+# caller states which profile produced the staged swipl-web.data (build-wasm.sh
+# step 2.6 and run_all.sh's profile-preferring staging both pass it). Null
+# otherwise, matching the swipl-provenance policy: visible, never fabricated —
+# this script cannot introspect a .data package to tell profile from full.
+: "${PRELOAD_PROFILE:=}"
+preload_profile_json="null"
+if [ -n "$PRELOAD_PROFILE" ]; then
+  profile_file="$SCRIPT_DIR/preload-profile.txt"
+  if [ ! -f "$profile_file" ]; then
+    echo "stamp-manifest: PRELOAD_PROFILE=$PRELOAD_PROFILE but $profile_file is missing" >&2
+    exit 1
+  fi
+  profile_sha="$(sha256sum "$profile_file" | cut -d' ' -f1)"
+  profile_entries="$(grep -cvE '^\s*(#|$)' "$profile_file")"
+  preload_profile_json="{ \"name\": \"$PRELOAD_PROFILE\", \"manifestSha256\": \"$profile_sha\", \"files\": $profile_entries }"
+fi
+
 # swipl provenance — null (not guessed) when $SWIPL_SRC is not a git tree.
 swipl_commit="null"
 submodules_json="null"
@@ -84,6 +102,7 @@ cat > "$CLIENT_DIR/build-manifest.json" <<EOF
 {
   "v": 1,
   "buildId": "$build_id",
+  "preloadProfile": $preload_profile_json,
   "swipl": { "commit": $swipl_commit, "submodules": $submodules_json },
   "toolchain": {
     "emsdk": "$EMSDK_VERSION",

@@ -117,11 +117,59 @@ mkdir -p "$BUILD_DIR" && cd "$BUILD_DIR"
 ../scripts/configure -y wasm
 ninja swipl-web
 
+# --- 2.6 crosswordsmith-web preload profile (payload plan Phase 2) -----------
+# SWI's wasm build packs its ENTIRE library into swipl-web.data (~1.6 MB raw
+# for ~250 KB actually reachable from the browser qlf). Rather than patching
+# the pinned tree, assemble the tracked keep-list (preload-profile.txt) into a
+# CLEAN sibling staging dir and replay the swipl-web link against it. The
+# replay is extracted from ninja itself — not hand-maintained — so the profile
+# link always carries exactly the flags/objects of the full link it shadows;
+# the grep asserts the expected --preload-file token so a cmake reshape fails
+# loudly here instead of silently shipping the wrong image. Pruning the real
+# wasm-preload/ in place is NOT an option: install_in_wasm_preload() files are
+# ninja outputs and any later ninja run restores them mid-graph.
+# Determinism: same staged inputs -> byte-identical js/wasm/data (verified by
+# double-link; the only path-sensitive bytes are the PACKAGE_NAME literal,
+# which this fixed directory naming keeps constant).
+log "2.6 preload profile: crosswordsmith-web ($REPO_ROOT/wasm/build/preload-profile.txt)"
+PROFILE_FILE="$REPO_ROOT/wasm/build/preload-profile.txt"
+PRELOAD_SRC="$BUILD_DIR/src/wasm-preload"
+PRELOAD_CW="$BUILD_DIR/src/wasm-preload-crosswordsmith-web"
+PROFILE_OUT="$BUILD_DIR/src/profile-crosswordsmith-web"
+rm -rf "$PRELOAD_CW" "$PROFILE_OUT"
+mkdir -p "$PRELOAD_CW" "$PROFILE_OUT"
+while IFS= read -r f; do
+  case "$f" in ''|\#*) continue ;; esac
+  if [ ! -f "$PRELOAD_SRC/$f" ]; then
+    echo "preload profile FAILED: '$f' is in preload-profile.txt but not in $PRELOAD_SRC" >&2
+    echo "  (stale profile after an SWI pin bump, or the staging step did not run)" >&2
+    exit 1
+  fi
+  mkdir -p "$PRELOAD_CW/$(dirname "$f")"
+  cp "$PRELOAD_SRC/$f" "$PRELOAD_CW/$f"
+done < "$PROFILE_FILE"
+LINK_CMD="$(cd "$BUILD_DIR" && ninja -t commands swipl-web \
+            | grep -F -- "--preload-file $PRELOAD_SRC@swipl" | tail -n1)"
+if [ -z "$LINK_CMD" ]; then
+  echo "preload profile FAILED: could not extract the swipl-web link command" >&2
+  echo "  (expected a ninja command containing '--preload-file $PRELOAD_SRC@swipl')" >&2
+  exit 1
+fi
+LINK_CMD="${LINK_CMD/--preload-file $PRELOAD_SRC@swipl/--preload-file $PRELOAD_CW@swipl}"
+LINK_CMD="${LINK_CMD/-o src\/swipl-web.js/-o $PROFILE_OUT/swipl-web.js}"
+( cd "$BUILD_DIR" && bash -c "$LINK_CMD" )
+for a in swipl-web.js swipl-web.wasm swipl-web.data; do
+  [ -f "$PROFILE_OUT/$a" ] || { echo "preload profile FAILED: link produced no $a" >&2; exit 1; }
+done
+echo "  profile image: $(wc -c < "$PROFILE_OUT/swipl-web.data" | tr -d ' ') bytes data ($(wc -c < "$PRELOAD_SRC/../swipl-web.data" 2>/dev/null | tr -d ' ' || echo '?') full)"
+
 # --- 3. copy the three web artifacts into wasm/client -----------------------
-log "3. artifacts -> $CLIENT_DIR"
-cp "$BUILD_DIR/src/swipl-web.js"   "$CLIENT_DIR/"
-cp "$BUILD_DIR/src/swipl-web.wasm" "$CLIENT_DIR/"
-cp "$BUILD_DIR/src/swipl-web.data" "$CLIENT_DIR/"
+# The PROFILE image is what ships; the full-image swipl-web.{js,wasm,data}
+# stay in $BUILD_DIR/src/ as the SWI-default build (diagnostics, comparison).
+log "3. artifacts (crosswordsmith-web profile) -> $CLIENT_DIR"
+cp "$PROFILE_OUT/swipl-web.js"   "$CLIENT_DIR/"
+cp "$PROFILE_OUT/swipl-web.wasm" "$CLIENT_DIR/"
+cp "$PROFILE_OUT/swipl-web.data" "$CLIENT_DIR/"
 
 # --- 4. qcompile the app to crosswordsmith.qlf (WASM word size) -------------
 # CRITICAL: produce the qlf with the wasm build's own swipl (run under node), not
@@ -144,6 +192,7 @@ mv "$CLIENT_DIR/solve_browser.qlf" "$CLIENT_DIR/crosswordsmith.qlf"
 # worker prefers when the manifest is present — a CDN redeploy can no longer
 # pair a new js with a long-cached stale wasm/qlf.
 log "5. provenance -> $CLIENT_DIR/build-manifest.json"
-CLIENT_DIR="$CLIENT_DIR" SWIPL_SRC="$SWIPL_SRC" "$SCRIPT_DIR/stamp-manifest.sh"
+CLIENT_DIR="$CLIENT_DIR" SWIPL_SRC="$SWIPL_SRC" PRELOAD_PROFILE=crosswordsmith-web \
+  "$SCRIPT_DIR/stamp-manifest.sh"
 
 log "done — serve wasm/client/ (see wasm/README.md) and open the page."

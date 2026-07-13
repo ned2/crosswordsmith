@@ -1,6 +1,6 @@
 {
   "v": 1,
-  "recorded": "2026-07-13T15:44:20.466Z",
+  "recorded": "2026-07-13T16:03:55.647Z",
   "machine": {
     "platform": "linux 7.0.0-27-generic",
     "cpu": "13th Gen Intel(R) Core(TM) i9-13900K",
@@ -8,7 +8,7 @@
     "chrome": "149.0.7827.200"
   },
   "build": {
-    "buildId": "6bd7897518df77d5083164d270496d4f90b267ccf1f9aa15f1d9774d9a069770",
+    "buildId": "e7039a5734345330c25bd3854f726337b7dc4e6ccc1651881573e829e78d5825",
     "swiplCommit": "aa6289399da856e8a585797c46a44d1298480598",
     "packages": [
       "packages/RDF",
@@ -42,15 +42,15 @@
     },
     "build-manifest.json": {
       "file": "build-manifest.json",
-      "raw": 1929,
-      "gzip": 993,
-      "brotli": 920
+      "raw": 2081,
+      "gzip": 1075,
+      "brotli": 990
     },
     "swipl-web.js": {
-      "file": "swipl-web.e62a4c9df96e.js",
-      "raw": 192096,
-      "gzip": 51258,
-      "brotli": 43682
+      "file": "swipl-web.4d3c7e2bfd6c.js",
+      "raw": 152928,
+      "gzip": 40705,
+      "brotli": 35368
     },
     "swipl-web.wasm": {
       "file": "swipl-web.92f2b8e72744.wasm",
@@ -59,10 +59,10 @@
       "brotli": 628861
     },
     "swipl-web.data": {
-      "file": "swipl-web.af73f25eb4ca.data",
-      "raw": 1646186,
-      "gzip": 1179939,
-      "brotli": 1008234
+      "file": "swipl-web.fec6712a5052.data",
+      "raw": 195323,
+      "gzip": 168831,
+      "brotli": 163057
     },
     "crosswordsmith.qlf": {
       "file": "crosswordsmith.10a1886031dd.qlf",
@@ -73,14 +73,14 @@
   },
   "aggregates": {
     "engineTrio": {
-      "raw": 4033897,
-      "gzip": 2027785,
-      "brotli": 1680777
+      "raw": 2543866,
+      "gzip": 1006124,
+      "brotli": 827286
     },
     "shippedSet": {
-      "raw": 4095456,
-      "gzip": 2056601,
-      "brotli": 1705395
+      "raw": 2605577,
+      "gzip": 1035022,
+      "brotli": 851974
     }
   },
   "scenarios": {
@@ -91,12 +91,12 @@
         "/favicon.ico": 1,
         "/client/worker.js": 2,
         "/client/build-manifest.json": 2,
-        "/client/swipl-web.e62a4c9df96e.js": 2,
-        "/client/swipl-web.af73f25eb4ca.data": 2,
+        "/client/swipl-web.4d3c7e2bfd6c.js": 2,
+        "/client/swipl-web.fec6712a5052.data": 2,
         "/client/swipl-web.92f2b8e72744.wasm": 2,
         "/client/crosswordsmith.10a1886031dd.qlf": 4
       },
-      "modeledColdBrotli": 3451684
+      "modeledColdBrotli": 1744842
     },
     "sdk-eager/immutable": {
       "requests": {
@@ -105,12 +105,12 @@
         "/favicon.ico": 1,
         "/client/worker.js": 2,
         "/client/build-manifest.json": 2,
-        "/client/swipl-web.e62a4c9df96e.js": 1,
-        "/client/swipl-web.af73f25eb4ca.data": 1,
+        "/client/swipl-web.4d3c7e2bfd6c.js": 1,
+        "/client/swipl-web.fec6712a5052.data": 1,
         "/client/swipl-web.92f2b8e72744.wasm": 1,
         "/client/crosswordsmith.10a1886031dd.qlf": 4
       },
-      "modeledColdBrotli": 1770907
+      "modeledColdBrotli": 917556
     },
     "raw-single/no-cache-headers": {
       "requests": {
@@ -119,12 +119,12 @@
         "/favicon.ico": 1,
         "/client/worker.js": 1,
         "/client/build-manifest.json": 1,
-        "/client/swipl-web.e62a4c9df96e.js": 1,
-        "/client/swipl-web.af73f25eb4ca.data": 1,
+        "/client/swipl-web.4d3c7e2bfd6c.js": 1,
+        "/client/swipl-web.fec6712a5052.data": 1,
         "/client/swipl-web.92f2b8e72744.wasm": 1,
         "/client/crosswordsmith.10a1886031dd.qlf": 2
       },
-      "modeledColdBrotli": 1725842
+      "modeledColdBrotli": 872421
     },
     "raw-single/immutable": {
       "requests": {
@@ -133,12 +133,12 @@
         "/favicon.ico": 1,
         "/client/worker.js": 1,
         "/client/build-manifest.json": 1,
-        "/client/swipl-web.e62a4c9df96e.js": 1,
-        "/client/swipl-web.af73f25eb4ca.data": 1,
+        "/client/swipl-web.4d3c7e2bfd6c.js": 1,
+        "/client/swipl-web.fec6712a5052.data": 1,
         "/client/swipl-web.92f2b8e72744.wasm": 1,
         "/client/crosswordsmith.10a1886031dd.qlf": 2
       },
-      "modeledColdBrotli": 1725842
+      "modeledColdBrotli": 872421
     }
   },
   "timing": {
@@ -148,37 +148,37 @@
     "sdkEager": {
       "readinessMs": {
         "n": 10,
-        "median": 119.5,
-        "mean": 120.3,
-        "min": 102.8,
-        "max": 132.5,
-        "p95": 132.5
+        "median": 95.9,
+        "mean": 98.6,
+        "min": 90.4,
+        "max": 111.6,
+        "p95": 111.6
       },
       "firstArrangeMs": {
         "n": 10,
-        "median": 6.2,
-        "mean": 7,
-        "min": 4.6,
-        "max": 9.5,
-        "p95": 9.5
+        "median": 8.9,
+        "mean": 8.4,
+        "min": 6,
+        "max": 10,
+        "p95": 10
       }
     },
     "rawSingleWorker": {
       "readinessMs": {
         "n": 10,
-        "median": 104.9,
-        "mean": 104.9,
-        "min": 95,
+        "median": 96.7,
+        "mean": 97.7,
+        "min": 84.5,
         "max": 114.7,
         "p95": 114.7
       },
       "firstArrangeMs": {
         "n": 10,
-        "median": 4.6,
-        "mean": 5,
-        "min": 4.5,
-        "max": 6.7,
-        "p95": 6.7
+        "median": 5.8,
+        "mean": 5.6,
+        "min": 4.6,
+        "max": 7,
+        "p95": 7
       }
     }
   },
@@ -187,8 +187,8 @@
     "usedJsHeapBytes": {
       "n": 10,
       "median": 1342834,
-      "mean": 1342825.6,
-      "min": 1342774,
+      "mean": 1342822,
+      "min": 1342738,
       "max": 1342834,
       "p95": 1342834
     }

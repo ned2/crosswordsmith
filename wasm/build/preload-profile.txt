@@ -1,0 +1,52 @@
+# preload-profile.txt - the crosswordsmith-web preload manifest (payload plan
+# Phase 2). Every file the production browser image's Emscripten data package
+# carries, relative to the swipl-web build's staged wasm-preload/ tree; one
+# path per line, # comments and blank lines ignored. build-wasm.sh assembles
+# EXACTLY this list into a clean sibling staging dir and relinks swipl-web
+# against it (a missing entry fails the build loudly); SWI's own full-image
+# staging tree is never modified, so the general wasm build stays SWI-default.
+#
+# Derivation (2026-07-14, post-Phase-1 qlf): strace of the full browser
+# dispatch workload (all four verbs, every lint profile, both exports, the
+# validation/unknown-verb/failure/resource error taxonomy) under the wasm node
+# VM, plus the library(wasm) closure prolog.js loads at engine init. Regenerate
+# after any change to the browser load root's dependency closure: re-run the
+# workload under `strace -f -e trace=openat node build.wasm/src/swipl.js ...`,
+# map the touched home/library files to their .qlf image names, and let the
+# full battery (`make test-wasm`) adjudicate — a missing autoload surfaces as
+# a source_sink error in the page logs, which the suite treats as failure.
+#
+# The gate for this list is behavioural, not aesthetic: the complete browser
+# battery (value goldens, headless SDK end-to-end incl. heavy solves +
+# cancellation/spare recovery, worker error taxonomy) must stay green on the
+# image linked from it.
+
+# engine bootstrap
+ABI
+boot.prc
+
+# autoload index for the core library (the ext/ dirs keep their own)
+library/INDEX.pl
+
+# core library closure reached by the browser qlf + library(wasm)
+library/aggregate.qlf
+library/apply.qlf
+library/assoc.qlf
+library/debug.qlf
+library/error.qlf
+library/lists.qlf
+library/option.qlf
+library/ordsets.qlf
+library/pairs.qlf
+library/quasi_quotations.qlf
+library/random.qlf
+library/readutil.qlf
+library/record.qlf
+library/ugraphs.qlf
+library/wasm.qlf
+
+# JSON both ways (the wire contract) + URI support library(wasm) requires
+library/ext/clib/INDEX.pl
+library/ext/clib/uri.qlf
+library/ext/json/INDEX.pl
+library/ext/json/json.qlf
