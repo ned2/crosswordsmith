@@ -39,7 +39,9 @@ The implementation lives under `prolog/crosswordsmith/`, driven by the
 The same engine also runs **client-side in the browser** (SWI-Prolog compiled
 to WASM, in a Web Worker) behind a typed JS SDK — `arrange`, `lint`, and
 `export` today, value-locked against the CLI's output. See
-[`wasm/README.md`](wasm/README.md).
+[`wasm/README.md`](wasm/README.md). The measured plan to reduce its browser
+payload and startup cost is
+[`docs/plans/wasm-payload-performance.md`](docs/plans/wasm-payload-performance.md).
 
 Words — and optional per-word metadata (a clue, a link, anything) — are supplied
 to `arrange` as a JSON file or a Prolog `clues/1` fixture. The bundled
