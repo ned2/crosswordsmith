@@ -31,6 +31,18 @@
 
 const SDK_VERSION = "0.1.0";
 
+// Default engine-asset location: the in-repo layout, where sdk/ and client/
+// are siblings. Routed through a const — NOT written literally inside
+// new URL(...) — because bundlers (Vite, webpack 5) statically pattern-match
+// `new URL("<literal>", import.meta.url)` and try to resolve the path at
+// build time; wasm/client/ is copied out of band and is never in a consumer's
+// module graph, so that analysis can only produce a build warning. The const
+// keeps resolution a runtime concern, which is what it is.
+// NB: if this file is BUNDLED, import.meta.url becomes the bundled chunk's
+// URL and this default resolves relative to that — bundling consumers must
+// pass assetBaseUrl explicitly.
+const DEFAULT_ASSET_DIR = "../client/";
+
 // Draw an app-side seed for "regenerate": an integer in [0, 1e9], matching the
 // CLI's --shuffle draw (random_between(0, 1_000_000_000, N)). Keep seeds in
 // this range: a float or a value above 2^53 fails the engine's integer guard
@@ -49,9 +61,10 @@ export class CancelledError extends Error {
 
 export async function createCrosswordsmith(options = {}) {
   // Engine assets (worker.js + swipl-web.{js,wasm,data} + crosswordsmith.qlf)
-  // live in one directory; default to the in-repo layout (sdk/ and client/ are
-  // siblings). Consumers hosting the assets elsewhere pass assetBaseUrl.
-  const base = options.assetBaseUrl ?? new URL("../client/", import.meta.url);
+  // live in one directory; default to the in-repo layout. Consumers hosting
+  // the assets elsewhere (or bundling this file — see DEFAULT_ASSET_DIR) pass
+  // assetBaseUrl.
+  const base = options.assetBaseUrl ?? new URL(DEFAULT_ASSET_DIR, import.meta.url);
   const assetBaseUrl = new URL(String(base).endsWith("/") ? base : base + "/",
                                import.meta.url);
   const workerUrl = new URL("worker.js", assetBaseUrl);

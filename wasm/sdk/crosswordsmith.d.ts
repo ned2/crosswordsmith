@@ -199,7 +199,10 @@ export interface Capabilities {
 export interface CreateOptions {
   /** Directory holding worker.js + swipl-web.{js,wasm,data} +
    *  crosswordsmith.qlf. Default: ../client/ relative to this module (the
-   *  in-repo layout). */
+   *  in-repo layout), resolved at RUNTIME via import.meta.url — so if a
+   *  bundler processes crosswordsmith.mjs into a chunk, the default resolves
+   *  relative to the chunk's URL and is almost certainly wrong: bundling
+   *  consumers must pass assetBaseUrl explicitly. */
   assetBaseUrl?: string | URL;
   /** Per-request logical stack cap in bytes (positive integer; default
    *  256_000_000). Keep it under the platform memory ceiling so a runaway
