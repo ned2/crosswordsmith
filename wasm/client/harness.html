@@ -12,8 +12,8 @@
 
   ?noauto  - don't boot/solve on load (raw-worker probes use the page only as
              a same-origin host and must not pay for idle SDK workers).
-  window.harness = { boot(), cw, ready, randomSeed, CancelledError } is the
-  hook the headless tests drive the facade through.
+  window.harness = { boot(), cw, ready, createCrosswordsmith, randomSeed,
+  CancelledError } is the hook the headless tests drive the facade through.
 -->
 <style>
   body { font: 14px/1.4 system-ui, sans-serif; margin: 2rem; }
@@ -31,6 +31,10 @@
   const harness = {
     randomSeed,
     CancelledError,
+    // The raw factory, for probes that need their own instance with options
+    // (e.g. spare_policy_probe.mjs); boot() below remains the page's shared
+    // default instance.
+    createCrosswordsmith,
     cw: null,
     ready: null,
     boot() {

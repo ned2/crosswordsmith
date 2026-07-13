@@ -25,7 +25,11 @@ local file — the consult(URL) probe/abort duplicate is gone and the fetch
 obeys HTTP caching: cold qlf requests 4 → 2 uncached, 4 → 1 under immutable
 headers; eager-immutable modeled transfer 896 → 652 KB. Items 2–3 (manifest
 and capabilities round trips) deliberately deferred: both need non-local
-network timings first, per §8) — all 2026-07-14.
+network timings first, per §8), and Phase 5 (SDK `sparePolicy` option —
+`eager` default | `idle` | `lazy` — gated by
+`wasm/test/spare_policy_probe.mjs` in the battery; measured abort→next-result
+recovery ~9ms warmed (eager/idle) vs ~81ms cold (lazy), abort rejection <1ms
+under every policy) — all 2026-07-14.
 
 Goal: make the crosswordsmith browser engine substantially cheaper to fetch,
 compile, and initialise without changing solver semantics, native behaviour, or

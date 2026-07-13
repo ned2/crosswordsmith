@@ -28,7 +28,7 @@ VM cost model: [`docs/research/swi-vm-wasm-performance.md`](../docs/research/swi
 ### `sdk/`
 | File | Role |
 |---|---|
-| `crosswordsmith.mjs` | `createCrosswordsmith()` — spawns + warms the engine Worker (plus a standby spare), id-correlated single-flight queue, `AbortSignal` cancel = `terminate()` + spare promote with generation fencing, engine-sourced `capabilities()`. `randomSeed()` draws the app-side regenerate seed in `[0, 1e9]`. |
+| `crosswordsmith.mjs` | `createCrosswordsmith()` — spawns + warms the engine Worker (plus a standby spare per the `sparePolicy` option: `eager` default \| `idle` warms after the first response \| `lazy` never pre-warms — payload plan Phase 5; recovery/latency numbers below), id-correlated single-flight queue, `AbortSignal` cancel = `terminate()` + spare promote with generation fencing, engine-sourced `capabilities()`. `randomSeed()` draws the app-side regenerate seed in `[0, 1e9]`. |
 | `crosswordsmith.d.ts` | the envelope + `ArrangeInput`/`Layout` types (DEC-5); locked against the goldens by `test/golden_type_check.mjs` |
 
 ### `client/`
@@ -269,6 +269,18 @@ make bench-wasm-payload                 # full report (needs staged+stamped clie
 make bench-wasm-payload-record         # rewrite the committed baseline (review the diff)
 make bench-wasm-payload-check          # deterministic size gate vs the baseline (no browser)
 ```
+
+**Spare-worker policies (payload plan Phase 5)** — for each `sparePolicy`
+(`eager` | `idle` | `lazy`): worker census via Playwright's `page.workers()`,
+prompt `CancelledError` on an in-flight abort, queued work proceeding, lazy's
+zero-worker drain + cold-boot-on-demand, dispose, and option validation. Runs
+in the battery; standalone: `node wasm/test/spare_policy_probe.mjs`. Measured
+on the reference desktop (probe `info` lines): abort→next-result recovery
+**~9ms** with a warmed spare (eager/idle) vs **~81ms** cold (lazy; a from-idle
+first request cold-boots in ~116ms); the abort itself rejects in <1ms under
+every policy. `eager` stays the default — `idle` matches it after the first
+response (the spare just warms off the critical path); pick `lazy` only where
+an idle second worker costs more than ~100ms of post-cancel latency.
 
 **Large-search responsiveness + cancel (gate #1)** — a real ~38.3M-inference
 search in headless Chrome: completes, page stays responsive, `terminate()`

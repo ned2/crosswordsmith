@@ -1,9 +1,10 @@
 // crosswordsmith.mjs - the client-side SDK facade (wasm-sdk-strategy §5).
 //
 // createCrosswordsmith() bakes the whole Worker story in: it spawns the engine
-// Worker (wasm/client/worker.js) plus one warmed spare, serializes requests
-// through an id-correlated single-flight FIFO queue, and dresses cancellation
-// as an AbortSignal over worker.terminate() with generation fencing. Consumers
+// Worker (wasm/client/worker.js) plus — per the sparePolicy option: eager
+// (default) | idle | lazy — a warmed spare, serializes requests through an
+// id-correlated single-flight FIFO queue, and dresses cancellation as an
+// AbortSignal over worker.terminate() with generation fencing. Consumers
 // only ever see typed envelopes:
 //
 //   import { createCrosswordsmith, randomSeed } from ".../sdk/crosswordsmith.mjs";
@@ -76,12 +77,33 @@ export async function createCrosswordsmith(options = {}) {
     defaults.heartbeat = options.heartbeat;
   }
 
+  // Spare-worker policy (payload plan Phase 5). The spare exists for ONE
+  // reason: cancellation is worker.terminate(), so recovery latency after a
+  // cancel is "promote a warmed standby" (fast) or "cold-boot a worker"
+  // (slow). Policies trade that recovery latency against idle workers:
+  //   eager (default) - spawn the spare at create() and re-warm one whenever
+  //          it is consumed. Current behaviour; prompt recovery, 2 workers.
+  //   idle  - create the spare after the first successful response, via
+  //          requestIdleCallback (bounded-timeout fallback where the API is
+  //          missing). One worker until the instance proves it's in use.
+  //   lazy  - never pre-warm. A replacement is created only when work needs
+  //          one (a queued/new request); a cancel with nothing queued leaves
+  //          zero workers until the next request cold-boots one.
+  const SPARE_POLICIES = ["eager", "idle", "lazy"];
+  const sparePolicy = options.sparePolicy ?? "eager";
+  if (!SPARE_POLICIES.includes(sparePolicy)) {
+    throw new TypeError(
+      "createCrosswordsmith: unknown sparePolicy \"" + sparePolicy +
+      "\" (expected " + SPARE_POLICIES.join(" | ") + ")");
+  }
+
   let seq = 0;          // request id counter (r-1, r-2, ...)
   const queue = [];     // jobs accepted but not yet posted (single-flight FIFO)
   let inflight = null;  // the ONE job currently posted to the active worker
   let active = null;    // { worker, dead } - the serving instance
   let spare = null;     // a warmed standby (already fetched wasm + loaded qlf)
   let disposed = false;
+  let idleWarmArmed = false; // idle policy: at most one scheduled pre-warm
 
   // --- worker lifecycle ------------------------------------------------------
 
@@ -97,6 +119,28 @@ export async function createCrosswordsmith(options = {}) {
     if (!disposed && !spare) spare = spawnWarm();
   }
 
+  // idle policy: pre-warm the spare off the critical path. requestIdleCallback
+  // with a bounded timeout where available (so a busy main thread still warms
+  // within 2s), a plain bounded timer elsewhere (Workers, Safari).
+  function scheduleIdleWarm() {
+    if (disposed || spare || idleWarmArmed) return;
+    idleWarmArmed = true;
+    const warm = () => { idleWarmArmed = false; ensureSpare(); };
+    if (typeof requestIdleCallback === "function") {
+      requestIdleCallback(warm, { timeout: 2000 });
+    } else {
+      setTimeout(warm, 250);
+    }
+  }
+
+  // Policy hook: a spare was consumed (or found absent) — arrange for the
+  // next one. eager re-warms now, idle re-warms when the thread is idle,
+  // lazy never pre-warms.
+  function replenishSpare() {
+    if (sparePolicy === "eager") ensureSpare();
+    else if (sparePolicy === "idle") scheduleIdleWarm();
+  }
+
   // Retire a worker for good: no message from it may ever settle anything
   // again (generation fence — a late "response" from a terminated instance
   // must not resolve a cancelled promise).
@@ -106,10 +150,21 @@ export async function createCrosswordsmith(options = {}) {
     record.worker.terminate();
   }
 
-  function promoteSpare() {
+  // Replace a retired active. `needNow` says work is waiting (a queued job, a
+  // failing job's replacement): without it the lazy policy leaves active null
+  // — dispatchNext cold-boots on the next request — which is also what makes
+  // "cancel during dispose spawns nothing" hold by construction there. eager/
+  // idle always keep a serving instance so a later request never pays a full
+  // cold boot.
+  function promoteSpare(needNow) {
+    if (disposed) { spare = null; return; }
+    if (sparePolicy === "lazy" && !spare && !needNow) {
+      active = null;
+      return;
+    }
     active = spare || spawnWarm();
     spare = null;
-    ensureSpare();
+    replenishSpare();
   }
 
   function onWorkerMessage(record, msg) {
@@ -120,6 +175,11 @@ export async function createCrosswordsmith(options = {}) {
     const job = inflight;
     inflight = null;
     settle(job, "resolve", msg.envelope);
+    // idle policy's trigger: the engine has served a response (any envelope
+    // status — the WORKER worked), so this instance is in real use; warm the
+    // spare off the critical path. No-op for eager (spare already standing)
+    // and lazy (never pre-warms).
+    replenishSpare();
     dispatchNext();
   }
 
@@ -128,7 +188,7 @@ export async function createCrosswordsmith(options = {}) {
   function onWorkerError(record, ev) {
     if (record.dead || record !== active) return;
     retire(active);
-    promoteSpare();
+    promoteSpare(inflight !== null || queue.length > 0);
     if (inflight) {
       const job = inflight;
       inflight = null;
@@ -153,6 +213,7 @@ export async function createCrosswordsmith(options = {}) {
     if (disposed || inflight) return;
     while (queue.length > 0 && queue[0].settled) queue.shift();
     if (queue.length === 0) return;
+    if (!active) active = spawnWarm();  // lazy: cold-boot on demand
     inflight = queue.shift();
     active.worker.postMessage({
       type: "request",
@@ -166,9 +227,11 @@ export async function createCrosswordsmith(options = {}) {
     if (job === inflight) {
       // The only request posted to the instance: hard-kill it and promote the
       // warmed spare. Queued jobs are untouched — they were never posted.
+      // (Under lazy with an empty queue nothing replaces the killed worker —
+      // including during dispose — until the next request cold-boots one.)
       inflight = null;
       retire(active);
-      promoteSpare();
+      promoteSpare(queue.length > 0);
       settle(job, "reject", new CancelledError());
       dispatchNext();
     } else {
@@ -211,10 +274,12 @@ export async function createCrosswordsmith(options = {}) {
     return env.result;
   }
 
-  // --- boot: active + spare, then one engine round-trip ----------------------
+  // --- boot: active (+ spare per policy), then one engine round-trip ---------
 
   active = spawnWarm();
-  ensureSpare();
+  if (sparePolicy === "eager") ensureSpare();
+  // idle warms its spare after the first response (see onWorkerMessage) —
+  // which the capabilities round-trip below is; lazy never pre-warms.
   const initCaps = await requireSuccess("capabilities", {});
 
   return {

@@ -206,6 +206,7 @@ echo "== serving wasm/ at http://127.0.0.1:$PORT (pid $SERVER_PID) =="
 
 step "headless SDK end-to-end" env URL="$HARNESS" node wasm/test/headless.mjs
 step "worker error paths" env URL="$HARNESS?noauto=1" node wasm/test/error_probe.mjs
+step "spare-worker policies" env URL="$HARNESS?noauto=1" node wasm/test/spare_policy_probe.mjs
 if [ "$RUN_YIELD" = 1 ]; then
   step "gate #1 responsiveness + cancel (~60s)" env URL="$HARNESS?noauto=1" node wasm/test/yield_probe.mjs
 else

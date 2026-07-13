@@ -210,6 +210,19 @@ export interface CreateOptions {
   stackLimit?: number;
   /** Engine yield interval in inferences (not load-bearing; default 50_000). */
   heartbeat?: number;
+  /** Spare-worker policy (payload plan Phase 5). The spare exists so that
+   *  cancellation (worker.terminate()) recovers by promoting a WARMED
+   *  standby instead of cold-booting one:
+   *  - "eager" (default): warm the spare at create() and re-warm on use —
+   *    prompt recovery, two live workers.
+   *  - "idle": warm the spare after the engine's first response, off the
+   *    critical path (requestIdleCallback, bounded-timer fallback).
+   *  - "lazy": never pre-warm; after a cancel with nothing queued there are
+   *    ZERO workers until the next request cold-boots one (recovery then
+   *    pays the full engine boot, ~solving-startup latency).
+   *  Cancellation semantics are identical under every policy: in-flight
+   *  aborts reject promptly with CancelledError and queued work proceeds. */
+  sparePolicy?: "eager" | "idle" | "lazy";
 }
 
 export interface RequestOptions {
@@ -243,8 +256,8 @@ export interface Crosswordsmith {
   dispose(): void;
 }
 
-/** Spawn + warm the engine Worker (plus one standby spare) and resolve once
- *  the engine answered its first capabilities round-trip. */
+/** Spawn + warm the engine Worker (plus a standby spare per sparePolicy) and
+ *  resolve once the engine answered its first capabilities round-trip. */
 export function createCrosswordsmith(opts?: CreateOptions): Promise<Crosswordsmith>;
 
 /** An app-side seed for "regenerate": integer in [0, 1e9] (the CLI's
