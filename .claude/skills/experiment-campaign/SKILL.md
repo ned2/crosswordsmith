@@ -93,7 +93,9 @@ still running?") with READ-ONLY checks — the agent list/attach view,
 transcript into a background agent: an inherited orchestrator context plus
 auto permissions does not stay a status check, it becomes a second
 orchestrator writing to the mainline (the 2026-07 fill campaign lost ~1h of
-reconciliation and a ledger correction exactly this way). If you discover a
+reconciliation and a ledger correction exactly this way). In the
+crosswordsmith repo, `scripts/campaign-status.sh` performs the full
+read-only inspection in one command. If you discover a
 twin, pause it via the agent view BEFORE any reconciliation; adopt its
 verified results by appended correction, and never partially trust its
 uncommitted state. To keep polling rare, emit a one-line status note after

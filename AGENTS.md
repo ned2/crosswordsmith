@@ -89,6 +89,11 @@ the README.
 - After a context compaction, Read a file before your first Edit to it — the
   "already read" state does not survive the summary, even for files you
   authored earlier in the session.
+- On long build/spike sessions, land durable state EARLY: extract the working
+  recipe into a script plus a ≤1-screen README before the first compaction,
+  rather than accumulating it in a growing prose plan. Post-compaction
+  recovery then reloads a 40-line script instead of re-reading a 777-line
+  document (which one session did 34 times).
 - Items marked best-effort / optional / Stretch carry an implicit STOP
   condition: if the happy path fails, document the gap and move on — that IS
   the completed outcome. Do not research or build probes to close the gap,

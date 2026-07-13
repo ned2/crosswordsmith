@@ -480,6 +480,14 @@ Run the full regression suite with:
 
     $ make test
 
+The Python conversion companion under `xword/` has its own suite, not run by
+`make test`:
+
+    $ make test-xword
+
+and `make xword-parity` byte-diffs the engine's ipuz/exolve exports against
+xword's over one layout (best-effort parity — see `docs/xword-spec.md` §14).
+
 There are two benchmarks, answering different questions. Both share the
 measurement core in `benchmarks/bench_core.pl` (warmup, iterate, summarize;
 one median definition). All numbers are machine-specific and reporting-only;
