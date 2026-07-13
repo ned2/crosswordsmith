@@ -2,7 +2,7 @@
 
 SHELL := /bin/bash
 
-.PHONY: test test-wasm unit golden update-golden fuzz bench bench-check bench-record bench-log bench-history bench-matrix
+.PHONY: test test-wasm test-xword xword-parity unit golden update-golden fuzz bench bench-check bench-record bench-log bench-history bench-matrix
 
 BENCH_FORMAT ?= text
 BENCH_ARGS ?=
@@ -23,6 +23,20 @@ test:
 WASM_TEST_ARGS ?=
 test-wasm:
 	wasm/test/run_all.sh $(WASM_TEST_ARGS)
+
+# xword companion (Python conversion toolchain) tests. NOT part of `make test`.
+test-xword:
+	cd xword && uv run pytest -q
+
+# Engine<->xword export parity probe: run both toolchains over one native
+# layout and byte-diff the ipuz + exolve outputs. Byte-parity is BEST-EFFORT
+# policy, not a contract (docs/xword-spec.md §14) - a nonzero exit is
+# information, not a broken build. NOT part of `make test`.
+#   make xword-parity
+#   make xword-parity XWORD_PARITY_FIXTURE=fixtures/titled_layout.json
+XWORD_PARITY_FIXTURE ?= tests/golden/arrange_bundled_17_fixed.json
+xword-parity:
+	scripts/xword-parity.sh $(XWORD_PARITY_FIXTURE)
 
 # Just the plunit unit/integration tests.
 unit:
@@ -157,7 +171,7 @@ bench-matrix:
 #   make bench-fill
 #   make bench-fill BENCH_ARGS=--heavy
 #   make bench-fill BENCH_FORMAT=csv BENCH_ARGS="--fixture g11"
-.PHONY: bench-fill bench-fill-check bench-fill-record bench-fill-log bench-fill-history
+.PHONY: bench-fill bench-fill-check bench-fill-record bench-fill-log bench-fill-history bench-fill-verify bench-fill-promote
 bench-fill:
 	swipl -q benchmarks/run_fill.pl -- --format $(BENCH_FORMAT) $(BENCH_ARGS)
 
@@ -176,6 +190,26 @@ bench-fill-check:
 #   make bench-fill-record BENCH_ARGS=--heavy
 bench-fill-record:
 	swipl -q benchmarks/check_fill_baseline.pl --record $(BENCH_ARGS)
+
+# One-command fill adjudication battery: full test suite, CLI byte-identity,
+# artifact byte-identity, then the inference ratchet - the four checks every
+# fill-experiment accept runs, in one invocation (fail-fast, in that order).
+#   make bench-fill-verify
+#   make bench-fill-verify BENCH_ARGS=--heavy
+bench-fill-verify:
+	./run_tests.sh
+	benchmarks/check_fill_identity.sh
+	benchmarks/check_fill_identity_artifact.sh
+	swipl -q benchmarks/check_fill_baseline.pl $(BENCH_ARGS)
+
+# Check-then-ratchet from ONE measurement: run the ladder once, diff against
+# the baseline, and only if clean (zero regressions) record that same run as
+# the new baseline + history entry. Replaces the bench-fill-check ->
+# bench-fill-record double measurement when accepting a win.
+#   make bench-fill-promote
+#   make bench-fill-promote BENCH_ARGS=--heavy
+bench-fill-promote:
+	swipl -q benchmarks/check_fill_baseline.pl --promote $(BENCH_ARGS)
 
 # Append the current fill measurement to fill_history.jsonl WITHOUT moving the
 # baseline.

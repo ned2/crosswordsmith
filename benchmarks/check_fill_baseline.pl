@@ -31,6 +31,11 @@
 %                                                         %   append to fill_history.jsonl
 %   swipl -q benchmarks/check_fill_baseline.pl --log      % LOG: diff + append to history,
 %                                                         %   WITHOUT moving the baseline
+%   swipl -q benchmarks/check_fill_baseline.pl --promote  % PROMOTE: check, then if CLEAN
+%                                                         %   (zero regressions) record THIS
+%                                                         %   run as the new baseline + history
+%                                                         %   entry - one measurement instead of
+%                                                         %   the check-then-record double run
 %   swipl -q benchmarks/check_fill_baseline.pl --history  % HISTORY: render the trend (no run)
 % Extra args pass through to run_fill, so add --heavy for the tail rungs:
 %   make bench-fill-check  BENCH_ARGS=--heavy
@@ -64,6 +69,7 @@ main :-
     ( select('--history', Argv0, _)      -> Mode = history, Extra = []
     ; select('--log', Argv0, Extra)      -> Mode = log
     ; select('--record', Argv0, Extra)   -> Mode = record
+    ; select('--promote', Argv0, Extra)  -> Mode = promote
     ;                                       Mode = check, Extra = Argv0 ),
     bench_dir(BenchDir),
     ( Mode == history -> show_history(BenchDir), halt(0) ; true ),
@@ -82,6 +88,18 @@ main :-
         do_check(Baseline, Doc, _Fails, _Wins),
         append_history(BenchDir, Doc, Extra),
         halt(0)
+    ; Mode == promote
+    ->  format("crosswordsmith fill - PROMOTE (check, then ratchet this run)~s~n~n", [Note]),
+        run_product_bench(BenchDir, Extra, Doc),
+        do_check(Baseline, Doc, Fails, Wins),
+        report_result(Fails, Wins),
+        ( Fails =:= 0
+        ->  format("~npromote: clean run - recording it as the new baseline~n~n"),
+            do_record(BaselinePath, Baseline, Doc),
+            append_history(BenchDir, Doc, Extra),
+            halt(0)
+        ;   format("~npromote: regressions present - baseline NOT recorded~n"),
+            halt(1) )
     ;   format("crosswordsmith fill - performance ratchet~s~n~n", [Note]),
         run_product_bench(BenchDir, Extra, Doc),
         do_check(Baseline, Doc, Fails, Wins),
