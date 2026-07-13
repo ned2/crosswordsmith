@@ -19,7 +19,13 @@ archives dropped incl. sgml2pl; pcre2 unpinned/unstaged; notices + manifest
 actual link surface. swipl-web.wasm 2,195,615 → 1,382,532 raw / 440,056
 brotli — under the <1.5 MB raw and <475 KB brotli targets. Cumulative vs the
 Phase 0 baseline: trio brotli 1,680,777 → 638,569 (−62%), sdk cold readiness
-median 118.9ms → 89.3ms (−25%)) — all 2026-07-14.
+median 118.9ms → ~90–105ms across runs (n=10 medians jitter ~±15ms)), and
+Phase 4 item 1 (worker.js fetches the qlf once into MEMFS and consults the
+local file — the consult(URL) probe/abort duplicate is gone and the fetch
+obeys HTTP caching: cold qlf requests 4 → 2 uncached, 4 → 1 under immutable
+headers; eager-immutable modeled transfer 896 → 652 KB. Items 2–3 (manifest
+and capabilities round trips) deliberately deferred: both need non-local
+network timings first, per §8) — all 2026-07-14.
 
 Goal: make the crosswordsmith browser engine substantially cheaper to fetch,
 compile, and initialise without changing solver semantics, native behaviour, or

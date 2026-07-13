@@ -1,6 +1,6 @@
 {
   "v": 1,
-  "recorded": "2026-07-13T16:35:07.504Z",
+  "recorded": "2026-07-13T16:39:13.174Z",
   "machine": {
     "platform": "linux 7.0.0-27-generic",
     "cpu": "13th Gen Intel(R) Core(TM) i9-13900K",
@@ -25,9 +25,9 @@
   "sizes": {
     "worker.js": {
       "file": "worker.js",
-      "raw": 8635,
-      "gzip": 3797,
-      "brotli": 3251
+      "raw": 9239,
+      "gzip": 4042,
+      "brotli": 3445
     },
     "build-manifest.json": {
       "file": "build-manifest.json",
@@ -67,9 +67,9 @@
       "brotli": 638569
     },
     "shippedSet": {
-      "raw": 1790802,
-      "gzip": 794461,
-      "brotli": 663005
+      "raw": 1791406,
+      "gzip": 794706,
+      "brotli": 663199
     }
   },
   "scenarios": {
@@ -83,9 +83,9 @@
         "/client/swipl-web.ff6a11ff1929.js": 2,
         "/client/swipl-web.593767f86bc3.data": 2,
         "/client/swipl-web.4ff44f2a56ac.wasm": 2,
-        "/client/crosswordsmith.10a1886031dd.qlf": 4
+        "/client/crosswordsmith.10a1886031dd.qlf": 2
       },
-      "modeledColdBrotli": 1366904
+      "modeledColdBrotli": 1326398
     },
     "sdk-eager/immutable": {
       "requests": {
@@ -97,9 +97,9 @@
         "/client/swipl-web.ff6a11ff1929.js": 1,
         "/client/swipl-web.593767f86bc3.data": 1,
         "/client/swipl-web.4ff44f2a56ac.wasm": 1,
-        "/client/crosswordsmith.10a1886031dd.qlf": 3
+        "/client/crosswordsmith.10a1886031dd.qlf": 1
       },
-      "modeledColdBrotli": 707888
+      "modeledColdBrotli": 667382
     },
     "raw-single/no-cache-headers": {
       "requests": {
@@ -111,9 +111,9 @@
         "/client/swipl-web.ff6a11ff1929.js": 1,
         "/client/swipl-web.593767f86bc3.data": 1,
         "/client/swipl-web.4ff44f2a56ac.wasm": 1,
-        "/client/crosswordsmith.10a1886031dd.qlf": 2
+        "/client/crosswordsmith.10a1886031dd.qlf": 1
       },
-      "modeledColdBrotli": 683452
+      "modeledColdBrotli": 663199
     },
     "raw-single/immutable": {
       "requests": {
@@ -125,9 +125,9 @@
         "/client/swipl-web.ff6a11ff1929.js": 1,
         "/client/swipl-web.593767f86bc3.data": 1,
         "/client/swipl-web.4ff44f2a56ac.wasm": 1,
-        "/client/crosswordsmith.10a1886031dd.qlf": 2
+        "/client/crosswordsmith.10a1886031dd.qlf": 1
       },
-      "modeledColdBrotli": 683452
+      "modeledColdBrotli": 663199
     }
   },
   "timing": {
@@ -137,37 +137,37 @@
     "sdkEager": {
       "readinessMs": {
         "n": 10,
-        "median": 89.3,
-        "mean": 93.9,
-        "min": 80.3,
-        "max": 118.2,
-        "p95": 118.2
+        "median": 104.3,
+        "mean": 102,
+        "min": 81.9,
+        "max": 118.4,
+        "p95": 118.4
       },
       "firstArrangeMs": {
         "n": 10,
-        "median": 9.3,
-        "mean": 8.5,
-        "min": 6,
-        "max": 10,
-        "p95": 10
+        "median": 7.5,
+        "mean": 7.7,
+        "min": 5.7,
+        "max": 10.4,
+        "p95": 10.4
       }
     },
     "rawSingleWorker": {
       "readinessMs": {
         "n": 10,
-        "median": 92.3,
-        "mean": 97.5,
-        "min": 75.3,
-        "max": 121.3,
-        "p95": 121.3
+        "median": 101.6,
+        "mean": 99.6,
+        "min": 76,
+        "max": 112.8,
+        "p95": 112.8
       },
       "firstArrangeMs": {
         "n": 10,
-        "median": 6.4,
-        "mean": 6.2,
-        "min": 4.6,
-        "max": 7.6,
-        "p95": 7.6
+        "median": 6.6,
+        "mean": 7,
+        "min": 5.9,
+        "max": 10.9,
+        "p95": 10.9
       }
     }
   },
@@ -176,10 +176,10 @@
     "usedJsHeapBytes": {
       "n": 10,
       "median": 1342834,
-      "mean": 1342829.2,
-      "min": 1342810,
-      "max": 1342834,
-      "p95": 1342834
+      "mean": 1342834.8,
+      "min": 1342822,
+      "max": 1342850,
+      "p95": 1342850
     }
   }
 }

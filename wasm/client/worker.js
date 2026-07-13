@@ -26,7 +26,7 @@
 // swipl-web.data (built with `ninja swipl-web`) and crosswordsmith.qlf (the
 // qcompiled app - see wasm/README.md) — resolved through the content-hashed
 // names in build-manifest.json when that is present (see loadBuildManifest
-// below). Falls back to consulting solve_browser.pl if the qlf is absent.
+// below).
 
 // SWI's WASM URL helpers (e.g. prolog.url_properties, used by consult(URL))
 // reach for a browser `window`, which does not exist inside a Worker — without
@@ -83,11 +83,22 @@ function init() {
     // search. The cap is applied INSIDE the forEach goal instead (see onmessage).
     // Load the app. This .qlf MUST be produced by a same-pointer-size (wasm/node)
     // swipl, not native x86 — see solve_browser.pl / the deployment plan doc.
-    // Use an ABSOLUTE URL: inside a Worker there is no `window`, so SWI cannot
-    // derive a base URL for a relative consult path (it logs "window is not
-    // defined") and "./crosswordsmith.qlf" would 404. Resolve it ourselves.
-    await Prolog.consult(
-      new URL("./" + assetName("crosswordsmith.qlf"), self.location.href).href);
+    // ONE explicit fetch into MEMFS, then a local consult (payload plan Phase
+    // 4): Prolog.consult(URL) issues a probe request it then aborts before the
+    // real fetch, and neither hits the HTTP cache — the known 2-requests-per-
+    // worker / 4-per-cold-load qlf pattern. An ordinary fetch() is issued once
+    // and obeys normal HTTP caching, so under immutable headers the second
+    // worker's copy is a cache hit, not a server round trip. The URL is
+    // resolved ABSOLUTE against this worker (no `window` here to derive a base
+    // from), through the manifest's hashed name when stamped.
+    const qlfUrl =
+      new URL("./" + assetName("crosswordsmith.qlf"), self.location.href).href;
+    const resp = await fetch(qlfUrl);
+    if (!resp.ok)
+      throw new Error("crosswordsmith.qlf fetch failed: HTTP " + resp.status);
+    module.FS.writeFile("/crosswordsmith.qlf",
+                        new Uint8Array(await resp.arrayBuffer()));
+    await Prolog.consult("/crosswordsmith.qlf");
     return Prolog;
   });
   return ready;

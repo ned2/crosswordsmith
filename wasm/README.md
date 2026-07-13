@@ -297,18 +297,22 @@ None of these show up under `node` — they are specific to the browser **Worker
 1. **`self.window = self`** before `importScripts("./swipl-web.js")`. SWI's wasm
    URL helpers reach for `window` (absent in a Worker) → `window is not defined`
    and `consult` fails.
-2. **Absolute URL for `Prolog.consult`** (`new URL("./crosswordsmith.qlf",
-   self.location.href).href`) — no `window` ⇒ no base URL ⇒ relative path 404s.
+2. **Absolute URL for the qlf** (`new URL("./crosswordsmith.qlf",
+   self.location.href).href`) — no `window` ⇒ SWI has no base URL ⇒ a relative
+   path 404s. (Since payload plan Phase 4 the worker fetches that URL itself
+   into MEMFS and consults the local file, but the resolution rule stands.)
 3. **JSON in, not a query binding.** The JS→Prolog binding turns JS strings into
    Prolog **atoms**, so a clue's `answer` fails core's `string` check; and Prolog
    `null`/`true`/`false` return as the JS *strings* `"null"`/`"true"`/`"false"`.
    The worker sends `JSON.stringify(request)`; `browser_dispatch/3` parses it
    with `json_read_dict` and returns the envelope as one JSON **atom**.
 
-Expected non-fatal noise: a `crosswordsmith.<hash>.qlf … net::ERR_ABORTED` line
-per worker — a cancelled duplicate request from SWI's URL consult; the qlf still
-loads, and results are correct (payload plan Phase 4 targets removing it). Also a
-single unnamed 404: headless Chrome probing `/favicon.ico`. The historic
+Expected non-fatal noise: a single unnamed 404 — headless Chrome probing
+`/favicon.ico`. The historic `crosswordsmith.<hash>.qlf … net::ERR_ABORTED`
+line per worker went away when the worker switched to one explicit
+`fetch` + MEMFS write + local consult (payload plan Phase 4; SWI's
+`Prolog.consult(URL)` issued a probe request it then aborted, and its real
+fetch bypassed the HTTP cache — a new `ERR_ABORTED` here is a regression). The historic
 `source_sink library(http/json) does not exist` warnings went away with the
 browser-specific load root (payload plan Phase 1); qlf-load noise citing a
 `.pl` source location is a REGRESSION signal now — the locations are baked-in
