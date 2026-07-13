@@ -1,6 +1,7 @@
 # Plan: smaller and faster browser payload
 
-Status: **in progress** · Drafted 2026-07-14. Landed: Phase 0 (benchmark
+Status: **landed (Phases 0–6; two explicit deferrals below)** · Drafted
+2026-07-14. Landed: Phase 0 (benchmark
 harness + committed baseline, `make bench-wasm-payload*`), Phase 1
 (browser-specific load root; qlf 71,580 → 51,068 bytes raw, fill/stockgrid/
 sha/fastrw out of the closure and gated in `run_all.sh`, the historic
@@ -29,7 +30,12 @@ network timings first, per §8), and Phase 5 (SDK `sparePolicy` option —
 `eager` default | `idle` | `lazy` — gated by
 `wasm/test/spare_policy_probe.mjs` in the battery; measured abort→next-result
 recovery ~9ms warmed (eager/idle) vs ~81ms cold (lazy), abort rejection <1ms
-under every policy) — all 2026-07-14.
+under every policy), and Phase 6 (gate re-run on the minimal profile: no-LZ4
+saves only 17,977 brotli / 15,899 gzip (~2–3%) while raw grows +42,234 — the
+Phase 2/3 trimming consumed the 276 KB win §10 measured on the full preload.
+Decision: KEEP `LZ4=1`; re-visit only if the preload grows) — all 2026-07-14.
+Remaining: Phase 4 items 2–3 (deferred on non-local network timings) and §13
+item 8's consumer re-copy (ned.sh, after publishing this verified bundle).
 
 Goal: make the crosswordsmith browser engine substantially cheaper to fetch,
 compile, and initialise without changing solver semantics, native behaviour, or
@@ -331,6 +337,12 @@ link saved about 276 KB Brotli with statistically similar local readiness
 (101.1 ms versus 102.0 ms median), at the cost of a larger raw response and a
 less lazy in-memory filesystem.
 
+**Re-run 2026-07-14 on the minimal (Phase 2+3) profile — decision: keep
+LZ4.** No-LZ4 trio: brotli 620,592 vs 638,569 (−17,977, 2.8%), gzip 749,907
+vs 765,806 (−15,899, 2.1%), raw 1,771,873 vs 1,729,639 (+42,234). Not
+material under the criteria below; the trimmed 195 KB preload no longer
+carries enough compressible data for the format to matter.
+
 Re-run this comparison only after the preload is minimal. Adopt no-LZ4 only if:
 
 - Brotli and gzip both win materially for the final profile;
@@ -368,13 +380,13 @@ Every phase that changes artifacts must run, in order:
 
 Release target on the current SWI/toolchain pin:
 
-| Measure | Current | Target |
-|---|---:|---:|
-| Engine trio, Brotli | 1.68 MB | ≤700 KB |
-| Correct eager cold request model, Brotli | 1.80 MB | ≤800 KB |
-| Median fresh-Chrome readiness, reference desktop | 109 ms | ≤90 ms |
-| Browser regression | green | green |
-| Native/value parity | green | green |
+| Measure | Was | Target | Achieved 2026-07-14 |
+|---|---:|---:|---:|
+| Engine trio, Brotli | 1.68 MB | ≤700 KB | 638,569 B ✓ |
+| Correct eager cold request model, Brotli | 1.80 MB | ≤800 KB | 651.7 KB ✓ |
+| Median fresh-Chrome readiness, reference desktop | 109 ms | ≤90 ms | ~90–105 ms across runs (n=10 medians jitter ±15 ms; best 89.3) |
+| Browser regression | green | green | green ✓ |
+| Native/value parity | green | green | green ✓ |
 
 If size targets pass but lower-powered startup or memory regresses, keep the
 smaller preload and back out the responsible package/compression step rather
