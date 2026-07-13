@@ -5,8 +5,8 @@
 # For each of the four build outputs in $CLIENT_DIR (swipl-web.{js,wasm,data} +
 # crosswordsmith.qlf) this records a sha256, copies it to a content-hashed
 # sibling <stem>.<sha256:12><ext>, and writes build-manifest.json tying the set
-# together with the swipl-devel commit, the nine compiled submodule SHAs, and
-# the toolchain pins. worker.js prefers the hashed names when the manifest is
+# together with the swipl-devel commit, the compiled submodule SHAs
+# (pins.sh $WASM_SUBMODULES), and the toolchain pins. worker.js prefers the hashed names when the manifest is
 # present (falls back to unhashed when absent), so a CDN deploy ships the
 # hashed set + worker.js + this manifest — a partial deploy can no longer pair
 # a new js with a long-cached stale wasm.
@@ -46,10 +46,10 @@ swipl_commit="null"
 submodules_json="null"
 if git -C "$SWIPL_SRC" rev-parse HEAD >/dev/null 2>&1; then
   swipl_commit="\"$(git -C "$SWIPL_SRC" rev-parse HEAD)\""
-  # the nine WASM-compiled submodules (same set verify-pin.sh asserts on)
-  submodules_json="$(git -C "$SWIPL_SRC" submodule status \
-      packages/chr packages/clib packages/clpqr packages/http packages/json \
-      packages/pcre packages/plunit packages/semweb packages/utf8proc 2>/dev/null \
+  # the WASM-compiled submodules (pins.sh $WASM_SUBMODULES — the same set
+  # verify-pin.sh asserts on)
+  # shellcheck disable=SC2086
+  submodules_json="$(git -C "$SWIPL_SRC" submodule status $WASM_SUBMODULES 2>/dev/null \
     | awk '{ sha=$1; sub(/^[+\-U]/, "", sha); printf "%s\"%s\": \"%s\"", sep, $2, sha; sep=", " } END { if (NR==0) exit 1 }' \
     | sed 's/^/{ /; s/$/ }/')" || submodules_json="null"
 fi

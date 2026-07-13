@@ -102,7 +102,8 @@ bootstrap_swipl_src "$SWIPL_SRC" "$SWIPL_COMMIT"
 #  1. superproject at the pin (won't move a shared HEAD unless allowed);
 #  2. clean tree FIRST, so a dirty superproject is caught before submodule checks
 #     (SWIPL_ALLOW_DIRTY=1 overrides for intentional local hacking);
-#  3. the nine WASM-compiled submodules at the superproject's recorded gitlinks.
+#  3. the WASM-compiled submodules (pins.sh $WASM_SUBMODULES) at the
+#     superproject's recorded gitlinks.
 verify_superproject_pin "$SWIPL_SRC" "$SWIPL_COMMIT"
 verify_clean_tree "$SWIPL_SRC"
 verify_submodules "$SWIPL_SRC"

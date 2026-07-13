@@ -9,21 +9,20 @@
 # Each function returns non-zero on a failed check; build-wasm.sh runs under
 # `set -e`, so a failed guard aborts the build.
 
-# The nine swipl-devel submodules the WASM build actually compiles (package set
-# per wasm-browser-deployment.md §10.3 / hardening plan §2). Deliberately
-# EXCLUDES packages/zlib (the SWI library(zlib) binding, not the C zlib the build
-# links — that comes from $WASM_HOME), packages/ssl, and the 30+ submodules that
-# are uninitialised on a normal checkout (asserting on them false-fails on '-').
-# Env-overridable (unset-only, so an intentionally EMPTY override sticks) so
-# bootstrap/guard logic can be unit-tested against a tiny local fake remote
-# (no network, no real swipl-devel clone).
-: "${WASM_SUBMODULES=packages/chr packages/clib packages/clpqr packages/http \
-packages/json packages/pcre packages/plunit packages/semweb packages/utf8proc}"
+# $WASM_SUBMODULES — the thirteen submodules the WASM build compiles — lives in
+# pins.sh with the other supply-chain pins (single source of truth, shared with
+# stamp-manifest.sh). Source it here too so these guards keep working when this
+# file is sourced standalone for the ~1s guard tests (idempotent re-source when
+# build-wasm.sh already did). The set deliberately excludes packages/ssl and
+# the 30+ submodules uninitialised on a normal checkout (asserting on them
+# false-fails on '-').
+# shellcheck disable=SC1091
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/pins.sh"
 
 # bootstrap_swipl_src SRC COMMIT — the cold-runner / standalone-CI path (Batch 2,
 # docs/plans/wasm-supply-chain-batch2.md §2). When SRC does not exist: clone
 # swipl-devel (override the remote with SWIPL_REPO_URL), check out the pin, and
-# init the nine WASM-compiled submodules. NOT shallow — a shallow tip need not
+# init the WASM-compiled submodules. NOT shallow — a shallow tip need not
 # contain the pinned commit or the recorded gitlinks. A pre-existing tree is
 # never mutated here (the read-only guards below own it, with their
 # SWIPL_ALLOW_CHECKOUT-gated refusal to move a shared HEAD); a non-git SRC is a

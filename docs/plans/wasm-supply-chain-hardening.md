@@ -6,6 +6,17 @@ cold-runner bootstrap, committed lockfile — see
 [`wasm-supply-chain-batch2.md`](./wasm-supply-chain-batch2.md)) · Drafted
 2026-07-06.
 
+> **Correction (2026-07-13):** "the nine compiled submodules" throughout this
+> plan under-counted. cmake's dependency closure (`PackageSelection.cmake`:
+> `semweb → RDF nlp sgml zlib`, `http/clib → sgml json`) means the WASM build
+> compiles **thirteen** packages — verified against `build.wasm/packages/` at
+> pin `aa6289399`. A cold-clone bootstrap with only the nine fails to
+> configure, and drift in the four extras (`sgml`, `RDF`, `nlp`,
+> `packages/zlib` — the library(zlib) *binding*, distinct from the C zlib
+> staged into `$WASM_HOME`) escaped `verify_submodules`. `$WASM_SUBMODULES`
+> now lists all thirteen and lives in `wasm/build/pins.sh`, shared by
+> `verify-pin.sh` and `stamp-manifest.sh`.
+
 Scope: close the still-OPEN build-reproducibility / supply-chain debt tracked in
 [`wasm-browser-deployment.md`](./wasm-browser-deployment.md) §10.3. Every change
 lands in the single build script
