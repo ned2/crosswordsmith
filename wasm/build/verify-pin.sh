@@ -9,7 +9,7 @@
 # Each function returns non-zero on a failed check; build-wasm.sh runs under
 # `set -e`, so a failed guard aborts the build.
 
-# $WASM_SUBMODULES — the thirteen submodules the WASM build compiles — lives in
+# $WASM_SUBMODULES — the submodules the WASM profile build compiles — lives in
 # pins.sh with the other supply-chain pins (single source of truth, shared with
 # stamp-manifest.sh). Source it here too so these guards keep working when this
 # file is sourced standalone for the ~1s guard tests (idempotent re-source when
@@ -115,19 +115,6 @@ verify_submodules() {
       echo "  (or re-run with SWIPL_ALLOW_CHECKOUT=1 to let this script sync them)" >&2
       return 1
     fi
-  fi
-}
-
-# verify_pcre2_commit DIR WANT — assert the cloned pcre2 tag resolved to the
-# pinned commit. A git tag is safer than a rotating tarball but is movable and
-# carries no commit assertion; a retagged upstream pcre2-<ver> would otherwise
-# compile silently different source.
-verify_pcre2_commit() {
-  local dir="$1" want="$2" got
-  got="$(git -C "$dir" rev-parse HEAD)"
-  if [ "$got" != "$want" ]; then
-    echo "ERROR: pcre2 clone at $got != pinned $want (tag may have moved)." >&2
-    return 1
   fi
 }
 

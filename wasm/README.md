@@ -22,7 +22,7 @@ VM cost model: [`docs/research/swi-vm-wasm-performance.md`](../docs/research/swi
 | `sdk/` | the JS/TS SDK: `crosswordsmith.mjs` (`createCrosswordsmith()` facade) + hand-written `crosswordsmith.d.ts` |
 | `client/` | the engine assets — served as static files; `harness.html` is the minimal SDK consumer (smoke/diagnostic page) |
 | `build/build-wasm.sh` | reproducible build: emsdk + deps → `swipl-web` → app `.qlf` → provenance manifest. Pins in `build/pins.sh`; guards in `build/verify-pin.sh`; manifest stamping in `build/stamp-manifest.sh` |
-| `THIRD_PARTY_NOTICES.md` | the redistribution notice for what the built bundle ships — self-contained, verbatim licence texts verified against the pinned sources (SWI-Prolog + its vendored components incl. LGPL isub, zlib, PCRE2, Emscripten runtime, crosswordsmith; future UKACD18 obligation). `stamp-manifest.sh` copies it into `client/` so a deploy of that directory ships it; keep it reachable from any site serving the bundle |
+| `THIRD_PARTY_NOTICES.md` | the redistribution notice for what the built bundle ships — self-contained, verbatim licence texts verified against the pinned sources (SWI-Prolog + the vendored components the profile image actually links, zlib, Emscripten runtime, crosswordsmith; future UKACD18 obligation). Scoped to the crosswordsmith-web profile: PCRE2 and the nlp/semweb/clib-crypto notices left with their packages (payload plan Phase 3). `stamp-manifest.sh` copies it into `client/` so a deploy of that directory ships it; keep it reachable from any site serving the bundle |
 | `test/` | native + headless-Chrome regression tests (Playwright + system Chrome); `run_all.sh` is the one-command battery (`make test-wasm`) |
 
 ### `sdk/`
@@ -74,8 +74,10 @@ terminated worker posts nothing.
 
 ## Build
 
-One script does the whole thing (emsdk activate → stage zlib/pcre2 → build
-`swipl-web` from our pinned commit → copy artifacts → qcompile the app `.qlf`):
+One script does the whole thing (emsdk activate → stage zlib → build
+`swipl-web` from our pinned commit with the crosswordsmith-web package
+profile → relink the profile image → copy artifacts → qcompile the app
+`.qlf`):
 
 ```bash
 wasm/build/build-wasm.sh          # verifies the swipl-devel pin; won't move a shared HEAD
@@ -86,19 +88,39 @@ It's idempotent-ish (skips already-staged deps) and drops all outputs into
 artifact names (`wasm/build/stamp-manifest.sh` — provenance + CDN cache
 safety).
 
-**Preload profile (payload plan Phase 2):** what ships is NOT SWI's default
-full-library image. Step 2.6 assembles the tracked keep-list
-`wasm/build/preload-profile.txt` (~22 files, ~248 KB raw: boot + the exact
-library closure the browser qlf and `library(wasm)` reach) into a clean
-staging dir and replays the ninja-extracted `swipl-web` link against it —
-`swipl-web.data` drops from ~1.6 MB to ~195 KB raw. The pinned SWI tree is
-never patched and its own `wasm-preload/` staging is never touched (its files
-are ninja outputs — in-place pruning would be silently reverted mid-graph).
-A profile entry missing from the staging tree fails the build; a library
-missing from the profile fails the battery (autoload `source_sink` errors in
-the page logs). `build-manifest.json` records `preloadProfile`
-{name, manifestSha256, files}; `run_all.sh` stages the profile image
-automatically when the build tree carries one. **Cold runner:** when `$SWIPL_SRC` is absent it clones swipl-devel at
+**The crosswordsmith-web profile (payload plan Phases 2+3):** what ships is
+NOT SWI's default full-library, 13-package image.
+
+- *Packages (Phase 3):* the tree is configured with
+  `-DSWIPL_PACKAGE_LIST="clib;json;http"` (pins.sh `$WASM_PACKAGE_LIST`;
+  cmake auto-adds sgml as a clib/http dependency). http exists only so
+  `library_qlf` can compile core `library/dom.pl`; its code never ships.
+- *Foreign extensions (Phase 3):* step 2.6 compiles a variant `pl-load.c.o`
+  from a `static_packages.h` generated off pins.sh `$WASM_STATIC_EXTENSIONS`
+  (uri, readutil, json — the only plugins the preloaded library actually
+  loads), lists it ahead of `libswipl.a` in the replayed link (so the full
+  registry member is never pulled), and drops the other nine plugin archives
+  (sgml2pl, http_stream, sha4pl, hashstream, md54pl, crypt, memfile, files,
+  prolog_stream) from the link — `swipl-web.wasm` drops from ~2.2 MB to
+  ~1.38 MB raw (~440 KB brotli). The node-side `swipl.js` keeps every plugin
+  (library qlfmake + value goldens need them).
+- *Preload (Phase 2):* the same step assembles the tracked keep-list
+  `wasm/build/preload-profile.txt` (22 files, ~248 KB raw: boot + the exact
+  library closure the browser qlf and `library(wasm)` reach) into a clean
+  staging dir for the replayed link — `swipl-web.data` drops from ~1.8 MB to
+  ~195 KB raw.
+
+The pinned SWI tree is never patched and its own `wasm-preload/` staging is
+never touched (its files are ninja outputs — in-place pruning would be
+silently reverted mid-graph); the link/compile commands are extracted from
+ninja per build, not hand-maintained. A profile entry missing from the
+staging tree fails the build; a library missing from the profile fails the
+battery (autoload `source_sink` errors in the page logs); a foreign extension
+missing from the keep-list fails loudly at load (`use_foreign_library`
+existence error). `build-manifest.json` records `profile`
+{name, packageList, staticExtensions, preload{manifestSha256, files}};
+`run_all.sh` stages the profile image automatically when the build tree
+carries one. **Cold runner:** when `$SWIPL_SRC` is absent it clones swipl-devel at
 the pin and inits the WASM submodules itself (`SWIPL_REPO_URL` overrides the
 remote), so a standalone CI box needs no pre-existing checkout. Overridable via
 env: `WASM_HOME`, `SWIPL_SRC`, `SWIPL_ALLOW_CHECKOUT=1` (let the script

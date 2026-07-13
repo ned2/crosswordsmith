@@ -41,13 +41,17 @@ for a in $ARTIFACTS; do
   fi
 done
 
-# preload-profile provenance (payload plan Phase 2) — recorded ONLY when the
-# caller states which profile produced the staged swipl-web.data (build-wasm.sh
+# profile provenance (payload plan Phases 2+3) — recorded ONLY when the
+# caller states which profile produced the staged artifacts (build-wasm.sh
 # step 2.6 and run_all.sh's profile-preferring staging both pass it). Null
 # otherwise, matching the swipl-provenance policy: visible, never fabricated —
-# this script cannot introspect a .data package to tell profile from full.
+# this script cannot introspect a .data/.wasm to tell profile from full.
+# packageList is the explicit -DSWIPL_PACKAGE_LIST configure input;
+# staticExtensions is the ACTUAL foreign-plugin surface linked into the
+# shipped swipl-web (everything else was dropped from the link); preload pins
+# the .data keep-list. All from pins.sh — the single source of truth.
 : "${PRELOAD_PROFILE:=}"
-preload_profile_json="null"
+profile_json="null"
 if [ -n "$PRELOAD_PROFILE" ]; then
   profile_file="$SCRIPT_DIR/preload-profile.txt"
   if [ ! -f "$profile_file" ]; then
@@ -56,7 +60,10 @@ if [ -n "$PRELOAD_PROFILE" ]; then
   fi
   profile_sha="$(sha256sum "$profile_file" | cut -d' ' -f1)"
   profile_entries="$(grep -cvE '^\s*(#|$)' "$profile_file")"
-  preload_profile_json="{ \"name\": \"$PRELOAD_PROFILE\", \"manifestSha256\": \"$profile_sha\", \"files\": $profile_entries }"
+  static_exts_json="$(printf '"%s", ' $WASM_STATIC_EXTENSIONS)"
+  static_exts_json="[ ${static_exts_json%, } ]"
+  profile_json="$(printf '{ "name": "%s", "packageList": "%s", "staticExtensions": %s, "preload": { "manifestSha256": "%s", "files": %s } }' \
+    "$PRELOAD_PROFILE" "$WASM_PACKAGE_LIST" "$static_exts_json" "$profile_sha" "$profile_entries")"
 fi
 
 # swipl provenance — null (not guessed) when $SWIPL_SRC is not a git tree.
@@ -102,14 +109,12 @@ cat > "$CLIENT_DIR/build-manifest.json" <<EOF
 {
   "v": 1,
   "buildId": "$build_id",
-  "preloadProfile": $preload_profile_json,
+  "profile": $profile_json,
   "swipl": { "commit": $swipl_commit, "submodules": $submodules_json },
   "toolchain": {
     "emsdk": "$EMSDK_VERSION",
     "zlib": "$ZLIB_VERSION",
-    "zlibSha256": "$ZLIB_SHA256",
-    "pcre2": "$PCRE2_VERSION",
-    "pcre2Commit": "$PCRE2_COMMIT"
+    "zlibSha256": "$ZLIB_SHA256"
   },
   "licenses": "THIRD_PARTY_NOTICES.md",
   "artifacts": {

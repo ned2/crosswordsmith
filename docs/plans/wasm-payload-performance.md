@@ -7,10 +7,19 @@ sha/fastrw out of the closure and gated in `run_all.sh`, the historic
 `http/json` source_sink load warnings gone), and Phase 2 (minimal preload
 image: strace-derived 22-file keep-list in `wasm/build/preload-profile.txt`,
 deterministic link-command replay in `build-wasm.sh` step 2.6 producing
-`src/profile-crosswordsmith-web/`, provenance in the manifest's
-`preloadProfile`; swipl-web.data 1,646,186 → 195,323 bytes raw. Trio brotli
-1,680,777 → 827,286 (−50.8%) and sdk readiness median 118.9ms → 95.9ms (−19%)
-— both headline targets already met at Phase 2) — all 2026-07-14.
+`src/profile-crosswordsmith-web/`; swipl-web.data 1,646,186 → 195,323 bytes
+raw), and Phase 3 (crosswordsmith-web package profile:
+`-DSWIPL_PACKAGE_LIST="clib;json;http"` + sgml auto-dep — http retained only
+because core `library/dom.pl` imports `library(http/html_decl)` and
+`library_qlf` cannot exclude it without patching the pin; static-extension
+trim to uri/readutil/json via a generated `static_packages.h` + variant
+`pl-load.c.o` front-running `libswipl.a` in the replayed link, 9 plugin
+archives dropped incl. sgml2pl; pcre2 unpinned/unstaged; notices + manifest
+(`profile` {name, packageList, staticExtensions, preload}) rescoped to the
+actual link surface. swipl-web.wasm 2,195,615 → 1,382,532 raw / 440,056
+brotli — under the <1.5 MB raw and <475 KB brotli targets. Cumulative vs the
+Phase 0 baseline: trio brotli 1,680,777 → 638,569 (−62%), sdk cold readiness
+median 118.9ms → 89.3ms (−25%)) — all 2026-07-14.
 
 Goal: make the crosswordsmith browser engine substantially cheaper to fetch,
 compile, and initialise without changing solver semantics, native behaviour, or

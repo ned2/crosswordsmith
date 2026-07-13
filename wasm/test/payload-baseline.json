@@ -1,6 +1,6 @@
 {
   "v": 1,
-  "recorded": "2026-07-13T16:03:55.647Z",
+  "recorded": "2026-07-13T16:35:07.504Z",
   "machine": {
     "platform": "linux 7.0.0-27-generic",
     "cpu": "13th Gen Intel(R) Core(TM) i9-13900K",
@@ -8,29 +8,18 @@
     "chrome": "149.0.7827.200"
   },
   "build": {
-    "buildId": "e7039a5734345330c25bd3854f726337b7dc4e6ccc1651881573e829e78d5825",
+    "buildId": "6bad370a8f8fb1bdd2034eae7a012690c7be9129021ee678fcdb9bfb64a2d81a",
     "swiplCommit": "aa6289399da856e8a585797c46a44d1298480598",
     "packages": [
-      "packages/RDF",
-      "packages/chr",
       "packages/clib",
-      "packages/clpqr",
       "packages/http",
       "packages/json",
-      "packages/nlp",
-      "packages/pcre",
-      "packages/plunit",
-      "packages/semweb",
-      "packages/sgml",
-      "packages/utf8proc",
-      "packages/zlib"
+      "packages/sgml"
     ],
     "toolchain": {
       "emsdk": "6.0.1",
       "zlib": "1.3.2",
-      "zlibSha256": "bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16",
-      "pcre2": "10.47",
-      "pcre2Commit": "f454e231fe5006dd7ff8f4693fd2b8eb94333429"
+      "zlibSha256": "bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16"
     }
   },
   "sizes": {
@@ -42,26 +31,26 @@
     },
     "build-manifest.json": {
       "file": "build-manifest.json",
-      "raw": 2081,
-      "gzip": 1075,
-      "brotli": 990
+      "raw": 1533,
+      "gzip": 832,
+      "brotli": 738
     },
     "swipl-web.js": {
-      "file": "swipl-web.4d3c7e2bfd6c.js",
-      "raw": 152928,
-      "gzip": 40705,
-      "brotli": 35368
+      "file": "swipl-web.ff6a11ff1929.js",
+      "raw": 151784,
+      "gzip": 40453,
+      "brotli": 35130
     },
     "swipl-web.wasm": {
-      "file": "swipl-web.92f2b8e72744.wasm",
-      "raw": 2195615,
-      "gzip": 796588,
-      "brotli": 628861
+      "file": "swipl-web.4ff44f2a56ac.wasm",
+      "raw": 1382532,
+      "gzip": 556521,
+      "brotli": 440382
     },
     "swipl-web.data": {
-      "file": "swipl-web.fec6712a5052.data",
+      "file": "swipl-web.593767f86bc3.data",
       "raw": 195323,
-      "gzip": 168831,
+      "gzip": 168832,
       "brotli": 163057
     },
     "crosswordsmith.qlf": {
@@ -73,14 +62,14 @@
   },
   "aggregates": {
     "engineTrio": {
-      "raw": 2543866,
-      "gzip": 1006124,
-      "brotli": 827286
+      "raw": 1729639,
+      "gzip": 765806,
+      "brotli": 638569
     },
     "shippedSet": {
-      "raw": 2605577,
-      "gzip": 1035022,
-      "brotli": 851974
+      "raw": 1790802,
+      "gzip": 794461,
+      "brotli": 663005
     }
   },
   "scenarios": {
@@ -91,12 +80,12 @@
         "/favicon.ico": 1,
         "/client/worker.js": 2,
         "/client/build-manifest.json": 2,
-        "/client/swipl-web.4d3c7e2bfd6c.js": 2,
-        "/client/swipl-web.fec6712a5052.data": 2,
-        "/client/swipl-web.92f2b8e72744.wasm": 2,
+        "/client/swipl-web.ff6a11ff1929.js": 2,
+        "/client/swipl-web.593767f86bc3.data": 2,
+        "/client/swipl-web.4ff44f2a56ac.wasm": 2,
         "/client/crosswordsmith.10a1886031dd.qlf": 4
       },
-      "modeledColdBrotli": 1744842
+      "modeledColdBrotli": 1366904
     },
     "sdk-eager/immutable": {
       "requests": {
@@ -105,12 +94,12 @@
         "/favicon.ico": 1,
         "/client/worker.js": 2,
         "/client/build-manifest.json": 2,
-        "/client/swipl-web.4d3c7e2bfd6c.js": 1,
-        "/client/swipl-web.fec6712a5052.data": 1,
-        "/client/swipl-web.92f2b8e72744.wasm": 1,
-        "/client/crosswordsmith.10a1886031dd.qlf": 4
+        "/client/swipl-web.ff6a11ff1929.js": 1,
+        "/client/swipl-web.593767f86bc3.data": 1,
+        "/client/swipl-web.4ff44f2a56ac.wasm": 1,
+        "/client/crosswordsmith.10a1886031dd.qlf": 3
       },
-      "modeledColdBrotli": 917556
+      "modeledColdBrotli": 707888
     },
     "raw-single/no-cache-headers": {
       "requests": {
@@ -119,12 +108,12 @@
         "/favicon.ico": 1,
         "/client/worker.js": 1,
         "/client/build-manifest.json": 1,
-        "/client/swipl-web.4d3c7e2bfd6c.js": 1,
-        "/client/swipl-web.fec6712a5052.data": 1,
-        "/client/swipl-web.92f2b8e72744.wasm": 1,
+        "/client/swipl-web.ff6a11ff1929.js": 1,
+        "/client/swipl-web.593767f86bc3.data": 1,
+        "/client/swipl-web.4ff44f2a56ac.wasm": 1,
         "/client/crosswordsmith.10a1886031dd.qlf": 2
       },
-      "modeledColdBrotli": 872421
+      "modeledColdBrotli": 683452
     },
     "raw-single/immutable": {
       "requests": {
@@ -133,12 +122,12 @@
         "/favicon.ico": 1,
         "/client/worker.js": 1,
         "/client/build-manifest.json": 1,
-        "/client/swipl-web.4d3c7e2bfd6c.js": 1,
-        "/client/swipl-web.fec6712a5052.data": 1,
-        "/client/swipl-web.92f2b8e72744.wasm": 1,
+        "/client/swipl-web.ff6a11ff1929.js": 1,
+        "/client/swipl-web.593767f86bc3.data": 1,
+        "/client/swipl-web.4ff44f2a56ac.wasm": 1,
         "/client/crosswordsmith.10a1886031dd.qlf": 2
       },
-      "modeledColdBrotli": 872421
+      "modeledColdBrotli": 683452
     }
   },
   "timing": {
@@ -148,16 +137,16 @@
     "sdkEager": {
       "readinessMs": {
         "n": 10,
-        "median": 95.9,
-        "mean": 98.6,
-        "min": 90.4,
-        "max": 111.6,
-        "p95": 111.6
+        "median": 89.3,
+        "mean": 93.9,
+        "min": 80.3,
+        "max": 118.2,
+        "p95": 118.2
       },
       "firstArrangeMs": {
         "n": 10,
-        "median": 8.9,
-        "mean": 8.4,
+        "median": 9.3,
+        "mean": 8.5,
         "min": 6,
         "max": 10,
         "p95": 10
@@ -166,19 +155,19 @@
     "rawSingleWorker": {
       "readinessMs": {
         "n": 10,
-        "median": 96.7,
-        "mean": 97.7,
-        "min": 84.5,
-        "max": 114.7,
-        "p95": 114.7
+        "median": 92.3,
+        "mean": 97.5,
+        "min": 75.3,
+        "max": 121.3,
+        "p95": 121.3
       },
       "firstArrangeMs": {
         "n": 10,
-        "median": 5.8,
-        "mean": 5.6,
+        "median": 6.4,
+        "mean": 6.2,
         "min": 4.6,
-        "max": 7,
-        "p95": 7
+        "max": 7.6,
+        "p95": 7.6
       }
     }
   },
@@ -187,8 +176,8 @@
     "usedJsHeapBytes": {
       "n": 10,
       "median": 1342834,
-      "mean": 1342822,
-      "min": 1342738,
+      "mean": 1342829.2,
+      "min": 1342810,
       "max": 1342834,
       "p95": 1342834
     }
