@@ -85,6 +85,27 @@ Parallelism rule: research + probes may run alongside experiments, but never
 run two candidate changes to the same code concurrently — serial composition
 is what keeps attribution honest.
 
+**One orchestrator, always.** Exactly one active orchestrator holds the
+ledger; dispatched agents return DRAFT entries and never commit to the
+mainline or touch the main checkout. Answer a status question ("is the agent
+still running?") with READ-ONLY checks — the agent list/attach view,
+`git -C <worktree> status`, `ps` — never by fork-resuming your own session
+transcript into a background agent: an inherited orchestrator context plus
+auto permissions does not stay a status check, it becomes a second
+orchestrator writing to the mainline (the 2026-07 fill campaign lost ~1h of
+reconciliation and a ledger correction exactly this way). If you discover a
+twin, pause it via the agent view BEFORE any reconciliation; adopt its
+verified results by appended correction, and never partially trust its
+uncommitted state. To keep polling rare, emit a one-line status note after
+every dispatch (who is running, on what branch, since when).
+
+**Provision worktrees at current HEAD.** Auto-isolation cuts a worktree from
+the commit the SESSION started on, not current mainline — so on any campaign
+long enough for the mainline to advance, an auto-cut worktree starts silently
+stale. Before every dispatch, the orchestrator creates the branch at current
+mainline HEAD and hands the agent a ready worktree (see brief-template item 1
+for the self-heal to inline in the brief).
+
 ## Campaign lifecycle
 
 1. **Understand + plan playback**: read the target code fully yourself, then

@@ -6,6 +6,11 @@
    if stale (merge from the main checkout), and a signature feature to
    verify exists in the code. Rationale: three silently-stale worktree
    incidents in one campaign; without this, results are corrupted invisibly.
+   The ORCHESTRATOR provisions the branch/worktree at current mainline HEAD
+   before dispatch (auto-isolation cuts from the session-start commit, not
+   HEAD) and inlines the exact self-heal in the brief with the SHA filled
+   in — `git checkout -B <branch> <current-mainline-sha>` — so a stale base
+   costs the agent a self-heal, not a stop-and-report round-trip.
 
 2. **Context pointers**: the ledger section and any research/plan docs the
    agent must read before starting.
@@ -45,3 +50,9 @@
 Also state the acceptance bar in the brief when it is strict ("zero
 regressions across all rungs, or the avenue closes — either outcome is
 decision-grade"), so the agent knows a clean negative is a success.
+
+Watchdog note: long, silent measurement runs get killed by the ~600s output
+watchdog. Instruct the agent to emit a per-rung/per-trial heartbeat (e.g.
+`format(user_error, ...)`) or chunk the run so it never goes >10 minutes
+without output — two Phase-0 stalls in one campaign came from healthy runs
+that just went quiet.
