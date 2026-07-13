@@ -42,6 +42,35 @@ the README.
 - `tests/*.plt` hold the plunit coverage (one suite per module); the
   deterministic CLI goldens live under `tests/golden/`. Run all three layers
   (plunit + goldens + CLI exit-code checks) via `./run_tests.sh` or `make test`.
+- `xword/` is the Python conversion companion (terminal viewer + format
+  multitool: native ⇄ ipuz/exolve, rendering). Its tests are NOT run by
+  `make test` — use `make test-xword`. The engine↔xword cross-check is
+  specified in [docs/xword-spec.md](docs/xword-spec.md) §11/§14 and has a
+  one-command harness: `make xword-parity` (see Verification). Engine↔xword
+  byte-parity is best-effort policy, NOT a contract (§14): engine JSON goes
+  through SWI's `json_write_dict` (type-dependent colon spacing) while xword
+  uses `json.dumps` — don't hand-roll probes to chase the residual gap.
+
+## Browser / WASM
+
+- The browser build lives under `wasm/` — read [wasm/README.md](wasm/README.md)
+  first; it is canonical for the build, the wire contract, and the test battery.
+- Build: `wasm/build/build-wasm.sh` (pins in `wasm/build/pins.sh`). It runs for
+  MINUTES (emsdk/cmake/ninja) — run it as a background task, never under the
+  default 2-minute Bash timeout. Same for any cmake/ninja step in
+  `~/src/swipl-devel`.
+- Test: `make test-wasm`. It stages swipl-web artifacts, qcompiles the app qlf,
+  and self-manages a static server on a free port — do not hand-stage
+  `swipl-web.*`/qlf files and do not hand-roll `http.server`/`pkill`.
+- Never `git checkout` or dirty the shared `~/src/swipl-devel` tree; the wasm
+  build uses its own isolated `build.wasm/`.
+- Gotcha: the `USE_GMP=OFF` wasm build seeds a DIFFERENT RNG than native SWI,
+  so `set_random(seed(N))` diverges CLI-vs-browser. The seeded arrange path
+  therefore owns an engine-internal xorshift PRNG — read the PRNG section of
+  [wasm/README.md](wasm/README.md) before touching seeding.
+- Build/bench logs can exceed the 256KB Read cap — tail or grep them, never
+  read them whole. To wait on a long-running step, use a background task or a
+  Monitor-style until-loop, not `sleep N; tail`.
 
 ## Working Instructions
 
@@ -57,11 +86,26 @@ the README.
   in sync. Internal predicates use plain `%` prose as needed.
 - Do not change the JSON input or output contract without updating the
   corresponding spec, README, tests, and golden output as needed.
+- After a context compaction, Read a file before your first Edit to it — the
+  "already read" state does not survive the summary, even for files you
+  authored earlier in the session.
+- Items marked best-effort / optional / Stretch carry an implicit STOP
+  condition: if the happy path fails, document the gap and move on — that IS
+  the completed outcome. Do not research or build probes to close the gap,
+  and do not escalate it as a decision unless the plan is genuinely ambiguous.
+- Ask nuanced tradeoff questions in prose (or state "proceeding with X unless
+  you object"); reserve AskUserQuestion menus for clean either/or forks with
+  stable framing.
 
 ## Verification
 
-- Full test suite: `make test` or `./run_tests.sh`
-- Plunit only: `make unit`
-- Golden output only: `make golden`
-- Regenerate golden output only after an intentional output change:
-  `make update-golden`
+- Full native suite: `make test` or `./run_tests.sh` (plunit + goldens + CLI
+  exit-code checks).
+- Fast inner loop: `make unit` (plunit only) — prefer this while iterating on
+  Prolog; run `make test` before committing.
+- Golden output only: `make golden`. Regenerate only after an intentional
+  output change (`make update-golden`) and review the diff.
+- WASM battery: `make test-wasm` (see Browser / WASM above).
+- xword companion: `make test-xword`. Engine↔xword output comparison:
+  `make xword-parity [XWORD_PARITY_FIXTURE=<layout.json>]` — one command;
+  don't hand-roll export/convert/diff probes.
