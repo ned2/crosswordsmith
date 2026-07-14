@@ -196,9 +196,24 @@ Concretely, in scope and license-clean:
    naturally into `lint`'s existing per-word report.
 3. **`arrange`: score as tiebreak only** (see above), preserving determinism.
 
-**Head-to-head benchmark design (proposed — not yet run).** The sharpest,
-fairest target is **ingrid_core** (CLI, grid-first, open-source, MIT, uses the
-*same* STW list):
+**Head-to-head benchmark — measured (prototype).** Run and quantified against
+**ingrid_core** (CLI, grid-first, MIT, same STW list); full harness + results in
+[`benchmarks/fill_quality/`](../../benchmarks/fill_quality/README.md). Every
+placed entry scored *post hoc* against STW, so the gap is visible before
+crosswordsmith implements any scoring. Headline numbers (score 50 = "clean"):
+
+- **On grids both tools complete** (small, short-slot): crosswordsmith's scoreless
+  MRV fill scores **mean 27–42, with entries at 0** — it grabs the
+  alphabetically-first fitting strings (`AAAAA`, `AAAAQ`, `ABAAB`, `AEAEA`).
+  ingrid at `--min-score 50` scores mean/min 50, zero below-clean. **A crude
+  `score>=50` *dict prefilter* on crosswordsmith fully recovers ingrid-parity
+  quality** — the cheapest form of scored fill already closes the quality gap.
+- **On a hard grid** (`blocked_13a`, full 13-length slots): crosswordsmith
+  **cannot complete** (budget-exhausted ~20s, any dict); ingrid completes in ~10s
+  at `--min-score ≤30` but times out at 50. So there is a **second, orthogonal
+  gap — search power on hard grids — separate from scoring**, and the harder one.
+
+The original benchmark design (unchanged, for the fuller sweep still worth doing):
 
 - **Inputs:** a fixed set of legal blocked grids (crosswordsmith's own stock
   grids + a few standard 15×15 American masks), same **STW dictionary** for both.
@@ -310,9 +325,13 @@ rendering competitors. A follow-up pass on those tools would firm up sections A
 and E.
 
 **Open questions (load-bearing, unresolved):**
-1. **The measured** fill-quality/speed delta between scoreless MRV and
-   ingrid_core's scored CSP on identical grids + STW — materially worse, or just
-   occasionally worse corners? (Decides urgency of D#1.)
+1. ~~The measured fill-quality/speed delta between scoreless MRV and ingrid_core~~
+   **ANSWERED (prototype, [`benchmarks/fill_quality/`](../../benchmarks/fill_quality/README.md)):**
+   *materially worse* — scoreless fill drops to non-word junk (mean 27–42, entries
+   at 0) where scored fill holds mean/min 50; a `score>=50` dict prefilter recovers
+   parity. Plus a *second* gap: crosswordsmith can't complete standard 13×13
+   full-slot grids ingrid solves in ~10s (search power, not scoring). Remaining
+   open: the delta across a proper spread of standard 11×11/15×15 masks.
 2. Is scored *`arrange`* even coherent given the closed-set model, or does scoring
    belong *only* in `fill`? (Section D takes the position that `arrange` gets
    tiebreak-only; worth validating in practice.)
