@@ -51,14 +51,20 @@ Tagged effort × leverage × identity-fit.
    The research-endorsed differentiated half ("compete on render, not convert");
    cairosvg output stays byte-deterministic.
 
-3. **`.puz` *read* via an optional `puzpy` extra** — `.puz` → `Board` (puzpy is
-   pure-Python **MIT**), as an `xword[puz]` extra mirroring the `[raster]` pattern,
-   plus wiring the reserved binary-magic detect branch. *Effort medium · leverage
-   medium · fit ok.* Highest-priority real-world format gap (xword can't read a
-   `.puz` at all today). Spec §9 already sanctions "one more parser via puzpy."
-   The kotwords boundary was about the engine's *outbound binary write*, not
-   inbound reads — MIT puzpy respects license-cleanliness and hand-rolls no CRC.
-   `.puz` can't hold bars, so barred boards fail-strict on `.puz` *write* (D7).
+3. **`.puz` *read* via an optional pure-Python extra** — `.puz` → `Board` as an
+   `xword[puz]` extra mirroring the `[raster]` pattern, plus wiring the reserved
+   binary-magic detect branch. Two license-clean MIT options (third-pass
+   research): **puzpy** (`.puz`/`.txt`, 100%-round-trip pedigree) or **pypuz**
+   (Crossword Nexus — also reads `.jpz`/`.cfp`/AmuseLabs JSON, so it doubles as a
+   `.jpz`-read on-ramp). *Effort medium · leverage medium · fit ok.* Highest-priority
+   real-world format gap (xword can't read a `.puz` at all today). Spec §9 already
+   sanctions "one more parser via puzpy." The kotwords boundary was about the
+   engine's *outbound binary write*, not inbound reads — MIT puzpy/pypuz respect
+   license-cleanliness and hand-roll no CRC. `.puz` can't hold bars, so barred
+   boards fail-strict on `.puz` *write* (D7). **Synergy:** `xword-dl` (actively
+   maintained) emits `.puz`-only, so a `.puz` read makes `xword-dl → xword
+   convert/render` a natural pipeline. **Prior art to study, not reinvent:**
+   Crossword Nexus's `pypuz`/`jscrossword` already parse this format graph.
 
 4. **`diff` verb** — parse two layouts (any formats) → structural diff (grid
    shape, blocks, per-cell letters, numbering, clues, enumerations); human default,

@@ -20,12 +20,12 @@ cryptic doc as still-valid for setter *methodology* and cryptic conventions; use
 
 > **Honesty note on coverage.** The first pass's verified corpus was heavy on
 > **fill / word-list / format-conversion tooling** and lighter on cryptic-specific
-> and rendering competitors. A **[second-pass verification](#second-pass-verification-2026-07-15)**
-> (see the section at the foot of this doc) has since re-verified **Qxw,
-> Nutrimatic, MyCrossword, Phil, Black Ink, and Amuse PuzzleMe** for 2026 against
-> primary sources. Still **unconfirmed** (no verified claims this project) and not
-> to be treated as researched: **Qat, Sympathy/TEA/Wordplay Wizard, xword-dl,
-> Crossword Nexus** — carried from the prior doc at its confidence only.
+> and rendering competitors. A **[second- + third-pass verification](#second-pass-verification-2026-07-15)**
+> (see the section at the foot of this doc) has since re-verified **all** the
+> carried-over tools for 2026 against primary sources — Qxw, Nutrimatic,
+> MyCrossword, Phil, Black Ink, Amuse PuzzleMe (second pass) and Qat,
+> Sympathy/TEA/Wordplay Wizard, xword-dl, Crossword Nexus (third pass). No scoped
+> tool remains unverified.
 
 ---
 
@@ -353,14 +353,16 @@ and E.
 
 ---
 
-## Second-pass verification (2026-07-15)
+## Second- + third-pass verification (2026-07-15)
 
-A focused follow-up re-verified the tools the first pass carried over unverified,
-asking one question per tool: **is it maintained in 2026, and does it close any of
-crosswordsmith's residual gaps** — (1) barred-grid model, (2) ninas, (3)
-cluing-potential scoring, (4) clue stockpile keyed by answer, (5) pattern/anagram
-query, (6) wordplay decomposition, (7) scored fill? All claims below verified 3-0
-against primary sources unless noted.
+Two focused follow-ups re-verified every tool the first pass carried over
+unverified, asking one question per tool: **is it maintained in 2026, and does it
+close any of crosswordsmith's residual gaps** — (1) barred-grid model, (2) ninas,
+(3) cluing-potential scoring, (4) clue stockpile keyed by answer, (5)
+pattern/anagram query, (6) wordplay decomposition, (7) scored fill? All claims
+below verified 3-0 against primary sources unless noted. The **second pass**
+covered Qxw/Nutrimatic/MyCrossword/Phil/Black Ink/PuzzleMe; the **third pass**
+closed out the last four (Qat, Sympathy/TEA, xword-dl, Crossword Nexus).
 
 | Tool | 2026 status | Closes which gap? |
 |---|---|---|
@@ -370,7 +372,10 @@ against primary sources unless noted.
 | **Phil** | **Unmaintained since 2017** (2025 commit is just a redirect to a successor). SAT fill (Glucose 3.0), American blocked only. | None. |
 | **Black Ink** | Current (Black Ink 2, $29.95, Mac App Store) but a **solver, not a constructor**; `.puz` only. | None. |
 | **Amuse PuzzleMe** | Actively operated hosted construction/publishing platform; embeddable (JS/WordPress/iframe), ~€99/mo premium tier, plugin v1.4.0 May 2026. | None (it's a platform, not a gap-closer). |
-| **Qat · Sympathy/TEA · xword-dl · Crossword Nexus** | **Unconfirmed this pass** — no verified claims returned. Treat as unknown, *not* verified-absent. | — |
+| **Qat** (Mark Owen, quinapalus) | **Live/maintained** (page updated Dec 2025). *Server-hosted* web query engine (not self-hostable — the downloadable GPL sibling is Qxw the *constructor*); full operator set `. [] @ # * / & \| ! ~`, defaults to UKACD. Its CGI endpoint is one of Exet's autofill backends. | **Demonstrates (5) pattern/anagram query** — a third independent witness alongside Nutrimatic + umiaq. |
+| **Sympathy / TEA / Wordplay Wizard** (Ross Beresford) | **Still withdrawn from sale** (official site confirms 2026); no successor/re-release. The associated **UKACD** word list stays **freely redistributable freeware** (notice-must-be-included; silent on modification, so *not* OSI-open). | None directly — but their withdrawal leaves the **UK-cryptic-construction niche empty** (context for crosswordsmith's cryptic direction). |
+| **xword-dl** (thisisparker) | **Actively maintained** (v2025.10.14; commits into 2026). A **`.puz`-only downloader** scraping ~40 outlets. | None (a *downloader* — orthogonal). **Adjacency:** it emits `.puz`, so an `xword` `.puz` *read* would let `xword-dl → xword` pipeline (reinforces the xword breadth item). |
+| **Crossword Nexus** (open-source, MIT; GitHub user, actively updated 2026) | Ships **umiaq** (MIT Python "Qat clone" pattern engine), **pypuz** (MIT Python — reads/writes `.puz`/`.ipuz`/`.jpz`/`.cfp`/AmuseLabs JSON, *not* `.xd`), **jscrossword** (JS, PUZ/JPZ/iPUZ/CFP + `puz2pdf`), **html5-crossword-solver** (browser player). | **Reusable prior art / partial competitor to `xword`.** umiaq → (5) pattern query; pypuz/jscrossword overlap `xword`'s convert surface (shared `.ipuz`) and are candidate reusable components for `.puz`/`.jpz` read. Closes none of (1)–(4),(6),(7). |
 
 **Roadmap implications (net of both passes):**
 
@@ -388,12 +393,24 @@ against primary sources unless noted.
   low-fidelity on-ramp.
 - **MyCrossword's anagram-% / device-balance heuristic is a ready blueprint for
   gap (3)** — the concrete first cut of cluing-potential scoring, if pursued.
+- **Gap (5) pattern/anagram query is now triple-validated** (Nutrimatic, Qat,
+  umiaq) with *converging* operator syntax — a well-understood capability, and
+  **umiaq (MIT Python) is a reusable reference** for a Prolog-native equivalent.
+- **The `xword` `.puz`-read item gains two reusable, license-clean options**
+  (both MIT Python): **puzpy** (the plan's pick) and **pypuz** (also does
+  `.jpz`/`.cfp`). And **xword-dl** (`.puz`-only downloader) makes `.puz` read the
+  natural on-ramp for a `xword-dl → xword convert/render` pipeline.
+- **UKACD stays freely redistributable freeware** — reconfirms crosswordsmith's
+  license-clean lexicon story, but note it's silent on modification (not OSI-open),
+  so ship its notice verbatim (as the repo already does for UKACD18).
 
-**Caveats:** `quinapalus.com` returned HTTP 403 to automated fetch — Qxw facts
-were confirmed via curl + Debian/Ubuntu manpages + the official guide PDF (substance
-solid; a few exact quoted strings not byte-verified). "Actively maintained" is
-generous for Qxw (2020 release) and Nutrimatic (Jun 2025 commit). Four brief
-targets (Qat, Sympathy/TEA, xword-dl, Crossword Nexus) still need a dedicated pass.
+**Caveats:** `quinapalus.com` returns HTTP 403 to default fetchers — Qxw/Qat facts
+were confirmed via curl with a browser user-agent (+ manpages / the guide PDF for
+Qxw); a few exact quoted strings not byte-verified. "Actively maintained" is
+generous for Qxw (2020 release), Nutrimatic (Jun 2025), and Qat (Dec 2025 page
+edit). Crossword Nexus is a GitHub *user* not an org; jscrossword's SPDX is
+NOASSERTION though its README states MIT (treat as README-stated). All four scoped
+tools are now verified; nothing scoped remains outstanding.
 
 ## Sources (primary unless noted)
 
@@ -412,6 +429,12 @@ targets (Qat, Sympathy/TEA, xword-dl, Crossword Nexus) still need a dedicated pa
 - Phil: https://github.com/keiranking/Phil
 - Black Ink: https://redsweater.com/blackink/
 - Amuse PuzzleMe: https://amuselabs.com/features/
+
+**Third-pass verification (2026-07-15):**
+- Qat: https://www.quinapalus.com/qat.html
+- Sympathy/TEA/Wordplay Wizard (withdrawn): https://www.rossberesford.com/crosswordman · UKACD licence: https://www.wirdz.com/ukacdasc.html
+- xword-dl: https://github.com/thisisparker/xword-dl
+- Crossword Nexus — umiaq: https://github.com/crosswordnexus/umiaq · pypuz: https://github.com/crosswordnexus/pypuz · jscrossword: https://github.com/crosswordnexus/jscrossword
 
 **Word lists (license/scoring):**
 - Spread the Wordlist (CC BY-NC-SA 4.0): https://www.spreadthewordlist.com/
