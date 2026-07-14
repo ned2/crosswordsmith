@@ -93,11 +93,11 @@ Reachability calibration (`--check-target`, ε, τ) is a **required pre-weightin
 
 ### Research-derived backlog priorities (2026-07-15) — need spec + plan
 
-A 2026 competitive re-scan ([`research/setter-tool-landscape-2026.md`](./research/setter-tool-landscape-2026.md), three verification passes) re-baselined crosswordsmith against the current field and identified the three highest-leverage **OD-8 backlog** items. Each is **recorded, not yet built** — every one still needs its own §10 decision pass + spec section + implementation plan before work starts (per the OD-8 discipline). Tracked in their home specs:
+A 2026 competitive re-scan ([`research/setter-tool-landscape-2026.md`](./research/setter-tool-landscape-2026.md), three verification passes) re-baselined crosswordsmith against the current field and identified the three highest-leverage **OD-8 backlog** items. Each is **recorded, not yet built** — per the OD-8 discipline, each needs its own §10 decision pass + spec section + implementation plan before work starts. **Item 1 (scored fill) has now cleared its decision pass + spec (DP-4 → §8.4a);** the other two still need theirs. Tracked in their home specs:
 
 | # | Item | Home | Why now | Status |
 |---|---|---|---|---|
-| 1 | **Scored fill** (`fill --min-score` + fill-quality report) | design-spec §8.5 ★ | The #1 competitive gap — every serious filler scores; crosswordsmith's scoreless MRV fills junk (measured, [`../benchmarks/fill_quality/`](../benchmarks/fill_quality/README.md)). License-clean via Spread the Wordlist. | needs decision pass + spec + plan |
+| 1 | **Scored fill** (`fill --min-score` + fill-quality report) | design-spec **§8.4a** (DP-4) | The #1 competitive gap — every serious filler scores; crosswordsmith's scoreless MRV fills junk (measured, [`../benchmarks/fill_quality/`](../benchmarks/fill_quality/README.md)). License-clean via Spread the Wordlist. | **spec'd (DP-4 → §8.4a, LOCKED); not started** — decision pass + spec done, needs implementation plan + build |
 | 2 | **`stats`/`inspect` + `diff` verbs** on `xword` | [`xword-status.md`](./xword-status.md) ★ · [`plans/xword-breadth-expansion.md`](./plans/xword-breadth-expansion.md) | The differentiated "breadth" first cut (read-only, deterministic, hub-amplifying) — research says compete on render + hub, not convert coverage. | needs decision pass + spec + plan |
 | 3 | **Clue stockpile keyed by answer** (`meta`) | design-spec §8.5 ★ | Unserved across the entire surveyed field (both passes) — a genuine differentiator, low-effort, pure `meta` plumbing. | needs decision pass + spec + plan |
 
