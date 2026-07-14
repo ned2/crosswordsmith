@@ -18,14 +18,14 @@ today.** Where a prior-doc claim has changed, it is flagged inline. Treat the
 cryptic doc as still-valid for setter *methodology* and cryptic conventions; use
 *this* doc for the competitive/gap picture.
 
-> **Honesty note on coverage.** The verified claim corpus is heavy on
+> **Honesty note on coverage.** The first pass's verified corpus was heavy on
 > **fill / word-list / format-conversion tooling** and lighter on cryptic-specific
-> and rendering competitors. Tools that were in scope but returned no
-> *independently verified* claims this pass — **Qxw, MyCrossword, Phil, Black Ink,
-> Amuse Labs PuzzleMe, Sympathy/TEA, xword-dl, Crossword Nexus, Nutrimatic** — are
-> carried forward from the prior doc at its confidence, not re-confirmed here, and
-> are marked `[prior-doc, unverified 2026]` below. Do not treat their 2026 status
-> as researched.
+> and rendering competitors. A **[second-pass verification](#second-pass-verification-2026-07-15)**
+> (see the section at the foot of this doc) has since re-verified **Qxw,
+> Nutrimatic, MyCrossword, Phil, Black Ink, and Amuse PuzzleMe** for 2026 against
+> primary sources. Still **unconfirmed** (no verified claims this project) and not
+> to be treated as researched: **Qat, Sympathy/TEA/Wordplay Wizard, xword-dl,
+> Crossword Nexus** — carried from the prior doc at its confidence only.
 
 ---
 
@@ -266,34 +266,44 @@ that *feeds* clue tools; CLI-first; deterministic; license-clean; metadata-agnos
    in-scope yes (preserves determinism + closed-set model). *Natural follow-on to #1.*
 3. **Cluing-potential annotation (`meta.cluing`).** Leverage medium (unique
    differentiator) · effort low→medium · in-scope yes (emit-time, solver stays
-   agnostic). *Vowel/common-letter sub-scores ship data-free first.*
-4. **Nina seeding + feasibility report** (solver path). Leverage medium (cryptic
-   audience) · effort medium · in-scope yes.
-5. **Prolog-native pattern/anagram query endpoint.** Leverage low→medium · effort
-   medium · in-scope yes. *Plays to unification; assistive not generative.*
-6. **Barred-grid cell model.** Leverage medium (cryptic) · effort **high**
-   (different cell model) · in-scope debatable. *Prior doc rightly flags this as
-   near-a-separate-engine; defer.*
+   agnostic). *Vowel/common-letter sub-scores ship data-free first.* MyCrossword's
+   anagram-% / device-balance heuristic (second pass) is a ready blueprint.
+4. **Clue stockpile keyed by answer** (`meta`: `{clueText, status, date}`, surfaced
+   when a word is placed). Leverage medium (**unserved across both research
+   passes** — a genuine differentiator) · effort **low** (pure `meta` plumbing) ·
+   in-scope yes.
+5. **Nina seeding + feasibility report** (solver path). Leverage medium (cryptic
+   audience) · effort medium · in-scope yes. *Second pass: Qxw "free lights"
+   confirm this is a real, still-served-nowhere-open capability.*
+6. **Prolog-native pattern/anagram query endpoint.** Leverage low→medium · effort
+   medium · in-scope yes. *Plays to unification; assistive not generative. Second
+   pass: Nutrimatic's `A/C/V/#/_` + `<...>` + `&` syntax is a ready model.*
+7. **Barred-grid cell model.** Leverage medium (cryptic) · effort **high**
+   (different cell model) · in-scope debatable. *Only Qxw serves it (no JSON/ipuz
+   export); build native, or a lossy Qxw-XML import as an on-ramp. Defer.*
 
 ### `xword` tool
+(Full shortlist + backlog in [`docs/plans/xword-breadth-expansion.md`](../plans/xword-breadth-expansion.md).)
 
-7. **Rendering quality/targets** (the differentiated half). Leverage medium ·
+8. **Rendering quality/targets** (the differentiated half). Leverage medium ·
    effort low→medium · in-scope yes. *Compete on render, not convert.*
-8. **`.xd` interchange** (only missing text format). Leverage low · effort low ·
-   in-scope yes. *Optional; only if Puzzmo/`.xd` matters to you.*
-   — **Do NOT** chase conversion breadth or byte-parity (table stakes; mature
-   libraries own it).
+9. **`stats`/`inspect` + `diff` verbs** over the native-JSON hub. Leverage medium ·
+   effort low · in-scope yes. *Read-only, deterministic, hub-amplifying.*
+10. **`.puz` read (puzpy extra) + `.xd` interchange.** Leverage low→medium · effort
+    low→medium · in-scope yes. *The two format gaps that matter.*
+    — **Do NOT** chase conversion breadth or byte-parity (table stakes; mature
+    libraries own it).
 
 ### Interop / export
 
-9. **Fill-quality report surfaced through `lint`.** Leverage medium · effort low ·
-   in-scope yes. *Pairs with #1; reuses the per-word report machinery.*
-   — `.puz`/`.jpz`/PDF stay a **kotwords handoff**, not native (prior-doc guidance
-   unchanged; `.puz` can't represent bars anyway).
+11. **Fill-quality report surfaced through `lint`.** Leverage medium · effort low ·
+    in-scope yes. *Pairs with #1; reuses the per-word report machinery.*
+    — `.puz`/`.jpz`/PDF stay a **kotwords handoff**, not native (prior-doc guidance
+    unchanged; `.puz` can't represent bars anyway).
 
 ### Browser SDK (the open niche)
 
-10. **Name & harden the embeddable WASM constructor SDK as first-class
+12. **Name & harden the embeddable WASM constructor SDK as first-class
     positioning** (bundle size, typed API, framework examples). Leverage
     **high/strategic** (nearly uncontested niche) · effort medium (payload work
     already planned) · in-scope yes. *Bring `fill` to the SDK once #1 lands, so the
@@ -343,6 +353,48 @@ and E.
 
 ---
 
+## Second-pass verification (2026-07-15)
+
+A focused follow-up re-verified the tools the first pass carried over unverified,
+asking one question per tool: **is it maintained in 2026, and does it close any of
+crosswordsmith's residual gaps** — (1) barred-grid model, (2) ninas, (3)
+cluing-potential scoring, (4) clue stockpile keyed by answer, (5) pattern/anagram
+query, (6) wordplay decomposition, (7) scored fill? All claims below verified 3-0
+against primary sources unless noted.
+
+| Tool | 2026 status | Closes which gap? |
+|---|---|---|
+| **Qxw** | GPL v2; last release **2020-07-08**, but site curated to Dec 2025 (semi-maintained). Rect/hex/circular grids, blocks+bars+mixed, auto-fill, answer treatments, batch `-b`. Exports EPS/SVG/HTML/PNG + an *experimental, lossy* Crossword-Compiler XML — **no JSON/ipuz**. | **Strongest evidence for (1) barred grids + (2) ninas/"free lights".** Does *not* close the JSON/ipuz conversion niche — that stays crosswordsmith's. |
+| **Nutrimatic** | Open-source (`egnor/nutrimatic`, now PuzzleTechHub), self-hostable, maintained through Jun 2025 (sporadic). Syntax: `A/C/V/#/_/-` classes, `<...>` anagram, `&` intersection. | **Fully demonstrates (5) pattern/anagram query** — validates a Prolog-native equivalent (maps onto unification/backtracking). |
+| **MyCrossword** | **Live & maintained** (open-source `t-blackwell/mycrossword` v2.3.0 Apr 2026; puzzles dated Jul 2026), free. Device tagging across ~28 clue types, indicator/abbrev references (Chambers filter), **anagram-% score** (advises ≤25%). | **Clearest exemplar of (3) cluing-potential scoring** — the *only documented, concrete scoring formula* found in the wild. Does **not** do (6) wordplay decomposition (that framing was refuted 1-2). |
+| **Phil** | **Unmaintained since 2017** (2025 commit is just a redirect to a successor). SAT fill (Glucose 3.0), American blocked only. | None. |
+| **Black Ink** | Current (Black Ink 2, $29.95, Mac App Store) but a **solver, not a constructor**; `.puz` only. | None. |
+| **Amuse PuzzleMe** | Actively operated hosted construction/publishing platform; embeddable (JS/WordPress/iframe), ~€99/mo premium tier, plugin v1.4.0 May 2026. | None (it's a platform, not a gap-closer). |
+| **Qat · Sympathy/TEA · xword-dl · Crossword Nexus** | **Unconfirmed this pass** — no verified claims returned. Treat as unknown, *not* verified-absent. | — |
+
+**Roadmap implications (net of both passes):**
+
+- **Gaps (4) clue stockpile keyed by answer and (7)-as-*cryptic*-fill surfaced in
+  NO re-verified tool.** Scored fill *is* ubiquitous among American *fillers*
+  (pass 1: CC/CrossFire/ingrid) but absent from the cryptic tools; a **clue
+  stockpile keyed by answer is unserved across both passes** — a genuine
+  differentiator crosswordsmith could own (and it's pure `meta` plumbing, squarely
+  in-scope).
+- **Qxw validates barred grids + ninas but exports no JSON/ipuz.** Open strategic
+  fork: implement the barred-grid model *natively*, or add Qxw-XML *import* to
+  `xword`'s converter (cheaper, but Qxw's XML is lossy — drops topologies/answer
+  treatments/free-lights, so it can't faithfully carry the very features that make
+  Qxw interesting). Leaning native for a real barred model; XML import only as a
+  low-fidelity on-ramp.
+- **MyCrossword's anagram-% / device-balance heuristic is a ready blueprint for
+  gap (3)** — the concrete first cut of cluing-potential scoring, if pursued.
+
+**Caveats:** `quinapalus.com` returned HTTP 403 to automated fetch — Qxw facts
+were confirmed via curl + Debian/Ubuntu manpages + the official guide PDF (substance
+solid; a few exact quoted strings not byte-verified). "Actively maintained" is
+generous for Qxw (2020 release) and Nutrimatic (Jun 2025 commit). Four brief
+targets (Qat, Sympathy/TEA, xword-dl, Crossword Nexus) still need a dedicated pass.
+
 ## Sources (primary unless noted)
 
 **Construction tools / fill:**
@@ -351,8 +403,15 @@ and E.
 - Exet: https://github.com/viresh-ratnakar/exet
 - Crosshare construct: https://crosshare.org/construct
 - ingrid_core (Rust CLI/lib): https://github.com/rf-/ingrid_core · Ingrid app FAQ: https://ingrid.cx/faq/
-- Qxw guide [prior-doc, unverified 2026]: https://www.quinapalus.com/qxw-guide-20200708.pdf
 - Tool overview [blog]: https://communicrossings.com/constructing-crosswords-tools
+
+**Second-pass verification (2026-07-15):**
+- Qxw: https://www.quinapalus.com/qxw.html · guide: https://www.quinapalus.com/qxw-guide-20200708.pdf
+- Nutrimatic: https://nutrimatic.org/2024/usage.html · source: https://github.com/egnor/nutrimatic
+- MyCrossword: https://www.mycrossword.co.uk/crosswords/user-guide · https://mycrossword.co.uk/about
+- Phil: https://github.com/keiranking/Phil
+- Black Ink: https://redsweater.com/blackink/
+- Amuse PuzzleMe: https://amuselabs.com/features/
 
 **Word lists (license/scoring):**
 - Spread the Wordlist (CC BY-NC-SA 4.0): https://www.spreadthewordlist.com/
