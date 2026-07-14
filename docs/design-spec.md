@@ -344,18 +344,21 @@ The path to *authentic* cryptic layout: take a pre-validated legal blocked grid 
 **AC-FILL-4** A produced fill re-validates as a legal layout against the shared metric predicates (the grid's `lint` verdict is unchanged by the fill — letters do not affect structure).
 
 ### 8.5 Backlog — tagged, not yet specified
-These are recognised future capabilities. Each is **out of scope until specified here** (a §10 decision pass per feature). Listed so they are tracked, not so they are built.
+These are recognised future capabilities. Each is **out of scope until specified here** (a §10 decision pass per feature). Listed so they are tracked, not so they are built. **Evidence & prioritization** for these against the 2026 competitive field live in [`research/setter-tool-landscape-2026.md`](research/setter-tool-landscape-2026.md); the ★-tagged rows below are the three the 2026 research flags as the current highest-leverage backlog and which need a decision pass + spec + implementation plan next.
 
 | Feature | Flavour | Note |
 |---|---|---|
-| Per-entry cluing-potential annotation (`meta.cluing`) | B | Computed at emit-time answer→meta join; engine stays metadata-agnostic. |
-| Nina seeding | Shared | **Absorbed into the fragment-grid primitive** (§6.6) — not a separate feature. |
+| ★ **Scored fill** (`fill --min-score` + fill-quality report) | B | **2026 research: the #1 competitive gap.** Every serious filler (Crossword Compiler / CrossFire / ingrid_core) drives fill by per-word score; crosswordsmith's scoreless MRV places non-word junk (measured — `AAAAA`/`AAAAQ`). Closable **license-clean** via Spread the Wordlist (CC BY-NC-SA 4.0). A `score≥50` dict prefilter already recovers ingrid-parity quality in the prototype. **Needs decision pass + spec + plan.** Evidence: research §D + [`../benchmarks/fill_quality/`](../benchmarks/fill_quality/README.md). |
+| Per-entry cluing-potential annotation (`meta.cluing`) | B | Computed at emit-time answer→meta join; engine stays metadata-agnostic. 2026 research: MyCrossword's anagram-%/device-balance heuristic is a ready blueprint. |
+| Nina seeding | Shared | **Absorbed into the fragment-grid primitive** (§6.6) — not a separate feature. (Qxw "free lights" confirm the capability is served nowhere open.) |
 | `min_len:3` hard floor option | B | Soft default for TOC; always *report* sub-3. |
-| Clue stockpile keyed by answer (`meta`) | B | Pure data plumbing on the answer key. |
-| Prolog-native pattern/anagram query endpoint | B | Maps onto unification/backtracking. |
+| ★ Clue stockpile keyed by answer (`meta`) | B | Pure data plumbing on the answer key. **2026 research: unserved across the entire surveyed field (both passes) — a genuine differentiator, and low-effort.** Needs decision pass + spec + plan. |
+| Prolog-native pattern/anagram query endpoint | B | Maps onto unification/backtracking. 2026 research: Nutrimatic's `A/C/V/#/_` + `<…>` + `&` syntax is a ready model. |
 | Wordplay-decomposition engine (`meta.clueCandidates`) | B | Generate + verify via backtracking; prune hard. |
 | Batch/deck interface + shell exit codes | Shared | Pipeline embedding. |
-| Scored-fill drop-order/tiebreak | B (legacy) | **Note tension:** scores were de-scoped for `arrange` (§3); only meaningful if a scored-drop mode is ever reintroduced. Currently dormant. |
+| Scored `arrange` drop-order/tiebreak | A (legacy) | Secondary to the scored-fill row above; scores were de-scoped for `arrange` (§3), so this is a tiebreak/drop-order signal only (must preserve determinism + the closed-set model). Currently dormant. |
+
+> The third ★ priority — **`stats`/`inspect` + `diff` verbs on the `xword` companion** — is tracked in [`xword-status.md`](xword-status.md) (xword lives on its own spec/status, not §8.x); the full xword breadth shortlist is [`plans/xword-breadth-expansion.md`](plans/xword-breadth-expansion.md).
 
 ---
 

@@ -119,6 +119,8 @@ cairosvg, so the base suite still runs without the extra).
 
 | Phase | Deliverable | Status |
 |---|---|---|
+| — | ★ **`stats`/`inspect` + `diff` verbs** over the native-JSON hub (read-only, deterministic metrics + cross-format structural diff) | **backlog — needs spec + plan** (2026 research-derived; the differentiated "double down on breadth" first cut — see [`plans/xword-breadth-expansion.md`](plans/xword-breadth-expansion.md)) |
+| — | Print/PDF rendering breadth; `.puz` *read* via a puzpy extra; `.xd` interchange | backlog — needs spec + plan (rendering + the two format gaps that matter; same plan) |
 | 4 | Interactive **Textual** renderer over the same `Board` (S2 confirmed the seam) | deferred |
 | — | **Native-model uplift** (D9) — additive-optional, lossless-only: `title`/`author` **landed** (P1 engine + P2 xword, 2026-07-07); closed-subset cell styling (P3) + `'`/`.` enumeration separators (P4) are the next riders, each with its own go/no-go | in progress (title/author done) |
 | — | Best-effort **structural** conversion (crop/flatten + warnings) | **rejected (D9)** — yields a different/invalid puzzle |
