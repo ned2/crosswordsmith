@@ -20,7 +20,7 @@ cryptic doc as still-valid for setter *methodology* and cryptic conventions; use
 
 > **Honesty note on coverage.** The first pass's verified corpus was heavy on
 > **fill / word-list / format-conversion tooling** and lighter on cryptic-specific
-> and rendering competitors. A **[second- + third-pass verification](#second-pass-verification-2026-07-15)**
+> and rendering competitors. A **[second and third verification pass](#second-and-third-verification-passes-2026-07-15)**
 > (see the section at the foot of this doc) has since re-verified **all** the
 > carried-over tools for 2026 against primary sources — Qxw, Nutrimatic,
 > MyCrossword, Phil, Black Ink, Amuse PuzzleMe (second pass) and Qat,
@@ -353,7 +353,7 @@ and E.
 
 ---
 
-## Second- + third-pass verification (2026-07-15)
+## Second and third verification passes (2026-07-15)
 
 Two focused follow-ups re-verified every tool the first pass carried over
 unverified, asking one question per tool: **is it maintained in 2026, and does it

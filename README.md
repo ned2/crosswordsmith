@@ -465,6 +465,15 @@ The full schema and design rationale live in
   the demo grids); pass a real lexicon (UKACD18 — redistributable freeware,
   ship its license verbatim) with `--dict` for production fills. The full
   dictionary is not bundled.
+- **`fill` is unscored, and its search has a budget ceiling on hard grids.**
+  The MRV backtracking places any *legal* word — it has no notion of fill
+  *quality*, so with a large open dictionary it can pick obscure/junk entries a
+  scored filler would reject (measured: it fills a small open grid with `AAAAA`
+  where a scored filler yields real words). Separately, its fixed inference
+  budget can exhaust on a standard blocked 13×13 with full-length slots that a
+  dedicated scored CSP fills in seconds. Both are quantified against `ingrid_core`
+  in [`benchmarks/fill_quality/`](benchmarks/fill_quality/README.md); a
+  score-aware `fill` (`--min-score`) is a tracked backlog item (design-spec §8.5).
 - **`export`'s third-party round-trip is a manual step.** The output is
   spec-valid ipuz v2 / Exolve by construction, but actual ingestion by kotwords
   (ipuz) or Exet (Exolve) is verified by hand, not in CI.
