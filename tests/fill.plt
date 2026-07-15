@@ -686,6 +686,43 @@ test(cwl50_bundled_artifact_smoke) :-
     min_list(Scores, 50),
     get_assoc(['C','R','O','S','S','W','O','R','D'], SA, 90).
 
+% --- DP-10: clean capacity failure (AC-FILL-15) ------------------------------
+% A resource_error(stack) inside a guarded phase becomes the ordinary
+% report-and-fail shape: phase + stack limit + remedy hint on stderr, then a
+% plain failure (the CLI's exit-1 path) - never SWI's raw stack dump.
+test(capacity_guard_maps_overflow_to_clean_failure) :-
+    with_stderr_string(
+        \+ crosswordsmith_fill:fill_capacity_guard(
+               throw(error(resource_error(stack), plunit_synthetic)),
+               search(13)),
+        Err),
+    once(sub_string(Err, _, _, _, "capacity exceeded during search on 13x13")),
+    once(sub_string(Err, _, _, _, "swipl --stack-limit")).
+
+% Only capacity overflows are absorbed; every other exception rethrows
+% untouched (a genuine bug must never masquerade as a clean no-fill).
+test(capacity_guard_rethrows_other_errors,
+     [throws(error(type_error(foo, bar), _))]) :-
+    crosswordsmith_fill:fill_capacity_guard(
+        throw(error(type_error(foo, bar), plunit_synthetic)),
+        load('nonesuch.txt')).
+
+% The real thing, in-envelope-shrunk: a genuine overflow (enable_50k under a
+% 40MB per-thread limit) takes the load-phase report path and fails cleanly;
+% the flag is restored either way (setup/cleanup share the clause bindings).
+test(capacity_guard_real_overflow_reports_load_phase,
+     [setup(( current_prolog_flag(stack_limit, Orig),
+              set_prolog_flag(stack_limit, 40_000_000) )),
+      cleanup(set_prolog_flag(stack_limit, Orig))]) :-
+    with_stderr_string(
+        \+ crosswordsmith_fill:fill_capacity_guard(
+               crosswordsmith_fill:load_dict('fixtures/dict/enable_50k.txt',
+                                             _, _),
+               load('fixtures/dict/enable_50k.txt')),
+        Err),
+    once(sub_string(Err, _, _, _, "capacity exceeded loading/indexing")),
+    once(sub_string(Err, _, _, _, "enable_50k.txt")).
+
 % The hard prune (AC-FILL-5): --min-score 50 removes every word scoring < 50
 % from the buckets (so no slot domain can see one), and the prune is
 % reported unconditionally on stderr (INV-3).

@@ -27,9 +27,10 @@ CWL sections):
    that score-descending order then plays eagerly.
 2. **`score ≥ 50` floor baked in**: 50 is the documented clean-floor
    convention for 0–100 lists, and — decisive here — the largest CWL floor
-   inside the engine's measured capacity envelope (the full list crashes
-   dict load at SWI's default 1GB stack; the ≥30 band loads but can blow
-   the global stack in §8.4c search on grids with full-length slots).
+   inside the engine's measured capacity envelope (the full list exceeds
+   SWI's default 1GB stack at dict load; the ≥30 band loads but can exceed
+   it in §8.4c search on grids with full-length slots — both report as a
+   clean one-line failure with remedies since DP-10/AC-FILL-15).
    `scripts/fetch-cwl.sh --min-score N` emits other floors from the same
    pin, with those caveats printed.
 

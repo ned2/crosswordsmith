@@ -499,9 +499,13 @@ The full schema and design rationale live in
   it with `grids/amer11.json`; UK fills want your own UKACD18) and its
   upstream data has been frozen since 2023-02. Lists much beyond the
   bundled size hit measured engine capacity: the full 567k-entry CWL
-  crashes dict load at SWI's default 1GB stack, and its ≥30 band (437k)
-  can blow the global stack in search on full-length-slot grids (an
-  engine-robustness backlog item, design-spec §8.5).
+  exceeds SWI's default 1GB stack at dict load, and its ≥30 band (437k)
+  can exceed it in search on full-length-slot grids. Since DP-10
+  (design-spec §8.4 AC-FILL-15) both report as an ordinary one-line
+  failure naming the limit and the remedies — shrink/`--min-score`, or
+  relaunch as `swipl --stack-limit=4g ./crosswordsmith …` — instead of a
+  raw stack dump; the capacity envelope itself is unchanged (measured
+  bounds in [`benchmarks/fill_quality/`](benchmarks/fill_quality/README.md)).
 - **`fill` quality needs a scored dictionary.** With a plain (unscored)
   list the search places any *legal* word — it can pick obscure/junk
   entries a scored filler would reject (measured: it fills a small open

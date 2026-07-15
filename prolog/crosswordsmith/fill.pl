@@ -1760,9 +1760,13 @@ fill_solve(GridFile, SeedFileOrNone, DictFile, SizeMode, Options) :-
     option(report_json(ReportFile), Options, none),
     fill_effective_budget(Options, Budget),
     fill_prepare(GridFile, SeedFileOrNone, Size, Slots, SearchSlots),
-    load_dict(DictFile, [min_score(MinScore)], DictByLen, Index, Scores),
-    fill_place_and_emit(Size, Slots, SearchSlots, DictByLen, Index, none,
-                        SizeMode, report_ctx(Scores, ReportFile), Budget).
+    fill_capacity_guard(
+        load_dict(DictFile, [min_score(MinScore)], DictByLen, Index, Scores),
+        load(DictFile)),
+    fill_capacity_guard(
+        fill_place_and_emit(Size, Slots, SearchSlots, DictByLen, Index, none,
+                            SizeMode, report_ctx(Scores, ReportFile), Budget),
+        search(Size)).
 
 % Resolve the effective inference budget from a budget(N) option. The -1
 % sentinel (or no option) selects the engine default fill_budget/1; anything
@@ -1810,10 +1814,14 @@ fill_solve_index(GridFile, SeedFileOrNone, IndexFile, DictFileOrNone, SizeMode) 
 fill_solve_index(GridFile, SeedFileOrNone, IndexFile, DictFileOrNone,
                  SizeMode, Options) :-
     fill_effective_budget(Options, Budget),
-    fill_load_index(IndexFile, DictFileOrNone, DictByLen, Index, Masks),
+    fill_capacity_guard(
+        fill_load_index(IndexFile, DictFileOrNone, DictByLen, Index, Masks),
+        load(IndexFile)),
     fill_prepare(GridFile, SeedFileOrNone, Size, Slots, SearchSlots),
-    fill_place_and_emit(Size, Slots, SearchSlots, DictByLen, Index, Masks,
-                        SizeMode, report_ctx(none, none), Budget).
+    fill_capacity_guard(
+        fill_place_and_emit(Size, Slots, SearchSlots, DictByLen, Index, Masks,
+                            SizeMode, report_ctx(none, none), Budget),
+        search(Size)).
 
 % Grid + seed derivation, shared by both entry points (identical to the raw
 % path's front matter). Slots are ALL slots (emitted); SearchSlots exclude seed
@@ -1937,6 +1945,48 @@ emit_fill_mode(fixed, Numbered, InputWords, Size) :-
 emit_fill_mode(max, Numbered, InputWords, Size) :-
     emit_arrange(Numbered, InputWords, Size, max).
 
+% --- DP-10: clean capacity failure (AC-FILL-15) -------------------------------
+% SWI renders resource_error(stack) as a multi-line raw dump (stack stats + a
+% backtrace that includes kilobyte bignum mask spew from the §8.4c kernels) -
+% it reads as an engine bug and names no remedy. Both entry points guard
+% their two phases with this catch, so a capacity overflow becomes the
+% ordinary report-and-fail failure shape (the budget-exhaustion style above);
+% every other exception rethrows untouched. The capacity ENVELOPE itself is
+% unchanged and documented (benchmarks/fill_quality/README.md, DP-9 findings).
+% The relaunch hint is verified to work: the shebang launcher runs normally
+% under an explicit `swipl --stack-limit=<size> ./crosswordsmith ...`.
+fill_capacity_guard(Goal, Phase) :-
+    catch(Goal, error(resource_error(stack), _), fill_capacity_fail(Phase)).
+
+fill_capacity_fail(load(File)) :-
+    fill_stack_limit_desc(Lim),
+    format(user_error,
+           "fill: capacity exceeded loading/indexing ~w (SWI stack limit ~w)~n",
+           [File, Lim]),
+    fill_capacity_hint('shrink the dictionary (e.g. --min-score 50)'),
+    fail.
+fill_capacity_fail(search(Size)) :-
+    fill_stack_limit_desc(Lim),
+    format(user_error,
+           "fill: capacity exceeded during search on ~wx~w grid (SWI stack limit ~w)~n",
+           [Size, Size, Lim]),
+    fill_capacity_hint('raise --min-score or use a smaller dictionary'),
+    fail.
+
+fill_capacity_hint(Remedy) :-
+    format(user_error,
+           "fill: hint: ~w, or relaunch with a larger stack: swipl --stack-limit=4g ./crosswordsmith ...~n",
+           [Remedy]).
+
+fill_stack_limit_desc(Desc) :-
+    current_prolog_flag(stack_limit, Limit),
+    (   Limit >= 1073741824
+    ->  Gb is Limit / 1073741824.0,
+        format(atom(Desc), '~1fGb', [Gb])
+    ;   Mb is Limit / 1048576.0,
+        format(atom(Desc), '~0fMb', [Mb])
+    ).
+
 fill_report_failure(not_proven, _Slots, _D, _I, Size) :-
     format(user_error,
            "fill: not proven within budget on ~wx~w grid (search did not complete)~n",
@@ -2022,8 +2072,8 @@ empty_slots(Slots, DictByLen, Index, Bad) :-
 % predecessor (the hardening changes nothing for ASCII input).
 fill_index_format_version(3).
 
-%!  fill_save_index(+DictFile:atom, +OutFile:atom) is det.
-%!  fill_save_index(+DictFile:atom, +OutFile:atom, +Options:list) is det.
+%!  fill_save_index(+DictFile:atom, +OutFile:atom) is semidet.
+%!  fill_save_index(+DictFile:atom, +OutFile:atom, +Options:list) is semidet.
 %
 %   BUILD the precomputed index artifact: load_dict the frozen DictFile and
 %   serialize the exact runtime structures + integrity/provenance meta to
@@ -2033,12 +2083,14 @@ fill_index_format_version(3).
 %   additionally derives the parallel bitset masks FROM the ordset Index (so
 %   popcount agreement is by construction) and embeds them as the masks(...)
 %   Meta key. Any other Options content is ignored (same permissive
-%   convention as Meta itself). Throws on an unreadable dictionary file.
+%   convention as Meta itself). Throws on an unreadable dictionary file;
+%   fails (after the AC-FILL-15 capacity report, DP-10) when loading/indexing
+%   the dictionary overflows the stack limit - det on every in-envelope input.
 fill_save_index(DictFile, OutFile) :-
     fill_save_index(DictFile, OutFile, []).
 
 fill_save_index(DictFile, OutFile, Options) :-
-    load_dict(DictFile, DictByLen, Index),
+    fill_capacity_guard(load_dict(DictFile, DictByLen, Index), load(DictFile)),
     dict_word_count(DictByLen, NWords),
     fill_file_sha256(DictFile, Sha),
     fill_swi_version(Swi),

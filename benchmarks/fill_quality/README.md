@@ -383,8 +383,9 @@ entries dropped (exactly the 992 lines finding 3 predicted; 567,657 →
    overflow inside `mac_support`/`mac_revise` — the §8.4c bignum candidate
    masks over full-13 domains at this band width. `amer11` @30 is fine
    (mean 67.7, min 30). The ≥50 band (252k) is inside both envelopes.
-   Both crashes are one engine-robustness backlog item (§8.5): fail cleanly
-   at capacity instead of overflowing, and document the envelope.
+   *(Since resolved — DP-10 (§10), same day: both modes now report as an
+   ordinary one-line §5.1 failure with remedies (AC-FILL-15) instead of the
+   raw dump. The envelope NUMBERS here are unchanged and still current.)*
 3. **The DP-8 reference-row completion is list-specific.** `blocked_13a` @30
    with CWL is envelope crash (b) above — not comparable to STW's 2m20s
    completion. At the clean floor the row stays hard for *both* engines with
