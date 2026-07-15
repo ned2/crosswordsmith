@@ -585,6 +585,149 @@ mark_oracle_ok(B, M) :-
     atom_chars(Composed, [P]),
     crosswordsmith_fill:fold_char(P, [B]).
 
+% --- §8.4a scored ingestion + --min-score prune + ordering (AC-FILL-5/6/8) ---
+% The scored fixture (fixtures/dict_scored_sample.txt) is ORIGINAL (INV-4):
+% a score-0 blocklist entry (AAA), unscored lines (RAW/RED/ROW -> uniform 1),
+% one malformed line (BAD;lots -> dropped + reported), and equal-score ties
+% (CAT/COW at 95, DOG/WED at 80) - the mainline tiebreak case.
+
+% Bucket order is the §8.4a total order: score-descending, then lex (ties
+% collapse to dictionary order). Pins the whole 3-letter bucket, incl. the
+% default `score >= 1` prune (DP-5): AAA (score 0) is OUT, unscored words
+% (score 1) are IN and sort last.
+test(scored_bucket_order_score_desc_then_lex) :-
+    crosswordsmith_fill:load_dict('fixtures/dict_scored_sample.txt',
+                                  [], DBL, _, scores(_)),
+    assoc_to_list(DBL, [3-Bucket]),
+    findall(A, ( member(W, Bucket), atom_chars(A, W) ), Atoms),
+    Atoms == ['CAT','COW','ORE','DOG','WED','ERA','DEW','ARE','GAD',
+              'AWE','OWE','TED','CAR','COT','RAW','RED','ROW'].
+
+% The score assoc keeps PRE-prune scores (a pruned word is still scorable by
+% the report); unscored lines carry the uniform score 1 (DP-5, AC-FILL-8).
+test(scored_assoc_uniform_and_blocklist_scores) :-
+    crosswordsmith_fill:load_dict('fixtures/dict_scored_sample.txt',
+                                  [], _, _, scores(SA)),
+    get_assoc(['R','E','D'], SA, 1),
+    get_assoc(['A','A','A'], SA, 0),
+    get_assoc(['C','A','T'], SA, 95).
+
+% An explicit --min-score 0 re-admits the score-0 floor (the DP-5 default is
+% a default, not a hard rule); AAA sorts last (lowest score).
+test(scored_min_score_0_includes_blocklist) :-
+    crosswordsmith_fill:load_dict('fixtures/dict_scored_sample.txt',
+                                  [min_score(0)], DBL, _, _),
+    assoc_to_list(DBL, [3-Bucket]),
+    last(Bucket, ['A','A','A']).
+
+% The malformed scored line is dropped + counted + reported (INV-3,
+% AC-FILL-8) - never squeezed into a word (the old plain reading would have
+% kept BADLOTS).
+test(scored_malformed_line_reported) :-
+    with_stderr_string(
+        crosswordsmith_fill:load_dict('fixtures/dict_scored_sample.txt',
+                                      [], DBL, _, _),
+        Err),
+    once(sub_string(Err, _, _, _, "dropped 1 malformed scored line")),
+    nb_getval(fill_dict_malformed_lines, 1),
+    assoc_to_list(DBL, [3-_]).             % nothing but the 3-letter bucket
+
+% A duplicate word keeps its MAXIMUM score, deterministically and
+% input-order-independently (both orders -> the same single entry).
+test(scored_duplicate_word_keeps_max,
+     [cleanup(( delete_file(D1), delete_file(D2) ))]) :-
+    tmp_dict("FOO;30\nFOO;50\nFOO\n", D1),
+    tmp_dict("FOO;50\nFOO\nFOO;30\n", D2),
+    crosswordsmith_fill:load_dict(D1, [], DBL1, _, scores(SA1)),
+    crosswordsmith_fill:load_dict(D2, [], DBL2, _, scores(SA2)),
+    get_assoc(['F','O','O'], SA1, 50),
+    get_assoc(['F','O','O'], SA2, 50),
+    assoc_to_list(DBL1, [3-[['F','O','O']]]),
+    DBL1 == DBL2.
+
+% The hard prune (AC-FILL-5): --min-score 50 removes every word scoring < 50
+% from the buckets (so no slot domain can see one), and the prune is
+% reported unconditionally on stderr (INV-3).
+test(scored_min_score_prunes_and_reports) :-
+    with_stderr_string(
+        crosswordsmith_fill:load_dict('fixtures/dict_scored_sample.txt',
+                                      [min_score(50)], DBL, _, scores(SA)),
+        Err),
+    once(sub_string(Err, _, _, _, "--min-score 50 pruned 9 of 18")),
+    assoc_to_list(DBL, [3-Bucket]),
+    length(Bucket, 9),
+    forall(member(W, Bucket), ( get_assoc(W, SA, S), S >= 50 )).
+
+% A prune that empties the dictionary reports the targeted hint (max score;
+% the `--min-score 2` vs uniform-score-1 degenerate case), and the empty
+% domains downstream are the ordinary AC-FILL-1 infeasible outcome.
+test(scored_prune_all_hints_max_score) :-
+    with_stderr_string(
+        crosswordsmith_fill:load_dict('fixtures/wordlist_sample.txt',
+                                      [min_score(2)], DBL, Idx, _),
+        Err),
+    once(sub_string(Err, _, _, _, "exceeds the dictionary's maximum score 1")),
+    once(sub_string(Err, _, _, _, "unscored words score 1")),
+    crosswordsmith_fill:fill_grid('fixtures/fill_grid_3.json', _, Slots, _),
+    crosswordsmith_fill:fill_attempt(Slots, Slots, DBL, Idx, Outcome, _, _),
+    Outcome == infeasible.
+
+% AC-FILL-6, structural half: a plain wordlist loads IDENTICALLY through the
+% options path (Scores == uniform, same buckets, same index), so the
+% pre-scoring engine's behavior is reproduced by construction.
+test(scored_plain_path_identity) :-
+    crosswordsmith_fill:load_dict('fixtures/wordlist_sample.txt', DBL3, Idx3),
+    crosswordsmith_fill:load_dict('fixtures/wordlist_sample.txt',
+                                  [], DBL5, Idx5, Scores),
+    Scores == uniform,
+    DBL3 == DBL5,
+    Idx3 == Idx5.
+
+% AC-FILL-6, uniform-score half: the same words all at one explicit score
+% produce the exact plain-path buckets + index (score-desc collapses to lex).
+test(scored_uniform_score_collapses_to_lex,
+     [cleanup(( delete_file(DP), delete_file(DS) ))]) :-
+    tmp_dict("CAT\nCOW\nARE\nTED\nORE\nWED\n", DP),
+    tmp_dict("CAT;7\nCOW;7\nARE;7\nTED;7\nORE;7\nWED;7\n", DS),
+    crosswordsmith_fill:load_dict(DP, [], DBLP, IdxP, uniform),
+    crosswordsmith_fill:load_dict(DS, [], DBLS, IdxS, scores(_)),
+    DBLP == DBLS,
+    IdxP == IdxS.
+
+% Score-descending ordering drives the SEARCH: with two disjoint word
+% squares available, the fill lands on the high-scored one even though the
+% low-scored square wins lexicographically (CAT < DOG).
+test(scored_ordering_prefers_high_score_square,
+     [cleanup(delete_file(DF))]) :-
+    tmp_dict("CAT;10\nCOW;10\nARE;10\nTED;10\nORE;90\nWED;90\nDOG;90\nERA;90\nDEW;90\nGAD;90\n", DF),
+    crosswordsmith_fill:fill_grid('fixtures/fill_grid_3.json', _, Slots, _),
+    crosswordsmith_fill:load_dict(DF, [], DBL, Idx, _),
+    crosswordsmith_fill:fill_attempt(Slots, Slots, DBL, Idx, filled, Numbered, _),
+    findall(A, ( member(PW, Numbered), pw_answer(PW, A) ), As),
+    msort(As, Sorted),
+    Sorted == ['DEW','DOG','ERA','GAD','ORE','WED'].
+
+% AC-FILL-5 end to end on the fixture: a --min-score 50 fill contains no
+% word scoring < 50 (and it exists - the DOG/ERA/WED square is all >= 50).
+test(scored_min50_fill_all_clean) :-
+    crosswordsmith_fill:fill_grid('fixtures/fill_grid_3.json', _, Slots, _),
+    crosswordsmith_fill:load_dict('fixtures/dict_scored_sample.txt',
+                                  [min_score(50)], DBL, Idx, scores(SA)),
+    crosswordsmith_fill:fill_attempt(Slots, Slots, DBL, Idx, filled, Numbered, _),
+    forall(( member(PW, Numbered), pw_answer(PW, A) ),
+           ( atom_chars(A, W), get_assoc(W, SA, S), S >= 50 )).
+
+% DP-5's default in action: the score-0 blocklist entry never appears in a
+% default-flags fill.
+test(scored_default_fill_excludes_score0) :-
+    crosswordsmith_fill:fill_grid('fixtures/fill_grid_3.json', _, Slots, _),
+    crosswordsmith_fill:load_dict('fixtures/dict_scored_sample.txt', DBL, Idx),
+    crosswordsmith_fill:fill_attempt(Slots, Slots, DBL, Idx, filled, Numbered, _),
+    findall(A, ( member(PW, Numbered), pw_answer(PW, A) ), As),
+    \+ memberchk('AAA', As),
+    msort(As, Sorted),
+    Sorted == ['ARE','CAT','COW','ORE','TED','WED'].
+
 :- end_tests(fill).
 
 % Helper: apply a list of frag/4 seeds directly (mirrors apply_seeds/4 minus the

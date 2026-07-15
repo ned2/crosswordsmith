@@ -200,6 +200,11 @@ seeded_slot(SeededKeys, slot(Start, Dir, _, _)) :- memberchk(Start-Dir, SeededKe
 %   DictByLen[Len]. A slot's candidates = the words of its length matching
 %   its already-bound positions (intersection of the index sets), or all
 %   words of that length if nothing bound. Throws on an unreadable File.
+%   Delegate of load_dict/5 with default options: scored `word;score` lines
+%   are ingested per §8.4a (default prune `score >= 1`, DP-5), and a plain
+%   wordlist (no `;` anywhere in the file) takes the pre-scoring path
+%   verbatim, so this seam's behavior and counts are unchanged for every
+%   existing plain-dict rung.
 %
 %   The File is DEFINED as UTF-8 (decoded with an explicit encoding(utf8)
 %   pin - never the process locale). Each line is normalized fold-then-strict
@@ -215,7 +220,39 @@ seeded_slot(SeededKeys, slot(Start, Dir, _, _)) :- memberchk(Start-Dir, SeededKe
 %   Benchmark seam: the fill bench's `dict_load` bucket (load_inf) times
 %   exactly this goal - it is the gated load path (F-L1).
 load_dict(File, DictByLen, Index) :-
-    read_file_lines(File, Lines),
+    load_dict(File, [], DictByLen, Index, _Scores).
+
+% load_dict(+File, +Options, -DictByLen, -Index, -Scores) is det (internal).
+% The §8.4a scored-ingestion entry the product path uses. Options:
+%   min_score(N) - the hard candidate prune (default 1, DP-5: exclude only
+%                  the score-0 blocklist floor; N is in the dict's NATIVE
+%                  units, no normalisation).
+% Scores is `uniform` (plain wordlist: every word scores 1, DP-5) or
+% scores(Assoc) (assoc: normalized letter-list -> score, PRE-prune, so the
+% fill-quality report can score any placed word - incl. a pruned seed - the
+% way score_fill.py would). Dispatch is per FILE, not per line: a file with
+% no `;` at all is a plain wordlist and takes the pre-scoring path verbatim
+% (one C-level sub_string scan decides), keeping AC-FILL-6's byte-identity
+% and the gated load_inf counts on every plain-dict rung. A file with any
+% `;` is scored: `word;score` lines carry an integer score >= 0 in native
+% units; `;`-less lines in it are unscored (uniform score 1); a line whose
+% score part is not a non-negative integer is dropped + counted + reported
+% (INV-3, AC-FILL-8); a duplicate word keeps its maximum score (the same
+% silent, deterministic dedupe class as the plain path's sort/2).
+load_dict(File, Options, DictByLen, Index, Scores) :-
+    option(min_score(MinScore), Options, 1),
+    read_file_lines(File, Lines, Str),
+    (   MinScore =< 1,
+        \+ sub_string(Str, _, _, _, ";")
+    ->  plain_dict_words(Lines, File, Words),
+        Scores = uniform
+    ;   scored_dict_words(Lines, File, MinScore, Words, ScoreAssoc),
+        Scores = scores(ScoreAssoc)
+    ),
+    index_words(Words, DictByLen, Index).
+
+% The pre-scoring plain-wordlist path, byte-for-byte (the gated F-L1 body).
+plain_dict_words(Lines, File, Words) :-
     % convlist, not findall+member+guard (C32): the same word list in the same
     % order with no findall record/copy per word. NB named helper, not a yall
     % lambda (the F-L1 rationale, fold_chars/3 below) - this is the gated
@@ -225,7 +262,33 @@ load_dict(File, DictByLen, Index) :-
     convlist(line_word, Lines, Ws0),
     nb_getval(fill_dict_dropped_words, Dropped),
     warn_dropped_words(Dropped, File),
-    sort(Ws0, Words),                       % dedupe + a stable, deterministic order
+    sort(Ws0, Words).                       % dedupe + a stable, deterministic order
+
+% Scored ingestion (§8.4a): parse `word;score` lines, dedupe to the max
+% score, prune below MinScore (reported, INV-3), and order every survivor
+% score-DESCENDING then lexicographic - the §8.4a total order. The ordering
+% lands here (not in the search): candidate enumeration follows the length
+% buckets' internal order, so a reordered bucket IS the new candidate order
+% and the MRV search itself needs zero edits. For a uniform-score file the
+% order collapses to the plain path's lexicographic sort (AC-FILL-6).
+scored_dict_words(Lines, File, MinScore, Words, ScoreAssoc) :-
+    nb_setval(fill_dict_dropped_words, 0),
+    nb_setval(fill_dict_malformed_lines, 0),
+    convlist(line_word_score, Lines, Pairs0),
+    nb_getval(fill_dict_dropped_words, Dropped),
+    warn_dropped_words(Dropped, File),
+    nb_getval(fill_dict_malformed_lines, Malformed),
+    warn_malformed_lines(Malformed, File),
+    msort(Pairs0, Sorted),                  % word, then score ASCENDING
+    dedupe_max_score(Sorted, Pairs),        % duplicate word -> its max score
+    list_to_assoc(Pairs, ScoreAssoc),
+    prune_min_score(Pairs, MinScore, File, Kept),
+    order_score_desc(Kept, Words).
+
+% Shared tail: length buckets + the pattern index. keysort/2 is STABLE, so
+% each length bucket inherits Words' relative order - lexicographic on the
+% plain path, score-descending-then-lex on the scored path.
+index_words(Words, DictByLen, Index) :-
     map_list_to_pairs(length, Words, LPairs),
     keysort(LPairs, LSorted),
     group_pairs_by_key(LSorted, LGroups),
@@ -236,7 +299,11 @@ load_dict(File, DictByLen, Index) :-
 % mangles multibyte input into U+FFFD mojibake, making the loaded dictionary
 % depend on the invoking environment. Dictionary files are DEFINED as UTF-8
 % (fixtures/dict/README.md); pure-ASCII files decode identically either way.
+% /3 also hands back the raw file string so load_dict/5's plain-vs-scored
+% dispatch is one whole-string scan, not a second file read.
 read_file_lines(File, Lines) :-
+    read_file_lines(File, Lines, _Str).
+read_file_lines(File, Lines, Str) :-
     read_file_to_string(File, Str, [encoding(utf8)]),
     split_string(Str, "\n", "\r \t", Parts),
     exclude(==(""), Parts, Lines).
@@ -278,6 +345,109 @@ warn_dropped_words(Dropped, File) :-
                "fill: dropped ~w dictionary word(s) from ~w (unrepresentable in A-Z after folding)~n",
                [Dropped, File])
     ).
+
+% One `word;score` line -> Letters-Score. A `;`-less line inside a scored
+% file is unscored: uniform score 1 (DP-5, "unrated" != "blocklisted"). A
+% scored line splits at its LAST `;` (mirroring score_fill.py's rsplit); any
+% earlier `;` stays in the word part, where normalize_word squeezes it like
+% all ASCII punctuation. A score part that is not a non-negative integer
+% drops the line, counted + reported (INV-3, AC-FILL-8) - unlike the word
+% part, malformed metadata cannot be "folded" into anything faithful. The
+% word part then goes through the exact plain-path line_word/2 (normalize,
+% empty-skip, unfoldable-drop accounting).
+line_word_score(Line, Letters-Score) :-
+    split_string(Line, ";", " \t", Parts),
+    (   Parts = [WordStr]
+    ->  Score = 1
+    ;   % first solution = the split at the LAST `;` is the single solution
+        % with a 1-element suffix; once/1 prunes append/3's dead choicepoint.
+        once(append(WordParts, [ScoreStr], Parts)),
+        (   number_string(Score0, ScoreStr), integer(Score0), Score0 >= 0
+        ->  Score = Score0,
+            atomic_list_concat(WordParts, ';', WordStr)
+        ;   dict_malformed_note,
+            fail
+        )
+    ),
+    line_word(WordStr, Letters).
+
+% Malformed scored-line counter: same nb_ shape + load-time init as the
+% dropped-words counter above (scored_dict_words re-zeroes it per load).
+:- nb_setval(fill_dict_malformed_lines, 0).
+dict_malformed_note :-
+    nb_getval(fill_dict_malformed_lines, N0),
+    N is N0 + 1,
+    nb_setval(fill_dict_malformed_lines, N).
+
+warn_malformed_lines(Malformed, File) :-
+    (   Malformed =:= 0
+    ->  true
+    ;   format(user_error,
+               "fill: dropped ~w malformed scored line(s) from ~w (expected word;integer-score, score >= 0)~n",
+               [Malformed, File])
+    ).
+
+% msort/2 sorts Letters-Score pairs by word then score ASCENDING, so within
+% a duplicate-word group the LAST pair carries the maximum score - keep it.
+% Deterministic and input-order-independent.
+dedupe_max_score([], []).
+dedupe_max_score([W-S|T], Out) :-
+    (   T = [W2-_|_], W == W2
+    ->  dedupe_max_score(T, Out)
+    ;   Out = [W-S|Rest],
+        dedupe_max_score(T, Rest)
+    ).
+
+% The §8.4a hard prune: drop every word scoring < MinScore, BEFORE the
+% bucket/index build (so slot domains never see a pruned word, AC-FILL-5).
+% Any nonzero prune is reported unconditionally on stderr (INV-3) - the
+% DP-5 default (1) prunes nothing from a dict without a score-0 floor, so
+% the quiet-success stderr contract holds wherever it held before. A prune
+% that empties the whole dictionary additionally reports the observed
+% maximum score - the targeted hint for `--min-score N` above a uniform
+% (unscored, all-1) dictionary's ceiling.
+prune_min_score(Pairs, MinScore, File, Kept) :-
+    partition_min_score(Pairs, MinScore, Kept, NPruned),
+    (   NPruned =:= 0
+    ->  true
+    ;   length(Pairs, Total),
+        format(user_error,
+               "fill: --min-score ~w pruned ~w of ~w dictionary word(s) from ~w~n",
+               [MinScore, NPruned, Total, File]),
+        (   Kept == []
+        ->  max_pair_score(Pairs, 0, Max),
+            format(user_error,
+                   "fill: --min-score ~w exceeds the dictionary's maximum score ~w (unscored words score 1); no words remain~n",
+                   [MinScore, Max])
+        ;   true
+        )
+    ).
+
+partition_min_score([], _, [], 0).
+partition_min_score([W-S|T], Min, Kept, N) :-
+    (   S >= Min
+    ->  Kept = [W-S|K1],
+        partition_min_score(T, Min, K1, N)
+    ;   partition_min_score(T, Min, Kept, N1),
+        N is N1 + 1
+    ).
+
+max_pair_score([], M, M).
+max_pair_score([_-S|T], M0, M) :-
+    M1 is max(M0, S),
+    max_pair_score(T, M1, M).
+
+% Score-descending, then lexicographic (§8.4a's total order, INV-2): msort
+% over k(-Score, Letters) keys - ascending -Score = descending score, ties
+% at equal score collapse to the plain path's lexicographic word order (the
+% mainline case, and the AC-FILL-6 uniform-dict identity).
+order_score_desc(Pairs, Words) :-
+    maplist(neg_score_key, Pairs, Keyed),
+    msort(Keyed, SortedKeys),
+    maplist(key_word, SortedKeys, Words).
+
+neg_score_key(W-S, k(NS, W)) :- NS is -S.
+key_word(k(_, W), W).
 
 % NB first-order on purpose: an include([C]>>char_type(C,alpha), ...) filter
 % pays the yall meta-call + lambda copy PER CHARACTER (this module never

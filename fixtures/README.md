@@ -3,6 +3,13 @@
 This directory contains Prolog `clues/1` fixtures used by examples,
 regressions, and local benchmarking. Each fixture can be passed to the CLI with
 `--input`, or to the benchmark harness with `make bench BENCH_FIXTURE=...`.
+It also holds the small `fill` test assets: grid masks (`fill_grid_*.json`),
+seed fragments (`fill_seed_*.json`), and wordlists (`wordlist_sample.txt`,
+`dict_cow*.txt`, and the scored `dict_scored_sample.txt` — an ORIGINAL,
+hand-authored `word;score` list per INV-4, never derived from any published
+scored wordlist; it deliberately contains a score-0 blocklist entry, unscored
+lines, equal-score ties, and one malformed line for the §8.4a ingestion
+tests). Larger unscored dictionaries live under [`dict/`](dict/README.md).
 
 ## Benchmark Fixtures
 
