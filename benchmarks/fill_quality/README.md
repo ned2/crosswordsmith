@@ -137,7 +137,31 @@ deterministic, ingrid rows are an informational reference):
    mini7 42.2 → 47.8, mini9 41.8 → 47.5) — the FS-1 *ordering* benefit,
    before any threshold is applied.
 
-## CWL measurement (2026-07-15) — evidence for the DP-6 bundling candidate
+### Budget & ordering probes on the reference row (FS-4 / DP-6 evidence, 2026-07-15)
+
+Two white-box probes against the frontier's sole measured gap row
+(`blocked_13a`, STW, `--min-score` ≤ 30 — ingrid_core ~10s), both run in a
+throwaway git worktree against the engine at `23e3772`:
+
+- **Budget ladder** — `fill_budget` scaled ×2 / ×4 / ×10 / ×20 over the
+  hardcoded 800M inferences, at `--min-score` 30 and 1: **not completed at
+  any rung**. ×20 = 16×10⁹ inferences ≈ 354s of search, wall time scaling
+  linearly with budget and zero completion signal. Budget buys latency,
+  never completion (the perf campaign's finding, now confirmed from the
+  product side): the tail is exponential.
+- **Ordering-diversity probe** (seeded-restart proxy) — the plain lex
+  tiebreak replaced by 8 different salted deterministic reorders *within
+  equal-score bands* (score-descending preserved — exactly the perturbation
+  a `fill --seed` would apply), each at the default budget: **0/8
+  completed** (all ~22s budget-exhausted). No lucky-ordering escape exists
+  on this instance.
+
+**Conclusion (DP-6, design-spec §10):** only crossing-aware
+forward-checking — ingrid's pruning class — can close the `blocked_13a`
+row. `--budget` and `fill --seed` are honest control/variety levers
+(spec'd in §8.4b) but measurably not completion fixes.
+
+## CWL measurement (2026-07-15) — evidence for the CWL-bundling decision pass
 
 The FS-6(b) research confirmed the [Collaborative Word
 List](https://github.com/Crossword-Nexus/collaborative-word-list) (CWL) is
