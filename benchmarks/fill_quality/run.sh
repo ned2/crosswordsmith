@@ -25,6 +25,14 @@ python3 "$HERE/gen_grids.py" .
 for g in open4 open5 mini7 mini9; do
   "$CS" fill --grid "$g.json" --dict stw_plain.txt --out "cs_$g.json"  >/dev/null 2>&1 || echo "cs full  $g: no fill within budget"
   "$CS" fill --grid "$g.json" --dict stw_ge50.txt  --out "cs50_$g.json" >/dev/null 2>&1 || echo "cs >=50  $g: no fill within budget"
+  # Native scored fill (§8.4a): STW ingested directly as word;score, hard
+  # prune at the clean floor. The FS-1 acceptance gate: this column MUST
+  # match the >=50-prefiltered-dict column (mean/min 50, 0 below-clean),
+  # and its --report-json numbers must agree with score_fill.py's post-hoc
+  # stats on the same fill (checked by score_fill.py below).
+  "$CS" fill --grid "$g.json" --dict "$STW" --min-score 50 \
+      --report-json "cs_minscore_$g.report.json" --out "cs_minscore_$g.json" >/dev/null 2>&1 \
+      || echo "cs min50 $g: no fill within budget"
   ingrid_core --wordlist "$STW" --min-score 50 "$g.txt" > "ingrid_$g.txt" 2>/dev/null   || echo "ingrid   $g: no fill"
 done
 

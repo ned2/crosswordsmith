@@ -1,6 +1,11 @@
 # Implementation plan: scored fill (FS-1 + FS-3(a)/(c))
 
-**Status: EXECUTING (2026-07-15).** Builds the LOCKED §8.4a contract
+**Status: DONE (2026-07-15).** All phases (C1–C5) landed; the FS-3(a)
+STW/ingrid harness gate PASSED (native `--min-score 50` matches the
+`>=50`-dict column — mean 50.0 / min 50 / 0 below-clean — on all four
+completable grids, `--report-json` cross-check agrees) and the fill ratchet
+including `--heavy` rungs is PASS at +0.00% (search untouched). Built the
+LOCKED §8.4a contract
 ([design-spec](../design-spec.md), DP-4 as amended by DP-5) per
 [fill-scoring-uplift.md](./fill-scoring-uplift.md) §5 sequencing: DP-5 landed
 first (own commit); this plan is FS-1 plus its FS-3(a)/(c) acceptance gates.

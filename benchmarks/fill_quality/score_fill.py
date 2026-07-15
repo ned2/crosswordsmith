@@ -89,28 +89,59 @@ def stats(words, scores):
     }
 
 
+def check_report(grid, s):
+    """Cross-check the engine's --report-json against these post-hoc stats.
+
+    The §8.4a acceptance gate: n/min/belowThreshold must match exactly;
+    mean within 0.05 (both sides round to 1 d.p., but SWI rounds half away
+    from zero while Python rounds half to even, so an exact .x5 tie may
+    differ in the last decimal). Returns True/False, or None if the engine
+    wrote no report (older engine / failed fill).
+    """
+    rp = Path(f"cs_minscore_{grid}.report.json")
+    if not rp.exists():
+        return None
+    rep = json.loads(rp.read_text())
+    return (rep['n'] == s['n'] and rep['min'] == s['min']
+            and rep['belowThreshold'] == s['below50']
+            and abs(rep['mean'] - s['mean']) < 0.05001)
+
+
 def main():
     scores = load_scores(sys.argv[1])
     grids = sys.argv[2:]
-    hdr = f"{'grid':7} {'tool':26} {'n':>3} {'mean':>5} {'min':>4} {'<50':>4} {'junk':>4}"
+    hdr = f"{'grid':7} {'tool':31} {'n':>3} {'mean':>5} {'min':>4} {'<50':>4} {'junk':>4}"
     print(hdr)
     print('-' * len(hdr))
+    disagreements = 0
     for g in grids:
         mask = json.loads(Path(f"{g}.json").read_text())['mask']
         variants = [
             ('crosswordsmith (full)', f"cs_{g}.json", 'cs'),
             ('crosswordsmith (>=50 dict)', f"cs50_{g}.json", 'cs'),
+            ('crosswordsmith (--min-score 50)', f"cs_minscore_{g}.json", 'cs'),
             ('ingrid_core (min-score 50)', f"ingrid_{g}.txt", 'ingrid'),
         ]
         for label, fpath, kind in variants:
             if not Path(fpath).exists():
-                print(f"{g:7} {label:26} (missing)")
+                print(f"{g:7} {label:31} (missing)")
                 continue
             words = cs_words(fpath) if kind == 'cs' else ingrid_words(fpath, mask)
             s = stats(words, scores)
-            print(f"{g:7} {label:26} {s['n']:>3} {s['mean']:>5} "
-                  f"{s['min']:>4} {s['below50']:>4} {s['junk']:>4}")
+            note = ''
+            if fpath.startswith('cs_minscore_'):
+                agree = check_report(g, s)
+                if agree is True:
+                    note = '  report-json AGREES'
+                elif agree is False:
+                    note = '  report-json DISAGREES'
+                    disagreements += 1
+            print(f"{g:7} {label:31} {s['n']:>3} {s['mean']:>5} "
+                  f"{s['min']:>4} {s['below50']:>4} {s['junk']:>4}{note}")
         print()
+    if disagreements:
+        print(f"FAIL: {disagreements} --report-json disagreement(s) with post-hoc scoring")
+        sys.exit(1)
 
 
 if __name__ == '__main__':
