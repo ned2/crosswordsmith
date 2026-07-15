@@ -413,8 +413,12 @@ fill_opts_spec(
        longflags([masks]),                   help('with --save-index: also embed bitset counting masks (faster fill phase for search-heavy grids / WASM; ~32% bigger artifact that loads slower - skip for quick interactive fills)')],
       [opt(index), type(atom),    default(''), meta('FILE'),
        longflags([index]),                   help('fill using a prebuilt index artifact (from --save-index) instead of parsing --dict; also pass --dict to verify the artifact matches that dictionary')],
+      [opt(min_score), type(integer), default(1), meta('N'),
+       longflags(['min-score']),             help('hard-prune candidates scoring below N (in the dict\'s own units) before search; default 1 drops only score-0 blocklist entries; 50 is the usual clean floor for 0-100 lists. Pruning can only reduce feasibility - a hard grid may lose its fill')],
+      [opt(report_json), type(atom), default(''), meta('FILE'),
+       longflags(['report-json']),           help('write the fill-quality report (n/mean/min/belowThreshold at the 50 clean floor) as JSON to FILE; the stdout layout is unchanged')],
       [opt(verbose), type(boolean), default(false),
-       longflags([verbose]),                 help('report the success summary (grid, filled slots) on stderr; failures print regardless')],
+       longflags([verbose]),                 help('report the success summary (grid, filled slots) and the fill-quality line on stderr; failures print regardless')],
       [opt(out),   type(atom),    default(''), meta('FILE'),
        longflags([out]),                     help('write output to FILE instead of stdout')]
     ]).
@@ -433,10 +437,15 @@ fill_usage(S) :-
     fill_opts_spec(Spec),
     opt_help(Spec, Help),
     format(S,
-"Usage: crosswordsmith fill --grid <mask> [--seeds <frag>] [--dict <words>]~n~n\c
+"Usage: crosswordsmith fill --grid <mask> [--seeds <frag>] [--dict <words>]~n\c
+                          [--min-score N] [--report-json <file>]~n~n\c
 Fills a legal blocked grid from a word list, seeds pinned. Output is a canonical~n\c
 layout (composes with lint/export). Exit is non-zero, naming the unfillable~n\c
-slot(s), when no complete fill exists.~n~n~w", [Help]).
+slot(s), when no complete fill exists. A --dict may be scored (word;score lines,~n\c
+integer scores in the list's own units): candidates are tried high-score-first,~n\c
+--min-score N hard-prunes lower-scored words before search, and the fill-quality~n\c
+report (stderr under --verbose; --report-json for machines) summarises the~n\c
+produced fill's scores.~n~n~w", [Help]).
 
 % Three modes, chosen by --save-index / --index (mutually exclusive), following
 % arrange's mutually-exclusive-flag house pattern:
@@ -463,10 +472,27 @@ fill_dispatch(Opts, Positional) :-
 % win for search-heavy grids / WASM at a ~32% artifact-size + load-wall cost;
 % the default artifact stays small and loads fast).
 fill_build_index(SaveIdx, Opts) :-
+    fill_reject_scored_flags(Opts, '--save-index'),
     memberchk(dict(Dict0), Opts), ( Dict0 == '' -> default_dict(Dict) ; Dict = Dict0 ),
     memberchk(masks(WithMasks), Opts),
     fill_save_index(Dict, SaveIdx, [masks(WithMasks)]),
     verbose_report("fill: wrote index artifact ~w from ~w~n", [SaveIdx, Dict]).
+
+% v1 scope (§8.4a build plan): --min-score and --report-json ride the text
+% --dict path only. An index artifact carries no scores (so a fill-time
+% prune/report is impossible), and --save-index bakes only the default prune
+% - both combinations error clearly instead of half-working (AC-CLI-2).
+fill_reject_scored_flags(Opts, Mode) :-
+    memberchk(min_score(MinScore), Opts),
+    (   MinScore =\= 1
+    ->  fill_err('--min-score works only with a text --dict (~w path: index artifacts carry no scores)'-[Mode])
+    ;   true
+    ),
+    memberchk(report_json(ReportJson), Opts),
+    (   ReportJson \== ''
+    ->  fill_err('--report-json works only with a text --dict (~w path: index artifacts carry no scores)'-[Mode])
+    ;   true
+    ).
 
 % FILL mode (raw or artifact-consuming): --grid required.
 fill_run_dispatch(UseIdx, Opts) :-
@@ -477,10 +503,17 @@ fill_run_dispatch(UseIdx, Opts) :-
     memberchk(out(OutFile), Opts),
     (   UseIdx \== ''
     ->  % CONSUME: --dict, if explicitly given, verifies the artifact's hash.
+        % Scored flags are text-dict-only in v1 (artifacts carry no scores).
+        fill_reject_scored_flags(Opts, '--index'),
         ( Dict0 == '' -> DictCheck = none ; DictCheck = Dict0 ),
         with_output(OutFile, fill_solve_index(Grid, Seeds, UseIdx, DictCheck, fixed))
     ;   ( Dict0 == '' -> default_dict(Dict) ; Dict = Dict0 ),
-        with_output(OutFile, fill_solve(Grid, Seeds, Dict, fixed)) ).
+        memberchk(min_score(MinScore), Opts),
+        memberchk(report_json(ReportJson0), Opts),
+        ( ReportJson0 == '' -> ReportJson = none ; ReportJson = ReportJson0 ),
+        with_output(OutFile,
+                    fill_solve(Grid, Seeds, Dict, fixed,
+                               [min_score(MinScore), report_json(ReportJson)])) ).
 
 % The default dictionary is the small bundled sample, resolved relative to the
 % script directory (real fills pass --dict <UKACD18>).

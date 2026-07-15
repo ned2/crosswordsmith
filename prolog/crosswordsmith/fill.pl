@@ -21,6 +21,7 @@
 
 :- module(crosswordsmith_fill,
           [ fill_solve/4,
+            fill_solve/5,
             fill_solve_index/5,
             fill_save_index/2,
             fill_save_index/3,
@@ -44,7 +45,8 @@
 % emit_arrange/4 — the old library(http/json) line here was vestigial.)
 :- use_module(library(apply), [convlist/3, exclude/3, foldl/4, maplist/3]).
 :- use_module(library(lists),
-              [append/3, member/2, nextto/3, nth0/3, select/3, subtract/3]).
+              [ append/3, member/2, min_list/2, nextto/3, nth0/3,
+                select/3, subtract/3, sum_list/2 ]).
 :- use_module(library(ordsets),
               [list_to_ord_set/2, ord_intersect/2, ord_intersection/3]).
 :- use_module(library(assoc),
@@ -1177,11 +1179,28 @@ fill_attempt_masked(SearchSlots, AllSlots, DictByLen, Index, Budget, Masks,
 %   on any non-filled outcome - not_proven (budget) or infeasible - after
 %   reporting the unfillable slot(s) on stderr (INV-3, never silent). Throws
 %   on a malformed grid/seed file, an unmatchable seed, or two seeds pinning
-%   the same answer (fill_seed_duplicate).
+%   the same answer (fill_seed_duplicate). Default-options delegate of
+%   fill_solve/5.
 fill_solve(GridFile, SeedFileOrNone, DictFile, SizeMode) :-
+    fill_solve(GridFile, SeedFileOrNone, DictFile, SizeMode, []).
+
+%!  fill_solve(+GridFile:atom, +SeedFileOrNone, +DictFile:atom,
+%!             +SizeMode:oneof([fixed,max]), +Options:list) is semidet.
+%
+%   §8.4a options-carrying form of fill_solve/4 (same contract). Options:
+%     * min_score(N): the hard candidate prune, in the dictionary's native
+%       units (default 1, DP-5 - excludes only the score-0 blocklist floor).
+%     * report_json(FileOrNone): write the fill-quality report as a one-line
+%       sorted-key JSON object to File on success (default `none`). The
+%       stderr human summary rides `--verbose` (§5.1's quiet-success stderr
+%       contract); the canonical stdout layout is untouched (AC-FILL-7).
+fill_solve(GridFile, SeedFileOrNone, DictFile, SizeMode, Options) :-
+    option(min_score(MinScore), Options, 1),
+    option(report_json(ReportFile), Options, none),
     fill_prepare(GridFile, SeedFileOrNone, Size, Slots, SearchSlots),
-    load_dict(DictFile, DictByLen, Index),
-    fill_place_and_emit(Size, Slots, SearchSlots, DictByLen, Index, none, SizeMode).
+    load_dict(DictFile, [min_score(MinScore)], DictByLen, Index, Scores),
+    fill_place_and_emit(Size, Slots, SearchSlots, DictByLen, Index, none,
+                        SizeMode, report_ctx(Scores, ReportFile)).
 
 %!  fill_solve_index(+GridFile:atom, +SeedFileOrNone, +IndexFile:atom,
 %!                   +DictFileOrNone, +SizeMode:oneof([fixed,max])) is semidet.
@@ -1199,10 +1218,14 @@ fill_solve(GridFile, SeedFileOrNone, DictFile, SizeMode) :-
 % runs iff Masks == masks(_). A `none` here (no masks in the artifact) transparently
 % falls back to the ordset kernel, so this entry is correct for any artifact shape
 % the loader accepts.
+% The artifact path carries no scores (v1: --min-score/--report-json are
+% text-dict-only, rejected upstream at the CLI), so its report context is
+% report_ctx(none, none) - no quality report on this path.
 fill_solve_index(GridFile, SeedFileOrNone, IndexFile, DictFileOrNone, SizeMode) :-
     fill_load_index(IndexFile, DictFileOrNone, DictByLen, Index, Masks),
     fill_prepare(GridFile, SeedFileOrNone, Size, Slots, SearchSlots),
-    fill_place_and_emit(Size, Slots, SearchSlots, DictByLen, Index, Masks, SizeMode).
+    fill_place_and_emit(Size, Slots, SearchSlots, DictByLen, Index, Masks,
+                        SizeMode, report_ctx(none, none)).
 
 % Grid + seed derivation, shared by both entry points (identical to the raw
 % path's front matter). Slots are ALL slots (emitted); SearchSlots exclude seed
@@ -1221,7 +1244,8 @@ fill_prepare(GridFile, SeedFileOrNone, Size, Slots, SearchSlots) :-
 % runs the bignum kernel (v2 artifact). The raw branch calls the unchanged
 % fill_attempt/7 so the raw CLI path is untouched; only the artifact branch takes
 % the masked core.
-fill_place_and_emit(Size, Slots, SearchSlots, DictByLen, Index, Masks, SizeMode) :-
+fill_place_and_emit(Size, Slots, SearchSlots, DictByLen, Index, Masks, SizeMode,
+                    ReportCtx) :-
     (   Masks == none
     ->  fill_attempt(SearchSlots, Slots, DictByLen, Index, Outcome, Numbered, InputWords)
     ;   fill_budget(B),
@@ -1231,10 +1255,75 @@ fill_place_and_emit(Size, Slots, SearchSlots, DictByLen, Index, Masks, SizeMode)
     (   Outcome == filled
     ->  emit_fill(Numbered, InputWords, Size, SizeMode),
         length(Numbered, NS),
-        verbose_report("fill: grid ~wx~w, filled ~w slots~n", [Size, Size, NS])
+        verbose_report("fill: grid ~wx~w, filled ~w slots~n", [Size, Size, NS]),
+        fill_quality_report(ReportCtx, Numbered, DictByLen)
     ;   fill_report_failure(Outcome, SearchSlots, DictByLen, Index, Size),
         fail
     ).
+
+% --- the §8.4a fill-quality sidecar report (AC-FILL-7, INV-3) -----------------
+% A SIDECAR: the canonical stdout layout is byte-untouched. The human summary
+% rides the --verbose stderr channel (§5.1: quiet on clean success; the report
+% is informational, not a compromise); report_json(File) is the unconditional
+% machine channel when requested. The artifact path carries no scores
+% (Scores == none) and emits no report. Written only on a FILLED outcome, so
+% --report-json never leaves a partial/failed report file (the §5.2 --out
+% discipline). The threshold is the documented clean-floor convention (50, in
+% the dict's native units - DP-5's recommended `--min-score 50`), matching
+% benchmarks/fill_quality/score_fill.py's below-50 column by construction.
+fill_quality_threshold(50).
+
+fill_quality_report(report_ctx(Scores, ReportFile), Numbered, DictByLen) :-
+    (   Scores == none
+    ->  true
+    ;   fill_quality_stats(Numbered, Scores, DictByLen, stats(N, Mean, Min, Below)),
+        fill_quality_threshold(T),
+        verbose_report("fill: quality n=~w mean=~w min=~w below~w=~w~n",
+                       [N, Mean, Min, T, Below]),
+        (   ReportFile == none
+        ->  true
+        ;   write_quality_json(ReportFile, N, Mean, Min, Below, T)
+        )
+    ).
+
+% n / mean (1 d.p.) / min / below-threshold over every placed answer,
+% mirroring score_fill.py: an answer absent from the dictionary (a non-dict
+% seed pin) scores 0. Answers are normalized through the same
+% word_letters/3 footprint the seed path uses, so multi-word/hyphenated
+% seeds score by their placed letters, exactly as the benchmark scores them.
+fill_quality_stats(Numbered, Scores, DictByLen, stats(N, Mean, Min, Below)) :-
+    maplist(placed_word_score(Scores, DictByLen), Numbered, Vals),
+    length(Vals, N),
+    sum_list(Vals, Sum),
+    Mean is round(Sum * 10 / N) / 10.0,
+    min_list(Vals, Min),
+    fill_quality_threshold(T),
+    foldl(count_below(T), Vals, 0, Below).
+
+count_below(T, V, A0, A) :- ( V < T -> A is A0 + 1 ; A = A0 ).
+
+placed_word_score(Scores, DictByLen, PW, Score) :-
+    pw_answer(PW, A),
+    word_letters([A], Letters, _),
+    (   Scores = scores(SA)
+    ->  ( get_assoc(Letters, SA, S) -> Score = S ; Score = 0 )
+    ;   % uniform: every in-dict word scores 1 (DP-5); absent -> 0
+        length(Letters, L),
+        (   get_assoc(L, DictByLen, Bucket),
+            memberchk(Letters, Bucket)
+        ->  Score = 1
+        ;   Score = 0
+        )
+    ).
+
+% One sorted-key JSON object, hand-formatted: four integers and a 1-d.p.
+% float need no JSON library, and the shape is pinned by golden + plunit.
+write_quality_json(File, N, Mean, Min, Below, T) :-
+    setup_call_cleanup(
+        open(File, write, S, [encoding(utf8)]),
+        format(S, '{"belowThreshold":~w,"mean":~w,"min":~w,"n":~w,"threshold":~w}~n',
+               [Below, Mean, Min, N, T]),
+        close(S)).
 
 % The fill emit boundary. First re-assert the unique-answers invariant that
 % emit_json/3's metadata join requires (nothing upstream on fill's pipeline

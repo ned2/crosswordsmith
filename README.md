@@ -206,13 +206,22 @@ with `lint`/`export`.
     $ ./crosswordsmith fill --grid grids/blocked_13a.json --seeds seeds.json \
         --dict UKACD18.txt
 
+    # Scored fill: point --dict at a word;score list (e.g. Spread the
+    # Wordlist - CC BY-NC-SA, download it yourself; it is never bundled).
+    # Candidates are tried high-score-first; --min-score 50 is the usual
+    # "clean" floor for 0-100-scale lists.
+    $ ./crosswordsmith fill --grid grids/blocked_13a.json \
+        --dict spread-the-wordlist.txt --min-score 50 --report-json quality.json
+
 | flag | meaning |
 | --- | --- |
 | `--grid <file>` | **required** — the grid template (a `grids/` black-square mask). |
 | `--seeds <file>` | seed words to pin (a fragment, §6.6, canonical or thin form — a thin `[{answer,row,col,dir}]` list is framed by the grid itself, no `gridLength` needed); filled around as hard pins. |
-| `--dict <file>` | word list, one per line, **UTF-8** (default: a small bundled sample; real fills: `--dict UKACD18`). Words are normalized to A–Z: accented Latin letters fold to their base (café → CAFE, Straße → STRASSE), punctuation/digits are squeezed; a word with letters that cannot be folded (Cyrillic, Greek, …) is dropped, and the drop count is reported on stderr (unconditionally — pure-ASCII lists load in silence). |
+| `--dict <file>` | word list, one per line, **UTF-8** (default: a small bundled sample; real fills: `--dict UKACD18`). Words are normalized to A–Z: accented Latin letters fold to their base (café → CAFE, Straße → STRASSE), punctuation/digits are squeezed; a word with letters that cannot be folded (Cyrillic, Greek, …) is dropped, and the drop count is reported on stderr (unconditionally — pure-ASCII lists load in silence). A file containing `;` is read as a **scored** list (`word;score`, integer scores in the list's **own** units — no normalisation): candidates are tried score-descending (ties in dictionary order), unscored lines score 1, malformed lines are dropped + reported, and a duplicate word keeps its highest score. |
+| `--min-score <N>` | hard-prune every candidate scoring below `N` (native units) *before* search; default `1` drops only score-0 blocklist entries, so unscored dictionaries are unaffected. `50` is the documented clean floor for 0–100-scale lists (STW/Broda). Pruning shrinks slot domains, so it can only *reduce* feasibility — a hard grid may lose its fill (reported as the ordinary no-fill outcome). Any nonzero prune count is reported on stderr. Text `--dict` path only (index artifacts carry no scores). |
+| `--report-json <file>` | write the fill-quality report for the produced fill to `<file>` as one sorted-key JSON object: `{"belowThreshold":…,"mean":…,"min":…,"n":…,"threshold":50}` (threshold 50 = the clean-floor convention; entries absent from the dict score 0). The stdout layout is byte-unchanged; nothing is written when no fill is produced. Text `--dict` path only. |
 | `--out <file>` | write to `<file>` instead of stdout. |
-| `--verbose` | report the success summary (grid, filled slots) on stderr; a clean success is silent there by default. Failures print regardless. |
+| `--verbose` | report the success summary (grid, filled slots) and the fill-quality line (`n/mean/min/below50`) on stderr; a clean success is silent there by default. Failures print regardless. |
 
 Each white cell is a shared logical variable, so crossings are consistent by
 construction; the search is MRV backtracking (most-constrained slot first) over
@@ -465,15 +474,19 @@ The full schema and design rationale live in
   the demo grids); pass a real lexicon (UKACD18 — redistributable freeware,
   ship its license verbatim) with `--dict` for production fills. The full
   dictionary is not bundled.
-- **`fill` is unscored, and its search has a budget ceiling on hard grids.**
-  The MRV backtracking places any *legal* word — it has no notion of fill
-  *quality*, so with a large open dictionary it can pick obscure/junk entries a
-  scored filler would reject (measured: it fills a small open grid with `AAAAA`
-  where a scored filler yields real words). Separately, its fixed inference
+- **`fill` quality needs a scored dictionary, and its search has a budget
+  ceiling on hard grids.** With a plain (unscored) list the MRV backtracking
+  places any *legal* word — it can pick obscure/junk entries a scored filler
+  would reject (measured: it fills a small open grid with `AAAAA` where a
+  scored filler yields real words). A scored `--dict` + `--min-score`
+  (design-spec §8.4a) closes that quality gap, but no scored list is bundled
+  (none is license-clean to bundle — supply your own, e.g. Spread the
+  Wordlist). Separately, and *untouched by scoring*, the fixed inference
   budget can exhaust on a standard blocked 13×13 with full-length slots that a
-  dedicated scored CSP fills in seconds. Both are quantified against `ingrid_core`
-  in [`benchmarks/fill_quality/`](benchmarks/fill_quality/README.md); a
-  score-aware `fill` (`--min-score`) is a tracked backlog item (design-spec §8.5).
+  dedicated scored CSP fills in seconds — and a `--min-score` prune shrinks
+  slot domains, so high thresholds make hard grids *less* fillable, never
+  faster. Both axes are quantified against `ingrid_core` in
+  [`benchmarks/fill_quality/`](benchmarks/fill_quality/README.md).
 - **`export`'s third-party round-trip is a manual step.** The output is
   spec-valid ipuz v2 / Exolve by construction, but actual ingestion by kotwords
   (ipuz) or Exet (Exolve) is verified by hand, not in CI.

@@ -717,6 +717,51 @@ test(scored_min50_fill_all_clean) :-
     forall(( member(PW, Numbered), pw_answer(PW, A) ),
            ( atom_chars(A, W), get_assoc(W, SA, S), S >= 50 )).
 
+% --- the fill-quality sidecar report (AC-FILL-7) ------------------------------
+% Stats over the default fixture fill (CAT/COW/ARE/TED/ORE/WED at
+% 95/95/60/30/90/80): n=6, mean 75.0, min 30 (TED), one entry below the 50
+% clean floor. The same numbers score_fill.py computes post hoc.
+test(quality_stats_scored_default) :-
+    crosswordsmith_fill:fill_grid('fixtures/fill_grid_3.json', _, Slots, _),
+    crosswordsmith_fill:load_dict('fixtures/dict_scored_sample.txt',
+                                  [], DBL, Idx, Scores),
+    crosswordsmith_fill:fill_attempt(Slots, Slots, DBL, Idx, filled, Numbered, _),
+    crosswordsmith_fill:fill_quality_stats(Numbered, Scores, DBL, St),
+    St == stats(6, 75.0, 30, 1).
+
+% A uniform (plain) dict scores 1 per in-dict word: degenerate but defined
+% (n=6, mean 1.0, min 1, all 6 below the 50 floor).
+test(quality_stats_uniform_dict) :-
+    crosswordsmith_fill:fill_grid('fixtures/fill_grid_3.json', _, Slots, _),
+    crosswordsmith_fill:load_dict('fixtures/wordlist_sample.txt',
+                                  [], DBL, Idx, Scores),
+    Scores == uniform,
+    crosswordsmith_fill:fill_attempt(Slots, Slots, DBL, Idx, filled, Numbered, _),
+    crosswordsmith_fill:fill_quality_stats(Numbered, Scores, DBL, St),
+    St == stats(6, 1.0, 1, 6).
+
+% An answer absent from the dictionary (a non-dict seed pin) scores 0 -
+% score_fill.py's junk convention - on both the uniform and the scored path.
+test(quality_absent_word_scores_zero) :-
+    crosswordsmith_fill:load_dict('fixtures/wordlist_sample.txt',
+                                  [], DBLU, _, uniform),
+    crosswordsmith_fill:placed_word_score(uniform, DBLU,
+                                          pw('ZZZ', _, _, _, _, _, _, _), SU),
+    SU == 0,
+    crosswordsmith_fill:load_dict('fixtures/dict_scored_sample.txt',
+                                  [], DBLS, _, Scores),
+    crosswordsmith_fill:placed_word_score(Scores, DBLS,
+                                          pw('ZZZ', _, _, _, _, _, _, _), SS),
+    SS == 0.
+
+% The report JSON is one sorted-key object, byte-pinned (AC-X-2 spirit; the
+% CLI-level file lands in the goldens).
+test(quality_report_json_bytes, [cleanup(delete_file(RF))]) :-
+    tmp_path(RF),
+    crosswordsmith_fill:write_quality_json(RF, 6, 75.0, 30, 1, 50),
+    read_file_to_string(RF, S, []),
+    S == "{\"belowThreshold\":1,\"mean\":75.0,\"min\":30,\"n\":6,\"threshold\":50}\n".
+
 % DP-5's default in action: the score-0 blocklist entry never appears in a
 % default-flags fill.
 test(scored_default_fill_excludes_score0) :-
