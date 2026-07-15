@@ -23,6 +23,7 @@
           [ fill_solve/4,
             fill_solve/5,
             fill_solve_index/5,
+            fill_solve_index/6,
             fill_save_index/2,
             fill_save_index/3,
             % the benchmark measurement seams (benchmarks/fill_subjects.pl,
@@ -62,6 +63,7 @@
 % option/2,3: the artifact Meta is a keyed list of unary Key(Value) terms -
 % literally an SWI option list - and fill_save_index's Options is one too.
 :- use_module(library(option), [option/2, option/3]).
+:- use_module(library(error), [must_be/2]).
 % read_file_to_string/3: whole-file reads (dict lines + the SHA-256
 % fingerprint) without the hand-rolled open/read_string/close dance (C39).
 :- use_module(library(readutil), [read_file_to_string/3]).
@@ -1187,20 +1189,38 @@ fill_solve(GridFile, SeedFileOrNone, DictFile, SizeMode) :-
 %!  fill_solve(+GridFile:atom, +SeedFileOrNone, +DictFile:atom,
 %!             +SizeMode:oneof([fixed,max]), +Options:list) is semidet.
 %
-%   §8.4a options-carrying form of fill_solve/4 (same contract). Options:
+%   §8.4a/§8.4b options-carrying form of fill_solve/4 (same contract). Options:
 %     * min_score(N): the hard candidate prune, in the dictionary's native
 %       units (default 1, DP-5 - excludes only the score-0 blocklist floor).
 %     * report_json(FileOrNone): write the fill-quality report as a one-line
 %       sorted-key JSON object to File on success (default `none`). The
 %       stderr human summary rides `--verbose` (§5.1's quiet-success stderr
 %       contract); the canonical stdout layout is untouched (AC-FILL-7).
+%     * budget(N): the §8.4b inference budget (AC-FILL-9). -1 (the default
+%       sentinel) means the engine default, fill_budget/1 - which stays the
+%       single source of truth. The budget never changes WHICH fill is
+%       found, only fill-vs-not-proven; it is an escape hatch, NOT a
+%       completion fix (DP-6, measured).
 fill_solve(GridFile, SeedFileOrNone, DictFile, SizeMode, Options) :-
     option(min_score(MinScore), Options, 1),
     option(report_json(ReportFile), Options, none),
+    fill_effective_budget(Options, Budget),
     fill_prepare(GridFile, SeedFileOrNone, Size, Slots, SearchSlots),
     load_dict(DictFile, [min_score(MinScore)], DictByLen, Index, Scores),
     fill_place_and_emit(Size, Slots, SearchSlots, DictByLen, Index, none,
-                        SizeMode, report_ctx(Scores, ReportFile)).
+                        SizeMode, report_ctx(Scores, ReportFile), Budget).
+
+% Resolve the effective inference budget from a budget(N) option. The -1
+% sentinel (or no option) selects the engine default fill_budget/1; anything
+% else must be a positive integer (the CLI validates too, but white-box
+% callers get the same clean error).
+fill_effective_budget(Options, Budget) :-
+    option(budget(Budget0), Options, -1),
+    (   Budget0 == -1
+    ->  fill_budget(Budget)
+    ;   must_be(positive_integer, Budget0),
+        Budget = Budget0
+    ).
 
 %!  fill_solve_index(+GridFile:atom, +SeedFileOrNone, +IndexFile:atom,
 %!                   +DictFileOrNone, +SizeMode:oneof([fixed,max])) is semidet.
@@ -1222,10 +1242,24 @@ fill_solve(GridFile, SeedFileOrNone, DictFile, SizeMode, Options) :-
 % text-dict-only, rejected upstream at the CLI), so its report context is
 % report_ctx(none, none) - no quality report on this path.
 fill_solve_index(GridFile, SeedFileOrNone, IndexFile, DictFileOrNone, SizeMode) :-
+    fill_solve_index(GridFile, SeedFileOrNone, IndexFile, DictFileOrNone,
+                     SizeMode, []).
+
+%!  fill_solve_index(+GridFile:atom, +SeedFileOrNone, +IndexFile:atom,
+%!                   +DictFileOrNone, +SizeMode:oneof([fixed,max]),
+%!                   +Options:list) is semidet.
+%
+%   §8.4b options-carrying form of fill_solve_index/5 (same contract).
+%   Options: budget(N) only - `--budget` is a pure search parameter and
+%   composes with the artifact path (AC-FILL-9/AC-FILL-11), unlike the
+%   score/seed flags (artifacts carry no scores and pin bucket order).
+fill_solve_index(GridFile, SeedFileOrNone, IndexFile, DictFileOrNone,
+                 SizeMode, Options) :-
+    fill_effective_budget(Options, Budget),
     fill_load_index(IndexFile, DictFileOrNone, DictByLen, Index, Masks),
     fill_prepare(GridFile, SeedFileOrNone, Size, Slots, SearchSlots),
     fill_place_and_emit(Size, Slots, SearchSlots, DictByLen, Index, Masks,
-                        SizeMode, report_ctx(none, none)).
+                        SizeMode, report_ctx(none, none), Budget).
 
 % Grid + seed derivation, shared by both entry points (identical to the raw
 % path's front matter). Slots are ALL slots (emitted); SearchSlots exclude seed
@@ -1241,15 +1275,17 @@ fill_prepare(GridFile, SeedFileOrNone, Size, Slots, SearchSlots) :-
 % non-filled outcome (INV-3): report the unfillable slot(s), never silent.
 % Masks threads F-H2's counting context: `none` runs the ordset kernel (raw CLI
 % path - byte-identical to pre-F-H2, exercised by the identity oracle), masks(_)
-% runs the bignum kernel (v2 artifact). The raw branch calls the unchanged
-% fill_attempt/7 so the raw CLI path is untouched; only the artifact branch takes
-% the masked core.
+% runs the bignum kernel (v2 artifact). Budget is the §8.4b effective budget
+% (fill_effective_budget/2: the fill_budget/1 default unless a budget(N)
+% option overrode it) - the raw branch feeds it to the budget-explicit
+% fill_attempt/8 (the gated bench seam, arity untouched); only the artifact
+% branch takes the masked core.
 fill_place_and_emit(Size, Slots, SearchSlots, DictByLen, Index, Masks, SizeMode,
-                    ReportCtx) :-
+                    ReportCtx, Budget) :-
     (   Masks == none
-    ->  fill_attempt(SearchSlots, Slots, DictByLen, Index, Outcome, Numbered, InputWords)
-    ;   fill_budget(B),
-        fill_attempt_masked(SearchSlots, Slots, DictByLen, Index, B, Masks,
+    ->  fill_attempt(SearchSlots, Slots, DictByLen, Index, Budget, Outcome,
+                     Numbered, InputWords)
+    ;   fill_attempt_masked(SearchSlots, Slots, DictByLen, Index, Budget, Masks,
                             Outcome, Numbered, InputWords)
     ),
     (   Outcome == filled

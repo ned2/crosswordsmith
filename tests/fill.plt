@@ -762,6 +762,54 @@ test(quality_report_json_bytes, [cleanup(delete_file(RF))]) :-
     read_file_to_string(RF, S, []),
     S == "{\"belowThreshold\":1,\"mean\":75.0,\"min\":30,\"n\":6,\"threshold\":50}\n".
 
+% --- §8.4b search levers (DP-6): --budget (AC-FILL-9) -------------------------
+
+% The -1 sentinel (and an absent option) selects the engine default;
+% fill_budget/1 stays the single source of truth.
+test(budget_option_default_and_sentinel) :-
+    crosswordsmith_fill:fill_effective_budget([], B0),
+    crosswordsmith_fill:fill_budget(Default),
+    B0 == Default,
+    crosswordsmith_fill:fill_effective_budget([budget(-1)], B1),
+    B1 == Default.
+
+test(budget_option_override) :-
+    crosswordsmith_fill:fill_effective_budget([budget(12345)], B),
+    B == 12345.
+
+% White-box callers get the same clean rejection the CLI gives (AC-FILL-9).
+test(budget_option_rejects_zero, [throws(error(type_error(positive_integer, 0), _))]) :-
+    crosswordsmith_fill:fill_effective_budget([budget(0)], _).
+
+test(budget_option_rejects_nonint, [throws(error(type_error(positive_integer, lots), _))]) :-
+    crosswordsmith_fill:fill_effective_budget([budget(lots)], _).
+
+% A too-small budget yields the ordinary AC-FILL-1 not-proven failure (no
+% stdout), through the full fill_solve/5 option path. (Budget 10: the 3x3
+% fixture fill completes within a few hundred inferences, so a four-digit
+% "tiny" budget is not tiny enough - found the hard way.)
+test(budget_tiny_fill_solve_fails) :-
+    with_output_to(string(S),
+        \+ crosswordsmith_fill:fill_solve('fixtures/fill_grid_3.json', none,
+                                          'fixtures/dict_scored_sample.txt',
+                                          fixed, [budget(10)])),
+    S == "".
+
+% AC-FILL-9's core clause: a budget change never alters the CONTENT of a
+% produced fill - default and a vastly larger budget emit byte-identical
+% layouts.
+test(budget_never_changes_content) :-
+    with_output_to(string(S1),
+        crosswordsmith_fill:fill_solve('fixtures/fill_grid_3.json', none,
+                                       'fixtures/dict_scored_sample.txt',
+                                       fixed, [])),
+    with_output_to(string(S2),
+        crosswordsmith_fill:fill_solve('fixtures/fill_grid_3.json', none,
+                                       'fixtures/dict_scored_sample.txt',
+                                       fixed, [budget(100_000_000_000)])),
+    S1 == S2,
+    S1 \== "".
+
 % DP-5's default in action: the score-0 blocklist entry never appears in a
 % default-flags fill.
 test(scored_default_fill_excludes_score0) :-
