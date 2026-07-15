@@ -217,20 +217,24 @@ with `lint`/`export`.
 | --- | --- |
 | `--grid <file>` | **required** — the grid template (a `grids/` black-square mask). |
 | `--seeds <file>` | seed words to pin (a fragment, §6.6, canonical or thin form — a thin `[{answer,row,col,dir}]` list is framed by the grid itself, no `gridLength` needed); filled around as hard pins. |
-| `--dict <file>` | word list, one per line, **UTF-8** (default: a small bundled sample; real fills: `--dict UKACD18`). Words are normalized to A–Z: accented Latin letters fold to their base (café → CAFE, Straße → STRASSE), punctuation/digits are squeezed; a word with letters that cannot be folded (Cyrillic, Greek, …) is dropped, and the drop count is reported on stderr (unconditionally — pure-ASCII lists load in silence). A file containing `;` is read as a **scored** list (`word;score`, integer scores in the list's **own** units — no normalisation): candidates are tried score-descending (ties in dictionary order), unscored lines score 1, malformed lines are dropped + reported, and a duplicate word keeps its highest score. |
+| `--dict <file>` | word list, one per line, **UTF-8** (default: a small bundled sample; real fills: `--dict UKACD18`). Words are normalized to A–Z: accented Latin letters fold to their base (café → CAFE, Straße → STRASSE), punctuation/digits are squeezed; a word with letters that cannot be folded (Cyrillic, Greek, …) is dropped, and the drop count is reported on stderr (unconditionally — pure-ASCII lists load in silence). A file containing `;` is read as a **scored** list (`word;score`, integer scores in the list's **own** units — no normalisation): candidates are tried score-descending (band order strict; the equal-score tail order is deterministic — lexicographic for multi-band lists, the engine's pinned shuffle when every word scores the same), unscored lines score 1, malformed lines are dropped + reported, and a duplicate word keeps its highest score. |
 | `--min-score <N>` | hard-prune every candidate scoring below `N` (native units) *before* search; default `1` drops only score-0 blocklist entries, so unscored dictionaries are unaffected. `50` is the documented clean floor for 0–100-scale lists (STW/Broda). Pruning shrinks slot domains, so it can only *reduce* feasibility — a hard grid may lose its fill (reported as the ordinary no-fill outcome). Any nonzero prune count is reported on stderr. Text `--dict` path only (index artifacts carry no scores). |
 | `--report-json <file>` | write the fill-quality report for the produced fill to `<file>` as one sorted-key JSON object: `{"belowThreshold":…,"mean":…,"min":…,"n":…,"threshold":50}` (threshold 50 = the clean-floor convention; entries absent from the dict score 0). The stdout layout is byte-unchanged; nothing is written when no fill is produced. Text `--dict` path only. |
-| `--budget <N>` | override the search's inference budget (default 800,000,000). Deterministic: a budget change never alters a *produced* fill, only fill-vs-not-proven — an **escape hatch** for marginal grids, *not* a completion fix for hard ones (measured: ×20 budget still doesn't complete a hard blocked 13×13; [`benchmarks/fill_quality/`](benchmarks/fill_quality/README.md)). Composes with every other flag and both index modes. |
-| `--seed <N>` | (N ≥ 0) a *reproducible alternative fill* of the same grid: perturbs **ties only** — equal-score candidate order and equal-constraint slot picks — so the score-descending quality ordering is untouched. Variety, *not* completion (measured: 0/8 reorderings completed a grid the default couldn't). Text `--dict` path only; mutually exclusive with `--shuffle`. There is no internal restart scheduling — a shell loop over `--seed` × `--budget` composes the same envelope. |
-| `--shuffle` | a *fresh* random alternative fill each run (same ties-only scope as `--seed`). Recoverable: `--verbose` prints `fill: shuffle seed N (reproduce with --seed N)` on stderr (the fill payload carries no diagnostics). Text `--dict` path only. |
+| `--budget <N>` | override the search's inference budget (default 800,000,000). Deterministic: a budget change never alters a *produced* fill, only fill-vs-not-proven — an **escape hatch** for marginal grids (the default covers every bundled benchmark rung and the reference hard 13×13; [`benchmarks/fill_quality/`](benchmarks/fill_quality/README.md)). Composes with every other flag and both index modes. |
+| `--seed <N>` | (N ≥ 0) a *reproducible alternative fill* of the same grid: every restart attempt picks among the top-3 candidates (weighted 4:2:1) on a PRNG stream seeded by `N`, and equal-score candidate order is seed-perturbed at load — the score-descending band order is untouched, so quality stays score-first. Variety with real per-seed variance (a seed can complete a marginal grid faster *or* exhaust the budget where the default completes). Text `--dict` path only; mutually exclusive with `--shuffle`. |
+| `--shuffle` | a *fresh* random alternative fill each run (same scope as `--seed`). Recoverable: `--verbose` prints `fill: shuffle seed N (reproduce with --seed N)` on stderr (the fill payload carries no diagnostics). Text `--dict` path only. |
 | `--out <file>` | write to `<file>` instead of stdout. |
 | `--verbose` | report the success summary (grid, filled slots) and the fill-quality line (`n/mean/min/below50`) on stderr; a clean success is silent there by default. Failures print regardless. |
 
 Each white cell is a shared logical variable, so crossings are consistent by
-construction; the search is MRV backtracking (most-constrained slot first) over
-an in-memory pattern index, and is **deterministic** (opt-in `--seed`/`--shuffle`
-perturb tie ordering only, exactly like their `arrange` namesakes — with neither
-flag no RNG is consulted). When no complete fill
+construction. The search (design-spec §8.4c) keeps per-slot candidate sets as
+bitmask domains over the pattern index, propagates crossing constraints to an
+arc-consistency fixpoint after every placement, picks the next slot by
+dom/wdeg conflict-weight learning, and restarts under a growing node cap —
+and it is **deterministic**: the default path is a pure function of the
+input (its diversification runs on pinned engine constants; no OS entropy,
+byte-identical CLI and browser), while opt-in `--seed`/`--shuffle` swap in a
+user-seeded stream for reproducible/fresh variety. When no complete fill
 exists, `fill` reports the unfillable slot(s) and exits non-zero (it never emits
 a partial grid). The bundled lexicon is a tiny sample for the demo grids; supply
 a real dictionary (UKACD18 — redistributable freeware; ship its license verbatim) with `--dict` for production fills.
@@ -326,7 +330,7 @@ benchmarks go through it):
 | `prolog/crosswordsmith/lint.pl` | **Flavour B** — the profile-driven grid validator (consumes the canonical layout, reuses the metric predicates). |
 | `prolog/crosswordsmith/export.pl` | **Flavour B** — ipuz v2 / Exolve transforms of the canonical layout. |
 | `prolog/crosswordsmith/stockgrid.pl` + `grids/` | **Flavour B** — the bundled stock-grid library: black-square masks, slots derived on load, each validated by `lint --profile blocked-uk`. |
-| `prolog/crosswordsmith/fill.pl` | **Flavour B** — grid-first auto-fill: each white cell a shared logical variable, MRV backtracking over an in-memory dictionary index, seeds pinned. |
+| `prolog/crosswordsmith/fill.pl` | **Flavour B** — grid-first auto-fill: each white cell a shared logical variable, MAC + dom/wdeg + restarts over bitmask domains (design-spec §8.4c), seeds pinned. |
 | `load.pl` | loads the implementation in the known-good order; defines the `crosswordsmith` file-search alias. |
 | `crosswordsmith` | the CLI: verb dispatch (`arrange`/`lint`/`export`/`fill`). |
 
@@ -479,27 +483,25 @@ The full schema and design rationale live in
   the demo grids); pass a real lexicon (UKACD18 — redistributable freeware,
   ship its license verbatim) with `--dict` for production fills. The full
   dictionary is not bundled.
-- **`fill` quality needs a scored dictionary, and its search has a budget
-  ceiling on hard grids.** With a plain (unscored) list the MRV backtracking
-  places any *legal* word — it can pick obscure/junk entries a scored filler
-  would reject (measured: it fills a small open grid with `AAAAA` where a
-  scored filler yields real words). A scored `--dict` + `--min-score`
+- **`fill` quality needs a scored dictionary.** With a plain (unscored)
+  list the search places any *legal* word — it can pick obscure/junk
+  entries a scored filler would reject (measured: it fills a small open
+  grid with `AAAAA` where a scored filler yields real words). A scored `--dict` + `--min-score`
   (design-spec §8.4a) closes that quality gap, but no scored list is bundled
   — supply your own, e.g. Spread the Wordlist (CC BY-NC-SA, never bundled)
   or the MIT-licensed Collaborative Word List (bundling that one is an open
-  decision, not yet taken — see design-spec §8.5). Separately, and *untouched
-  by scoring*, the search budget (default 800M inferences, `--budget`) can
-  exhaust on a standard blocked 13×13 with full-length slots that a dedicated
-  scored CSP (`ingrid_core`) fills in ~9s — and a `--min-score` prune shrinks
-  slot domains, so high thresholds make hard grids *less* fillable, never
-  faster. This ceiling is real for the current engine — bigger budgets
-  (×20), seeded reorderings, and constraint propagation alone all fail that
-  grid — but it is **not** engine-class: a probe combining arc-consistency
-  propagation with dom/wdeg conflict-weight slot ordering closes it in
-  seconds at ingrid-parity quality with the score-first candidate order
-  intact (design-spec §10 DP-7, as amended). Adopting that search upgrade
-  is a recorded open decision (it changes which fill every grid gets — an
-  engine version bump). Both axes are quantified against `ingrid_core` in
+  decision, not yet taken — see design-spec §8.5). The once-documented
+  completion gap against the closest competitor is **closed**: the §8.4c
+  search core (MAC propagation + dom/wdeg + diversified restarts, adopted
+  at design-spec §10 DP-8) fills the reference blocked 13×13 that used to
+  budget-exhaust — `--min-score 30` in ~2½ min and `--min-score 1` in ~20s
+  under the default budget, at a mean fill score *above* `ingrid_core`'s on
+  the same row (45.0 vs 44.4, score-first order intact). Two honest edges
+  remain: a `--min-score` prune shrinks slot domains, so high thresholds
+  still make hard grids *less* fillable, never faster; and the two
+  hardest benchmark grids (`blocked_13b`/`blocked_15a`) stay out of reach —
+  they defeat `ingrid_core` too, and completion there was never promised.
+  Both axes are quantified in
   [`benchmarks/fill_quality/`](benchmarks/fill_quality/README.md).
 - **`export`'s third-party round-trip is a manual step.** The output is
   spec-valid ipuz v2 / Exolve by construction, but actual ingestion by kotwords

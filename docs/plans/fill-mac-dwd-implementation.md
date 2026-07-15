@@ -1,6 +1,10 @@
 # Implementation plan: §8.4c `fill` search core (MAC + dom/wdeg + restarts)
 
-**Status: IN PROGRESS (started 2026-07-16).**
+**Status: DONE (built 2026-07-16; C1 spec/plan 625563c, C2 core 1ffc881,
+C3 search-power amendments + re-baselines ce8e02d, C4 docs sweep in the
+closing commit). All four stages complete; the C3 findings below amended
+the locked spec (§8.4c points 4–6, AC-FILL-13) — read them before touching
+the pick policy or load ordering.**
 Spec: design-spec **§8.4c [LOCKED — DP-8]** (plus the §8.4b seed-semantics
 amendment). Evidence base: the DP-7 MAC-probe campaign in
 [`../../benchmarks/fill_quality/README.md`](../../benchmarks/fill_quality/README.md)

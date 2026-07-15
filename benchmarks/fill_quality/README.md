@@ -13,7 +13,8 @@ This is the measured answer to the "load-bearing open question" in
 [`docs/research/setter-tool-landscape-2026.md`](../../docs/research/setter-tool-landscape-2026.md)
 §D: *does scoreless fill produce materially worse fill, or just occasionally
 worse corners?* **Answer: materially worse — down to nonsense strings — plus a
-separate completion-rate gap on hard grids.**
+separate completion-rate gap on hard grids** (the completion gap has since
+been closed by the §8.4c engine, DP-8 — see "Adopted: the engine result").
 
 > **Not part of `make bench`.** It needs two external, non-bundled deps:
 > `ingrid_core` (`cargo install ingrid_core`, needs a Rust toolchain) and the STW
@@ -84,19 +85,25 @@ ingrid_core (min 50)    : ASSTS SHERA SAMUS ERIES SISSY
 
 ### Completion / search power, on a hard grid (`blocked_13a`, full 13-length slots)
 
+> **Historical (pre-§8.4c MRV engine).** This gap is CLOSED as of the DP-8
+> build — see "Adopted: the engine result" below. The table is kept as the
+> baseline the DP-6/7/8 arc measured against.
+
 | tool | result |
 |---|---|
-| crosswordsmith (any dict) | **does not complete** — budget-exhausted at ~20s |
-| crosswordsmith `--min-score 50` (native, 2026-07-15) | **does not complete** — budget-exhausted at ~21s (the prune removes 195,725 of 315,903 words and shrinks every domain; scoring never lifts the search ceiling, per §8.4a) |
+| crosswordsmith MRV engine (any dict) | **did not complete** — budget-exhausted at ~20s |
+| crosswordsmith MRV `--min-score 50` (native, 2026-07-15) | **did not complete** — budget-exhausted at ~21s (the prune removes 195,725 of 315,903 words and shrinks every domain; scoring never lifts the search ceiling, per §8.4a) |
 | ingrid_core `--min-score 20` | completes in **10.7s** (mean 45.0, 17 below-50) |
 | ingrid_core `--min-score 30` | completes in **9.7s** (mean 44.4, 22 below-50) |
 | ingrid_core `--min-score 50` | **times out** (>90s) — even the scored CSP can't hit "clean" on this grid |
 
-A **second, distinct** competitiveness axis: crosswordsmith's fixed-budget MRV
-cannot complete a standard 13×13 with full-length slots that ingrid solves in
-~10s. This is orthogonal to scoring — it is search power — and is the harder
-engineering gap. (Note even ingrid can't fill `blocked_13a` at the clean-50 bar,
-so that grid is genuinely hard, not just hard for crosswordsmith.)
+This was a **second, distinct** competitiveness axis: the fixed-budget MRV
+tree could not complete a standard 13×13 with full-length slots that ingrid
+solves in ~10s — orthogonal to scoring, and the harder engineering gap. It
+drove the DP-6 → DP-7 → DP-8 arc below, which replaced the MRV tree with
+the §8.4c MAC + dom/wdeg core. (Note even ingrid can't fill `blocked_13a`
+at the clean-50 bar, so that grid is genuinely hard, not just hard for
+crosswordsmith.)
 
 ### The completion × min-score frontier (FS-3(b), 2026-07-15)
 
@@ -264,6 +271,40 @@ row: 7.1s randomized vs 125.7s greedy @ 30). So an adopted engine could
 keep the strongest form of today's contract — deterministic with no RNG on
 the default path — and treat `--seed`/`--shuffle` as the opt-in fast/variety
 lever, exactly §8.4b's existing shape.
+
+### Adopted: the engine result (DP-8 → §8.4c, built 2026-07-16)
+
+The recipe above IS the shipped `fill` engine as of the DP-8 build
+(design-spec §8.4c; plan `docs/plans/fill-mac-dwd-implementation.md`).
+Product-CLI numbers on this machine, **default budget (800M), default
+path** (no seed):
+
+| run | result | quality |
+|---|---|---|
+| `blocked_13a` × STW `--min-score 30` (the reference row) | **filled: 2m20s / 7 attempts** | **mean 45.0**, min 30 (ingrid 8.8s / mean 44.4; probe 7.1s / 44.81) |
+| `blocked_13a` × STW `--min-score 1` | **filled: 19s / 4 attempts** | mean 38.7 |
+| 15×15 / 17×17 / 21×21 × full ENABLE (identity-ladder rungs) | filled: 3.2s / 3.5s / 3.9s | — |
+| 17×17 × ENABLE-50k | filled: 1.3s / 4 attempts | — |
+
+Two C3 build findings the probes above could not see (they only ran
+blocked grids; the pure-greedy engine failed the OPEN-grid ladder rungs
+until both landed): per-node candidate enumeration must be **lazy** (the
+eager materialize-the-domain form burns the budget at O(popcount ×
+mask-width) bignum work per node), and the default path needs **pinned
+diversification** — top3 restarts on an engine-constant PRNG stream from
+attempt 2, plus a pinned load shuffle for dicts with no ordering
+information (plain / single-band; lexicographic clumps defeat top3
+diversification, while scored multi-band lists must KEEP their lex tail —
+in-band permutation starves this reference row). The engine default is
+therefore "deterministic as a pure function of the input" rather than
+"draw-free": full detail in §8.4c and the plan's C3-findings section.
+Wall-clock note: the engine's 2m20s vs the probe's 7.1s on the reference
+row is the priced cost of the deterministic pinned stream vs the probe's
+lucky random seeds (per-seed variance is real — engine `--seed 7` on the
+same row budget-exhausts at 8m47s with a clean `not proven` exit), plus
+CLI load/mask-build overhead; the AC-FILL-12 gate is completion under the
+default budget at ≥ old-engine quality, and it passes with quality above
+ingrid's.
 
 ## CWL measurement (2026-07-15) — evidence for the CWL-bundling decision pass
 
