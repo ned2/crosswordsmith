@@ -173,10 +173,20 @@ finds a *legal* fill but has no fill-*quality* signal, so it cannot compete on t
 (spreadthewordlist.com) is **CC BY-NC-SA 4.0**, explicitly permitting free-product
 use with attribution *and selling puzzles made with it* — compatible with
 crosswordsmith's license-clean identity. Snapshot (2026-07-01, will drift):
-**314,276 entries; 120,178 scored 50** (the "clean" benchmark). Alternatives, all
-permissive: the **Collaborative Word List** (MIT, crowdsourced, largest surveyed);
-`christophsjones/crossword-wordlist` (~170k, 1–50 band). **Never** bundle
+**314,276 entries; 120,178 scored 50** (the "clean" benchmark) — but note STW is
+**CC BY-NC-SA (point-at via `--dict`, not bundleable)**. On the *bundleable*
+alternatives, the deeper scoring pass
+([`wordlist-scoring-2026.md`](wordlist-scoring-2026.md)) corrects this row: the
+**Collaborative Word List** (MIT, crowdsourced, largest surveyed) is permissive but
+its *scored-status is unconfirmed*, and `christophsjones/crossword-wordlist` (~170k,
+1–50 band) has **no LICENSE file** → all-rights-reserved, **not** permissive. Net:
+no cleanly-bundleable scored list is yet confirmed, so the bundled default stays
+*unscored* UKACD18 and scoring is `--dict` opt-in. **Never** bundle
 Chambers/Collins/Oxford or the personal-use-only XWord Info list.
+**Scales are heterogeneous** (STW/Broda 0–100, XWord Info 5–60, CC default ≤50) — see
+[`wordlist-scoring-2026.md` §1/§4/§5](wordlist-scoring-2026.md) for band tables,
+license verdicts, and the two new `fill --min-score` design questions (scale-units
+and the score-0 blocklist).
 
 **How scoring fits the closed-set model (design tension — flagged as open).** The
 subtlety: scored fillers assume an **open dictionary they can reject words from**.
