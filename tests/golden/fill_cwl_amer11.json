@@ -1,0 +1,470 @@
+{
+  "grid": [
+    [
+      {"across":1,"down":1,"letter":"B","number":1},
+      {"across":1,"down":2,"letter":"L","number":2},
+      {"across":1,"down":3,"letter":"E","number":3},
+      {"across":1,"down":4,"letter":"D","number":4},
+      null,
+      {"across":5,"down":5,"letter":"S","number":5},
+      {"across":5,"down":6,"letter":"U","number":6},
+      {"across":5,"down":7,"letter":"B","number":7},
+      {"across":5,"down":8,"letter":"P","number":8},
+      {"across":5,"down":9,"letter":"A","number":9},
+      {"across":5,"down":10,"letter":"R","number":10}
+    ],
+    [
+      {"across":11,"down":1,"letter":"L","number":11},
+      {"across":11,"down":2,"letter":"A","number":null},
+      {"across":11,"down":3,"letter":"T","number":null},
+      {"across":11,"down":4,"letter":"E","number":null},
+      null,
+      {"across":12,"down":5,"letter":"E","number":12},
+      {"across":12,"down":6,"letter":"N","number":null},
+      {"across":12,"down":7,"letter":"L","number":null},
+      {"across":12,"down":8,"letter":"A","number":null},
+      {"across":12,"down":9,"letter":"C","number":null},
+      {"across":12,"down":10,"letter":"E","number":null}
+    ],
+    [
+      {"across":13,"down":1,"letter":"O","number":13},
+      {"across":13,"down":2,"letter":"L","number":null},
+      {"across":13,"down":3,"letter":"A","number":null},
+      {"across":13,"down":4,"letter":"V","number":null},
+      null,
+      {"across":14,"down":5,"letter":"B","number":14},
+      {"across":14,"down":6,"letter":"I","number":null},
+      {"across":14,"down":7,"letter":"O","number":null},
+      {"across":14,"down":8,"letter":"N","number":null},
+      {"across":14,"down":9,"letter":"I","number":null},
+      {"across":14,"down":10,"letter":"C","number":null}
+    ],
+    [
+      {"across":15,"down":1,"letter":"C","number":15},
+      {"across":15,"down":2,"letter":"A","number":null},
+      {"across":15,"down":3,"letter":"L","number":null},
+      {"across":15,"down":4,"letter":"I","number":null},
+      {"across":15,"down":16,"letter":"C","number":16},
+      {"across":15,"down":5,"letter":"O","number":null},
+      null,
+      {"across":17,"down":7,"letter":"B","number":17},
+      {"across":17,"down":8,"letter":"A","number":null},
+      {"across":17,"down":9,"letter":"D","number":null},
+      {"across":17,"down":10,"letter":"E","number":null}
+    ],
+    [
+      null,
+      null,
+      null,
+      {"across":18,"down":4,"letter":"L","number":18},
+      {"across":18,"down":16,"letter":"I","number":null},
+      {"across":18,"down":5,"letter":"R","number":null},
+      {"across":18,"down":19,"letter":"A","number":19},
+      null,
+      {"across":20,"down":8,"letter":"M","number":20},
+      {"across":20,"down":9,"letter":"I","number":null},
+      {"across":20,"down":10,"letter":"D","number":null}
+    ],
+    [
+      {"across":21,"down":21,"letter":"P","number":21},
+      {"across":21,"down":22,"letter":"A","number":22},
+      {"across":21,"down":23,"letter":"M","number":23},
+      null,
+      {"across":24,"down":16,"letter":"A","number":24},
+      {"across":24,"down":5,"letter":"R","number":null},
+      {"across":24,"down":19,"letter":"C","number":null},
+      null,
+      {"across":25,"down":8,"letter":"A","number":25},
+      {"across":25,"down":9,"letter":"C","number":null},
+      {"across":25,"down":10,"letter":"E","number":null}
+    ],
+    [
+      {"across":26,"down":21,"letter":"U","number":26},
+      {"across":26,"down":22,"letter":"P","number":null},
+      {"across":26,"down":23,"letter":"I","number":null},
+      null,
+      {"across":27,"down":16,"letter":"O","number":27},
+      {"across":27,"down":5,"letter":"H","number":null},
+      {"across":27,"down":19,"letter":"I","number":null},
+      {"across":27,"down":28,"letter":"O","number":28},
+      null,
+      null,
+      null
+    ],
+    [
+      {"across":29,"down":21,"letter":"T","number":29},
+      {"across":29,"down":22,"letter":"A","number":null},
+      {"across":29,"down":23,"letter":"D","number":null},
+      {"across":29,"down":30,"letter":"A","number":30},
+      null,
+      {"across":31,"down":5,"letter":"O","number":31},
+      {"across":31,"down":19,"letter":"D","number":null},
+      {"across":31,"down":28,"letter":"D","number":null},
+      {"across":31,"down":32,"letter":"I","number":32},
+      {"across":31,"down":33,"letter":"T","number":33},
+      {"across":31,"down":34,"letter":"Y","number":34}
+    ],
+    [
+      {"across":35,"down":21,"letter":"S","number":35},
+      {"across":35,"down":22,"letter":"C","number":null},
+      {"across":35,"down":23,"letter":"A","number":null},
+      {"across":35,"down":30,"letter":"R","number":null},
+      {"across":35,"down":36,"letter":"C","number":36},
+      {"across":35,"down":5,"letter":"E","number":null},
+      null,
+      {"across":37,"down":28,"letter":"D","number":37},
+      {"across":37,"down":32,"letter":"A","number":null},
+      {"across":37,"down":33,"letter":"V","number":null},
+      {"across":37,"down":34,"letter":"E","number":null}
+    ],
+    [
+      {"across":38,"down":21,"letter":"C","number":38},
+      {"across":38,"down":22,"letter":"H","number":null},
+      {"across":38,"down":23,"letter":"I","number":null},
+      {"across":38,"down":30,"letter":"C","number":null},
+      {"across":38,"down":36,"letter":"H","number":null},
+      {"across":38,"down":5,"letter":"I","number":null},
+      null,
+      {"across":39,"down":28,"letter":"E","number":39},
+      {"across":39,"down":32,"letter":"G","number":null},
+      {"across":39,"down":33,"letter":"A","number":null},
+      {"across":39,"down":34,"letter":"N","number":null}
+    ],
+    [
+      {"across":40,"down":21,"letter":"H","number":40},
+      {"across":40,"down":22,"letter":"E","number":null},
+      {"across":40,"down":23,"letter":"R","number":null},
+      {"across":40,"down":30,"letter":"O","number":null},
+      {"across":40,"down":36,"letter":"I","number":null},
+      {"across":40,"down":5,"letter":"C","number":null},
+      null,
+      {"across":41,"down":28,"letter":"R","number":41},
+      {"across":41,"down":32,"letter":"O","number":null},
+      {"across":41,"down":33,"letter":"D","number":null},
+      {"across":41,"down":34,"letter":"S","number":null}
+    ]
+  ],
+  "gridLength":11,
+  "words": [
+    {
+      "answer":"BLED",
+      "cells": [ [0, 0 ],  [0, 1 ],  [0, 2 ],  [0, 3 ] ],
+      "direction":"across",
+      "meta": {},
+      "number":1
+    },
+    {
+      "answer":"BLOC",
+      "cells": [ [0, 0 ],  [1, 0 ],  [2, 0 ],  [3, 0 ] ],
+      "direction":"down",
+      "meta": {},
+      "number":1
+    },
+    {
+      "answer":"LALA",
+      "cells": [ [0, 1 ],  [1, 1 ],  [2, 1 ],  [3, 1 ] ],
+      "direction":"down",
+      "meta": {},
+      "number":2
+    },
+    {
+      "answer":"ETAL",
+      "cells": [ [0, 2 ],  [1, 2 ],  [2, 2 ],  [3, 2 ] ],
+      "direction":"down",
+      "meta": {},
+      "number":3
+    },
+    {
+      "answer":"DEVIL",
+      "cells": [ [0, 3 ],  [1, 3 ],  [2, 3 ],  [3, 3 ],  [4, 3 ] ],
+      "direction":"down",
+      "meta": {},
+      "number":4
+    },
+    {
+      "answer":"SUBPAR",
+      "cells": [ [0, 5 ],  [0, 6 ],  [0, 7 ],  [0, 8 ],  [0, 9 ],  [0, 10 ] ],
+      "direction":"across",
+      "meta": {},
+      "number":5
+    },
+    {
+      "answer":"SEBORRHOEIC",
+      "cells": [
+	 [0, 5 ],
+	 [1, 5 ],
+	 [2, 5 ],
+	 [3, 5 ],
+	 [4, 5 ],
+	 [5, 5 ],
+	 [6, 5 ],
+	 [7, 5 ],
+	 [8, 5 ],
+	 [9, 5 ],
+	 [10, 5 ]
+      ],
+      "direction":"down",
+      "meta": {},
+      "number":5
+    },
+    {
+      "answer":"UNI",
+      "cells": [ [0, 6 ],  [1, 6 ],  [2, 6 ] ],
+      "direction":"down",
+      "meta": {},
+      "number":6
+    },
+    {
+      "answer":"BLOB",
+      "cells": [ [0, 7 ],  [1, 7 ],  [2, 7 ],  [3, 7 ] ],
+      "direction":"down",
+      "meta": {},
+      "number":7
+    },
+    {
+      "answer":"PANAMA",
+      "cells": [ [0, 8 ],  [1, 8 ],  [2, 8 ],  [3, 8 ],  [4, 8 ],  [5, 8 ] ],
+      "direction":"down",
+      "meta": {},
+      "number":8
+    },
+    {
+      "answer":"ACIDIC",
+      "cells": [ [0, 9 ],  [1, 9 ],  [2, 9 ],  [3, 9 ],  [4, 9 ],  [5, 9 ] ],
+      "direction":"down",
+      "meta": {},
+      "number":9
+    },
+    {
+      "answer":"RECEDE",
+      "cells": [ [0, 10 ],  [1, 10 ],  [2, 10 ],  [3, 10 ],  [4, 10 ],  [5, 10 ] ],
+      "direction":"down",
+      "meta": {},
+      "number":10
+    },
+    {
+      "answer":"LATE",
+      "cells": [ [1, 0 ],  [1, 1 ],  [1, 2 ],  [1, 3 ] ],
+      "direction":"across",
+      "meta": {},
+      "number":11
+    },
+    {
+      "answer":"ENLACE",
+      "cells": [ [1, 5 ],  [1, 6 ],  [1, 7 ],  [1, 8 ],  [1, 9 ],  [1, 10 ] ],
+      "direction":"across",
+      "meta": {},
+      "number":12
+    },
+    {
+      "answer":"OLAV",
+      "cells": [ [2, 0 ],  [2, 1 ],  [2, 2 ],  [2, 3 ] ],
+      "direction":"across",
+      "meta": {},
+      "number":13
+    },
+    {
+      "answer":"BIONIC",
+      "cells": [ [2, 5 ],  [2, 6 ],  [2, 7 ],  [2, 8 ],  [2, 9 ],  [2, 10 ] ],
+      "direction":"across",
+      "meta": {},
+      "number":14
+    },
+    {
+      "answer":"CALICO",
+      "cells": [ [3, 0 ],  [3, 1 ],  [3, 2 ],  [3, 3 ],  [3, 4 ],  [3, 5 ] ],
+      "direction":"across",
+      "meta": {},
+      "number":15
+    },
+    {
+      "answer":"CIAO",
+      "cells": [ [3, 4 ],  [4, 4 ],  [5, 4 ],  [6, 4 ] ],
+      "direction":"down",
+      "meta": {},
+      "number":16
+    },
+    {
+      "answer":"BADE",
+      "cells": [ [3, 7 ],  [3, 8 ],  [3, 9 ],  [3, 10 ] ],
+      "direction":"across",
+      "meta": {},
+      "number":17
+    },
+    {
+      "answer":"LIRA",
+      "cells": [ [4, 3 ],  [4, 4 ],  [4, 5 ],  [4, 6 ] ],
+      "direction":"across",
+      "meta": {},
+      "number":18
+    },
+    {
+      "answer":"ACID",
+      "cells": [ [4, 6 ],  [5, 6 ],  [6, 6 ],  [7, 6 ] ],
+      "direction":"down",
+      "meta": {},
+      "number":19
+    },
+    {
+      "answer":"MID",
+      "cells": [ [4, 8 ],  [4, 9 ],  [4, 10 ] ],
+      "direction":"across",
+      "meta": {},
+      "number":20
+    },
+    {
+      "answer":"PAM",
+      "cells": [ [5, 0 ],  [5, 1 ],  [5, 2 ] ],
+      "direction":"across",
+      "meta": {},
+      "number":21
+    },
+    {
+      "answer":"PUTSCH",
+      "cells": [ [5, 0 ],  [6, 0 ],  [7, 0 ],  [8, 0 ],  [9, 0 ],  [10, 0 ] ],
+      "direction":"down",
+      "meta": {},
+      "number":21
+    },
+    {
+      "answer":"APACHE",
+      "cells": [ [5, 1 ],  [6, 1 ],  [7, 1 ],  [8, 1 ],  [9, 1 ],  [10, 1 ] ],
+      "direction":"down",
+      "meta": {},
+      "number":22
+    },
+    {
+      "answer":"MIDAIR",
+      "cells": [ [5, 2 ],  [6, 2 ],  [7, 2 ],  [8, 2 ],  [9, 2 ],  [10, 2 ] ],
+      "direction":"down",
+      "meta": {},
+      "number":23
+    },
+    {
+      "answer":"ARC",
+      "cells": [ [5, 4 ],  [5, 5 ],  [5, 6 ] ],
+      "direction":"across",
+      "meta": {},
+      "number":24
+    },
+    {
+      "answer":"ACE",
+      "cells": [ [5, 8 ],  [5, 9 ],  [5, 10 ] ],
+      "direction":"across",
+      "meta": {},
+      "number":25
+    },
+    {
+      "answer":"UPI",
+      "cells": [ [6, 0 ],  [6, 1 ],  [6, 2 ] ],
+      "direction":"across",
+      "meta": {},
+      "number":26
+    },
+    {
+      "answer":"OHIO",
+      "cells": [ [6, 4 ],  [6, 5 ],  [6, 6 ],  [6, 7 ] ],
+      "direction":"across",
+      "meta": {},
+      "number":27
+    },
+    {
+      "answer":"ODDER",
+      "cells": [ [6, 7 ],  [7, 7 ],  [8, 7 ],  [9, 7 ],  [10, 7 ] ],
+      "direction":"down",
+      "meta": {},
+      "number":28
+    },
+    {
+      "answer":"TADA",
+      "cells": [ [7, 0 ],  [7, 1 ],  [7, 2 ],  [7, 3 ] ],
+      "direction":"across",
+      "meta": {},
+      "number":29
+    },
+    {
+      "answer":"ARCO",
+      "cells": [ [7, 3 ],  [8, 3 ],  [9, 3 ],  [10, 3 ] ],
+      "direction":"down",
+      "meta": {},
+      "number":30
+    },
+    {
+      "answer":"ODDITY",
+      "cells": [ [7, 5 ],  [7, 6 ],  [7, 7 ],  [7, 8 ],  [7, 9 ],  [7, 10 ] ],
+      "direction":"across",
+      "meta": {},
+      "number":31
+    },
+    {
+      "answer":"IAGO",
+      "cells": [ [7, 8 ],  [8, 8 ],  [9, 8 ],  [10, 8 ] ],
+      "direction":"down",
+      "meta": {},
+      "number":32
+    },
+    {
+      "answer":"TVAD",
+      "cells": [ [7, 9 ],  [8, 9 ],  [9, 9 ],  [10, 9 ] ],
+      "direction":"down",
+      "meta": {},
+      "number":33
+    },
+    {
+      "answer":"YENS",
+      "cells": [ [7, 10 ],  [8, 10 ],  [9, 10 ],  [10, 10 ] ],
+      "direction":"down",
+      "meta": {},
+      "number":34
+    },
+    {
+      "answer":"SCARCE",
+      "cells": [ [8, 0 ],  [8, 1 ],  [8, 2 ],  [8, 3 ],  [8, 4 ],  [8, 5 ] ],
+      "direction":"across",
+      "meta": {},
+      "number":35
+    },
+    {
+      "answer":"CHI",
+      "cells": [ [8, 4 ],  [9, 4 ],  [10, 4 ] ],
+      "direction":"down",
+      "meta": {},
+      "number":36
+    },
+    {
+      "answer":"DAVE",
+      "cells": [ [8, 7 ],  [8, 8 ],  [8, 9 ],  [8, 10 ] ],
+      "direction":"across",
+      "meta": {},
+      "number":37
+    },
+    {
+      "answer":"CHICHI",
+      "cells": [ [9, 0 ],  [9, 1 ],  [9, 2 ],  [9, 3 ],  [9, 4 ],  [9, 5 ] ],
+      "direction":"across",
+      "meta": {},
+      "number":38
+    },
+    {
+      "answer":"EGAN",
+      "cells": [ [9, 7 ],  [9, 8 ],  [9, 9 ],  [9, 10 ] ],
+      "direction":"across",
+      "meta": {},
+      "number":39
+    },
+    {
+      "answer":"HEROIC",
+      "cells": [ [10, 0 ],  [10, 1 ],  [10, 2 ],  [10, 3 ],  [10, 4 ],  [10, 5 ] ],
+      "direction":"across",
+      "meta": {},
+      "number":40
+    },
+    {
+      "answer":"RODS",
+      "cells": [ [10, 7 ],  [10, 8 ],  [10, 9 ],  [10, 10 ] ],
+      "direction":"across",
+      "meta": {},
+      "number":41
+    }
+  ]
+}

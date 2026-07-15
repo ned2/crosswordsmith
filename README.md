@@ -197,7 +197,14 @@ own) and fills every slot with a dictionary word so that crossings agree, with
 your own words pinned as **seeds**. Output is a canonical layout, so it composes
 with `lint`/`export`.
 
-    # Fill a grid from a word list (a tiny sample ships; real fills want UKACD18).
+    # Scored fill out of the box: the bundled Collaborative Word List
+    # clean-floor derivative (dicts/cwl50.dict, MIT — see dicts/README.md)
+    # on the bundled American-style 11x11. High-score-first, ~6s.
+    $ ./crosswordsmith fill --grid grids/amer11.json --dict dicts/cwl50.dict
+
+    # UK-style grids want a UK lexicon (the bundled CWL is American-style
+    # and does not fill the blocked_* stock grids): supply your own, e.g.
+    # UKACD18 (redistributable freeware).
     $ ./crosswordsmith fill --grid grids/blocked_13a.json --dict UKACD18.txt
 
     # Pin some answers (a §6.6 fragment, canonical or thin form) and fill
@@ -217,7 +224,7 @@ with `lint`/`export`.
 | --- | --- |
 | `--grid <file>` | **required** — the grid template (a `grids/` black-square mask). |
 | `--seeds <file>` | seed words to pin (a fragment, §6.6, canonical or thin form — a thin `[{answer,row,col,dir}]` list is framed by the grid itself, no `gridLength` needed); filled around as hard pins. |
-| `--dict <file>` | word list, one per line, **UTF-8** (default: a small bundled sample; real fills: `--dict UKACD18`). Words are normalized to A–Z: accented Latin letters fold to their base (café → CAFE, Straße → STRASSE), punctuation/digits are squeezed; a word with letters that cannot be folded (Cyrillic, Greek, …) is dropped, and the drop count is reported on stderr (unconditionally — pure-ASCII lists load in silence). A file containing `;` is read as a **scored** list (`word;score`, integer scores in the list's **own** units — no normalisation): candidates are tried score-descending (band order strict; the equal-score tail order is deterministic — lexicographic for multi-band lists, the engine's pinned shuffle when every word scores the same), unscored lines score 1, malformed lines are dropped + reported, and a duplicate word keeps its highest score. |
+| `--dict <file>` | word list, one per line, **UTF-8** (default: a small bundled sample; for real fills pass `dicts/cwl50.dict` — the bundled scored lexicon, opt-in by design — or your own list, e.g. UKACD18). Words are normalized to A–Z: accented Latin letters fold to their base (café → CAFE, Straße → STRASSE), punctuation/digits are squeezed; a word with letters that cannot be folded (Cyrillic, Greek, …) is dropped, and the drop count is reported on stderr (unconditionally — pure-ASCII lists load in silence). A file containing `;` is read as a **scored** list (`word;score`, integer scores in the list's **own** units — no normalisation): candidates are tried score-descending (band order strict; the equal-score tail order is deterministic — lexicographic for multi-band lists, the engine's pinned shuffle when every word scores the same), unscored lines score 1, malformed lines are dropped + reported, and a duplicate word keeps its highest score. |
 | `--min-score <N>` | hard-prune every candidate scoring below `N` (native units) *before* search; default `1` drops only score-0 blocklist entries, so unscored dictionaries are unaffected. `50` is the documented clean floor for 0–100-scale lists (STW/Broda). Pruning shrinks slot domains, so it can only *reduce* feasibility — a hard grid may lose its fill (reported as the ordinary no-fill outcome). Any nonzero prune count is reported on stderr. Text `--dict` path only (index artifacts carry no scores). |
 | `--report-json <file>` | write the fill-quality report for the produced fill to `<file>` as one sorted-key JSON object: `{"belowThreshold":…,"mean":…,"min":…,"n":…,"threshold":50}` (threshold 50 = the clean-floor convention; entries absent from the dict score 0). The stdout layout is byte-unchanged; nothing is written when no fill is produced. Text `--dict` path only. |
 | `--budget <N>` | override the search's inference budget (default 800,000,000). Deterministic: a budget change never alters a *produced* fill, only fill-vs-not-proven — an **escape hatch** for marginal grids (the default covers every bundled benchmark rung and the reference hard 13×13; [`benchmarks/fill_quality/`](benchmarks/fill_quality/README.md)). Composes with every other flag and both index modes. |
@@ -236,8 +243,11 @@ input (its diversification runs on pinned engine constants; no OS entropy,
 byte-identical CLI and browser), while opt-in `--seed`/`--shuffle` swap in a
 user-seeded stream for reproducible/fresh variety. When no complete fill
 exists, `fill` reports the unfillable slot(s) and exits non-zero (it never emits
-a partial grid). The bundled lexicon is a tiny sample for the demo grids; supply
-a real dictionary (UKACD18 — redistributable freeware; ship its license verbatim) with `--dict` for production fills.
+a partial grid). The `--dict` default is a tiny sample for the demo grids;
+production fills pass a real lexicon explicitly — the bundled scored
+`dicts/cwl50.dict` (Collaborative Word List clean-floor derivative, MIT,
+provenance in [dicts/README.md](dicts/README.md)) or your own (UKACD18 —
+redistributable freeware — for UK-style grids).
 
 
 ## Word/clue input (for `arrange`)
@@ -479,24 +489,37 @@ The full schema and design rationale live in
 - **`--enumerate` is expensive.** Many enumerated solutions are the same
   physical layout reached by placing words in a different order; the count is
   large and the search slow on big inputs.
-- **`fill` needs a dictionary.** Only a tiny sample wordlist ships (enough for
-  the demo grids); pass a real lexicon (UKACD18 — redistributable freeware,
-  ship its license verbatim) with `--dict` for production fills. The full
-  dictionary is not bundled.
+- **`fill`'s default dictionary is a tiny sample** (enough for the demo
+  grids — the default deliberately never changed, design-spec §10 DP-9);
+  production fills pass a lexicon explicitly. A **scored list is bundled**:
+  `dicts/cwl50.dict`, the MIT Collaborative Word List clean-floor derivative
+  (252,200 `word;score` entries ≥ 50, snapshot pinned + regenerable —
+  [dicts/README.md](dicts/README.md)). Caveats, documented not hidden: CWL
+  is American-style (it does not fill the UK `blocked_*` stock grids — pair
+  it with `grids/amer11.json`; UK fills want your own UKACD18) and its
+  upstream data has been frozen since 2023-02. Lists much beyond the
+  bundled size hit measured engine capacity: the full 567k-entry CWL
+  crashes dict load at SWI's default 1GB stack, and its ≥30 band (437k)
+  can blow the global stack in search on full-length-slot grids (an
+  engine-robustness backlog item, design-spec §8.5).
 - **`fill` quality needs a scored dictionary.** With a plain (unscored)
   list the search places any *legal* word — it can pick obscure/junk
   entries a scored filler would reject (measured: it fills a small open
   grid with `AAAAA` where a scored filler yields real words). A scored `--dict` + `--min-score`
-  (design-spec §8.4a) closes that quality gap, but no scored list is bundled
-  — supply your own, e.g. Spread the Wordlist (CC BY-NC-SA, never bundled)
-  or the MIT-licensed Collaborative Word List (bundling that one is an open
-  decision, not yet taken — see design-spec §8.5). The once-documented
+  (design-spec §8.4a) closes that quality gap — the bundled
+  `dicts/cwl50.dict` needs no flag at all (its ≥ 50 floor is baked in),
+  and on it the §8.4c engine *beats* `ingrid_core` on every completable
+  benchmark mask (means 78–83 vs 77–79). Stricter floors: `--min-score
+  75`/`90`. Other scored sources stay user-supplied: Spread the Wordlist
+  (CC BY-NC-SA, never bundled), etc. The once-documented
   completion gap against the closest competitor is **closed**: the §8.4c
   search core (MAC propagation + dom/wdeg + diversified restarts, adopted
   at design-spec §10 DP-8) fills the reference blocked 13×13 that used to
   budget-exhaust — `--min-score 30` in ~2½ min and `--min-score 1` in ~20s
   under the default budget, at a mean fill score *above* `ingrid_core`'s on
-  the same row (45.0 vs 44.4, score-first order intact). Two honest edges
+  the same row (45.0 vs 44.4, score-first order intact; measured with a
+  user-supplied Spread the Wordlist — the row is not completable from the
+  bundled CWL, whose loadable floors are too high for it). Two honest edges
   remain: a `--min-score` prune shrinks slot domains, so high thresholds
   still make hard grids *less* fillable, never faster; and the two
   hardest benchmark grids (`blocked_13b`/`blocked_15a`) stay out of reach —

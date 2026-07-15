@@ -404,6 +404,9 @@ entries dropped (exactly the 992 lines finding 3 predicted; 567,657 →
 
 ## Caveats / how to extend
 
+- **`amer11` is also shipped** as `grids/amer11.json` (promoted at DP-9 as
+  the bundled-CWL demo pairing) — `gen_grids.py` stays the benchmark's own
+  source; if either mask is ever edited the two must be re-synced by hand.
 - **Mask sample.** Eight masks now (easy four + American 11×11 + three blocked
   stock grids); a fuller benchmark still wants an American 15×15 (the
   next authored-mask candidate — `check_american` in `gen_grids.py` makes

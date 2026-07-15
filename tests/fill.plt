@@ -669,6 +669,23 @@ test(scored_duplicate_word_keeps_max,
     assoc_to_list(DBL1, [3-[['F','O','O']]]),
     DBL1 == DBL2.
 
+% --- DP-9: bundled CWL derivative (dicts/cwl50.dict) smoke -------------------
+% The shipped clean-floor artifact loads through the real loader as a clean
+% 1:1 (already A-Z, deduplicated at generation): exactly its recorded 252,200
+% words, the >=50 floor baked in (so the DP-5 default prune is a no-op on
+% it), and a stable spot entry. A bad regeneration (scripts/fetch-cwl.sh
+% drift from the pin in dicts/README.md) fails here.
+test(cwl50_bundled_artifact_smoke) :-
+    crosswordsmith_fill:load_dict('dicts/cwl50.dict', [], DBL, _, scores(SA)),
+    assoc_to_list(DBL, Buckets),
+    findall(N, ( member(_-B, Buckets), length(B, N) ), Ns),
+    sum_list(Ns, 252200),
+    assoc_to_list(SA, Pairs),
+    length(Pairs, 252200),
+    findall(S, member(_-S, Pairs), Scores),
+    min_list(Scores, 50),
+    get_assoc(['C','R','O','S','S','W','O','R','D'], SA, 90).
+
 % The hard prune (AC-FILL-5): --min-score 50 removes every word scoring < 50
 % from the buckets (so no slot domain can see one), and the prune is
 % reported unconditionally on stderr (INV-3).

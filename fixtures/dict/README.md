@@ -2,9 +2,11 @@
 
 Frozen wordlists for the `fill` performance ladder
 (`benchmarks/fill_workloads.pl`). These are **benchmark fixtures**, not a
-product asset — real fills pass their own `--dict` (e.g. UKACD18). The bench
-freezes them so the dictionary-load inference count (a measured, tracked
-metric) is reproducible byte-for-byte.
+product asset — the product's bundled scored lexicon lives in
+[`dicts/`](../../dicts/README.md) (DP-9), and real fills otherwise pass
+their own `--dict` (e.g. UKACD18). The bench freezes them so the
+dictionary-load inference count (a measured, tracked metric) is
+reproducible byte-for-byte.
 
 ## Primary dictionary — ENABLE
 

@@ -150,6 +150,13 @@ rm -f "$scored_report"
 check_golden "fill 15 bench" \
     tests/golden/fill_15_bench.json \
     ./crosswordsmith fill --grid fixtures/fill_grid_15a.json --dict fixtures/dict/enable1.txt
+# Bundled-lexicon golden (DP-9): the README demo pairing, end to end — the
+# shipped amer11 stock grid filled from the shipped CWL clean-floor derivative
+# (~6s CLI; mean 78.1 / 0 below-clean when produced). Byte-pins the pairing so
+# artifact drift or an engine change shows up as an explicit golden diff.
+check_golden "fill cwl50 amer11 (bundled pairing)" \
+    tests/golden/fill_cwl_amer11.json \
+    ./crosswordsmith fill --grid grids/amer11.json --dict dicts/cwl50.dict
 
 echo
 echo "=== CLI exit-code contract (AC-LINT-2) ==="

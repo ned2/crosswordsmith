@@ -28,6 +28,7 @@ A small, curated set of **pre-validated legal blocked grid templates**
 | `blocked_13a.json` | 13×13 | 180°-symmetric, lights 3/5/13 |
 | `blocked_13b.json` | 13×13 | 180°-symmetric, lights 3/4/5/13 |
 | `blocked_15a.json` | 15×15 | 180°-symmetric, lights 3/4/5/7/15 |
+| `amer11.json` | 11×11 | American-style, fully checked, 180°-symmetric, spanning 11-letter slot — promoted from the fill-quality benchmark (DP-9) as the demo pairing for the bundled `dicts/cwl50.dict` (fills in ~6s, mean 78.1) |
 
 All are original, license-clean, and **PASS `lint --profile blocked-uk`**. This
 is a starter set (real publications curate only dozens); it grows by adding more

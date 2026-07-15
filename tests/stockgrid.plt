@@ -16,6 +16,7 @@
 bundled_grid('grids/blocked_13a.json').
 bundled_grid('grids/blocked_13b.json').
 bundled_grid('grids/blocked_15a.json').
+bundled_grid('grids/amer11.json').      % DP-9 demo pairing for dicts/cwl50.dict
 
 
 :- begin_tests(stockgrid).
