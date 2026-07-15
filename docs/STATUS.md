@@ -97,7 +97,7 @@ A 2026 competitive re-scan ([`research/setter-tool-landscape-2026.md`](./researc
 
 | # | Item | Home | Why now | Status |
 |---|---|---|---|---|
-| 1 | **Scored fill** (`fill --min-score` + fill-quality report) | design-spec **§8.4a** (DP-4) | The #1 competitive gap — every serious filler scores; crosswordsmith's scoreless MRV fills junk (measured, [`../benchmarks/fill_quality/`](../benchmarks/fill_quality/README.md)). License-clean via Spread the Wordlist. | **spec'd (DP-4 → §8.4a, LOCKED); not started** — decision pass + spec done, needs implementation plan + build |
+| 1 | **Scored fill** (`fill --min-score` + fill-quality report) | design-spec **§8.4a** (DP-4 + DP-5) | The #1 competitive gap — every serious filler scores; crosswordsmith's scoreless MRV fills junk (measured, [`../benchmarks/fill_quality/`](../benchmarks/fill_quality/README.md)). License-clean via Spread the Wordlist. | **spec'd (DP-4 → §8.4a, LOCKED; refinements resolved by DP-5 — native units, default prune `score ≥ 1`, uniform score 1); not started** — needs implementation plan + build |
 | 2 | **`stats`/`inspect` + `diff` verbs** on `xword` | [`xword-status.md`](./xword-status.md) ★ · [`plans/xword-breadth-expansion.md`](./plans/xword-breadth-expansion.md) | The differentiated "breadth" first cut (read-only, deterministic, hub-amplifying) — research says compete on render + hub, not convert coverage. | needs decision pass + spec + plan |
 | 3 | **Clue stockpile keyed by answer** (`meta`) | design-spec §8.5 ★ | Unserved across the entire surveyed field (both passes) — a genuine differentiator, low-effort, pure `meta` plumbing. | needs decision pass + spec + plan |
 
