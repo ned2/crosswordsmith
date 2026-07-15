@@ -188,7 +188,9 @@ On the reference row (`blocked_13a`, STW, `--min-score 30`; ingrid_core
 | MAC + restarts (top-3 [4,2,1] random picks, cap 500 ×1.5, fresh seed per attempt) | 1800s | **timeout**, 14 attempts, 211,115 nodes |
 | MAC + restarts + **fillability value order** (Σ log10(letter-support popcount+1) desc — ingrid's dominant signal) | 1800s | **timeout**, 13 attempts, 186,954 nodes |
 
-**Conclusion (DP-7, design-spec §10):** MAC-class propagation is necessary
+**Conclusion (DP-7, design-spec §10) — since AMENDED by the dom/wdeg
+follow-up below (2026-07-16), which overturns the "new search core" sizing:**
+MAC-class propagation is necessary
 but measurably NOT sufficient in this engine: at the probe's ~10ms/node
 (full-AC sweeps over ~30k-bit masks; already 3× faster than the naive
 form), 30 minutes buys ~2×10⁵ nodes and zero completions under three
@@ -208,6 +210,46 @@ boundary (`\(1<<63)` yields `2^63-1` — a 64-bit complement — instead of the
 documented unbounded one's complement `-(2^63)-1`, silently wiping bits
 ≥ 63 of a mask AND-chain). Clear bits with `xor`, never `/\ \(1<<B)`;
 found the hard way. Candidate upstream report.
+
+### dom/wdeg follow-up: the missing ingredient (DP-7 amendment, 2026-07-16)
+
+The one component of ingrid's stack the table above never isolated was
+**dom/wdeg conflict-weight learning** — probed the next day as
+`probe_mac_dwd/6` (same MAC machinery; every crossing carries a weight,
+init 1.0, +1 whenever its revision wipes a domain, held in a global
+`nb_setarg` compound so learning survives backtracking, persisting across
+restarts with ×0.99 aging; variable order picks the slot minimizing
+`popcount(dom) / Σ weights of crossings to unfilled neighbors` instead of
+bare MRV). Each completed fill is **hard-verified** by binding the placed
+words onto the grid's shared cell variables (crossing inconsistency fails
+unification) and is byte-reproducible per seed.
+
+Same reference row (`blocked_13a`, STW, ingrid_core 8.8s):
+
+| variant | threshold | result | quality |
+|---|---|---|---|
+| MAC + restarts + **dom/wdeg**, **§8.4a score-desc value order** | 30 | **completes: 7.1s / 726 nodes** (seed 12345; seeds 777 / 424242: 11.4s / 908 and 9.2s / 451 — **3/3 seeds**) | **mean 44.81**, min 30 (ingrid @30: mean 44.4) |
+| MAC + restarts + dom/wdeg, score-desc order | 1 | **completes: 12.6s / 876 nodes** | — |
+| MAC + restarts + dom/wdeg, fillability order | 30 | completes: 24–25s / 2,010 nodes | mean 43.89, min 30 |
+
+(For scale on the learning effect alone: the 9×9 drops from 14,512 nodes
+(restarts, no learning) to 2,175 with dom/wdeg on the same score-desc
+order, and from 1,114 to 369 on the fillability order.)
+
+**What this overturns in the DP-7 conclusion:** two of its three "you need
+the whole ingrid stack" claims are falsified — (1) **native node rates are
+NOT required**: ~726 nodes at the probe's ~10ms/node is seconds, not
+hours; (2) **the fillability quality-inversion is NOT required**: the
+§8.4a score-first value order not only completes, it *beats* fillability
+here on both wall time and fill quality, at quality parity with
+ingrid_core on the same row. What stands: (3) plain MAC propagation alone
+is insufficient (the 2026-07-15 table), and MAC still regresses easy
+completable grids end-to-end at spike per-node costs. The corrected
+sizing: the row is closable by a **bounded upgrade** — MAC propagation +
+dom/wdeg + seeded restarts, keeping the quality-first candidate order —
+not by adopting ingrid's engine wholesale. Adoption remains its own
+decision (the §8.4/AC-FILL-3 contract churn priced in DP-6/DP-7 is
+unchanged); see the amended DP-7 entry in the design spec.
 
 ## CWL measurement (2026-07-15) — evidence for the CWL-bundling decision pass
 

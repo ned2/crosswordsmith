@@ -492,13 +492,14 @@ The full schema and design rationale live in
   exhaust on a standard blocked 13×13 with full-length slots that a dedicated
   scored CSP (`ingrid_core`) fills in ~9s — and a `--min-score` prune shrinks
   slot domains, so high thresholds make hard grids *less* fillable, never
-  faster. This is a **measured engine-class limitation, not a tuning gap**
-  (design-spec §10 DP-7): bigger budgets (×20), seeded reorderings, and even
-  MAC-grade constraint propagation probes all fail that grid, while
-  ingrid_core's completion rests on its full search core (conflict-weight
-  ordering + fillability-first value order + incremental arc consistency) —
-  adopting that would be a different engine with a different quality
-  contract. Both axes are quantified against `ingrid_core` in
+  faster. This ceiling is real for the current engine — bigger budgets
+  (×20), seeded reorderings, and constraint propagation alone all fail that
+  grid — but it is **not** engine-class: a probe combining arc-consistency
+  propagation with dom/wdeg conflict-weight slot ordering closes it in
+  seconds at ingrid-parity quality with the score-first candidate order
+  intact (design-spec §10 DP-7, as amended). Adopting that search upgrade
+  is a recorded open decision (it changes which fill every grid gets — an
+  engine version bump). Both axes are quantified against `ingrid_core` in
   [`benchmarks/fill_quality/`](benchmarks/fill_quality/README.md).
 - **`export`'s third-party round-trip is a manual step.** The output is
   spec-valid ipuz v2 / Exolve by construction, but actual ingestion by kotwords
