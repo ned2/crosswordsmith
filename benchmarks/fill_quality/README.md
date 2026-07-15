@@ -349,6 +349,59 @@ run with CWL as `$STW` to convert its two recorded caveats — staleness
    `--min-score 50` is still not proven within budget (~26s) — the ceiling is
    the search, not the list.
 
+### CWL on the §8.4c engine (2026-07-16) — DP-9 grounding
+
+Re-run for the DP-9 bundling decision after DP-8 replaced the search core.
+Same harness (`run.sh` with CWL as `$STW`, plus the matrix rows for `amer11`
+and `blocked_13a` only — `blocked_13b`/`15a` stay untouched per the DP-6
+report-don't-chase pin), against a **pinned snapshot**: upstream commit
+`2efe76e11ef3` (`xwordlist.dict` last changed 2023-02-12; repo re-verified
+MIT at source, not archived), raw sha256
+`a945a839a5f1e6f48caf9c8de446e5cd85f3567d7f62afcf54c6b738e8906ff4`. Also
+measured: the cleaned derivative DP-9 proposes to ship — digit-bearing
+entries dropped (exactly the 992 lines finding 3 predicted; 567,657 →
+566,665), `cwl50` = its `score ≥ 50` subset (252,200 entries, 3.7MB).
+
+| grid | crosswordsmith (`--min-score 50`, native, §8.4c) | ingrid_core (`--min-score 50`) |
+|---|---|---|
+| open4 | mean **83.1**, min 50, 0 below, report-json agrees | mean 78.8, min 50, 0 below |
+| open5 | mean **78.5**, min 50, 0 below, report-json agrees | mean 77.0, min 50, 0 below |
+| mini7 | mean **81.7**, min 50, 0 below, report-json agrees | mean 77.6, min 50, 0 below |
+| mini9 | mean **80.9**, min 50, 0 below, report-json agrees | mean 77.1, min 50, 0 below |
+| amer11 | mean **78.1**, min 50, 0 below (44 slots, **6.4s end-to-end** with the `cwl50` artifact) | ok |
+
+**Findings (supersede the 2026-07-15 quality table for the current engine):**
+
+1. **Quality: §8.4c + CWL beats ingrid_core on all five completable masks**
+   (the §8.4b engine had tied/edged it on four). `run.sh`'s report-json gate
+   passes on all four gated grids.
+2. **Capacity: the engine has TWO stack envelopes, and both fail as raw
+   crashes, not clean §5.1 reports.** (a) *Load*: the full 566k cleaned list
+   still blows the default 1GB stack at `build_index` (finding 1 stands on
+   §8.4c). (b) *Search* — NEW: at `--min-score 30` the dict loads (437,400
+   words survive) but `blocked_13a` dies ~17s in with a global-stack
+   overflow inside `mac_support`/`mac_revise` — the §8.4c bignum candidate
+   masks over full-13 domains at this band width. `amer11` @30 is fine
+   (mean 67.7, min 30). The ≥50 band (252k) is inside both envelopes.
+   Both crashes are one engine-robustness backlog item (§8.5): fail cleanly
+   at capacity instead of overflowing, and document the envelope.
+3. **The DP-8 reference-row completion is list-specific.** `blocked_13a` @30
+   with CWL is envelope crash (b) above — not comparable to STW's 2m20s
+   completion. At the clean floor the row stays hard for *both* engines with
+   CWL exactly as with STW: native budget-exhausts cleanly (`not proven
+   within budget`, 3m57s under the default 800M budget with the `cwl50`
+   artifact — the ordinary §5.1 outcome, no crash), ingrid_core
+   NOT-COMPLETED at the 90s cap. Do not present the CWL bundle as a
+   search-power demo on the UK stock grids: **no loadable CWL floor fills
+   `blocked_13a`**.
+4. **Digit filter validated:** dropping `[0-9]`-bearing lines removes exactly
+   the 992 recorded entries; the eager `MPJS`-artifact from finding 3 is gone
+   from the cleaned derivative.
+5. **The `amer11` + `cwl50` pairing is the demo:** 6.4s load+fill, mean 78.1,
+   0 below-clean, and the filled layout PASSes `lint --profile blocked-uk`
+   (222 checks); the `amer11` mask itself PASSes `stockgrid_report` — the
+   basis for promoting it into `grids/` (DP-9).
+
 ## Caveats / how to extend
 
 - **Mask sample.** Eight masks now (easy four + American 11×11 + three blocked
