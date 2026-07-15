@@ -44,9 +44,9 @@
 % qsave_program(..., [autoload(false)]) build resolves them (P11/C5). (No JSON
 % import: this module's emit delegates to core's emit_json/3 / arrange's
 % emit_arrange/4 — the old library(http/json) line here was vestigial.)
-:- use_module(library(apply), [convlist/3, exclude/3, foldl/4, maplist/3]).
+:- use_module(library(apply), [convlist/3, exclude/3, foldl/4, include/3, maplist/3]).
 :- use_module(library(lists),
-              [ append/3, member/2, min_list/2, nextto/3, nth0/3,
+              [ append/2, append/3, member/2, min_list/2, nextto/3, nth0/3,
                 select/3, subtract/3, sum_list/2 ]).
 :- use_module(library(ordsets),
               [list_to_ord_set/2, ord_intersect/2, ord_intersection/3]).
@@ -89,7 +89,10 @@
 % itself.
 :- use_module(crosswordsmith(core),
               [ assign_clue_numbers/2, check_unique_answers/1, emit_json/3,
-                verbose_report/2, pw_answer/2 ]).
+                verbose_report/2, pw_answer/2,
+                % §8.4b (DP-6) seed perturbation: fill reads the SAME
+                % module-owned PRNG as arrange's §7.6 knobs (wasm parity)
+                current_search_seed/1, seeded_permutation/2 ]).
 
 fill_budget(800_000_000).   % inference budget (determinism via INV-2, bounded)
 
@@ -266,7 +269,19 @@ plain_dict_words(Lines, File, Words) :-
     convlist(line_word, Lines, Ws0),
     nb_getval(fill_dict_dropped_words, Dropped),
     warn_dropped_words(Dropped, File),
-    sort(Ws0, Words).                       % dedupe + a stable, deterministic order
+    sort(Ws0, Sorted),                      % dedupe + a stable, deterministic order
+    seed_perturb_plain(Sorted, Words).
+
+% §8.4b (AC-FILL-10): iff a search seed is installed, permute the whole plain
+% word list - a uniform (unscored) dict's "equal-score tie" is the entire
+% length bucket, and bucket order inherits Words' order (keysort/2 is stable).
+% Unseeded: identity, one failed dynamic lookup on the gated F-L1 load path
+% (within the ratchet's 0.5%, like the §8.4a scored-sniff's +30).
+seed_perturb_plain(Ws, Out) :-
+    (   current_search_seed(_)
+    ->  seeded_permutation(Ws, Out)
+    ;   Out = Ws
+    ).
 
 % Scored ingestion (§8.4a): parse `word;score` lines, dedupe to the max
 % score, prune below MinScore (reported, INV-3), and order every survivor
@@ -448,10 +463,27 @@ max_pair_score([_-S|T], M0, M) :-
 order_score_desc(Pairs, Words) :-
     maplist(neg_score_key, Pairs, Keyed),
     msort(Keyed, SortedKeys),
-    maplist(key_word, SortedKeys, Words).
+    seed_tie_shuffle(SortedKeys, Perturbed),
+    maplist(key_word, Perturbed, Words).
 
 neg_score_key(W-S, k(NS, W)) :- NS is -S.
 key_word(k(_, W), W).
+
+% §8.4b (AC-FILL-10): iff a search seed is installed, reorder WITHIN each
+% equal-score group only - score-descending stays the primary order (the
+% §8.4a quality contract), the seed varies just the lexicographic tiebreak.
+% Unseeded: identity.
+seed_tie_shuffle(Keyed, Perturbed) :-
+    (   current_search_seed(_)
+    ->  maplist(ns_group_key, Keyed, NSPairs),
+        group_pairs_by_key(NSPairs, Groups),
+        maplist(shuffle_score_group, Groups, Buckets),
+        append(Buckets, Perturbed)
+    ;   Perturbed = Keyed
+    ).
+
+ns_group_key(k(NS, W), NS-k(NS, W)).
+shuffle_score_group(_NS-Group, Shuffled) :- seeded_permutation(Group, Shuffled).
 
 % NB first-order on purpose: an include([C]>>char_type(C,alpha), ...) filter
 % pays the yall meta-call + lambda copy PER CHARACTER (this module never
@@ -965,7 +997,13 @@ index_set(Len, P, Ch, Index, S) :-
 % inference-identical to the pre-F-H2 engine.
 fill_search(Slots, DictByLen, Index, Masks, Used) :-
     maplist(slot_with_count(DictByLen, Index, Masks), Slots, Counted),
-    fill_search_inc(Counted, DictByLen, Index, Masks, Used).
+    % §8.4b dispatch, read ONCE per search (not per node): the deterministic
+    % loop below is byte-identical to pre-8.4b for the ratchet + identity
+    % oracle; a seeded run takes the twin.
+    (   current_search_seed(_)
+    ->  fill_search_inc_seeded(Counted, DictByLen, Index, Masks, Used)
+    ;   fill_search_inc(Counted, DictByLen, Index, Masks, Used)
+    ).
 
 % Pair each slot with its current candidate count, keeping the ORIGINAL slot
 % term (shared cell variables intact - no reconstruction, no copy). This is the
@@ -990,6 +1028,40 @@ fill_search_inc([C0|Cs], DictByLen, Index, Masks, Used) :-
     BestVars = Word,                      % unify into the shared cell variables
     recount_crossing(Rest, NewCells, DictByLen, Index, Masks, Rest1),
     fill_search_inc(Rest1, DictByLen, Index, Masks, [Word|Used]).
+
+% §8.4b (AC-FILL-10) seeded twin of fill_search_inc - the F-H2 twin idiom
+% (fill_attempt_masked precedent): kept separate so the deterministic loop
+% above stays byte-identical for the ratchet. Two differences only: slot
+% selection picks among the equal-min-count TIES via the core PRNG (the
+% deterministic loop's tie-break is (Start, Dir) order - exactly the tie the
+% DP-6 contract lets the seed vary), and candidate order arrives already
+% seed-perturbed from the load seams. Reorders branches, never prunes or adds
+% them: completeness and the budget contract are unchanged.
+fill_search_inc_seeded([], _DictByLen, _Index, _Masks, _Used).
+fill_search_inc_seeded([C0|Cs], DictByLen, Index, Masks, Used) :-
+    select_min_count_seeded([C0|Cs], cnt(_, Best), Rest),
+    Best = slot(_, _, BestCells, BestVars),
+    newly_bound_cells(BestCells, BestVars, NewCells),
+    candidates(BestVars, DictByLen, Index, Cands),
+    member(Word, Cands),
+    \+ memberchk(Word, Used),
+    BestVars = Word,
+    recount_crossing(Rest, NewCells, DictByLen, Index, Masks, Rest1),
+    fill_search_inc_seeded(Rest1, DictByLen, Index, Masks, [Word|Used]).
+
+% The min COUNT, then a PRNG pick among every cnt/2 sharing it (a one-element
+% seeded_permutation head-pick: deterministic per seed, advances the shared
+% stream like arrange's bucket shuffles). Rest preserves order + term-sharing,
+% same as the deterministic remove_slot path.
+select_min_count_seeded(Counted, Min, Rest) :-
+    Counted = [H|T],
+    min_count_walk(T, H, cnt(MinC, _)),
+    include(tie_count(MinC), Counted, Ties),
+    seeded_permutation(Ties, [Min|_]),
+    Min = cnt(_, slot(MStart, MDir, _, _)),
+    remove_slot(MStart, MDir, Counted, Rest).
+
+tie_count(C, cnt(C0, _)) :- C0 == C.
 
 % Winner = the cnt/2 with the minimum c(Count, Start, Dir) in standard order
 % (Count, then Start, then Dir; all ground). This reproduces select_mrv's

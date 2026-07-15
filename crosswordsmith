@@ -419,6 +419,10 @@ fill_opts_spec(
        longflags(['report-json']),           help('write the fill-quality report (n/mean/min/belowThreshold at the 50 clean floor) as JSON to FILE; the stdout layout is unchanged')],
       [opt(budget), type(integer), default(-1), meta('N'),
        longflags([budget]),                  help('inference budget for the search (default 800,000,000). Deterministic: a budget change never alters a produced fill, only fill-vs-not-proven. An escape hatch for marginal grids - NOT a completion fix on hard ones (measured: 20x does not complete a blocked 13x13)')],
+      [opt(seed),   type(integer), default(-1), meta('N'),
+       longflags([seed]),                    help('perturb the fill search with RNG seed N (>=0) for a reproducible ALTERNATIVE fill of the same grid; only ties move (equal-score candidates, equal-MRV slots), so quality ordering is preserved. Variety, not completion (measured). Text --dict only')],
+      [opt(shuffle), type(boolean), default(false),
+       longflags([shuffle]),                 help('perturb the fill search with a FRESH random seed each run (a different fill every time; --verbose prints the seed to reproduce it). Mutually exclusive with --seed; text --dict only')],
       [opt(verbose), type(boolean), default(false),
        longflags([verbose]),                 help('report the success summary (grid, filled slots) and the fill-quality line on stderr; failures print regardless')],
       [opt(out),   type(atom),    default(''), meta('FILE'),
@@ -440,7 +444,8 @@ fill_usage(S) :-
     opt_help(Spec, Help),
     format(S,
 "Usage: crosswordsmith fill --grid <mask> [--seeds <frag>] [--dict <words>]~n\c
-                          [--min-score N] [--report-json <file>] [--budget N]~n~n\c
+                          [--min-score N] [--report-json <file>] [--budget N]~n\c
+                          [--seed N | --shuffle]~n~n\c
 Fills a legal blocked grid from a word list, seeds pinned. Output is a canonical~n\c
 layout (composes with lint/export). Exit is non-zero, naming the unfillable~n\c
 slot(s), when no complete fill exists. A --dict may be scored (word;score lines,~n\c
@@ -475,6 +480,7 @@ fill_dispatch(Opts, Positional) :-
 % the default artifact stays small and loads fast).
 fill_build_index(SaveIdx, Opts) :-
     fill_reject_scored_flags(Opts, '--save-index'),
+    fill_reject_seed_flags(Opts, '--save-index'),
     memberchk(dict(Dict0), Opts), ( Dict0 == '' -> default_dict(Dict) ; Dict = Dict0 ),
     memberchk(masks(WithMasks), Opts),
     fill_save_index(Dict, SaveIdx, [masks(WithMasks)]),
@@ -496,6 +502,18 @@ fill_reject_scored_flags(Opts, Mode) :-
     ;   true
     ).
 
+% §8.4b v1 scope (AC-FILL-11): --seed/--shuffle ride the text --dict path
+% only. An index artifact is an order-pinned, score-free byte-stable cache -
+% it cannot honor the equal-score tie contract - and --save-index has no
+% search to perturb. (--budget is a pure search parameter and composes.)
+fill_reject_seed_flags(Opts, Mode) :-
+    memberchk(seed(SeedOpt), Opts),
+    memberchk(shuffle(Shuffle), Opts),
+    (   SeedOpt == -1, Shuffle == false
+    ->  true
+    ;   fill_err('--seed/--shuffle work only with a text --dict (~w path: artifacts pin candidate order)'-[Mode])
+    ).
+
 % FILL mode (raw or artifact-consuming): --grid required.
 fill_run_dispatch(UseIdx, Opts) :-
     memberchk(grid(Grid), Opts),
@@ -504,11 +522,17 @@ fill_run_dispatch(UseIdx, Opts) :-
     memberchk(dict(Dict0), Opts),
     memberchk(out(OutFile), Opts),
     fill_validate_budget(Opts, Budget),
+    memberchk(seed(SeedOpt), Opts),
+    memberchk(shuffle(Shuffle), Opts),
+    fill_validate_seed(SeedOpt),
+    fill_seed_mode(Shuffle, SeedOpt, SeedMode),
     (   UseIdx \== ''
     ->  % CONSUME: --dict, if explicitly given, verifies the artifact's hash.
-        % Scored flags are text-dict-only in v1 (artifacts carry no scores);
-        % --budget is a pure search parameter and composes (AC-FILL-11).
+        % Scored/seed flags are text-dict-only in v1 (artifacts pin candidate
+        % order and carry no scores); --budget is a pure search parameter and
+        % composes (AC-FILL-11).
         fill_reject_scored_flags(Opts, '--index'),
+        fill_reject_seed_flags(Opts, '--index'),
         ( Dict0 == '' -> DictCheck = none ; DictCheck = Dict0 ),
         with_output(OutFile, fill_solve_index(Grid, Seeds, UseIdx, DictCheck,
                                               fixed, [budget(Budget)]))
@@ -516,10 +540,32 @@ fill_run_dispatch(UseIdx, Opts) :-
         memberchk(min_score(MinScore), Opts),
         memberchk(report_json(ReportJson0), Opts),
         ( ReportJson0 == '' -> ReportJson = none ; ReportJson = ReportJson0 ),
+        fill_apply_seed_mode(SeedMode),
         with_output(OutFile,
                     fill_solve(Grid, Seeds, Dict, fixed,
                                [min_score(MinScore), report_json(ReportJson),
                                 budget(Budget)])) ).
+
+% fill's --seed/--shuffle validation and mode resolution mirror arrange's
+% validate_seed/seed_mode exactly (same sentinel, same exclusivity) but fail
+% under the fill prefix.
+fill_validate_seed(-1) :- !.
+fill_validate_seed(N) :- integer(N), N >= 0, !.
+fill_validate_seed(N) :- fill_err('--seed must be a non-negative integer (got ~w)'-[N]).
+
+fill_seed_mode(true, -1, shuffle) :- !.
+fill_seed_mode(true, _N, _)       :- !, fill_err('--seed and --shuffle are mutually exclusive').
+fill_seed_mode(false, -1, none)   :- !.
+fill_seed_mode(false, N,  fixed(N)).
+
+% Install the resolved fill perturbation (AC-FILL-10). Same modes as arrange's
+% apply_seed_mode, but fill's payload carries NO diagnostics (the stderr
+% contract test pins that), so shuffle-seed provenance is --verbose-only.
+fill_apply_seed_mode(none)     :- set_search_seed(-1).
+fill_apply_seed_mode(fixed(N)) :- set_search_seed(N).
+fill_apply_seed_mode(shuffle)  :-
+    set_shuffle_seed(N),
+    verbose_report("fill: shuffle seed ~w (reproduce with --seed ~w)~n", [N, N]).
 
 % --budget N (§8.4b, AC-FILL-9): N >= 1, or the -1 "not given" sentinel that
 % selects the engine default (fill_budget/1 stays the single source of truth).

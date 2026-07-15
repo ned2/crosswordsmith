@@ -65,10 +65,12 @@
             remove_x/3,
             shares_letter/2,
             check_unique_answers/1,
-            % search perturbation (the arrange --seed / --shuffle knobs)
+            % search perturbation (the arrange AND fill --seed / --shuffle
+            % knobs; §7.6 + §8.4b draw from the same module-owned PRNG)
             set_search_seed/1,
             set_shuffle_seed/1,
-            current_search_seed/1
+            current_search_seed/1,
+            seeded_permutation/2
           ]).
 
 
@@ -780,10 +782,16 @@ prng_draw(V) :-
     ;   throw(error(existence_error(prng_state, unseeded), _))
     ).
 
-% seeded_permutation(+List, -Perm): selection shuffle driven by prng_draw/1 —
-% one draw per element, index by V mod remaining-length. The tiny modulo bias
-% (~len/2^64) is irrelevant here: the contract is reproducibility, not
-% statistical uniformity. O(n^2), fine at word-list scale.
+%!  seeded_permutation(+List:list, -Perm:list) is det.
+%
+%   Selection shuffle driven by prng_draw/1 — one draw per element, index by
+%   V mod remaining-length. The tiny modulo bias (~len/2^64) is irrelevant
+%   here: the contract is reproducibility, not statistical uniformity.
+%   O(n^2), fine at word-list scale. THROWS (existence_error) if no search
+%   seed is installed — every caller guards on current_search_seed/1 first.
+%   Exported since §8.4b (DP-6): fill's perturbation seams reorder candidate
+%   ties and MRV slot ties through this same PRNG stream, so arrange and
+%   fill inherit the identical CLI↔WASM reproducibility guarantee.
 seeded_permutation([], []) :- !.
 seeded_permutation(List, [X|Perm]) :-
     length(List, N),

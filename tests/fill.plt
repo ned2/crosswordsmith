@@ -15,6 +15,7 @@
 % autoload(false) (P11/C5).
 :- use_module(library(lists)).
 :- use_module(library(apply)).
+:- use_module(library(yall)).    % test-body lambdas (§8.4b seed tests)
 
 % Run a fill and return the across/down answer lists (deterministic).
 do_fill(GridFile, SeedFile, DictFile, Across, Down) :-
@@ -809,6 +810,85 @@ test(budget_never_changes_content) :-
                                        fixed, [budget(100_000_000_000)])),
     S1 == S2,
     S1 \== "".
+
+% --- §8.4b search levers (DP-6): --seed / --shuffle (AC-FILL-10) -------------
+% The seed state lives behind core's set_search_seed/1 (-1 clears); every test
+% here restores the unseeded default so the rest of the suite stays untouched.
+
+% A fixed seed is REPRODUCIBLE (same seed -> byte-identical fill), genuinely
+% perturbs (seed 7 diverges from the default on this fixture - probed), and
+% clearing it (-1) restores the exact default bytes: the no-flag path is
+% untouched by an earlier seeded run.
+test(seed_fill_reproducible_diverges_and_clears,
+     [cleanup(crosswordsmith_core:set_search_seed(-1))]) :-
+    Fill = crosswordsmith_fill:fill_solve('fixtures/fill_grid_3.json', none,
+                                          'fixtures/wordlist_sample.txt',
+                                          fixed, []),
+    crosswordsmith_core:set_search_seed(-1),
+    with_output_to(string(S0), Fill),
+    crosswordsmith_core:set_search_seed(7),
+    with_output_to(string(S7a), Fill),
+    crosswordsmith_core:set_search_seed(7),
+    with_output_to(string(S7b), Fill),
+    crosswordsmith_core:set_search_seed(-1),
+    with_output_to(string(S0b), Fill),
+    S7a == S7b,
+    S7a \== S0,
+    S0b == S0.
+
+% Plain-path load seam: on a uniform dict the tie is the WHOLE length bucket,
+% so a seed permutes each bucket wholesale - same multiset per length,
+% seed-stable order, and a divergence from the sorted default (probed for
+% seed 7).
+test(seed_plain_bucket_whole_permutation,
+     [cleanup(crosswordsmith_core:set_search_seed(-1))]) :-
+    crosswordsmith_core:set_search_seed(-1),
+    crosswordsmith_fill:load_dict('fixtures/wordlist_sample.txt', DBL0, _),
+    crosswordsmith_core:set_search_seed(7),
+    crosswordsmith_fill:load_dict('fixtures/wordlist_sample.txt', DBL7, _),
+    % a run seeds ONCE then loads once - reproducing means re-seeding, since
+    % every seeded_permutation advances the PRNG stream
+    crosswordsmith_core:set_search_seed(7),
+    crosswordsmith_fill:load_dict('fixtures/wordlist_sample.txt', DBL7b, _),
+    DBL7 == DBL7b,
+    DBL7 \== DBL0,
+    assoc_to_list(DBL0, Pairs0),
+    assoc_to_list(DBL7, Pairs7),
+    maplist([L-B0, L-B7]>>( msort(B0, M), msort(B7, M) ), Pairs0, Pairs7).
+
+% Scored-path load seam: ONLY equal-score ties move. The seeded bucket is a
+% permutation of the default one whose score sequence stays exactly
+% non-ascending (score-descending remains the primary order, §8.4a).
+test(seed_scored_tie_shuffle_preserves_score_order,
+     [cleanup(crosswordsmith_core:set_search_seed(-1))]) :-
+    crosswordsmith_core:set_search_seed(-1),
+    crosswordsmith_fill:load_dict('fixtures/dict_scored_sample.txt',
+                                  [], DBL0, _, _),
+    assoc_to_list(DBL0, [3-B0]),
+    crosswordsmith_core:set_search_seed(7),
+    crosswordsmith_fill:load_dict('fixtures/dict_scored_sample.txt',
+                                  [], DBL7, _, scores(SA)),
+    assoc_to_list(DBL7, [3-B7]),
+    B7 \== B0,
+    msort(B0, M), msort(B7, M),
+    findall(S, ( member(W, B7), get_assoc(W, SA, S) ), Ss),
+    length(B7, N), length(Ss, N),          % every word scored
+    reverse(Ss, Ascending),
+    msort(Ascending, Ascending).
+
+% Slot-tie seam: the seeded twin still proves the same completability - a
+% seeded fill places the same multiset of answers on this fixture's unique-
+% word-square grid even when the candidate order was shuffled.
+test(seed_search_places_valid_fill,
+     [cleanup(crosswordsmith_core:set_search_seed(-1))]) :-
+    crosswordsmith_core:set_search_seed(11),
+    crosswordsmith_fill:fill_grid('fixtures/fill_grid_3.json', _, Slots, _),
+    crosswordsmith_fill:load_dict('fixtures/dict_scored_sample.txt', DBL, Idx),
+    crosswordsmith_fill:fill_attempt(Slots, Slots, DBL, Idx, Outcome, Numbered, _),
+    Outcome == filled,
+    length(Numbered, 6),
+    forall(member(PW, Numbered),
+           ( pw_answer(PW, A), atom_length(A, 3) )).
 
 % DP-5's default in action: the score-0 blocklist entry never appears in a
 % default-flags fill.
