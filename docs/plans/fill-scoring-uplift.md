@@ -365,6 +365,15 @@ strip spaces/hyphens) or the two reports will disagree on multi-word entries
   read). Keep a watch on christophsjones (currently unlicensed →
   all-rights-reserved, NOT permissive — §D stands corrected).
 
+  > **(b) DONE (2026-07-15)** — recorded in the scoring doc's
+  > [follow-up section](../research/wordlist-scoring-2026.md#follow-up-verification-2026-07-15--the-two-license-errands):
+  > **CWL confirmed MIT + scored 0–100** (567,657 entries; the first
+  > bundleable scored option — stale since 2023-02, band meanings
+  > undocumented; bundling remains its own decision pass), **Broda hardened
+  > to NO** (page carries no terms text at all), christophsjones re-checked
+  > still unlicensed. Bonus corroboration for FS-2(ii): CWL also uses a
+  > score-0/1 junk-blocklist floor (`ABUSE;0`, `ACKROYD;0`).
+
 **Why now.** (a): the scale-heterogeneity finding makes user error the top
 usability risk of FS-1 (a 5–60-scale list + `--min-score 50` = near-max
 strictness, silently). (b): if the MIT list is confirmed MIT *and* scored, the
@@ -448,8 +457,12 @@ and real usage asks for it.** Building it now is speculative scope.
 - **Bundling any currently-known scored list.** STW / Abate: CC BY-NC-SA
   (point-at only). XWord Info: paid + personal-use-only — cannot even be
   referenced as a `--dict` asset to ship. christophsjones: no LICENSE →
-  all-rights-reserved. Broda: unverified. Violates INV-4 today, full stop; the
-  only path is FS-6(b)'s MIT-list verification, then its *own* decision pass.
+  all-rights-reserved. Broda: no published terms (verified 2026-07-15 — hard
+  NO). *Exception opened by FS-6(b)'s completed verification:* the
+  **Collaborative Word List is MIT + scored**, so bundling *it* is no longer
+  an INV-4 violation — but it stays cut from this plan because it needs its
+  own decision pass against §8.4a's LOCKED default-lexicon posture (and a
+  staleness/band-semantics assessment).
 - **Auto-detecting and normalising score scales.** Rejected in the research
   itself ("non-deterministic-feeling, hides data", scoring §5.2 option (c)).
   Even the opt-in `--score-scale MIN:MAX` (option (b)) is deferred until
@@ -510,15 +523,17 @@ measured independently.
   clean floor. This *changes* DP-4's "default N = 0" sentence → it is the part
   of DP-5 that genuinely needs the recorded pass, with the reframed invariant:
   the default "never removes *usable* words".
-- **MIT Collaborative Word List:** scored-status and license both UNCONFIRMED
-  — verify (FS-6(b), highest-value follow-up per scoring §6). If confirmed
-  MIT + scored, it becomes the only bundleable scored option; **bundling it
-  would still be a new decision pass** against §8.4a's locked lexicon posture,
-  not an automatic consequence.
-- **Peter Broda's terms:** UNCONFIRMED (expired cert blocked the fetch);
-  re-verify before any reliance. Until then Broda-derived data is treated as
-  unusable, same as christophsjones (no LICENSE → all-rights-reserved).
-- **Until either gap closes,** the shipped posture stands and is *validated*
+- **MIT Collaborative Word List:** ~~scored-status and license both
+  UNCONFIRMED~~ **VERIFIED 2026-07-15 (FS-6(b) executed): MIT + scored
+  (0–100, 567,657 entries)** — the only bundleable scored option now exists.
+  **Bundling it is still a new decision pass** against §8.4a's locked lexicon
+  posture, weighing staleness (content frozen 2023-02-12) and undocumented
+  band semantics — not an automatic consequence.
+- **Peter Broda's terms:** ~~UNCONFIRMED (expired cert blocked the fetch)~~
+  **VERIFIED 2026-07-15: hard NO** — the page publishes no terms at all;
+  Broda-derived data is treated as unusable, same as christophsjones (no
+  LICENSE → all-rights-reserved; re-checked 2026-07-15, unchanged).
+- **With both gaps now closed,** the shipped posture stands and is *validated*
   by the research, not merely tolerated: bundled default = unscored UKACD18;
   scored fill = `--dict` point-at opt-in; recommended list = STW; recommended
   threshold = 50 (documented convention: STW FAQ, XWord Info FAQ, ingrid's

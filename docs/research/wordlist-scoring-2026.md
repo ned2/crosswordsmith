@@ -2,6 +2,11 @@
 
 **Status:** research deliverable, 2026-07-15. Deep-research pass (5 angles, 18
 primary sources fetched, 25 claims adversarially verified 3-0/2-1, 2 refuted).
+**Follow-up license errands completed later the same day** — see the
+[follow-up section](#follow-up-verification-2026-07-15--the-two-license-errands):
+the Collaborative Word List is **CONFIRMED MIT + scored** (the first cleanly-
+bundleable scored option), Peter Broda's list hardens to **NO** (no published
+terms at all).
 Feeds the just-spec'd **scored fill** (`fill --min-score`, design-spec
 [§8.4a / DP-4](../design-spec.md)) and refines
 [`setter-tool-landscape-2026.md` §D](setter-tool-landscape-2026.md#d-american-scored-fill--the-load-bearing-gap-and-how-to-close-it).
@@ -36,6 +41,11 @@ Where a claim is convention/folklore rather than documented, it says so.
    to §D, which called it permissive) → all-rights-reserved, not bundleable. →
    **This *validates* the spec choice: bundled default stays the permissive,
    unscored UKACD18; scored lists are `--dict` point-at only.**
+   *Update (same-day follow-up): the MIT-list gap is now closed — the Crossword
+   Nexus **Collaborative Word List** is verified **MIT and scored (0–100)**, so
+   a cleanly-bundleable scored option now exists (content stale since 2023-02;
+   bundling it would still need its own decision pass — the shipped default is
+   unchanged). See the follow-up section.*
 
 ## 1. Band-definition documentation (Workstream 1)
 
@@ -48,6 +58,7 @@ scales** — read the "Scale" column before comparing numbers across rows.
 | **Spread the Wordlist (STW)** | **0–100** | 50 = "clean" (trusted, *not necessarily exciting*) · 40 ≈ "a mixed bag" · ≤30 ≈ "throwing darts blindfolded" · **0 = blocklisted** (harmful/X-rated) | the "clean" trust floor; STW recommends "setting a minimum score of 50" |
 | **Crossword Compiler (default list)** | 0–100 *allowed*, default list uses **~10–50** | 50 = fairly common root words (top main tier) · 25 = less common words / derivatives (‑ing/‑ed) · 10 = vulgar words | the **ceiling** of the default list, not a midpoint |
 | **christophsjones/crossword-wordlist** | **~1–50** | 50 = "common word or phrase you wouldn't hesitate to put in the grid" · 25 = "an acceptable word" · 2 = "lowest score in the list" · 1 = reserved semi-word placeholder | "wouldn't hesitate" tier |
+| **Collaborative Word List (Crossword Nexus)** *(added 2026-07-15 follow-up)* | **0–100** (observed: full range in live use; heavy modes at 20/30/45/50/75/90) | Band meanings **undocumented** — README/blog define only the `word;score` format. Observed floor semantics: 0/1 hold misspellings + flagged-sensitive entries (`ACKROYD;0`, `ABUSE;0`, `AACK;1`) — a junk/blocklist floor in practice | 85,900 entries sit at exactly 50; 253k of 568k are ≥50 — 50-convention-compatible in practice |
 | **ingrid_core (filler, not a list)** | consumes the list's scale | `--min-score <N>` prunes candidates below N; **default 50** | de-facto usable floor |
 
 **Crossword Compiler's model matters for us:** its help states *"The absolute
@@ -122,8 +133,8 @@ not usable for distribution at all.
 | **Matt Abate's ML list** | ✅ (SVM-derived) | **CC BY-NC-SA 4.0** | **POINT-AT.** Same NC/ShareAlike constraint as STW. |
 | **XWord Info Word List** | ✅ 5–60 | **Paid** ($50/yr Angel + $200 one-time for Jeff Chen's personal list) **AND personal-use-only**: *"for your personal use only… not allowed to give it away or sell it… or create derivative lists except for your own use"* under a "DO NOT DISTRIBUTE" heading. | **NO.** Cannot bundle, cannot even ship as a `--dict` reference. Only an end-user who bought their own copy could load it locally. |
 | **christophsjones/crossword-wordlist** | ✅ ~1–50 | ⚠️ **No LICENSE file** (checked 2026-07-15) → all-rights-reserved by default. | **NO (as of check).** *Correction to §D, which called it permissive.* Reclassify to BUNDLE only if the author adds a permissive license. |
-| **Peter Broda's wordlist** | ✅ (used as a source by others) | **Unverified** — the terms page (`peterbroda.me`) has an expired TLS cert; not fetchable this run. Widely redistributed as a source, but its own license string is unconfirmed. | **UNCONFIRMED.** Do not rely on until the terms are read directly. |
-| **MIT "Collaborative Word List"** | **Scored-status UNCONFIRMED** | Expected MIT (permissive) — not re-verified this run. | **Candidate BUNDLE — verify first.** If it is both MIT *and* scored, it is the only confirmed cleanly-bundleable scored option. Highest-value gap to close. |
+| **Peter Broda's wordlist** | ✅ (a scored grid-text download is offered) | **No published terms at all** *(follow-up, 2026-07-15)*: the page was finally fetched (TLS cert still expired; fetched with verification disabled — integrity caveat noted) and carries **zero license/usage/redistribution text** — only download links (Crossword Compiler `.txt` / CrossFire `.dict`, scored grid text; other variants "currently unavailable" after a 2024-01-07 server-data-loss notice). | **NO** (hardened from UNCONFIRMED). No stated terms ⇒ all-rights-reserved by default: not bundleable, and not recommendable even as a point-at source while terms are unstated. Revisit only if terms are ever published. |
+| **Collaborative Word List** (Crossword Nexus — the "MIT list") | ✅ **CONFIRMED scored** *(follow-up, 2026-07-15)*: `word;score`, integer **0–100** — 567,657 entries, 0 malformed on parse; 253,136 ≥ 50; 324 at score 0 + 166 at 1 (misspellings + flagged-sensitive entries) | ✅ **CONFIRMED MIT** — in-repo LICENSE file, "Copyright (c) 2021 Crossword-Nexus"; README: "free for everyone"; launch blog: "free for all to use in any way they please". | **BUNDLE — the first confirmed cleanly-bundleable scored list.** Two caveats: band semantics are undocumented (scores observed, meanings inferred), and the **content is stale** — `xwordlist.dict` last changed **2023-02-12** (last repo push 2024-01-07; not archived). Actually bundling it is a **separate decision pass**: §8.4a's default-lexicon posture is LOCKED. |
 | **UKACD18** (current default) | ❌ **unscored** | Redistributable freeware (per DP-2). | **BUNDLE (unscored).** It is the permissive default dictionary, *not* a scoring source. |
 | **Ginsberg clue database** | n/a (clue DB, not a scored wordlist) | Not verified this run. | Out of scope for scored fill. |
 
@@ -133,6 +144,15 @@ Collaborative Word List's scored-status is unconfirmed. **Until the MIT list is
 verified as scored, crosswordsmith has no cleanly-bundleable scored dictionary** —
 which is exactly why §8.4a keeps the bundled default *unscored* (UKACD18) and makes
 scoring a `--dict` opt-in. The research validates that choice.
+
+> **Superseded same day (follow-up errands, 2026-07-15):** the verification
+> happened — the **Collaborative Word List is MIT + scored**, so a
+> cleanly-bundleable scored option now **exists**. The shipped posture
+> (unscored UKACD18 default; scored via `--dict`) remains correct *until a
+> decision pass weighs bundling CWL*, and that pass must weigh the freshness
+> caveat: CWL's content has been frozen since 2023-02-12, where STW is
+> actively curated. Broda meanwhile hardens to NO (no published terms), and
+> christophsjones re-checks as still unlicensed.
 
 ## 5. What this means for `fill --min-score` (§8.4a / DP-4)
 
@@ -144,7 +164,8 @@ current §8.4a does not yet resolve.
    correct call — there is no confirmed cleanly-bundleable scored list. *Action:*
    drop §D's "christophsjones … permissive" and "Collaborative Word List … " as
    settled facts; treat the MIT list's scored-status as the one gap worth closing
-   if we want a bundleable scored default.
+   if we want a bundleable scored default. *(Closed by the same-day follow-up:
+   CWL confirmed MIT + scored — see §4 and the follow-up section.)*
 
 2. **⚠️ New: `--min-score N` assumes a fixed 0–100 scale, but scales are
    heterogeneous (5–60, 1–50, 0–100).** A user pointing `--dict` at an XWord Info
@@ -176,16 +197,78 @@ the right documented default *suggestion* (distinct from the code default in #3)
 
 ## 6. Open questions / gaps carried forward
 
-- **MIT Collaborative Word List:** is it scored, and confirmed MIT? (The one path to
-  a bundleable scored default.) — *highest-value follow-up.*
-- **Peter Broda's list terms:** unfetchable this run (expired cert); confirm before
-  relying.
-- **christophsjones:** watch for a license being added; currently unlicensed.
+- ~~**MIT Collaborative Word List:** is it scored, and confirmed MIT?~~
+  **RESOLVED (2026-07-15 follow-up): yes on both** — in-repo MIT LICENSE +
+  `word;score` 0–100 across 567,657 entries. The bundleable-scored-default path
+  is now open, gated on its own decision pass (and on the staleness caveat:
+  content frozen 2023-02-12). *New residual question:* CWL band **meanings**
+  are undocumented — scores observed, semantics inferred.
+- ~~**Peter Broda's list terms:** unfetchable this run (expired cert); confirm
+  before relying.~~ **RESOLVED (2026-07-15 follow-up): hard NO** — the page
+  (fetched with TLS verification disabled; cert still expired) publishes no
+  license/usage terms whatsoever.
+- **christophsjones:** watch for a license being added; currently unlicensed
+  *(re-checked 2026-07-15 follow-up: still only `README.md` +
+  `crossword_wordlist.txt`, no LICENSE)*.
 - **Score aggregation across corpora** (max/avg/weighted) and length-normalization:
   undocumented in every primary source — pick an explicit rule if crosswordsmith
   ever merges lists.
 - **Constructor spoken heuristics:** this pass found none verifiable beyond list
   docs; a targeted blog/podcast pass would be needed to fill Workstream 3.
+
+## Follow-up verification (2026-07-15) — the two license errands
+
+Same-day follow-up closing §6's two license gaps (dispatched from
+[`plans/fill-scoring-uplift.md`](../plans/fill-scoring-uplift.md) FS-6(b));
+single-agent verification against primary sources (not the main pass's 3-vote
+protocol — flagged for honesty; every claim below is from a fetched primary
+artifact, not a summary).
+
+**1. Collaborative Word List (Crossword Nexus) — CONFIRMED MIT + scored.**
+
+- **License:** the repo (`Crossword-Nexus/collaborative-word-list`) carries an
+  in-repo `LICENSE` file — standard **MIT**, "Copyright (c) 2021
+  Crossword-Nexus" (raw file fetched). Corroborated by the README ("it's free
+  for everyone") and the 2021-06-08 launch post on the Crossword Nexus blog
+  ("This list is free for all to use in any way they please").
+- **Scored-status:** the full `xwordlist.dict` was downloaded and parsed:
+  **567,657 entries, all `word;score`, 0 malformed**, integer scores
+  **0–100** (observed min 0, max 100). Distribution: 253,136 entries ≥ 50;
+  heavy modes at 20 (97k), 30 (62k), 45 (59k), 50 (85.9k), 90 (46.6k).
+  **Score 0 (324 entries) / 1 (166 entries) function as a junk/blocklist
+  floor** — observed contents are misspellings (`ACKROYD;0`,
+  `ACHEIVEMENTTEST;1`) and flagged-sensitive words (`ABUSE;0`, `ADDICT;0`) —
+  which independently corroborates the §5.3 "default prune `score ≥ 1`"
+  recommendation for a third list beyond STW.
+- **Band semantics: undocumented.** Neither README, launch post, nor repo
+  files define what the numbers mean; the contribution pipeline (GitHub
+  Actions) validates format/duplicates/size (>425,000 entries), not meaning.
+- **Freshness caveat (load-bearing for any bundling decision):**
+  `xwordlist.dict` last changed **2023-02-12**; last repo push 2024-01-07 (a
+  trivial merge); repo not archived. The list is maintained-in-name,
+  **stale-in-practice** — vs. STW's active curation.
+- **Implication:** the "no cleanly-bundleable scored list exists" premise is
+  now false. §8.4a's shipped posture (unscored UKACD18 default) stays valid —
+  **bundling CWL is a new decision pass** (default-lexicon posture is LOCKED),
+  which must weigh MIT-cleanliness + 0–100-scale fit against staleness and
+  undocumented bands.
+
+**2. Peter Broda's wordlist — hardened UNCONFIRMED → NO.**
+
+- The terms page's TLS cert is *still* expired (same failure as the main
+  pass); the page was fetched read-only with certificate verification
+  disabled — an integrity caveat, acceptable for reading public prose, noted.
+- The page contains **no license, usage, or redistribution text at all**:
+  only download links (Crossword Compiler `.txt` / CrossFire `.dict` "grid
+  text SCORED"; full-text and unscored variants "currently unavailable") and
+  a 2024-01-07 notice of server data loss.
+- No stated terms ⇒ all-rights-reserved by default. **Verdict: NO** — not
+  bundleable, and not recommendable as a documented point-at source while its
+  terms are unstated.
+
+**3. christophsjones/crossword-wordlist — re-checked, unchanged.** Top-level
+files are still `README.md` + `crossword_wordlist.txt` only; **no LICENSE** ⇒
+all-rights-reserved stands.
 
 ## Sources (all primary unless noted)
 
@@ -197,5 +280,6 @@ the right documented default *suggestion* (distinct from the code default in #3)
 - ingrid_core — https://github.com/rf-/ingrid_core (README + `--min-score` default 50)
 - christophsjones/crossword-wordlist — https://github.com/christophsjones/crossword-wordlist (no LICENSE file, 2026-07-15)
 - Matt Abate wordlist (ML/SVM scoring, CC BY-NC-SA) — https://github.com/mattabate/wordlist
-- Peter Broda wordlist — http://www.peterbroda.me/crosswords/wordlist/ (terms unverified; TLS cert expired)
+- Peter Broda wordlist — http://www.peterbroda.me/crosswords/wordlist/ (fetched 2026-07-15 follow-up with TLS verification disabled — cert still expired; page carries no terms text)
+- Collaborative Word List — https://github.com/Crossword-Nexus/collaborative-word-list (LICENSE = MIT © 2021 Crossword-Nexus; README; `xwordlist.dict` raw download parsed 2026-07-15; freshness via GitHub API) · launch post: https://crosswordnexus.com/blog/2021/06/08/the-collaborative-word-list/
 - T Campbell, "Shopping for Wordlists" (blog, context) — https://tcampbell.substack.com/p/shopping-for-wordlists
