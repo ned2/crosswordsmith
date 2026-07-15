@@ -480,8 +480,9 @@ The full schema and design rationale live in
   would reject (measured: it fills a small open grid with `AAAAA` where a
   scored filler yields real words). A scored `--dict` + `--min-score`
   (design-spec §8.4a) closes that quality gap, but no scored list is bundled
-  (none is license-clean to bundle — supply your own, e.g. Spread the
-  Wordlist). Separately, and *untouched by scoring*, the fixed inference
+  — supply your own, e.g. Spread the Wordlist (CC BY-NC-SA, never bundled)
+  or the MIT-licensed Collaborative Word List (bundling that one is an open
+  decision, not yet taken — see design-spec §8.5). Separately, and *untouched by scoring*, the fixed inference
   budget can exhaust on a standard blocked 13×13 with full-length slots that a
   dedicated scored CSP fills in seconds — and a `--min-score` prune shrinks
   slot domains, so high thresholds make hard grids *less* fillable, never
