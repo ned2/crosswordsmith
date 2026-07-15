@@ -48,3 +48,7 @@ CWL sections):
 - **Honest limit:** no loadable CWL floor fills the UK stock grids
   (`blocked_13a` at this floor defeats ingrid_core too). The bundled demo
   pairing is `grids/amer11.json` (fills in ~6s, mean 78.1, 0 below-clean).
+- **`--seed`/`--shuffle` are slow on this file** (~2m45s at load regardless
+  of grid, vs ~6s for the default path): the seeded equal-score-band
+  permutation is O(n²) and this list's score-50 band has 85,800 entries.
+  Measured 2026-07-16; tracked as a design-spec §8.5 backlog row.
