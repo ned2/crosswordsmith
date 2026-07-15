@@ -23,8 +23,11 @@ separate completion-rate gap on hard grids.**
 
 ## Files
 
-- `gen_grids.py` — emits the small benchmark grids in both crosswordsmith JSON
-  and ingrid_core ASCII (`#`/`.`) form, so both tools fill identical masks.
+- `gen_grids.py` — emits the benchmark grids in both crosswordsmith JSON and
+  ingrid_core ASCII (`#`/`.`) form, so both tools fill identical masks. The
+  easy quality grids plus `amer11`, an authored standard American-style 11×11
+  (fully checked, 180° symmetric, spanning 11-letter slot), asserted valid at
+  generation time by `check_american`.
 - `score_fill.py` — scores a fill's entries against STW (n, mean, min, #below-50,
   #junk). Reconstructs ingrid's entries from its output grid + the mask. Also
   cross-checks the native fill's `--report-json` sidecar against its own
@@ -36,7 +39,13 @@ separate completion-rate gap on hard grids.**
   engine actually played.
 - `run.sh` — driver: builds the plain + `score>=50` dicts, fills each grid four
   ways (crosswordsmith full / `>=50`-prefiltered dict / **native
-  `--min-score 50`** / ingrid_core), prints the comparison.
+  `--min-score 50`** / ingrid_core), prints the comparison. This one GATES
+  (non-zero exit on a report-json disagreement).
+- `matrix.sh` — the FS-3(b) **completion × min-score frontier** (the
+  search-power axis): every mask — the easy four, the American 11×11, and the
+  three bundled blocked stock grids — × `--min-score` 1/30/50, for both
+  engines (ingrid capped at 90s). Non-gating by design: an incomplete fill
+  here is a data point. Evidence for the FS-4 search-power decision pass.
 
 ## Results (STW snapshots 2026-07-01 / 2026-07-15; score 50 = the "clean" benchmark)
 
@@ -89,6 +98,45 @@ cannot complete a standard 13×13 with full-length slots that ingrid solves in
 engineering gap. (Note even ingrid can't fill `blocked_13a` at the clean-50 bar,
 so that grid is genuinely hard, not just hard for crosswordsmith.)
 
+### The completion × min-score frontier (FS-3(b), 2026-07-15)
+
+`matrix.sh` sweeps every mask × `--min-score` ∈ {1, 30, 50} for both engines
+(STW snapshot 2026-07-15; ingrid capped at 90s; crosswordsmith rows are
+deterministic, ingrid rows are an informational reference):
+
+| grid | threshold | crosswordsmith (native) | ingrid_core |
+|---|---|---|---|
+| open4 / open5 / mini7 / mini9 | 1 | ok — means 43.0–47.8 | ok |
+| open4 / open5 / mini7 / mini9 | 30 | ok — means 46.0–49.1 | ok |
+| open4 / open5 / mini7 / mini9 | 50 | ok — mean/min 50, 0 below | ok |
+| **amer11** (fully-checked American 11×11, spanning 11-slot) | 1 | **ok** — mean 44.3, min 20 | ok |
+| **amer11** | 30 | **ok** — mean 46.4, min 30 | ok |
+| **amer11** | 50 | **ok** — mean/min 50, 0 below | ok |
+| blocked_13a (UK 13×13, full-length slots) | 1 | NOT completed | ok |
+| blocked_13a | 30 | NOT completed | ok |
+| blocked_13a | 50 | NOT completed | **NOT completed** (>90s) |
+| blocked_13b (UK 13×13) | 1 / 30 / 50 | NOT completed | **NOT completed** (>90s) |
+| blocked_15a (UK 15×15) | 1 / 30 / 50 | NOT completed | **NOT completed** (>90s) |
+
+**What the frontier shows (FS-4 sizing evidence):**
+
+1. **The ceiling is NOT "standard masks fail."** `amer11` — fully checked,
+   with a spanning 11-letter slot — completes at every threshold, clean at
+   50. The budget ceiling bites specifically on the blocked UK-style grids.
+2. **Two of the three bundled hard grids are hard for ingrid too.**
+   `blocked_13b` and `blocked_15a` complete for *neither* engine at any
+   threshold. The only measured crosswordsmith-vs-ingrid search-power gap on
+   this whole set is **`blocked_13a` at `--min-score` ≤ 30** — that row is
+   FS-4's concrete reference target (ingrid: ~10s).
+3. **Pruning never flips completion, in either direction, anywhere on this
+   set** — consistent with §8.4a's "never present `--min-score` as helping
+   completion" (and it didn't hurt completion here either).
+4. **Score-descending ordering alone buys quality.** At `--min-score 1` (no
+   meaningful prune) the native means beat the scoreless full-dict column of
+   the quality table by 5–16 points (open4 41.2 → 46.3, open5 27.0 → 43.0,
+   mini7 42.2 → 47.8, mini9 41.8 → 47.5) — the FS-1 *ordering* benefit,
+   before any threshold is applied.
+
 ## CWL measurement (2026-07-15) — evidence for the DP-6 bundling candidate
 
 The FS-6(b) research confirmed the [Collaborative Word
@@ -134,8 +182,10 @@ run with CWL as `$STW` to convert its two recorded caveats — staleness
 
 ## Caveats / how to extend
 
-- **Small-grid sample.** Four easy grids + one hard grid; a real benchmark wants
-  a spread of standard American masks (11×11, 15×15) and several STW snapshots.
+- **Mask sample.** Eight masks now (easy four + American 11×11 + three blocked
+  stock grids); a fuller benchmark still wants an American 15×15 (the
+  next authored-mask candidate — `check_american` in `gen_grids.py` makes
+  authoring safe) and several STW snapshots.
 - **`junk`=0 by construction** — crosswordsmith's dict here is *derived from* STW,
   so every placeable word has an STW score; the quality signal is mean/min/below-50.
 - **Post-hoc scoring is the independent check** — `score_fill.py` scores fills
@@ -146,7 +196,7 @@ run with CWL as `$STW` to convert its two recorded caveats — staleness
   on-demand; the no-deps regression for the same §8.4a behavior (AC-FILL-5/-7)
   lives in `make test` — plunit + goldens over the bundled original scored
   fixture (`fixtures/dict_scored_sample.txt`, `tests/golden/fill_scored*`).
-- **Mask spread (FS-3(b)) is still open** — standard 11×11/15×15 masks and a
-  completion-rate × min-score matrix remain the recorded next growth step;
-  they are a search-power measurement, not part of the scored-fill (FS-1)
-  acceptance.
+- **FS-3(b) is done** (2026-07-15): `matrix.sh` is the completion × min-score
+  frontier over eight masks. It is a search-power *measurement* feeding the
+  FS-4 decision pass, not part of the scored-fill (FS-1) acceptance gate, and
+  deliberately non-gating.
