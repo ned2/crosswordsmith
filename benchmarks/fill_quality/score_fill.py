@@ -20,15 +20,30 @@ import sys
 from pathlib import Path
 
 
+def fold(word):
+    """Engine-parity key: uppercase, keep A-Z only (digits/punct squeezed).
+
+    crosswordsmith normalizes every dict word this way at load (README --dict),
+    so post-hoc scoring must key the same way or entries like CWL's MP3J;100
+    (played by the engine as MPJ) would look absent. STW ships pre-normalized,
+    so this is a no-op for it (6 digit-bearing score-20 entries aside).
+    """
+    return ''.join(c for c in word.upper() if 'A' <= c <= 'Z')
+
+
 def load_scores(path):
     scores = {}
     for line in Path(path).read_text().splitlines():
         if ';' in line:
             word, raw = line.rsplit(';', 1)
             try:
-                scores[word.upper()] = int(raw)
+                score = int(raw)
             except ValueError:
-                pass
+                continue
+            key = fold(word)
+            if key:
+                # duplicate folded keys keep the max, matching the engine
+                scores[key] = max(score, scores.get(key, score))
     return scores
 
 
@@ -74,7 +89,7 @@ def ingrid_words(grid_txt, mask):
 
 def cs_words(cs_json):
     doc = json.loads(Path(cs_json).read_text())
-    return [w['answer'].replace(' ', '').upper() for w in doc['words']]
+    return [fold(w['answer']) for w in doc['words']]
 
 
 def stats(words, scores):
@@ -93,10 +108,12 @@ def check_report(grid, s):
     """Cross-check the engine's --report-json against these post-hoc stats.
 
     The §8.4a acceptance gate: n/min/belowThreshold must match exactly;
-    mean within 0.05 (both sides round to 1 d.p., but SWI rounds half away
-    from zero while Python rounds half to even, so an exact .x5 tie may
-    differ in the last decimal). Returns True/False, or None if the engine
-    wrote no report (older engine / failed fill).
+    mean within 0.1 (both sides round to 1 d.p., but SWI rounds half away
+    from zero while Python rounds half to even, so an exact .x5 tie makes
+    the two 1-d.p. values differ by exactly 0.1 — e.g. 81.25 -> 81.3 vs
+    81.2; the next legitimate gap is 0.2, so the 0.15 cutoff rejects any
+    real disagreement). Returns True/False, or None if the engine wrote no
+    report (older engine / failed fill).
     """
     rp = Path(f"cs_minscore_{grid}.report.json")
     if not rp.exists():
@@ -104,7 +121,7 @@ def check_report(grid, s):
     rep = json.loads(rp.read_text())
     return (rep['n'] == s['n'] and rep['min'] == s['min']
             and rep['belowThreshold'] == s['below50']
-            and abs(rep['mean'] - s['mean']) < 0.05001)
+            and abs(rep['mean'] - s['mean']) < 0.15)
 
 
 def main():

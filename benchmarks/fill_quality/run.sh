@@ -23,8 +23,11 @@ awk -F';' '$2>=50{print $1}' "$STW" > stw_ge50.txt   # score>=50 prefiltered dic
 python3 "$HERE/gen_grids.py" .
 
 for g in open4 open5 mini7 mini9; do
-  "$CS" fill --grid "$g.json" --dict stw_plain.txt --out "cs_$g.json"  >/dev/null 2>&1 || echo "cs full  $g: no fill within budget"
-  "$CS" fill --grid "$g.json" --dict stw_ge50.txt  --out "cs50_$g.json" >/dev/null 2>&1 || echo "cs >=50  $g: no fill within budget"
+  # NOTE: a non-zero exit here can be budget exhaustion OR a hard error (e.g.
+  # a >0.5M-word list blows SWI's default 1GB stack at index build — CWL did,
+  # 2026-07-15). Rerun without the stderr redirect to tell them apart.
+  "$CS" fill --grid "$g.json" --dict stw_plain.txt --out "cs_$g.json"  >/dev/null 2>&1 || echo "cs full  $g: no fill (budget or dict-load error)"
+  "$CS" fill --grid "$g.json" --dict stw_ge50.txt  --out "cs50_$g.json" >/dev/null 2>&1 || echo "cs >=50  $g: no fill (budget or dict-load error)"
   # Native scored fill (§8.4a): STW ingested directly as word;score, hard
   # prune at the clean floor. The FS-1 acceptance gate: this column MUST
   # match the >=50-prefiltered-dict column (mean/min 50, 0 below-clean),
@@ -32,7 +35,7 @@ for g in open4 open5 mini7 mini9; do
   # stats on the same fill (checked by score_fill.py below).
   "$CS" fill --grid "$g.json" --dict "$STW" --min-score 50 \
       --report-json "cs_minscore_$g.report.json" --out "cs_minscore_$g.json" >/dev/null 2>&1 \
-      || echo "cs min50 $g: no fill within budget"
+      || echo "cs min50 $g: no fill (budget or dict-load error)"
   ingrid_core --wordlist "$STW" --min-score 50 "$g.txt" > "ingrid_$g.txt" 2>/dev/null   || echo "ingrid   $g: no fill"
 done
 

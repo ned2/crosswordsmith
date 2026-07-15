@@ -18,7 +18,8 @@ separate completion-rate gap on hard grids.**
 > **Not part of `make bench`.** It needs two external, non-bundled deps:
 > `ingrid_core` (`cargo install ingrid_core`, needs a Rust toolchain) and the STW
 > `word;score` list (download from <https://www.spreadthewordlist.com/>). Run:
-> `STW=/path/to/spread-the-wordlist.txt ./run.sh`.
+> `STW=/path/to/spread-the-wordlist.txt ./run.sh`. Any `word;score` list works
+> as `$STW` — the CWL measurement below reused the same driver.
 
 ## Files
 
@@ -27,8 +28,12 @@ separate completion-rate gap on hard grids.**
 - `score_fill.py` — scores a fill's entries against STW (n, mean, min, #below-50,
   #junk). Reconstructs ingrid's entries from its output grid + the mask. Also
   cross-checks the native fill's `--report-json` sidecar against its own
-  post-hoc stats (n/min/belowThreshold exact; mean within 0.05 — SWI rounds
-  half away from zero, Python half to even) and exits non-zero on disagreement.
+  post-hoc stats (n/min/belowThreshold exact; mean within 0.1 — SWI rounds
+  half away from zero, Python half to even, so a .x5 tie differs by exactly
+  0.1 in the last decimal) and exits non-zero on disagreement. Scores are
+  keyed by the engine's own normalization (A–Z fold, digits/punct squeezed,
+  duplicate keys keep the max score) so post-hoc lookups match what the
+  engine actually played.
 - `run.sh` — driver: builds the plain + `score>=50` dicts, fills each grid four
   ways (crosswordsmith full / `>=50`-prefiltered dict / **native
   `--min-score 50`** / ingrid_core), prints the comparison.
@@ -83,6 +88,49 @@ cannot complete a standard 13×13 with full-length slots that ingrid solves in
 ~10s. This is orthogonal to scoring — it is search power — and is the harder
 engineering gap. (Note even ingrid can't fill `blocked_13a` at the clean-50 bar,
 so that grid is genuinely hard, not just hard for crosswordsmith.)
+
+## CWL measurement (2026-07-15) — evidence for the DP-6 bundling candidate
+
+The FS-6(b) research confirmed the [Collaborative Word
+List](https://github.com/Crossword-Nexus/collaborative-word-list) (CWL) is
+**MIT + fully scored** (567,657 `word;score` entries, integer 0–100), making
+it the first bundleable scored candidate (design-spec §8.5). The harness was
+run with CWL as `$STW` to convert its two recorded caveats — staleness
+(frozen 2023-02) and undocumented band semantics — into data:
+
+| grid | crosswordsmith (`--min-score 50`, native) | ingrid_core (`--min-score 50`) |
+|---|---|---|
+| open4 | mean **81.2**, min 50, 0 below, 0 junk, report-json agrees | mean 78.8, min 50, 0 below |
+| open5 | mean **78.5**, min 50, 0 below, 0 junk, report-json agrees | mean 77.0, min 50, 0 below |
+| mini7 | mean **82.4**, min 50, 0 below, 0 junk, report-json agrees | mean 77.6, min 50, 0 below |
+| mini9 | mean **78.0**, min 50, 0 below, 0 junk, report-json agrees | mean 77.1, min 50, 0 below |
+
+**Findings, in decreasing order of importance for DP-6:**
+
+1. **Capacity ceiling (engine finding, list-independent):** the full 567k-word
+   CWL dict **crashes `build_index`** at SWI's default 1GB stack limit — a raw
+   stack-overflow ERROR at dict load, not a clean §5.1-style failure report.
+   STW's 315k loads fine, so the ceiling sits somewhere in between. Any list
+   this size needs `--min-score` (CWL at 50 → 252,564 words, loads cleanly);
+   the unpruned "full dict" column is therefore **unmeasurable for CWL**.
+   Worth an engine robustness item: fail cleanly (or stream the index build)
+   instead of overflowing.
+2. **Quality: drop-in clean.** Native `--min-score 50` over raw CWL fills all
+   four grids at min 50 / 0 below-clean, with `--report-json` agreeing with
+   post-hoc scoring, and means (78–82) at or above ingrid_core on the same
+   list. On these small grids the 2023 freeze does not hurt: CWL's clean band
+   behaves like STW's.
+3. **Digit-entry hygiene:** CWL keeps digit-bearing entries (`MP3J;100`,
+   `0AD;25`, 992 such lines). The engine's documented A–Z fold squeezes
+   digits, so `MP3J;100` becomes a 3-letter `MPJ` at score **100** — which
+   score-descending ordering then plays *eagerly* (the open4 fill opens with
+   `MPJS`). A CWL-derived dict should pre-filter digit-bearing entries (or
+   the bundling pass should ship a cleaned derivative). This is also why
+   `score_fill.py` keys scores by the engine's fold — raw-keyed lookups
+   mislabel such entries as junk.
+4. **Search power unchanged (expected):** `blocked_13a` with CWL at
+   `--min-score 50` is still not proven within budget (~26s) — the ceiling is
+   the search, not the list.
 
 ## Caveats / how to extend
 
