@@ -66,29 +66,29 @@ Two axes classify every item:
 
 ## Track A — contract-safe engineering (land first, no decision-pass batching)
 
-### A1. Capacity robustness at the two stack envelopes (§8.5 row) — effort S/M
+### A1. Capacity robustness at the two stack envelopes (§8.5 row) — RESOLVED (DP-10, same day)
 
-Facts: (a) *load* — the full 566k cleaned CWL blows the default 1GB stack in
-`build_index`; (b) *search* — the ≥30 band (437,400 words) loads but blows
-the global stack inside `mac_support`/`mac_revise` bignum mask arithmetic
-~17s into full-13 search (`blocked_13a`). Both die as raw overflows, not the
-§5.1 failure contract (INV-3 tension). Reproducer:
-`scripts/fetch-cwl.sh --min-score 30` + `fill --grid grids/blocked_13a.json`.
+> **UPDATE (2026-07-16):** a parallel pass took this row's decision pass as
+> **DP-10** (design-spec §10) and built exactly the cheap slice this item
+> recommended — **AC-FILL-15**: `resource_error(stack)` at dict load/index
+> or during search reports as an ordinary one-line §5.1 failure (phase +
+> configured limit + remedies, including the verified
+> `swipl --stack-limit=…` relaunch), verified against both real
+> reproducers; goldens/identity/ratchets untouched by construction. Built
+> per `docs/plans/fill-capacity-cleanfail.md`. Streamed/segmented index
+> build and a default-stack raise were **declined** (no measured need at
+> bundled-data scale; reopen on a concrete user need). Nothing further to
+> do here.
 
-Shape: a micro decision pass (OD-8) choosing between **clean capacity
-error** (catch/report at the measured envelopes; document the envelope in
-README + `dicts/README.md`) and **streamed/segmented index build** (raises
-the load envelope for real). Recommendation: take the clean error first —
-small, identity-clean, converts both crashes into ordinary §5.1 outcomes —
-and leave segmentation as a stretch item that only activates on a concrete
-user need (per the best-effort STOP discipline). Note the search-side
-envelope is mask-*width* (bits per length-bucket), so a segmented-mask
-representation is the only real fix there; that is engine-internal surgery
-and, if ever done, belongs in Track D's batch (it must re-verify
-`make test-wasm` — LibBF bignum parity is part of the battery).
-
-Side benefit: A1 unblocks Track B/C probing at wide bands (today a probe at
-`--min-score 30` on full-13 grids just crashes).
+Residual notes for this program: the *envelope itself* is unchanged, so
+Track B/C probes at wide bands (`--min-score 30` on full-13 grids) now fail
+cleanly instead of crashing — but they still fail; wide-band probing is not
+unblocked, only made honest. The search-side envelope is mask-*width* (bits
+per length-bucket), so a segmented-mask representation remains the only
+real fix — engine-internal surgery that, per DP-10's declined-arm record,
+only reopens on a concrete user need and would belong in Track D's batch
+(it must re-verify `make test-wasm` — LibBF bignum parity is part of the
+battery).
 
 ### A2. Seeded load-walk O(n²) (§8.5 row) — effort M
 
@@ -196,7 +196,11 @@ members (resolve at solution assembly); class enumeration must stay lazy
 grids). If the spike fails, the recorded outcome is "F6 measured, does not
 close the blocked rows" and the pins stand unchanged.
 
-## Track D — the adoption decision pass (DP-10 candidate)
+## Track D — the adoption decision pass (decision pass pending)
+
+*(Naming note: this was drafted as "DP-10 candidate", but DP-10 was taken
+the same day by the Track A1 capacity pass — the number is assigned when
+the pass is actually run, per the DP-6 naming-note precedent.)*
 
 One batched go/no-go over every Track B/C arm that beat baseline, priced as
 a single §8.4c amendment: engine version bump, golden regeneration,
@@ -210,8 +214,8 @@ way the DP-8 probe evidence did, and the default engine stays byte-stable.
 
 ## Sequencing
 
-1. **A1** (capacity error) — smallest item, converts crashes to contract
-   outcomes, unblocks wide-band probing.
+1. ~~**A1** (capacity error)~~ — DONE (DP-10, AC-FILL-15; see the A1 update
+   above).
 2. **A2** (seeded walk) — micro decision pass, then the keep-sequence
    rewrite if replayable.
 3. **B0** (instrumentation) — cheap, and its kill-tests may delete half of
