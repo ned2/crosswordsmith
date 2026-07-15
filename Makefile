@@ -121,7 +121,8 @@ update-golden:
 	./crosswordsmith fill --grid fixtures/fill_grid_3.json --dict fixtures/wordlist_sample.txt --seed 7 2>/dev/null > tests/golden/fill_3_rng_seed7.json
 	./crosswordsmith fill --grid fixtures/fill_grid_3.json --dict fixtures/dict_scored_sample.txt 2>/dev/null > tests/golden/fill_scored.json
 	./crosswordsmith fill --grid fixtures/fill_grid_3.json --dict fixtures/dict_scored_sample.txt --min-score 50 --report-json tests/golden/fill_scored_min50_report.json 2>/dev/null > tests/golden/fill_scored_min50.json
-	@echo "Regenerated golden files (arrange fixed/max/fragment/candidates + lint toc + export ipuz/exolve + export titled ipuz/exolve + fill plain/seeded/scored)"
+	./crosswordsmith fill --grid fixtures/fill_grid_15a.json --dict fixtures/dict/enable1.txt 2>/dev/null > tests/golden/fill_15_bench.json
+	@echo "Regenerated golden files (arrange fixed/max/fragment/candidates + lint toc + export ipuz/exolve + export titled ipuz/exolve + fill plain/seeded/scored/15-bench)"
 
 # Product benchmark for `arrange`: end-to-end command latency, the in-process
 # search alone, and the CLI-wrapper overhead between them (rest = command -

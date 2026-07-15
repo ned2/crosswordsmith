@@ -48,10 +48,12 @@ test(fill_crossing_cells_are_shared) :-
 % --- the fill (AC-FILL-1) ----------------------------------------------------
 % A complete, consistent fill: every across is a row, every down is a column
 % (deterministic - pinned to the exact result).
+% The pinned fill changed once at the §8.4c (DP-8) version bump: the MAC +
+% dom/wdeg core deterministically finds the transpose of the old MRV square.
 test(fill_produces_consistent_square) :-
     do_fill('fixtures/fill_grid_3.json', none, 'fixtures/wordlist_sample.txt', Across, Down),
-    Across == ['CAT', 'ORE', 'WED'],
-    Down   == ['COW', 'ARE', 'TED'].
+    Across == ['COW', 'ARE', 'TED'],
+    Down   == ['CAT', 'ORE', 'WED'].
 
 % No dictionary word of the slot length -> infeasible (reported, not silent).
 test(fill_infeasible_when_no_matching_words) :-
@@ -283,7 +285,7 @@ test(fill_index_fill_matches_raw) :-
     delete_file(AF),
     crosswordsmith_fill:fill_attempt(Slots, Slots, DBL, Idx, filled, Numbered, _),
     findall(A, ( member(W, Numbered), pw_dir(W, across), pw_answer(W, A) ), Across),
-    Across == ['CAT', 'ORE', 'WED'].
+    Across == ['COW', 'ARE', 'TED'].   % §8.4c fill (DP-8 version bump)
 
 % Passing --dict that MATCHES the artifact's source verifies the SHA-256 and
 % loads (integrity check on the happy path).
@@ -392,7 +394,7 @@ test(fill_index_v2_default_no_masks_counts_via_ordsets) :-
     crosswordsmith_fill:fill_grid('fixtures/fill_grid_3.json', _Size, Slots, _),
     crosswordsmith_fill:fill_attempt(Slots, Slots, DBL, Idx, filled, Numbered, _),
     findall(A, ( member(W, Numbered), pw_dir(W, across), pw_answer(W, A) ), Across),
-    Across == ['CAT', 'ORE', 'WED'].
+    Across == ['COW', 'ARE', 'TED'].   % §8.4c fill (DP-8 version bump)
 
 % Deterministic bound patterns, lengths 3-6: single-bound cells over a letter
 % spread (incl. rare Q/Z -> often empty intersections) and 0-anchored two-cell
@@ -900,6 +902,83 @@ test(scored_default_fill_excludes_score0) :-
     \+ memberchk('AAA', As),
     msort(As, Sorted),
     Sorted == ['ARE','CAT','COW','ORE','TED','WED'].
+
+% --- §8.4c search core (DP-8): MAC + dom/wdeg + restarts ----------------------
+
+% Crossing edges carry one shared undirected edge id per crossing, present in
+% BOTH directions (the id indexes the conflict-weight compound).
+test(mac_edges_shared_ids_both_directions) :-
+    S0 = slot(1, across, [1,2,3], [_,_,_]),
+    S1 = slot(1, down,   [1,4,7], [_,_,_]),
+    crosswordsmith_fill:mac_edges([0-S0, 1-S1], EdgeA, NEdges),
+    NEdges =:= 1,
+    crosswordsmith_fill:mac_edges_of(EdgeA, 0, [e(0, 1, 0, EId)]),
+    crosswordsmith_fill:mac_edges_of(EdgeA, 1, [e(0, 0, 0, EId)]).
+
+% Initial domains respect seed-bound cells: a bound first letter narrows the
+% domain to the words carrying that letter at that position.
+test(mac_init_domain_respects_bound_cells) :-
+    crosswordsmith_fill:load_dict('fixtures/wordlist_sample.txt', DBL, Idx),
+    crosswordsmith_fill:build_masks(Idx, MA),
+    crosswordsmith_fill:mac_flat_masks(MA, LmA),
+    crosswordsmith_fill:mac_init_domain(DBL, LmA, 0-slot(1, across, [1,2,3], [_,_,_]), 0-Free),
+    get_assoc(3, DBL, Bucket3), length(Bucket3, NW),
+    Free =:= (1 << NW) - 1,
+    crosswordsmith_fill:mac_init_domain(DBL, LmA, 1-slot(1, across, [1,2,3], ['C',_,_]), 1-CDom),
+    crosswordsmith_fill:mac_buckets(DBL, BucketA),
+    get_assoc(3, BucketA, B),
+    crosswordsmith_fill:mac_words(CDom, B, CWords),
+    forall(member([F|_], CWords), F == 'C'),
+    CWords \== [].
+
+% mask materialization is ascending-bit (= the §8.4a bucket order) and is
+% immune to the SWI `\` int64-boundary quirk: a bit at index >= 63 survives
+% (regression for the xor-not-\ bit-clear; the DP-7 spike lost words 64+).
+test(mac_words_order_and_int64_boundary) :-
+    numlist(1, 70, Ns),
+    findall([w, N], member(N, Ns), Ws0),      % 70 distinct dummy "words"
+    Bucket =.. [b|Ws0],
+    Dom is (1 << 0) \/ (1 << 62) \/ (1 << 63) \/ (1 << 69),
+    crosswordsmith_fill:mac_words(Dom, Bucket, Got),
+    Got == [[w, 1], [w, 63], [w, 64], [w, 70]].
+
+% dom/wdeg selection: with uniform weights it reduces to smallest
+% domain-per-crossing; after a bump the conflicted slot wins the tie.
+test(mac_dwd_bump_steers_selection, [cleanup(nb_setval(cw_mac_weights, w))]) :-
+    crosswordsmith_fill:mac_init_weights(2),
+    % ids 0 and 1: same domain size (3 bits), one crossing each (edge ids
+    % 1 and 2, both to the wide slot 2, which never wins selection itself)
+    list_to_assoc([0-2'111, 1-2'111, 2-2'11111111], DomA),
+    list_to_assoc([0-[e(0, 2, 0, 1)], 1-[e(0, 2, 0, 2)]], EdgeA),
+    crosswordsmith_fill:mac_select_dwd([0, 1, 2], DomA, EdgeA, Best0),
+    Best0 =:= 0,                       % uniform weights: first-in-order wins
+    crosswordsmith_fill:mac_bump_edge(2),
+    crosswordsmith_fill:mac_select_dwd([0, 1, 2], DomA, EdgeA, Best1),
+    Best1 =:= 1.                       % id 1's crossing now carries weight
+
+% AC-FILL-13: the default path consults no RNG and is run-to-run
+% deterministic — two attempts on the same input produce the identical fill.
+test(mac_default_fill_deterministic_rerun) :-
+    crosswordsmith_fill:fill_grid('fixtures/fill_grid_09a.json', _, Slots1, _),
+    crosswordsmith_fill:load_dict('fixtures/dict/enable_25k.txt', DBL, Idx),
+    crosswordsmith_fill:fill_attempt(Slots1, Slots1, DBL, Idx, filled, N1, _),
+    crosswordsmith_fill:fill_grid('fixtures/fill_grid_09a.json', _, Slots2, _),
+    crosswordsmith_fill:fill_attempt(Slots2, Slots2, DBL, Idx, filled, N2, _),
+    findall(A, ( member(W, N1), pw_answer(W, A) ), As1),
+    findall(A, ( member(W, N2), pw_answer(W, A) ), As2),
+    As1 == As2.
+
+% AC-FILL-14 regression (the restart-loop conflation bug, found live): a
+% provably infeasible input must FAIL an attempt without a cap throw and
+% come out `infeasible` — never loop retrying (the pre-fix code retried
+% plain failures forever and float-overflowed the growing cap).
+test(mac_exhaustion_is_infeasible_not_retried) :-
+    tmp_file_stream(text, F, S), write(S, "AAB\nABA\nBAA\n"), close(S),
+    crosswordsmith_fill:fill_grid('fixtures/fill_grid_3.json', _, Slots, _),
+    crosswordsmith_fill:load_dict(F, DBL, Idx),
+    crosswordsmith_fill:fill_attempt(Slots, Slots, DBL, Idx, Outcome, _, _),
+    delete_file(F),
+    Outcome == infeasible.
 
 :- end_tests(fill).
 

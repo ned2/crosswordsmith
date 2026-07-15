@@ -70,7 +70,8 @@
             set_search_seed/1,
             set_shuffle_seed/1,
             current_search_seed/1,
-            seeded_permutation/2
+            seeded_permutation/2,
+            prng_draw/1
           ]).
 
 
@@ -772,9 +773,15 @@ splitmix64(S0, V, S1) :-
     Z2 is ((Z1 xor (Z1 >> 27)) * 0x94D049BB133111EB) /\ 0xFFFFFFFFFFFFFFFF,
     V is Z2 xor (Z2 >> 31).
 
-% Draw one value and advance the state destructively (mirrors the global RNG's
-% non-backtracking stream). Throws if no seed is installed — every caller is
-% guarded by search_seed(_), so reaching this seedless is a program error.
+%!  prng_draw(-V:integer) is det.
+%
+%   Draw one 64-bit value from the module-owned splitmix64 stream and
+%   advance the state destructively (mirrors the global RNG's
+%   non-backtracking stream; CLI/WASM bit-identical). Throws
+%   existence_error(prng_state, unseeded) if no seed is installed — every
+%   caller is guarded by current_search_seed/1, so reaching this seedless
+%   is a program error. Exported for fill's §8.4c seeded top-3 pick (DP-8);
+%   arrange's §7.6 knobs use it via seeded_permutation/2.
 prng_draw(V) :-
     (   retract(prng_state(S0))
     ->  splitmix64(S0, V, S1),

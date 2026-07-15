@@ -44,15 +44,18 @@
 % qsave_program(..., [autoload(false)]) build resolves them (P11/C5). (No JSON
 % import: this module's emit delegates to core's emit_json/3 / arrange's
 % emit_arrange/4 — the old library(http/json) line here was vestigial.)
-:- use_module(library(apply), [convlist/3, exclude/3, foldl/4, include/3, maplist/3]).
+:- use_module(library(apply),
+              [convlist/3, exclude/3, foldl/4, include/3, maplist/2, maplist/3]).
 :- use_module(library(lists),
               [ append/2, append/3, member/2, min_list/2, nextto/3, nth0/3,
-                select/3, subtract/3, sum_list/2 ]).
+                nth1/3, numlist/3, select/3, selectchk/3, subtract/3,
+                sum_list/2 ]).
 :- use_module(library(ordsets),
               [list_to_ord_set/2, ord_intersect/2, ord_intersection/3]).
 :- use_module(library(assoc),
               [ assoc_to_list/2, assoc_to_values/2, gen_assoc/3,
-                get_assoc/3, list_to_assoc/2, ord_list_to_assoc/2 ]).
+                get_assoc/3, is_assoc/1, list_to_assoc/2,
+                ord_list_to_assoc/2, put_assoc/4 ]).
 :- use_module(library(pairs),
               [group_pairs_by_key/2, map_list_to_pairs/3, pairs_keys_values/3]).
 % F-L2: dict-file SHA-256 (artifact integrity). NB library(sha)'s file defines
@@ -91,8 +94,10 @@
               [ assign_clue_numbers/2, check_unique_answers/1, emit_json/3,
                 verbose_report/2, pw_answer/2,
                 % §8.4b (DP-6) seed perturbation: fill reads the SAME
-                % module-owned PRNG as arrange's §7.6 knobs (wasm parity)
-                current_search_seed/1, seeded_permutation/2 ]).
+                % module-owned PRNG as arrange's §7.6 knobs (wasm parity).
+                % prng_draw/1: the §8.4c seeded top-3 pick (DP-8) draws the
+                % same stream directly.
+                current_search_seed/1, seeded_permutation/2, prng_draw/1 ]).
 
 fill_budget(800_000_000).   % inference budget (determinism via INV-2, bounded)
 
@@ -995,11 +1000,377 @@ index_set(Len, P, Ch, Index, S) :-
 % atom/compound through the recursion adds ZERO inferences (SWI clause indexing
 % dispatches candidate_count/5 with no penalty), so the `none` path is
 % inference-identical to the pre-F-H2 engine.
+% §8.4c (DP-8): fill_search/5 IS the MAC + dom/wdeg search core. The former
+% MRV/backtracking loops (fill_search_inc/_seeded, below) are RETAINED as
+% reference predicates (select_mrv precedent): white-box tests exercise them
+% and they document the §8.4 tree this core replaced at the DP-8 version
+% bump. Masks: a v2 artifact's masks(MA) is reused directly; `none` (raw
+% text path) builds the same structure from the Index here — the core NEEDS
+% the letter masks (they are its domains), so the F-H2 "masks optional"
+% counting split no longer applies to the search proper.
 fill_search(Slots, DictByLen, Index, Masks, Used) :-
+    (   Slots == []
+    ->  true
+    ;   mac_search_top(Slots, DictByLen, Index, Masks, Used)
+    ).
+
+% --- the §8.4c search core (MAC + dom/wdeg + restarts; DP-8) -------------------
+% Domains are bignum candidate masks over the §8.4a score-ordered per-length
+% buckets (bit i = bucket index i, so ascending-bit materialization IS the
+% score-desc-then-dictionary candidate order — the quality contract is
+% structural). Placement ANDs each crossing slot's domain with the placed
+% letter's mask and propagates letter-support to an AC-3 fixpoint; a wiped
+% domain fails the branch immediately. Slot selection is dom/wdeg: every
+% crossing carries a conflict weight (+1 when its revision wipes a domain),
+% held in a per-search nb_setarg'd global so learning survives backtracking,
+% and the next slot minimizes domain-size / Σ(weights to unfilled
+% neighbours). Attempts run under a growing node cap (500 ×1.5, weights aged
+% ×0.99 between attempts); a cap-abandoned attempt restarts with better
+% weights, an attempt that exhausts WITHOUT hitting its cap is a completed
+% search — genuine infeasibility (AC-FILL-14: the cap throw and plain
+% failure are distinct by construction, so a timeout can never masquerade as
+% a proof). Candidate picks: strict best-first by default (NO RNG on this
+% path — AC-FILL-13); under §8.4b --seed/--shuffle, weighted-random top-3
+% promotion ([4,2,1] on the engine-internal PRNG), read once per search.
+% Search assigns words WITHOUT binding cell variables (pure mask
+% bookkeeping); the winning assignment is bound onto the shared cell
+% variables at the end (mac_bind_fill/2), which re-checks crossing
+% consistency by unification as a hard invariant.
+mac_search_top(Slots, DictByLen, Index, Masks, Used) :-
+    % P2 guard (tests/fill.plt fill_propagates_genuine_error): a malformed
+    % dict/index must THROW, never fail into `infeasible`. The pre-§8.4c
+    % engine got this for free (get_assoc's C builtin type-checks); this
+    % core's first structural touch is assoc_to_list/2, which fails SILENTLY
+    % on a non-assoc — so the type check is explicit, with the same error
+    % class the old engine raised.
+    (   is_assoc(DictByLen) -> true
+    ;   throw(error(type_error(btree, DictByLen), _))
+    ),
+    (   Masks = masks(MA0)
+    ->  MA = MA0
+    ;   is_assoc(Index) -> build_masks(Index, MA)
+    ;   throw(error(type_error(btree, Index), _))
+    ),
+    mac_flat_masks(MA, LmA),
+    mac_buckets(DictByLen, BucketA),
+    length(Slots, N), NMax is N - 1, numlist(0, NMax, Ids),
+    pairs_keys_values(IdSlots, Ids, Slots),
+    maplist(mac_slot_len, Slots, Lens),
+    pairs_keys_values(IdLens, Ids, Lens),
+    list_to_assoc(IdLens, LenA),
+    mac_edges(IdSlots, EdgeA, NEdges),
+    mac_init_weights(NEdges),
+    maplist(mac_init_domain(DictByLen, LmA), IdSlots, IdDoms),
+    % An initially-empty domain is a proof up front (no word matches the
+    % slot's seed-bound letters): fail -> infeasible, named by empty_slots.
+    \+ ( member(_-D0, IdDoms), D0 =:= 0 ),
+    list_to_assoc(IdDoms, DomA0),
+    (   current_search_seed(_) -> Pick = top3 ; Pick = greedy ),
+    % Root AC fixpoint: failure here is likewise a proof (a wiped domain
+    % with nothing placed).
+    mac_propagate(Ids, DomA0, LenA, EdgeA, LmA, Ids, DomA1),
+    mac_restart_loop(1, 500, Ids, DomA1, LenA, BucketA, EdgeA, LmA, Pick,
+                     Used, Assign),
+    mac_bind_fill(Assign, IdSlots).
+
+mac_slot_len(slot(_, _, _, Vars), Len) :- length(Vars, Len).
+
+% Bind the winning assignment onto the grid's shared cell variables. Words
+% and Vars are both char lists, and crossing slots share cell variables, so
+% this unification is also a full crossing-consistency check of the mask
+% bookkeeping — it cannot fail unless the core is buggy, in which case
+% failing (-> infeasible, never a bad emit) is the safe outcome.
+mac_bind_fill([], _).
+mac_bind_fill([Id-Word|As], IdSlots) :-
+    memberchk(Id-slot(_, _, _, Vars), IdSlots),
+    Vars = Word,
+    mac_bind_fill(As, IdSlots).
+
+% Per-length bucket compounds: arg/3 gives O(1) word lookup from a mask's
+% bit index.
+mac_buckets(DictByLen, BucketA) :-
+    assoc_to_list(DictByLen, Pairs),
+    maplist(mac_bucket_pair, Pairs, BPairs),
+    list_to_assoc(BPairs, BucketA).
+mac_bucket_pair(L-Ws, L-T) :- T =.. [b|Ws].
+
+% Flat letter-mask table: assoc (Len-Pos) -> lm(MA,...,MZ), built once per
+% search from build_masks/2's k(Len,Pos,Ch) assoc. arg/3 access replaces two
+% logarithmic assoc lookups in the propagation hot loop (the naive form
+% measured ~14ms/node on the 13x13/STW row in the DP-7 spike).
+mac_flat_masks(MaskAssoc, LmA) :-
+    assoc_to_list(MaskAssoc, Pairs),
+    maplist(mac_lp_pair, Pairs, LPPairs),
+    msort(LPPairs, Sorted),
+    group_pairs_by_key(Sorted, Groups),
+    maplist(mac_lm_compound, Groups, LmPairs),
+    list_to_assoc(LmPairs, LmA).
+mac_lp_pair(k(L, P, Ch)-M, (L-P)-(Ch-M)).
+mac_lm_compound(LP-ChMs, LP-Lm) :-
+    mac_letters(Chs),
+    maplist(mac_lm_arg(ChMs), Chs, Ms),
+    Lm =.. [lm|Ms].
+mac_lm_arg(ChMs, Ch, M) :- ( memberchk(Ch-M0, ChMs) -> M = M0 ; M = 0 ).
+
+mac_letters(['A','B','C','D','E','F','G','H','I','J','K','L','M',
+             'N','O','P','Q','R','S','T','U','V','W','X','Y','Z']).
+
+mac_lm_of(LmA, Len, Pos, Lm) :-
+    (   get_assoc(Len-Pos, LmA, Lm0) -> Lm = Lm0
+    ;   Lm = lm(0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0)
+    ).
+
+mac_letter_arg(Ch, I) :- char_code(Ch, C), I is C - 64.   % 'A' -> 1
+
+% Initial domain: the full length bucket, intersected with the letter mask of
+% every cell already bound (seed pins / seed crossings). Positions with free
+% variables constrain nothing yet.
+mac_init_domain(DictByLen, LmA, Id-slot(_, _, _, Vars), Id-Dom) :-
+    length(Vars, Len),
+    (   get_assoc(Len, DictByLen, Ws)
+    ->  length(Ws, NW), Full is (1 << NW) - 1
+    ;   Full = 0
+    ),
+    mac_constrain_bound(Vars, 0, Len, LmA, Full, Dom).
+mac_constrain_bound([], _, _, _, D, D).
+mac_constrain_bound([V|Vs], Pos, Len, LmA, D0, D) :-
+    (   var(V)
+    ->  D1 = D0
+    ;   mac_lm_of(LmA, Len, Pos, Lm),
+        mac_letter_arg(V, ChI),
+        arg(ChI, Lm, M),
+        D1 is D0 /\ M
+    ),
+    Pos1 is Pos + 1,
+    mac_constrain_bound(Vs, Pos1, Len, LmA, D1, D).
+
+% Crossing edges among the SEARCH slots, from shared ground cell numbers:
+% EdgeA maps Id -> [e(Pos, OtherId, OtherPos, EdgeId), ...] with EdgeId
+% (1-based) shared by both directions of a crossing — the index into the
+% conflict-weight compound. Cells shared with SEEDED slots are already bound
+% and constrain the initial domains instead (seeded slots are not searched).
+mac_edges(IdSlots, EdgeA, NEdges) :-
+    findall(Cell-(Id-Pos),
+            ( member(Id-slot(_, _, Cells, _), IdSlots),
+              nth0(Pos, Cells, Cell) ),
+            CellOccs),
+    msort(CellOccs, Sorted),
+    group_pairs_by_key(Sorted, Groups),
+    findall(x(A, PA, B, PB), member(_-[A-PA, B-PB], Groups), Crossings),
+    length(Crossings, NEdges),
+    findall(Edge,
+            ( nth1(EId, Crossings, x(A, PA, B, PB)),
+              ( Edge = A-e(PA, B, PB, EId) ; Edge = B-e(PB, A, PA, EId) ) ),
+            AllEdges),
+    msort(AllEdges, SortedEdges),
+    group_pairs_by_key(SortedEdges, EdgeGroups),
+    list_to_assoc(EdgeGroups, EdgeA).
+
+mac_edges_of(EdgeA, Id, Es) :- ( get_assoc(Id, EdgeA, Es0) -> Es = Es0 ; Es = [] ).
+
+% Conflict weights: a flat w/NEdges float compound in a per-search global,
+% destructively bumped (nb_setarg) so the learning survives backtracking.
+% Re-initialized on every fill_search/5 entry, so consecutive fills in one
+% process are independent (INV-2). nb_setval/nb_getval are thread-local.
+mac_init_weights(N) :-
+    length(Ones, N), maplist(=(1.0), Ones),
+    WT =.. [w|Ones],
+    nb_setval(cw_mac_weights, WT).
+mac_bump_edge(EId) :-
+    nb_getval(cw_mac_weights, WT),
+    arg(EId, WT, V), V1 is V + 1.0,
+    nb_setarg(EId, WT, V1).
+mac_age_weights(Factor) :-
+    nb_getval(cw_mac_weights, WT),
+    functor(WT, w, N),
+    forall(between(1, N, I),
+           ( arg(I, WT, V), V1 is V * Factor, nb_setarg(I, WT, V1) )).
+
+% Restart loop: growing node cap, weights persist (aged) across attempts.
+% The three attempt outcomes are structurally distinct (AC-FILL-14):
+%   - success: mac_search/10 succeeds (Recover stays unbound);
+%   - cap abandoned: throw(mac_cap) unwinds the attempt, the catch recovers
+%     binding Recover = restart -> retry with a x1.5 cap and aged weights;
+%   - exhausted: mac_search/10 FAILS -> the whole loop fails. That failure
+%     is a completed search over the full tree (propagation and weights
+%     reorder branches, never prune legal ones), i.e. genuine infeasibility
+%     - it must NEVER be retried (the pre-fix conflation looped forever /
+%     float-overflowed the cap on provably-infeasible inputs).
+% No attempt-count bound: the inference budget (fill_attempt/8's
+% call_with_inference_limit) is the outer stop and maps to not_proven.
+mac_restart_loop(Attempt, Cap, Ids, DomA, LenA, BucketA, EdgeA, LmA, Pick,
+                 Used, Assign) :-
+    nb_setval(cw_mac_attempt_nodes, 0),
+    verbose_report("fill: search attempt ~w (node cap ~w)~n", [Attempt, Cap]),
+    catch(mac_search(Ids, DomA, LenA, BucketA, EdgeA, LmA, Pick, Cap,
+                     Used, Assign),
+          mac_cap, Recover = restart),
+    (   Recover == restart
+    ->  mac_age_weights(0.99),
+        Cap1 is (Cap * 3 + 1) // 2,   % ceiling(x1.5), integer-only arithmetic
+        A1 is Attempt + 1,
+        mac_restart_loop(A1, Cap1, Ids, DomA, LenA, BucketA, EdgeA, LmA, Pick,
+                         Used, Assign)
+    ;   true
+    ).
+
+mac_search([], _DomA, _LenA, _BucketA, _EdgeA, _LmA, _Pick, _Cap, _Used, []).
+mac_search(Unfilled, DomA, LenA, BucketA, EdgeA, LmA, Pick, Cap, Used,
+           [Best-Word|Assign]) :-
+    Unfilled = [_|_],
+    mac_select_dwd(Unfilled, DomA, EdgeA, Best),
+    selectchk(Best, Unfilled, Rest),
+    get_assoc(Best, DomA, Dom),
+    get_assoc(Best, LenA, Len),
+    get_assoc(Len, BucketA, Bucket),
+    mac_words(Dom, Bucket, Cands0),
+    mac_pick(Pick, Cands0, Cands),
+    member(Word, Cands),
+    \+ memberchk(Word, Used),
+    nb_getval(cw_mac_attempt_nodes, A0), A1 is A0 + 1,
+    nb_setval(cw_mac_attempt_nodes, A1),
+    ( A1 > Cap -> throw(mac_cap) ; true ),
+    mac_edges_of(EdgeA, Best, Es),
+    mac_place(Es, Word, Rest, LenA, LmA, DomA, DomA1, [], Dirty),
+    mac_propagate(Dirty, DomA1, LenA, EdgeA, LmA, Rest, DomA2),
+    mac_search(Rest, DomA2, LenA, BucketA, EdgeA, LmA, Pick, Cap,
+               [Word|Used], Assign).
+
+% greedy: strict best-first (the §8.4a order as materialized) — NO RNG.
+% top3 (§8.4b seeded): weighted-random promotion of one of the first three
+% candidates ([4,2,1]); the rest keep their order, so the attempt remains
+% complete (branches reordered, never dropped).
+mac_pick(greedy, Cands, Cands).
+mac_pick(top3, Cands0, Cands) :- mac_top3(Cands0, Cands).
+
+mac_top3([], []).
+mac_top3([A], [A]).
+mac_top3([A, B], Out) :-
+    prng_draw(V), W is V mod 6,
+    ( W < 4 -> Out = [A, B] ; Out = [B, A] ).
+mac_top3([A, B, C|Rest], [P|Ps]) :-
+    prng_draw(V), W is V mod 7,
+    (   W < 4 -> P = A, Ps = [B, C|Rest]
+    ;   W < 6 -> P = B, Ps = [A, C|Rest]
+    ;   P = C, Ps = [A, B|Rest]
+    ).
+
+% dom/wdeg selection: minimize popcount(dom)/wdeg, compared cross-multiplied.
+% wdeg = Σ weights of crossings to still-unfilled neighbours (+0.001 floor
+% for a slot with no unfilled neighbour, e.g. the last slot standing).
+mac_select_dwd([Id|Ids], DomA, EdgeA, Best) :-
+    nb_getval(cw_mac_weights, WT),
+    mac_dwd_key(Id, DomA, EdgeA, [Id|Ids], WT, C, W),
+    mac_dwd_walk(Ids, DomA, EdgeA, [Id|Ids], WT, Id, C, W, Best).
+mac_dwd_walk([], _, _, _, _, Best, _, _, Best).
+mac_dwd_walk([Id|Ids], DomA, EdgeA, Unfilled, WT, B0, C0, W0, Best) :-
+    mac_dwd_key(Id, DomA, EdgeA, Unfilled, WT, C, W),
+    (   C * W0 < C0 * W
+    ->  mac_dwd_walk(Ids, DomA, EdgeA, Unfilled, WT, Id, C, W, Best)
+    ;   mac_dwd_walk(Ids, DomA, EdgeA, Unfilled, WT, B0, C0, W0, Best)
+    ).
+mac_dwd_key(Id, DomA, EdgeA, Unfilled, WT, C, W) :-
+    get_assoc(Id, DomA, D), C is popcount(D),
+    mac_edges_of(EdgeA, Id, Es),
+    mac_dwd_wdeg(Es, Unfilled, WT, 0.001, W).
+mac_dwd_wdeg([], _, _, W, W).
+mac_dwd_wdeg([e(_, T, _, EId)|Es], Unfilled, WT, W0, W) :-
+    (   memberchk(T, Unfilled)
+    ->  arg(EId, WT, V), W1 is W0 + V
+    ;   W1 = W0
+    ),
+    mac_dwd_wdeg(Es, Unfilled, WT, W1, W).
+
+% Materialize words from mask bits, ascending bit index (= bucket order =
+% score-desc-then-dictionary: the §8.4a value order, preserved structurally).
+% Bits are cleared with xor, NOT `M /\ \(1<<B)`: SWI's `\` misevaluates at
+% the int64 boundary (\(1<<63) yields 2^63-1, silently wiping bits >= 63 of
+% a bignum AND-chain — found the hard way in the DP-7 spike).
+mac_words(0, _, []) :- !.
+mac_words(M, Bucket, [W|Ws]) :-
+    B is lsb(M),
+    I is B + 1, arg(I, Bucket, W),
+    M1 is M xor (1 << B),
+    mac_words(M1, Bucket, Ws).
+
+% Placement: AND each unfilled crosser's domain with the placed letter's
+% mask; collect dirtied ids for the propagation worklist. A wipeout bumps
+% the responsible crossing's weight (dom/wdeg's learning signal) and fails.
+mac_place([], _Word, _Unfilled, _LenA, _LmA, DomA, DomA, Dirty, Dirty).
+mac_place([e(Pos, T, TPos, EId)|Es], Word, Unfilled, LenA, LmA, DomA0, DomA,
+          Dirty0, Dirty) :-
+    (   memberchk(T, Unfilled)
+    ->  nth0(Pos, Word, Ch),
+        get_assoc(T, LenA, TLen),
+        mac_lm_of(LmA, TLen, TPos, LmT),
+        mac_letter_arg(Ch, ChI),
+        arg(ChI, LmT, ChMask),
+        get_assoc(T, DomA0, TDom),
+        TDom1 is TDom /\ ChMask,
+        (   TDom1 =:= 0
+        ->  mac_bump_edge(EId), fail
+        ;   true
+        ),
+        (   TDom1 =:= TDom
+        ->  DomA1 = DomA0, Dirty1 = Dirty0
+        ;   put_assoc(T, DomA0, TDom1, DomA1),
+            Dirty1 = [T|Dirty0]
+        )
+    ;   DomA1 = DomA0, Dirty1 = Dirty0
+    ),
+    mac_place(Es, Word, Unfilled, LenA, LmA, DomA1, DomA, Dirty1, Dirty).
+
+% AC-3 to fixpoint: worklist of slot ids whose domain changed; re-filter each
+% unfilled crosser's domain to the letters the changed slot still supports at
+% the shared cell. A wipeout bumps the crossing's weight and fails the branch.
+mac_propagate([], DomA, _LenA, _EdgeA, _LmA, _Unfilled, DomA).
+mac_propagate([S|Queue], DomA0, LenA, EdgeA, LmA, Unfilled, DomA) :-
+    mac_edges_of(EdgeA, S, Es),
+    get_assoc(S, DomA0, SDom),
+    get_assoc(S, LenA, SLen),
+    mac_revise(Es, SDom, SLen, LenA, LmA, Unfilled, DomA0, DomA1, Queue, Queue1),
+    mac_propagate(Queue1, DomA1, LenA, EdgeA, LmA, Unfilled, DomA).
+
+mac_revise([], _SDom, _SLen, _LenA, _LmA, _Unfilled, DomA, DomA, Q, Q).
+mac_revise([e(Pos, T, TPos, EId)|Es], SDom, SLen, LenA, LmA, Unfilled,
+           DomA0, DomA, Q0, Q) :-
+    (   memberchk(T, Unfilled)
+    ->  get_assoc(T, LenA, TLen),
+        mac_lm_of(LmA, SLen, Pos, LmS),
+        mac_lm_of(LmA, TLen, TPos, LmT),
+        mac_support(1, LmS, SDom, LmT, 0, Supp),
+        get_assoc(T, DomA0, TDom),
+        TDom1 is TDom /\ Supp,
+        (   TDom1 =:= 0
+        ->  mac_bump_edge(EId), fail
+        ;   true
+        ),
+        (   TDom1 =:= TDom
+        ->  DomA1 = DomA0, Q1 = Q0
+        ;   put_assoc(T, DomA0, TDom1, DomA1),
+            ( memberchk(T, Q0) -> Q1 = Q0 ; Q1 = [T|Q0] )
+        )
+    ;   DomA1 = DomA0, Q1 = Q0
+    ),
+    mac_revise(Es, SDom, SLen, LenA, LmA, Unfilled, DomA1, DomA, Q1, Q).
+
+% Letters S still supports at the shared cell, projected into T's mask space:
+% a 26-way sweep of two lm/26 compounds (arg/3 + one AND test per letter).
+mac_support(27, _, _, _, Supp, Supp) :- !.
+mac_support(I, LmS, SDom, LmT, Acc, Supp) :-
+    arg(I, LmS, SM),
+    (   SDom /\ SM =\= 0
+    ->  arg(I, LmT, TM),
+        Acc1 is Acc \/ TM
+    ;   Acc1 = Acc
+    ),
+    I1 is I + 1,
+    mac_support(I1, LmS, SDom, LmT, Acc1, Supp).
+
+% --- the RETAINED pre-§8.4c MRV search (reference; not on the hot path) --------
+fill_search_mrv(Slots, DictByLen, Index, Masks, Used) :-
     maplist(slot_with_count(DictByLen, Index, Masks), Slots, Counted),
-    % §8.4b dispatch, read ONCE per search (not per node): the deterministic
-    % loop below is byte-identical to pre-8.4b for the ratchet + identity
-    % oracle; a seeded run takes the twin.
+    % §8.4b dispatch, read ONCE per search (not per node).
     (   current_search_seed(_)
     ->  fill_search_inc_seeded(Counted, DictByLen, Index, Masks, Used)
     ;   fill_search_inc(Counted, DictByLen, Index, Masks, Used)
