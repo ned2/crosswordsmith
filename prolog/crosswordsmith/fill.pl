@@ -57,7 +57,8 @@
                 get_assoc/3, is_assoc/1, list_to_assoc/2,
                 ord_list_to_assoc/2, put_assoc/4 ]).
 :- use_module(library(pairs),
-              [group_pairs_by_key/2, map_list_to_pairs/3, pairs_keys_values/3]).
+              [group_pairs_by_key/2, map_list_to_pairs/3, pairs_keys_values/3,
+               pairs_values/2]).
 % F-L2: dict-file SHA-256 (artifact integrity). NB library(sha)'s file defines
 % module `crypto_hash` on 10.1.10; both predicates are on its export list.
 :- use_module(library(sha), [sha_hash/3, hash_atom/2]).
@@ -95,9 +96,11 @@
                 verbose_report/2, pw_answer/2,
                 % §8.4b (DP-6) seed perturbation: fill reads the SAME
                 % module-owned PRNG as arrange's §7.6 knobs (wasm parity).
-                % prng_draw/1: the §8.4c seeded top-3 pick (DP-8) draws the
-                % same stream directly.
-                current_search_seed/1, seeded_permutation/2, prng_draw/1 ]).
+                % prng_draw/1: the §8.4c top-3 pick (DP-8) draws the same
+                % stream directly; prng_seed_state/1 reseeds it from the
+                % pinned constant for default-path restarts (C3).
+                current_search_seed/1, seeded_permutation/2, prng_draw/1,
+                prng_seed_state/1 ]).
 
 fill_budget(800_000_000).   % inference budget (determinism via INV-2, bounded)
 
@@ -277,16 +280,37 @@ plain_dict_words(Lines, File, Words) :-
     sort(Ws0, Sorted),                      % dedupe + a stable, deterministic order
     seed_perturb_plain(Sorted, Words).
 
-% §8.4b (AC-FILL-10): iff a search seed is installed, permute the whole plain
-% word list - a uniform (unscored) dict's "equal-score tie" is the entire
-% length bucket, and bucket order inherits Words' order (keysort/2 is stable).
-% Unseeded: identity, one failed dynamic lookup on the gated F-L1 load path
-% (within the ratchet's 0.5%, like the §8.4a scored-sniff's +30).
+% §8.4b (AC-FILL-10): permute the whole plain word list - a uniform
+% (unscored) dict's "equal-score tie" is the entire length bucket, and
+% bucket order inherits Words' order (keysort/2 is stable). Seeded: the
+% user's PRNG stream (the DP-6 semantics). Default path (§8.4c/C3): the
+% SAME permutation on the PINNED engine constant - still a pure function of
+% the input, so determinism (AC-FILL-13 as amended) holds. This permutation
+% is load-bearing for search power, not cosmetics: a lexicographic bucket's
+% prefix is an alphabetical clump (AAH/AAL/AAS...) with near-zero letter
+% diversity, and the C3 campaign showed clumped value order defeats the
+% restart portfolio on open grids over big uniform dicts (g17_50k) where
+% permuted order converges in a handful of attempts. Scored dicts are NOT
+% touched on the default path - §8.4a's score-desc-then-lex order is the
+% quality contract. NB the default path uses an O(n log n) draw-key shuffle,
+% not seeded_permutation/2's O(n^2) selection walk (minutes at ENABLE
+% scale); the seeded path keeps the O(n^2) form byte-for-byte (its draws
+% are contract - DP-6 goldens/fuzz reproduce per seed).
 seed_perturb_plain(Ws, Out) :-
     (   current_search_seed(_)
     ->  seeded_permutation(Ws, Out)
-    ;   Out = Ws
+    ;   prng_seed_state(0x9E3779B9),     % pinned load stream (Weyl constant)
+        prng_shuffle(Ws, Out)
     ).
+
+% O(n log n) pinned shuffle: one prng_draw key per word, keysort, strip.
+% keysort/2 is stable and 64-bit key collisions are ~n^2/2^64, so the result
+% is deterministic on every build (GMP and LibBF alike).
+prng_shuffle(Ws, Out) :-
+    maplist(prng_key_pair, Ws, KWs),
+    keysort(KWs, Sorted),
+    pairs_values(Sorted, Out).
+prng_key_pair(W, K-W) :- prng_draw(K).
 
 % Scored ingestion (§8.4a): parse `word;score` lines, dedupe to the max
 % score, prune below MinScore (reported, INV-3), and order every survivor
@@ -461,10 +485,12 @@ max_pair_score([_-S|T], M0, M) :-
     M1 is max(M0, S),
     max_pair_score(T, M1, M).
 
-% Score-descending, then lexicographic (§8.4a's total order, INV-2): msort
-% over k(-Score, Letters) keys - ascending -Score = descending score, ties
-% at equal score collapse to the plain path's lexicographic word order (the
-% mainline case, and the AC-FILL-6 uniform-dict identity).
+% Score-descending, then a within-band shuffle (§8.4a's order as amended at
+% §8.4c/C3): msort over k(-Score, Letters) keys - ascending -Score =
+% descending score (the quality contract, untouched) - then every
+% equal-score band is reordered by seed_tie_shuffle/2 below. Lexicographic
+% order survives only as the pre-shuffle canonical form (it makes the
+% shuffle input - and so the output - deterministic).
 order_score_desc(Pairs, Words) :-
     maplist(neg_score_key, Pairs, Keyed),
     msort(Keyed, SortedKeys),
@@ -474,17 +500,34 @@ order_score_desc(Pairs, Words) :-
 neg_score_key(W-S, k(NS, W)) :- NS is -S.
 key_word(k(_, W), W).
 
-% §8.4b (AC-FILL-10): iff a search seed is installed, reorder WITHIN each
-% equal-score group only - score-descending stays the primary order (the
-% §8.4a quality contract), the seed varies just the lexicographic tiebreak.
-% Unseeded: identity.
+% §8.4b (AC-FILL-10): reorder WITHIN each equal-score group only -
+% score-descending stays the primary order (the §8.4a quality contract),
+% only the lexicographic tiebreak varies. Seeded: the user's PRNG stream
+% (DP-6 semantics, byte-for-byte). Default path (§8.4c/C3): pinned shuffle
+% IFF the dict is a single band (all scores equal) - i.e. exactly when it
+% carries no ordering information and is semantically a plain list, which
+% keeps AC-FILL-6's uniform-dict identity (same input order, same reseed,
+% same draw-per-element walk as seed_perturb_plain/2's whole-list shuffle).
+% A dict with REAL bands keeps the strict §8.4a score-desc-then-lex order:
+% the C3 campaign measured both directions - lex order defeats the restart
+% portfolio on big uniform dicts (g17_50k), yet on the scored reference row
+% (blocked_13a @30) it is the lex bands that converge (the DP-7 probe's 3/3
+% fast seeds ran top3 over lex bands) while in-band permutation starves the
+% budget (seed-7 and pinned-shuffle runs both died). Shuffle where order is
+% meaningless, preserve it where it is contract.
 seed_tie_shuffle(Keyed, Perturbed) :-
     (   current_search_seed(_)
     ->  maplist(ns_group_key, Keyed, NSPairs),
         group_pairs_by_key(NSPairs, Groups),
         maplist(shuffle_score_group, Groups, Buckets),
         append(Buckets, Perturbed)
-    ;   Perturbed = Keyed
+    ;   maplist(ns_group_key, Keyed, NSPairs),
+        group_pairs_by_key(NSPairs, Groups),
+        (   Groups = [_-OnlyBand]
+        ->  prng_seed_state(0x9E3779B9), % pinned load stream (Weyl constant)
+            prng_shuffle(OnlyBand, Perturbed)
+        ;   Perturbed = Keyed
+        )
     ).
 
 ns_group_key(k(NS, W), NS-k(NS, W)).
@@ -1029,9 +1072,12 @@ fill_search(Slots, DictByLen, Index, Masks, Used) :-
 % weights, an attempt that exhausts WITHOUT hitting its cap is a completed
 % search — genuine infeasibility (AC-FILL-14: the cap throw and plain
 % failure are distinct by construction, so a timeout can never masquerade as
-% a proof). Candidate picks: strict best-first by default (NO RNG on this
-% path — AC-FILL-13); under §8.4b --seed/--shuffle, weighted-random top-3
-% promotion ([4,2,1] on the engine-internal PRNG), read once per search.
+% a proof). Candidate picks (mac_attempt_pick/3): default-path attempt 1 is
+% strict best-first (no PRNG), later default attempts and every seeded
+% attempt use weighted top-3 promotion ([4,2,1] on the engine-internal
+% PRNG) — default attempts on a PINNED constant stream, so the path stays a
+% pure function of the input (AC-FILL-13 as amended); seed presence is read
+% once per search.
 % Search assigns words WITHOUT binding cell variables (pure mask
 % bookkeeping); the winning assignment is bound onto the shared cell
 % variables at the end (mac_bind_fill/2), which re-checks crossing
@@ -1065,11 +1111,15 @@ mac_search_top(Slots, DictByLen, Index, Masks, Used) :-
     % slot's seed-bound letters): fail -> infeasible, named by empty_slots.
     \+ ( member(_-D0, IdDoms), D0 =:= 0 ),
     list_to_assoc(IdDoms, DomA0),
-    (   current_search_seed(_) -> Pick = top3 ; Pick = greedy ),
+    % §8.4b dispatch, read ONCE per search: `seeded` = the user gave a seed
+    % (--seed/--shuffle; every attempt is top3 on their PRNG stream);
+    % `default` = attempt 1 is strict greedy, attempts >= 2 diversify on the
+    % pinned engine constant (mac_attempt_pick below — the C3 discovery).
+    (   current_search_seed(_) -> Mode = seeded ; Mode = default ),
     % Root AC fixpoint: failure here is likewise a proof (a wiped domain
     % with nothing placed).
     mac_propagate(Ids, DomA0, LenA, EdgeA, LmA, Ids, DomA1),
-    mac_restart_loop(1, 500, Ids, DomA1, LenA, BucketA, EdgeA, LmA, Pick,
+    mac_restart_loop(1, 500, Ids, DomA1, LenA, BucketA, EdgeA, LmA, Mode,
                      Used, Assign),
     mac_bind_fill(Assign, IdSlots).
 
@@ -1198,8 +1248,9 @@ mac_age_weights(Factor) :-
 %     float-overflowed the cap on provably-infeasible inputs).
 % No attempt-count bound: the inference budget (fill_attempt/8's
 % call_with_inference_limit) is the outer stop and maps to not_proven.
-mac_restart_loop(Attempt, Cap, Ids, DomA, LenA, BucketA, EdgeA, LmA, Pick,
+mac_restart_loop(Attempt, Cap, Ids, DomA, LenA, BucketA, EdgeA, LmA, Mode,
                  Used, Assign) :-
+    mac_attempt_pick(Mode, Attempt, Pick),
     nb_setval(cw_mac_attempt_nodes, 0),
     verbose_report("fill: search attempt ~w (node cap ~w)~n", [Attempt, Cap]),
     catch(mac_search(Ids, DomA, LenA, BucketA, EdgeA, LmA, Pick, Cap,
@@ -1209,10 +1260,32 @@ mac_restart_loop(Attempt, Cap, Ids, DomA, LenA, BucketA, EdgeA, LmA, Pick,
     ->  mac_age_weights(0.99),
         Cap1 is (Cap * 3 + 1) // 2,   % ceiling(x1.5), integer-only arithmetic
         A1 is Attempt + 1,
-        mac_restart_loop(A1, Cap1, Ids, DomA, LenA, BucketA, EdgeA, LmA, Pick,
+        mac_restart_loop(A1, Cap1, Ids, DomA, LenA, BucketA, EdgeA, LmA, Mode,
                          Used, Assign)
     ;   true
     ).
+
+% Per-attempt pick policy. Seeded (--seed/--shuffle): every attempt is top3
+% on the user's PRNG stream (set_search_seed/1 already seeded it). Default:
+% attempt 1 is STRICT GREEDY — the pure candidate order, no draws — so any
+% grid the first attempt completes gets the order-maximal fill; attempts
+% >= 2 are top3 on a stream reseeded ONCE (at attempt 2) from a pinned
+% engine constant (distinct from the load-shuffle constant, so the two
+% seams never replay each other's draw sequence). Diversified restarts are
+% load-bearing: restarts only pay off when successive attempts explore
+% DIFFERENT prefixes, and greedy-only restarts re-tread the same doomed
+% subtree (C3: open 17x17 x full ENABLE never converged in 23 greedy
+% attempts / ~1M nodes; top3 filled it in a handful). Value-order
+% diversity, in turn, comes from the load shuffle (seed_perturb_plain) —
+% top3 over a lexicographic clump diversifies nothing (the g17_50k
+% failure). Everything is a pure function of the input: byte-identical
+% across runs and CLI/WASM (AC-FILL-13 as amended — deterministic, not
+% draw-free).
+mac_attempt_pick(seeded, _, top3).
+mac_attempt_pick(default, 1, greedy) :- !.
+mac_attempt_pick(default, 2, top3) :- !,
+    prng_seed_state(0xCC9E2D51).         % pinned search stream (murmur3 c1)
+mac_attempt_pick(default, _, top3).
 
 mac_search([], _DomA, _LenA, _BucketA, _EdgeA, _LmA, _Pick, _Cap, _Used, []).
 mac_search(Unfilled, DomA, LenA, BucketA, EdgeA, LmA, Pick, Cap, Used,
@@ -1223,9 +1296,7 @@ mac_search(Unfilled, DomA, LenA, BucketA, EdgeA, LmA, Pick, Cap, Used,
     get_assoc(Best, DomA, Dom),
     get_assoc(Best, LenA, Len),
     get_assoc(Len, BucketA, Bucket),
-    mac_words(Dom, Bucket, Cands0),
-    mac_pick(Pick, Cands0, Cands),
-    member(Word, Cands),
+    mac_candidate(Pick, Dom, Bucket, Word),
     \+ memberchk(Word, Used),
     nb_getval(cw_mac_attempt_nodes, A0), A1 is A0 + 1,
     nb_setval(cw_mac_attempt_nodes, A1),
@@ -1236,12 +1307,49 @@ mac_search(Unfilled, DomA, LenA, BucketA, EdgeA, LmA, Pick, Cap, Used,
     mac_search(Rest, DomA2, LenA, BucketA, EdgeA, LmA, Pick, Cap,
                [Word|Used], Assign).
 
-% greedy: strict best-first (the §8.4a order as materialized) — NO RNG.
-% top3 (§8.4b seeded): weighted-random promotion of one of the first three
-% candidates ([4,2,1]); the rest keep their order, so the attempt remains
-% complete (branches reordered, never dropped).
-mac_pick(greedy, Cands, Cands).
-mac_pick(top3, Cands0, Cands) :- mac_top3(Cands0, Cands).
+% LAZY candidate enumeration in the §8.4a order (C3 fix): the eager form
+% (materialize the whole domain, then member/2) cost O(popcount x mask-width)
+% bignum work per node — on open grids over the full dictionary that burned
+% the inference budget before the search could converge (g17_full: 800M gone
+% in ~4k nodes). Enumerating set bits on demand makes the common case (an
+% early candidate sticks) one lsb/arg lookup; backtracking walks exactly as
+% far as the search actually retries. mac_words/3 below is the eager twin,
+% retained as the order oracle for the white-box tests.
+%
+% greedy: strict best-first — no PRNG.
+% top3: weighted promotion of one of the first three candidates ([4,2,1] via
+% prng_draw); the other two keep their order, then the residue mask continues
+% lazily — branch ORDER changes, the branch SET does not, so the attempt
+% remains complete (reordered, never dropped).
+mac_candidate(greedy, Dom, Bucket, Word) :-
+    mac_next_word(Dom, Bucket, Word).
+mac_candidate(top3, Dom, Bucket, Word) :-
+    mac_firstn(3, Dom, Bucket, First, Residue),
+    mac_top3(First, Ordered),
+    (   member(Word, Ordered)
+    ;   mac_next_word(Residue, Bucket, Word)
+    ).
+
+% Nondeterministic ascending-bit walk of a candidate mask: semantically
+% member/2 over mac_words/3, materializing nothing. Bits clear with xor, not
+% `/\ \Bit` (the int64 `\` quirk — see mac_words).
+mac_next_word(M, Bucket, Word) :-
+    M =\= 0,
+    B is lsb(M),
+    (   I is B + 1, arg(I, Bucket, Word)
+    ;   M1 is M xor (1 << B),
+        mac_next_word(M1, Bucket, Word)
+    ).
+
+% First (up to) N set bits' words, plus the mask with those bits cleared.
+mac_firstn(0, M, _, [], M) :- !.
+mac_firstn(_, 0, _, [], 0) :- !.
+mac_firstn(N, M, Bucket, [W|Ws], Residue) :-
+    B is lsb(M),
+    I is B + 1, arg(I, Bucket, W),
+    M1 is M xor (1 << B),
+    N1 is N - 1,
+    mac_firstn(N1, M1, Bucket, Ws, Residue).
 
 mac_top3([], []).
 mac_top3([A], [A]).
@@ -1283,6 +1391,9 @@ mac_dwd_wdeg([e(_, T, _, EId)|Es], Unfilled, WT, W0, W) :-
 
 % Materialize words from mask bits, ascending bit index (= bucket order =
 % score-desc-then-dictionary: the §8.4a value order, preserved structurally).
+% NOT on the hot path since the C3 lazy fix (mac_candidate/4 above): retained
+% as the order oracle for the white-box tests — it must stay bit-for-bit
+% equivalent to a full mac_next_word/3 walk.
 % Bits are cleared with xor, NOT `M /\ \(1<<B)`: SWI's `\` misevaluates at
 % the int64 boundary (\(1<<63) yields 2^63-1, silently wiping bits >= 63 of
 % a bignum AND-chain — found the hard way in the DP-7 spike).

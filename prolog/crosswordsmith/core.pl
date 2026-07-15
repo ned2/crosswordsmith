@@ -71,7 +71,8 @@
             set_shuffle_seed/1,
             current_search_seed/1,
             seeded_permutation/2,
-            prng_draw/1
+            prng_draw/1,
+            prng_seed_state/1
           ]).
 
 
@@ -109,9 +110,12 @@
 % generator natively, SWI's builtin under the USE_GMP=OFF wasm build), so the
 % same seed would produce different layouts on the CLI vs the browser. The
 % seeded path draws from a module-owned portable PRNG instead (splitmix64,
-% below). Neither is reached on the deterministic path (search_seed/1 unset ->
-% identity), so a default run never draws from — nor even seeds — any RNG.
-% (set_random/1 itself is a system builtin, not a library import.)
+% below). The entropy draw is never reached on the deterministic path
+% (search_seed/1 unset). NB since §8.4c/C3 the default fill path MAY drive the
+% portable PRNG too — reseeded from a PINNED engine constant via
+% prng_seed_state/1, so its draw sequence (and the output) is a pure function
+% of the input: deterministic, just not draw-free. Only --shuffle ever touches
+% OS entropy. (set_random/1 itself is a system builtin, not a library import.)
 :- use_module(library(random), [random_between/3]).
 
 % aggregate_all/3, used to count solutions in all_crossword/5.
@@ -700,10 +704,13 @@ assign_words_inc([W|Ws], PlacedWords, StateIn, GridLen, Start, Dir, GIn, GOut, O
 % one.
 :- dynamic search_seed/1.
 
-% prng_state/1: the advancing state of the module-owned PRNG; exists iff
-% search_seed/1 does. Like the global RNG it replaced, it is NON-backtrackable
-% (retract/assert survives backtracking into the search) and shared with
-% {engine:true} search engines (dynamics live in the global database).
+% prng_state/1: the advancing state of the module-owned PRNG. Exists while
+% search_seed/1 does, and (since §8.4c/C3) may also exist after a default-path
+% fill reseeded it from the pinned constant via prng_seed_state/1 — stale but
+% harmless: every consumer seeds before drawing. Like the global RNG it
+% replaced, it is NON-backtrackable (retract/assert survives backtracking into
+% the search) and shared with {engine:true} search engines (dynamics live in
+% the global database).
 :- dynamic prng_state/1.
 
 %!  set_search_seed(+N:integer) is semidet.
@@ -720,8 +727,8 @@ assign_words_inc([W|Ws], PlacedWords, StateIn, GridLen, Start, Dir, GIn, GOut, O
 % SWI's builtin under the USE_GMP=OFF wasm build, which made the same seed
 % diverge CLI vs browser (finding 2026-07-06, wasm-sdk-strategy §10). Mirrors
 % set_check_target/1: at most one search_seed/1 fact, retract before assert.
-% This setter is the sole sanctioned writer of search_seed/1 and the only
-% place prng_state/1 is seeded or cleared — but prng_draw/1 below ADVANCES
+% This setter is the sole sanctioned writer of search_seed/1; prng_state/1 is
+% seeded or cleared only here and in prng_seed_state/1 — and prng_draw/1 below ADVANCES
 % prng_state/1 during a seeded search, so the pair are two mutable module
 % facts, not one. (browser.pl's per-request reset clears both through the -1
 % sentinel here; prng_state/1 is the "fourth dynamic fact" its state-reset
@@ -788,6 +795,24 @@ prng_draw(V) :-
         assertz(prng_state(S1))
     ;   throw(error(existence_error(prng_state, unseeded), _))
     ).
+
+%!  prng_seed_state(+N:integer) is det.
+%
+%   Seed ONLY the module-owned PRNG stream, leaving search_seed/1 (the
+%   seeded-path sentinel) untouched. The §8.4c default-path diversification
+%   seam (DP-8/C3): fill's restart loop reseeds the stream from a PINNED
+%   engine constant when a default-path attempt moves past strict greedy,
+%   so the draw sequence — and therefore the output — stays a pure function
+%   of the input. current_search_seed/1 remains false, so no load seam,
+%   tie-break, or provenance path ever sees a "seed". Throws type_error on a
+%   non-integer.
+prng_seed_state(N) :-
+    (   integer(N) -> true
+    ;   throw(error(type_error(integer, N), _))
+    ),
+    retractall(prng_state(_)),
+    S0 is N /\ 0xFFFFFFFFFFFFFFFF,
+    assertz(prng_state(S0)).
 
 %!  seeded_permutation(+List:list, -Perm:list) is det.
 %

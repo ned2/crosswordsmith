@@ -442,8 +442,10 @@ The engine's answer to the DP-6/DP-7 reference row (`blocked_13a` at
 every probed budget/ordering). Adopted on the DP-7-amendment evidence
 ([`benchmarks/fill_quality/`](../benchmarks/fill_quality/README.md), MAC
 probes section): the full recipe closes the row at quality parity with
-ingrid_core while keeping the §8.4a score-first candidate order and — in
-its default form — consulting **no RNG at all**.
+ingrid_core while keeping the §8.4a score-first candidate order, with a
+default path that is a **pure function of the input** (no OS entropy, no
+run-to-run variance; see AC-FILL-13 as amended by the C3 build findings
+below).
 
 **The search core** (replaces §8.4's MRV/backtracking tree; the §8.4/§8.4a/
 §8.4b *contracts* — outcomes, determinism, budget, scoring, seed flags —
@@ -466,13 +468,33 @@ are preserved, which is why this lands as a revision, not a new engine):
    replacing bare MRV with failure-guided ordering.
 4. **Restarts.** Attempts run under a growing node cap (500, ×1.5); on cap
    the attempt is abandoned and search restarts from the root **keeping the
-   learned weights** (aged ×0.99). Restart diversity comes from the weights
-   reordering slot selection between attempts.
-5. **Candidate picks.** Default: strict best-first (greedy) — **no RNG on
-   the default path** (same contract class as the pre-§8.4c engine).
-   Under `--seed N`/`--shuffle`: weighted-random top-3 promotion ([4,2,1]
-   via the engine-internal splitmix64), measured as a ~18× accelerator on
-   the hardest row and the variety lever (§8.4b as amended).
+   learned weights** (aged ×0.99). *(C3 amendment)* Weight learning alone
+   does not diversify restarts (a greedy-only engine re-treads the same
+   doomed prefix — measured: open 17×17 × full ENABLE, 23 attempts / ~1M
+   nodes without converging), so attempts after the first switch pick
+   policy (point 5) — restart diversity is weights **plus** diversified
+   picks.
+5. **Candidate picks** *(C3-amended shape)*. Default path: attempt 1 is
+   strict best-first (greedy — the pure candidate order, no draws), and
+   attempts ≥ 2 use the weighted top-3 promotion ([4,2,1]) on the
+   engine-internal splitmix64 reseeded from a **pinned engine constant** —
+   still a pure function of the input. Under `--seed N`/`--shuffle`: every
+   attempt is top-3 on the user's stream (§8.4b as amended; measured as a
+   ~18× accelerator on the hardest row and the variety lever).
+6. **Value-order diversity** *(C3 addition)*. A dict with **no ordering
+   information** — a plain word list, or a scored dict whose surviving
+   words are a single equal-score band — is loaded in a **pinned-shuffle
+   order** (same engine constant) instead of lexicographic: top-3 over a
+   lexicographic prefix is an alphabetical clump (AAH/AAL/AAS…) with
+   near-zero letter diversity, and the C3 ladder showed that clumped order
+   defeats the restart portfolio on open grids over big uniform dicts
+   (g17_50k, g17/g21 full-ENABLE), while the pinned shuffle completes all
+   of them in seconds. Dicts with **real score bands keep the strict §8.4a
+   score-desc-then-lex order** — measured in the other direction on the
+   scored reference row: lex bands converge (probe 3/3), in-band
+   permutation starves the budget. The seeded path's DP-6 load
+   perturbation (whole-list / within-band on the user's stream) is
+   unchanged.
 
 **Outcome mapping (AC-FILL-1 unchanged):** fill found ⇒ `filled`; an
 attempt exhausts its whole tree *without* hitting the node cap ⇒
@@ -483,24 +505,32 @@ first ⇒ `not proven within budget`. `--budget N` keeps its §8.4b semantics
 (inference count, AC-FILL-9) over the new tree.
 
 **Determinism (AC-FILL-3 held, one-time re-baseline):** the default path is
-RNG-free and fully deterministic — weights, propagation order, and restarts
-are pure functions of the input. Fills **change once** at adoption (the
-tree is different): one engine version bump with a one-time golden
-regeneration, `fill_identity.sha256` re-baseline, and fill perf-ratchet
-re-baseline. AC-FILL-6's "byte-identical to the pre-scoring engine" clause
-is historical as of this bump (it pinned the §8.4a layering over the *MRV*
-tree; the §8.4a ordering contract itself — score-desc, then dictionary
-order — carries forward structurally in the masks).
+fully deterministic — weights, propagation order, restarts, the pinned load
+shuffle, and the pinned top-3 stream are all pure functions of the input
+(the engine-internal splitmix64 on pinned constants is bit-identical on
+every build, GMP and LibBF alike; no OS entropy is ever touched outside
+`--shuffle`). Fills **change once** at adoption (the tree is different):
+one engine version bump with a one-time golden regeneration,
+`fill_identity.sha256` re-baseline, and fill perf-ratchet re-baseline.
+AC-FILL-6's "byte-identical to the pre-scoring engine" clause is historical
+as of this bump (it pinned the §8.4a layering over the *MRV* tree; the
+§8.4a ordering contract itself — score-desc bands first — carries forward
+structurally in the masks, with the single-band/lex tail amended per
+point 6).
 
 **AC-FILL-12** On the DP-6 reference row (`blocked_13a`, STW-class scored
 dict, `--min-score 30` and `1`), default (RNG-free) `fill` completes within
 the default budget, at fill quality ≥ the pre-§8.4c engine's on every grid
 both complete ([`benchmarks/fill_quality/`](../benchmarks/fill_quality/README.md)
 is the standing gate).
-**AC-FILL-13** The default path consults no RNG; identical input ⇒
-byte-identical output (AC-FILL-3), including across CLI/WASM (the only
-randomness anywhere is the §8.4b seeded top-3, on the engine-internal
-PRNG).
+**AC-FILL-13** *(as amended during the C3 build)* The default path is a
+pure function of the input: identical input ⇒ byte-identical output
+(AC-FILL-3), including across CLI/WASM. It touches no OS entropy and has
+no run-to-run variance; it MAY drive the engine-internal splitmix64 from
+**pinned engine constants** (the C3 pinned load shuffle and the attempt ≥ 2
+top-3 stream) — "deterministic" is the contract, "draw-free" was only the
+original means and survives on attempt 1. Only `--shuffle` ever touches OS
+entropy.
 **AC-FILL-14** An `infeasible` verdict is issued only on proof (uncapped
 exhaustion or root-propagation wipeout, naming the slot); a capped/budgeted
 stop reports `not proven within budget` (INV-3 — never "infeasible" on a

@@ -26,8 +26,11 @@ Preserved contracts (the reason this is a revision, not a new engine):
 - **Quality** (§8.4a, AC-FILL-5/12): score-desc-then-dictionary candidate
   order is structural (ascending-bit materialization over score-sorted
   buckets); `--min-score` prune unchanged (it happens at load).
-- **Determinism** (AC-FILL-3/13): default path consults NO RNG; seeded path
-  uses only the engine-internal splitmix64 (CLI/WASM parity).
+- **Determinism** (AC-FILL-3/13, as amended in C3): default path is a pure
+  function of the input — no OS entropy, no run-to-run variance; it drives
+  the engine-internal splitmix64 from PINNED constants (load shuffle +
+  attempt ≥ 2 top3), and the seeded path uses the same PRNG on the user's
+  seed (CLI/WASM parity).
 - **Seeds/pins** (AC-FILL-2): seeded slots are excluded from search exactly
   as today; their bound letters constrain crossing slots' *initial domains*.
 - **Report/emit**: `slots_to_layout`, quality report, JSON contract — all
@@ -80,21 +83,73 @@ expectations and fuzz outputs.
 - **C4 — docs sweep.** README (limitations bullet: the gap row is CLOSED;
   flags table wording), STATUS, benchmark README result columns.
 
-## Measured facts to pin during C3 (do not hand-wave)
+## C3 findings — the two search-power amendments (2026-07-16)
 
-1. **Default-budget completion of the reference row on the greedy path.**
-   The probe burned ~126s @ 30 greedy — likely > 800M inferences. If the
-   default budget does not cover it: decide budget default vs documented
-   `--budget`/`--seed` guidance, and record the choice + numbers HERE and
-   in §8.4c (AC-FILL-12 wording allows either only if measured and
-   documented; do not silently regress the AC).
-2. **Easy-grid latency + mask-build overhead** (9×9/enable_25k and a
-   full-dict run): the probe was FASTER than the old engine on the 9×9
-   (0.45s vs 1.4s) but mask/edge setup on a 315k dict costs ~2s — measure
-   end-to-end CLI wall times before/after.
-3. **blocked_13b / blocked_15a**: still expected NOT to complete (they
-   defeat ingrid too). Confirm they exhaust budget cleanly with the right
-   outcome (not_proven), and record times.
+The C2 core as spec'd (greedy default, top3 only under a user seed, eager
+per-node domain materialization) passed plunit/goldens but FAILED the
+identity ladder's open-grid rungs (`g17_full`, `g21_full`: budget-dead
+under the default 800M; old MRV engine: ~2.5M/~3.3M inferences). The C3
+campaign isolated three interacting causes and landed three fixes, all in
+`fill.pl` (+ `prng_seed_state/1` in `core.pl`):
+
+1. **Lazy candidate enumeration** (`mac_candidate/4` replacing
+   materialize-then-`member/2`): the eager form cost
+   O(popcount × mask-width) bignum work per node — g17_full burned 800M
+   inferences in ~4k nodes. Lazy `lsb`-walk enumeration made the seeded
+   g17 run collapse from 7m12s to seconds.
+2. **Diversified default-path restarts** (`mac_attempt_pick/3`): greedy-only
+   restarts never converged on g17_full (23 attempts / ~1M nodes / 3.7M
+   node-cap — weight aging alone re-treads the same prefix), while top3
+   filled it on attempt 2. Default now: attempt 1 greedy, attempts ≥ 2
+   top3 on splitmix64 reseeded from pinned constant 0xCC9E2D51.
+3. **Pinned load shuffle for order-free dicts** (`seed_perturb_plain/2`,
+   single-band arm of `seed_tie_shuffle/2`, constant 0x9E3779B9): top3
+   over a lexicographic prefix is an alphabetical clump and diversifies
+   nothing — g17_50k died under all-top3 AND under a greedy/top3
+   alternation; with the shuffle every ladder rung fills in seconds.
+   Measured BOTH directions: scored multi-band dicts keep strict
+   score-desc-then-lex (in-band permutation starved the reference row —
+   pinned-shuffle run @30: not-proven at 3m30s; the DP-7 probe's fast 3/3
+   ran top3 over lex bands), so the shuffle applies exactly where the
+   order carries no information (plain, or all scores equal — which is
+   also what keeps AC-FILL-6's uniform-dict identity).
+
+Also fixed en route: `pinned_score_group`'s O(n²) trap avoided — the
+pinned shuffle is an O(n log n) draw-key keysort (`prng_shuffle/2`), NOT
+`seeded_permutation/2`'s selection walk (minutes at ENABLE scale; the
+seeded path keeps the O(n²) form because its draw sequence is DP-6
+contract). Toy-scale quality note: on the two-square 3×3 scored fixture
+the engine now lands on the mixed square (per-node band preference never
+guaranteed the global optimum; the old lex order just happened to walk
+into it) — the reference-row mean is the real quality gate and it IMPROVED
+(45.0 vs the probe's 44.81 and ingrid's 44.4).
+
+## Measured facts pinned during C3
+
+1. **Reference row (AC-FILL-12), default path, default 800M budget**
+   (blocked_13a × STW): `--min-score 30` **filled in 2m20s / 7 attempts,
+   mean 45.0 min 30**; `--min-score 1` **filled in 19s, mean 38.7**. No
+   budget-default change needed. (`--seed` variance is real: seed 7 on
+   @30 budget-exhausted at 8m47s with a correct `not proven` non-zero
+   exit; seeds are the variety lever, not the completion path.)
+2. **Ladder / easy-grid latency** (end-to-end CLI wall, full ENABLE):
+   15×15 3.2–3.6s (attempt 1), 17×17 3.5s (attempt 1), 21×21 3.9s
+   (4 attempts), 17×17 × 50k 1.3s (4 attempts). Identity oracle: 11/11
+   rungs recorded and verified. Ratchet re-baselined
+   (`fill_baseline.json`; heavy pass): small/blocked rungs rose to a
+   ~3.3–3.8M-inference floor (mask/edge setup dominates), while the
+   rungs the old engine found hardest DROPPED (g09_full 14.5M → 3.7M,
+   g17_50k 13.0M → 9.8M, g15_full 7.9M → 3.7M).
+3. **blocked_13b / blocked_15a**: not re-run (DP-6 report-don't-chase pin
+   stands; they defeat ingrid too and completion there was never promised
+   by DP-8). AC-FILL-14's outcome mapping is regression-tested at unit
+   level instead (`mac_exhaustion_is_infeasible_not_retried`).
+4. **Full verification battery at the final build**: plunit 379/379,
+   goldens (only `fill_3.json`/`fill_15_bench.json` changed vs the C2
+   commit; seeded goldens byte-identical — the lazy top3 is draw-for-draw
+   equivalent), `make test` ALL PASSED, fuzz 66/66, identity 11/11,
+   ratchet PASS, `make test-wasm` OK (bignum masks + pinned streams
+   bit-identical under LibBF).
 
 ## Rollback
 

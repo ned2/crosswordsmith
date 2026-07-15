@@ -48,12 +48,13 @@ test(fill_crossing_cells_are_shared) :-
 % --- the fill (AC-FILL-1) ----------------------------------------------------
 % A complete, consistent fill: every across is a row, every down is a column
 % (deterministic - pinned to the exact result).
-% The pinned fill changed once at the §8.4c (DP-8) version bump: the MAC +
-% dom/wdeg core deterministically finds the transpose of the old MRV square.
+% The pinned fill changed at the §8.4c (DP-8) version bump and again at the
+% C3 pinned-load-shuffle amendment - where it happens to land back on the
+% pre-DP-8 square (a coincidence of the pinned stream, not a contract).
 test(fill_produces_consistent_square) :-
     do_fill('fixtures/fill_grid_3.json', none, 'fixtures/wordlist_sample.txt', Across, Down),
-    Across == ['COW', 'ARE', 'TED'],
-    Down   == ['CAT', 'ORE', 'WED'].
+    Across == ['CAT', 'ORE', 'WED'],
+    Down   == ['COW', 'ARE', 'TED'].
 
 % No dictionary word of the slot length -> infeasible (reported, not silent).
 test(fill_infeasible_when_no_matching_words) :-
@@ -285,7 +286,7 @@ test(fill_index_fill_matches_raw) :-
     delete_file(AF),
     crosswordsmith_fill:fill_attempt(Slots, Slots, DBL, Idx, filled, Numbered, _),
     findall(A, ( member(W, Numbered), pw_dir(W, across), pw_answer(W, A) ), Across),
-    Across == ['COW', 'ARE', 'TED'].   % §8.4c fill (DP-8 version bump)
+    Across == ['CAT', 'ORE', 'WED'].   % §8.4c fill (DP-8 + C3 load shuffle)
 
 % Passing --dict that MATCHES the artifact's source verifies the SHA-256 and
 % loads (integrity check on the happy path).
@@ -394,7 +395,7 @@ test(fill_index_v2_default_no_masks_counts_via_ordsets) :-
     crosswordsmith_fill:fill_grid('fixtures/fill_grid_3.json', _Size, Slots, _),
     crosswordsmith_fill:fill_attempt(Slots, Slots, DBL, Idx, filled, Numbered, _),
     findall(A, ( member(W, Numbered), pw_dir(W, across), pw_answer(W, A) ), Across),
-    Across == ['COW', 'ARE', 'TED'].   % §8.4c fill (DP-8 version bump)
+    Across == ['CAT', 'ORE', 'WED'].   % §8.4c fill (DP-8 + C3 load shuffle)
 
 % Deterministic bound patterns, lengths 3-6: single-bound cells over a letter
 % spread (incl. rare Q/Z -> often empty intersections) and 0-anchored two-cell
@@ -594,10 +595,12 @@ mark_oracle_ok(B, M) :-
 % one malformed line (BAD;lots -> dropped + reported), and equal-score ties
 % (CAT/COW at 95, DOG/WED at 80) - the mainline tiebreak case.
 
-% Bucket order is the §8.4a total order: score-descending, then lex (ties
-% collapse to dictionary order). Pins the whole 3-letter bucket, incl. the
-% default `score >= 1` prune (DP-5): AAA (score 0) is OUT, unscored words
-% (score 1) are IN and sort last.
+% Bucket order for a MULTI-BAND dict is the strict §8.4a total order:
+% score-descending, then lex (§8.4c/C3 measured that lex bands are what
+% converge on the scored reference row - only single-band/plain dicts get
+% the pinned shuffle, see uniform_bucket_gets_pinned_shuffle below). Pins
+% the whole 3-letter bucket, incl. the default `score >= 1` prune (DP-5):
+% AAA (score 0) is OUT, unscored words (score 1) are IN and sort last.
 test(scored_bucket_order_score_desc_then_lex) :-
     crosswordsmith_fill:load_dict('fixtures/dict_scored_sample.txt',
                                   [], DBL, _, scores(_)),
@@ -605,6 +608,24 @@ test(scored_bucket_order_score_desc_then_lex) :-
     findall(A, ( member(W, Bucket), atom_chars(A, W) ), Atoms),
     Atoms == ['CAT','COW','ORE','DOG','WED','ERA','DEW','ARE','GAD',
               'AWE','OWE','TED','CAR','COT','RAW','RED','ROW'].
+
+% The §8.4c/C3 flip side: a dict with NO ordering information (plain list,
+% or all scores equal = a single band) gets the PINNED load shuffle - its
+% lex order is not contract, and lexicographic clumps starve diversified
+% restarts on big dicts (the g17_50k C3 finding). Deterministic: two loads
+% agree; and the order is NOT the lex sort it would have been pre-C3.
+test(uniform_bucket_gets_pinned_shuffle,
+     [cleanup(delete_file(DF))]) :-
+    tmp_dict("ARE\nAWE\nCAR\nCAT\nCOT\nCOW\nDEW\nDOG\nERA\nGAD\nORE\nOWE\nRAW\nRED\nROW\nTED\nWED\n", DF),
+    crosswordsmith_fill:load_dict(DF, [], DBL, _, uniform),
+    crosswordsmith_fill:load_dict(DF, [], DBL2, _, uniform),
+    DBL == DBL2,                            % pinned shuffle is deterministic
+    assoc_to_list(DBL, [3-Bucket]),
+    findall(A, ( member(W, Bucket), atom_chars(A, W) ), Atoms),
+    msort(Atoms, ['ARE','AWE','CAR','CAT','COT','COW','DEW','DOG','ERA',
+                  'GAD','ORE','OWE','RAW','RED','ROW','TED','WED']),
+    Atoms \== ['ARE','AWE','CAR','CAT','COT','COW','DEW','DOG','ERA',
+               'GAD','ORE','OWE','RAW','RED','ROW','TED','WED'].
 
 % The score assoc keeps PRE-prune scores (a pruned word is still scorable by
 % the report); unscored lines carry the uniform score 1 (DP-5, AC-FILL-8).
@@ -697,18 +718,24 @@ test(scored_uniform_score_collapses_to_lex,
     DBLP == DBLS,
     IdxP == IdxS.
 
-% Score-descending ordering drives the SEARCH: with two disjoint word
-% squares available, the fill lands on the high-scored one even though the
-% low-scored square wins lexicographically (CAT < DOG).
-test(scored_ordering_prefers_high_score_square,
+% Score-descending ordering drives the SEARCH per node: on two independent
+% (non-crossing) slots every candidate walk starts at the top band, so both
+% fills MUST come from it even though the low band's words precede them
+% lexicographically. Band membership, not exact words, is the assertion -
+% within-band order is the pinned §8.4c shuffle. (The pre-C3 form of this
+% test pinned a whole high-scored word SQUARE on crossing slots; per-node
+% band preference never guaranteed that global optimum - the lex in-band
+% order just happened to walk into it, and the pinned shuffle happens not
+% to. AC-FILL-12's reference-row mean is the real quality gate.)
+test(scored_ordering_prefers_high_score_band,
      [cleanup(delete_file(DF))]) :-
-    tmp_dict("CAT;10\nCOW;10\nARE;10\nTED;10\nORE;90\nWED;90\nDOG;90\nERA;90\nDEW;90\nGAD;90\n", DF),
-    crosswordsmith_fill:fill_grid('fixtures/fill_grid_3.json', _, Slots, _),
+    tmp_dict("ARE;10\nCAT;10\nCOW;10\nTED;10\nDEW;90\nORE;90\n", DF),
+    crosswordsmith_fill:fill_grid('fixtures/fill_grid_split3.json', _, Slots, _),
     crosswordsmith_fill:load_dict(DF, [], DBL, Idx, _),
     crosswordsmith_fill:fill_attempt(Slots, Slots, DBL, Idx, filled, Numbered, _),
     findall(A, ( member(PW, Numbered), pw_answer(PW, A) ), As),
     msort(As, Sorted),
-    Sorted == ['DEW','DOG','ERA','GAD','ORE','WED'].
+    Sorted == ['DEW','ORE'].
 
 % AC-FILL-5 end to end on the fixture: a --min-score 50 fill contains no
 % word scoring < 50 (and it exists - the DOG/ERA/WED square is all >= 50).
