@@ -161,6 +161,54 @@ forward-checking — ingrid's pruning class — can close the `blocked_13a`
 row. `--budget` and `fill --seed` are honest control/variety levers
 (spec'd in §8.4b) but measurably not completion fixes.
 
+### MAC probes on the reference row (DP-7 evidence, 2026-07-15)
+
+DP-6 named "crossing-aware forward-checking" as the path to the row; DP-7
+tested that claim with [`probe_mac.pl`](probe_mac.pl) — a throwaway
+maintaining-arc-consistency filler (AC-3 to fixpoint over the crossing
+graph, bignum bitset domains in the F-H2 `build_masks/2` bit-space) run
+against the engine at `fd8768b`, plus a source read of ingrid_core 1.3.1
+(the reference implementation: MAC + **dom/wdeg conflict-weight learning**
++ a **fillability-dominated value order** (weight ×900 vs score ×5) +
+weighted-random top-3 picks + randomized restarts with weight carryover —
+a full Balafoutis adaptive-CSP stack, *not* plain forward checking).
+
+Probe validity: fills the 3×3 and 9×9 fixtures (engine parity; the engine's
+own 9×9 solution replays cleanly through the probe's propagation), and MAC
+collapses node counts exactly as advertised on completable grids — the 9×9
+that costs the engine 14.4M inferences takes the probe 4,114 nodes (1,114
+with the fillability order).
+
+On the reference row (`blocked_13a`, STW, `--min-score 30`; ingrid_core
+**8.8s** on this machine, re-timed with the same wordlist):
+
+| variant | wall cap | result |
+|---|---|---|
+| deterministic MAC, §8.4a score-desc value order | 900s (naive), 1800s (flat masks) | **timeout**, 191,297 nodes / 22.3M domain-updates |
+| MAC + restarts (top-3 [4,2,1] random picks, cap 500 ×1.5, fresh seed per attempt) | 1800s | **timeout**, 14 attempts, 211,115 nodes |
+| MAC + restarts + **fillability value order** (Σ log10(letter-support popcount+1) desc — ingrid's dominant signal) | 1800s | **timeout**, 13 attempts, 186,954 nodes |
+
+**Conclusion (DP-7, design-spec §10):** MAC-class propagation is necessary
+but measurably NOT sufficient in this engine: at the probe's ~10ms/node
+(full-AC sweeps over ~30k-bit masks; already 3× faster than the naive
+form), 30 minutes buys ~2×10⁵ nodes and zero completions under three
+different search strategies. Closing the row needs the *rest* of ingrid's
+stack — dom/wdeg learning and, decisively, incremental-AC node rates 2–3
+orders of magnitude beyond the probe — i.e. a new search core, not a
+pruning patch. Two honesty pins: (1) the fillability value order that
+powers ingrid's completion *inverts* the §8.4a quality-first candidate
+order (score-desc is measured to lift fill means 5–16 pts — the two
+contracts pull in opposite directions); (2) on completable grids MAC is
+already *slower* end-to-end than the engine's counting search unless the
+per-node cost is engineered down (the 9×9: engine ~1.4s vs naive-probe
+6.1s — the node-count win does not survive the per-node cost).
+
+Caveat for re-runners: SWI's `\` arithmetic misevaluates at the int64
+boundary (`\(1<<63)` yields `2^63-1` — a 64-bit complement — instead of the
+documented unbounded one's complement `-(2^63)-1`, silently wiping bits
+≥ 63 of a mask AND-chain). Clear bits with `xor`, never `/\ \(1<<B)`;
+found the hard way. Candidate upstream report.
+
 ## CWL measurement (2026-07-15) — evidence for the CWL-bundling decision pass
 
 The FS-6(b) research confirmed the [Collaborative Word

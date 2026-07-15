@@ -487,11 +487,18 @@ The full schema and design rationale live in
   (design-spec §8.4a) closes that quality gap, but no scored list is bundled
   — supply your own, e.g. Spread the Wordlist (CC BY-NC-SA, never bundled)
   or the MIT-licensed Collaborative Word List (bundling that one is an open
-  decision, not yet taken — see design-spec §8.5). Separately, and *untouched by scoring*, the fixed inference
-  budget can exhaust on a standard blocked 13×13 with full-length slots that a
-  dedicated scored CSP fills in seconds — and a `--min-score` prune shrinks
+  decision, not yet taken — see design-spec §8.5). Separately, and *untouched
+  by scoring*, the search budget (default 800M inferences, `--budget`) can
+  exhaust on a standard blocked 13×13 with full-length slots that a dedicated
+  scored CSP (`ingrid_core`) fills in ~9s — and a `--min-score` prune shrinks
   slot domains, so high thresholds make hard grids *less* fillable, never
-  faster. Both axes are quantified against `ingrid_core` in
+  faster. This is a **measured engine-class limitation, not a tuning gap**
+  (design-spec §10 DP-7): bigger budgets (×20), seeded reorderings, and even
+  MAC-grade constraint propagation probes all fail that grid, while
+  ingrid_core's completion rests on its full search core (conflict-weight
+  ordering + fillability-first value order + incremental arc consistency) —
+  adopting that would be a different engine with a different quality
+  contract. Both axes are quantified against `ingrid_core` in
   [`benchmarks/fill_quality/`](benchmarks/fill_quality/README.md).
 - **`export`'s third-party round-trip is a manual step.** The output is
   spec-valid ipuz v2 / Exolve by construction, but actual ingestion by kotwords
