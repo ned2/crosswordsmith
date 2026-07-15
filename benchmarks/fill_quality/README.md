@@ -231,6 +231,8 @@ Same reference row (`blocked_13a`, STW, ingrid_core 8.8s):
 | MAC + restarts + **dom/wdeg**, **§8.4a score-desc value order** | 30 | **completes: 7.1s / 726 nodes** (seed 12345; seeds 777 / 424242: 11.4s / 908 and 9.2s / 451 — **3/3 seeds**) | **mean 44.81**, min 30 (ingrid @30: mean 44.4) |
 | MAC + restarts + dom/wdeg, score-desc order | 1 | **completes: 12.6s / 876 nodes** | — |
 | MAC + restarts + dom/wdeg, fillability order | 30 | completes: 24–25s / 2,010 nodes | mean 43.89, min 30 |
+| MAC + restarts + dom/wdeg, score-desc, **greedy pick — RNG-free** | 30 | **completes: 125.7s / 10,517 nodes / 7 attempts** | mean 44.63, min 30 |
+| MAC + restarts + dom/wdeg, score-desc, greedy pick — RNG-free | 1 | **completes: 9.1s / 604 nodes / 2 attempts** | — |
 
 (For scale on the learning effect alone: the 9×9 drops from 14,512 nodes
 (restarts, no learning) to 2,175 with dom/wdeg on the same score-desc
@@ -250,6 +252,18 @@ dom/wdeg + seeded restarts, keeping the quality-first candidate order —
 not by adopting ingrid's engine wholesale. Adoption remains its own
 decision (the §8.4/AC-FILL-3 contract churn priced in DP-6/DP-7 is
 unchanged); see the amended DP-7 entry in the design spec.
+
+**Determinism follow-up (2026-07-16, same day):** the `greedy` rows above
+answer "does the recipe need randomness at all?" — **no.** With strict
+best-first candidate picks the PRNG is never consulted (verified: `Pick =
+greedy` short-circuits before any draw), and restart diversity comes only
+from the learned weights reordering slot selection between attempts. The
+RNG-free variant still closes both gap thresholds; the seeded top-3
+randomness is an *accelerator*, not a requirement (~18× on the hardest
+row: 7.1s randomized vs 125.7s greedy @ 30). So an adopted engine could
+keep the strongest form of today's contract — deterministic with no RNG on
+the default path — and treat `--seed`/`--shuffle` as the opt-in fast/variety
+lever, exactly §8.4b's existing shape.
 
 ## CWL measurement (2026-07-15) — evidence for the CWL-bundling decision pass
 

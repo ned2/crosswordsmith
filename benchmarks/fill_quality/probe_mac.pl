@@ -22,7 +22,7 @@
 % section); the SWI \ int64-boundary arithmetic quirk that bit this probe
 % is documented there too.
 :- module(probe_mac, [probe_mac/4, probe_mac_restarts/5, probe_mac_restarts/6,
-                      probe_mac_dwd/6, replay_engine_fill/2]).
+                      probe_mac_dwd/6, probe_mac_dwd/7, replay_engine_fill/2]).
 
 :- use_module(library(assoc)).
 :- use_module(library(apply)).
@@ -300,6 +300,14 @@ pick_top3([A, B, C|Rest], [P|Ps]) :-
 % (e(Pos,T,TPos,EId) shared by both directions), so this variant has its own
 % place/revise/select twins - the three DP-7 configurations are untouched.
 probe_mac_dwd(GridFile, DictFile, MinScore, TimeoutSecs, BaseSeed, ValueOrder) :-
+    probe_mac_dwd(GridFile, DictFile, MinScore, TimeoutSecs, BaseSeed, ValueOrder, top3).
+
+% Pick: `top3` (ingrid's weighted-random [4,2,1] promotion - needs the PRNG)
+% or `greedy` (strict best-first; the PRNG is NEVER drawn, so the whole run
+% is RNG-free - restart diversity comes only from the learned weights
+% reordering slot selection between attempts).
+probe_mac_dwd(GridFile, DictFile, MinScore, TimeoutSecs, BaseSeed, ValueOrder, Pick) :-
+    nb_setval(mac_pick, Pick),
     crosswordsmith_fill:fill_grid(GridFile, Size, Slots, _CellVar),
     length(Slots, NSlots),
     format(user_error, 'macw: grid ~w, ~w slots~n', [Size, NSlots]),
@@ -391,7 +399,10 @@ mac_search_w(Unfilled, DomA, LenA, BucketA, EdgeA, LmA, VO, Cap, Used, [Best-Wor
     get_assoc(Best, LenA, Len),
     get_assoc(Len, BucketA, Bucket),
     materialize(VO, Len, Dom, Bucket, Cands0),
-    pick_top3(Cands0, Cands),
+    (   nb_current(mac_pick, greedy)
+    ->  Cands = Cands0
+    ;   pick_top3(Cands0, Cands)
+    ),
     member(Word, Cands),
     \+ memberchk(Word, Used),
     nb_getval(mac_nodes, N0), N1 is N0 + 1, nb_setval(mac_nodes, N1),
