@@ -122,7 +122,11 @@ crosswordsmith arrange [--strict | --best-effort] [--size N | --max-size N]
                        [--verbose] --input words.json [--out file.json]
 crosswordsmith lint    --profile <name> [--allow-asymmetry] layout.json     # Flavour B
 crosswordsmith export  --to ipuz|exolve  layout.json [--out file]           # Flavour B / shared
-crosswordsmith fill    --grid template.json --seeds seeds.json [--verbose]  # Flavour B (DEFERRED)
+crosswordsmith fill    --grid template.json [--seeds seeds.json]            # Flavour B
+                       [--dict words | --index idx | --save-index idx]
+                       [--min-score N] [--report-json file]      # §8.4a
+                       [--budget N] [--seed N | --shuffle]       # §8.4b (DP-6; build pending)
+                       [--verbose] [--out file.json]
 crosswordsmith                                                              # → usage, exit ≠ 0
 ```
 
@@ -361,13 +365,75 @@ Scored fill closes the #1 *measured* competitive gap (research §D): scoreless M
 
 *Implementation-time refinements (surfaced by [`research/wordlist-scoring-2026.md`](research/wordlist-scoring-2026.md)) — **both resolved by the DP-5 micro-pass (§10)** and folded into the paragraphs above:* (i) **Scale units** — `--min-score N` is in **the dict's own native units** (documented, deterministic, no auto-normalisation), not a fixed 0–100 assumption. (ii) **Score-0 semantics** — the default prune is **`score ≥ 1`**, excluding only the score-0 blocklist floor, with the invariant reframed as "the default never removes *usable* words." Neither reopens the LOCKED core (DP-4).
 
+### 8.4b `fill` search-power levers — `--budget` / `--seed` / `--shuffle`  **[LOCKED — DP-6]**
+
+The completion gap is real but **narrow** (measured — the FS-3(b) frontier,
+[`benchmarks/fill_quality/`](../benchmarks/fill_quality/README.md)): the
+fixed-budget MRV completes every benchmarked mask except the blocked UK-style
+grids, `blocked_13b`/`blocked_15a` defeat ingrid_core too, and **`blocked_13a`
+at `--min-score ≤ 30` is the single grid×threshold row where ingrid (~10s)
+beats crosswordsmith**. DP-6 (§10) probed the two cheap levers against that
+row and adopts them for what they measurably *are* — control and variety —
+while naming crossing-aware forward-checking as the only path to the row
+itself (its own future decision pass; §8.5).
+
+- **`--budget N`** (positive integer, inference count): the §8.4 search budget
+  — previously the hardcoded `fill_budget(800_000_000)` — becomes a documented
+  default with a CLI override. Deterministic (INV-2): the budget never changes
+  *which* fill the search finds, only whether the search runs long enough to
+  find it or reports the ordinary `not proven within budget` outcome
+  (AC-FILL-1's third arm; a non-zero exit with `--out` still writes nothing,
+  §5.2). **An escape hatch and experiment knob, NOT a completion fix** —
+  measured: ×20 the default (16×10⁹ inferences, ~6 min of search) does not
+  complete `blocked_13a` at `--min-score` 30 or 1. Docs must never present it
+  as buying completion on hard grids.
+- **`--seed N` / `--shuffle`**: §7.6's opt-in perturbation, mirrored onto
+  `fill` for **variety** — alternative fills of the same grid. The
+  perturbation reorders **ties only**: within each slot's candidate order it
+  shuffles words of *equal score* (score-descending stays primary; on an
+  unscored/uniform dict the tie is the whole bucket) and it breaks equal-MRV
+  slot-selection ties — the quality ordering (§8.4a) and the fail-first
+  heuristic are preserved. Same input + same `N` ⇒ byte-identical output;
+  `--shuffle` draws a fresh seed per run and reports it under `--verbose` so a
+  liked fill reproduces with `--seed N`; the two are mutually exclusive; with
+  neither flag no RNG is consulted (AC-FILL-3 byte-identity holds by
+  construction). The RNG is the **engine-internal xorshift PRNG** already used
+  by seeded `arrange` — never SWI's native RNG (CLI↔WASM parity; see the PRNG
+  section of [`wasm/README.md`](../wasm/README.md)). **Not a completion
+  lever** — measured: 0/8 salted tie-reorderings complete `blocked_13a` at the
+  default budget.
+- **v1 scope**: `--seed`/`--shuffle` apply to the text `--dict` path and are
+  rejected with `--index`/`--save-index` (index artifacts are order-pinned
+  byte-stable caches, and — carrying no scores — they cannot honor the
+  equal-score tie contract). `--budget` is a pure search parameter and
+  composes with every fill mode.
+
+**AC-FILL-9** `--budget N` overrides the documented default (800,000,000
+inferences). Identical input + identical budget ⇒ byte-identical outcome
+(fill or failure report; INV-2); changing the budget never alters the
+*content* of a produced fill, only fill-vs-not-proven.
+**AC-FILL-10** `--seed N` is reproducible (identical input + `N` ⇒
+byte-identical output) and perturbs only equal-score candidate ties and
+equal-MRV slot ties; `--shuffle` reports its drawn seed under `--verbose`;
+with neither flag, output is byte-identical to the pre-§8.4b engine
+(AC-FILL-3/AC-FILL-6 unchanged).
+**AC-FILL-11** `--seed`/`--shuffle` together, or either with
+`--index`/`--save-index`, error with a usage hint (AC-CLI-2); the §8.4/§8.4a
+reporting contract (INV-3, quiet-success §5.1) is unchanged by all three
+flags.
+
+*Contract LOCKED at DP-6; not yet built — per OD-8 discipline the build needs
+its own implementation plan, and the [`benchmarks/fill_quality/`](../benchmarks/fill_quality/README.md)
+probes are its baseline evidence.*
+
 ### 8.5 Backlog — tagged, not yet specified
 These are recognised future capabilities. Each is **out of scope until specified here** (a §10 decision pass per feature). Listed so they are tracked, not so they are built. **Evidence & prioritization** for these against the 2026 competitive field live in [`research/setter-tool-landscape-2026.md`](research/setter-tool-landscape-2026.md); the ★-tagged rows below are the three the 2026 research flags as the current highest-leverage backlog and which need a decision pass + spec + implementation plan next.
 
 | Feature | Flavour | Note |
 |---|---|---|
 | ★ **Scored fill** (`fill --min-score` + fill-quality report) | B | **2026 research: the #1 competitive gap.** Every serious filler (Crossword Compiler / CrossFire / ingrid_core) drives fill by per-word score; crosswordsmith's scoreless MRV places non-word junk (measured — `AAAAA`/`AAAAQ`). Closable **license-clean** via Spread the Wordlist (CC BY-NC-SA 4.0). A `score≥50` dict prefilter already recovers ingrid-parity quality in the prototype. **Built (2026-07-15): DP-4 → §8.4a (as amended by DP-5) — native `--min-score 50` matches the benchmark's `>=50`-dict column on every completable grid.** Evidence: research §D + [`../benchmarks/fill_quality/`](../benchmarks/fill_quality/README.md). |
-| Bundle/offer the **Collaborative Word List** as a scored lexicon (DP-6 candidate) | B | FS-6(b) research (2026-07-15) confirmed CWL is **MIT + fully scored** (567,657 `word;score` entries, integer 0–100, 253k ≥ 50 — drop-in compatible with §8.4a and the `--min-score 50` clean convention), the first bundleable scored candidate. A decision pass must weigh: **staleness** (data frozen 2023-02 vs STW's active curation — measured head-to-head in [`../benchmarks/fill_quality/`](../benchmarks/fill_quality/README.md)), **band semantics** (observed, not documented), **audience fit** (UKACD18 is UK/cryptics-oriented; CWL is American-style), and **default-change blast radius** (every default fill changes: goldens, backward compat, 567k entries vs the `load_inf` ratchet + wasm payload). Until that pass, §8.4a's posture stands: default lexicon UKACD18 (unscored), scored fill opt-in via `--dict`. |
+| Crossing-aware **forward-checking** in `fill` — the ingrid-class completion fix | B | **DP-6 (§10) elevated this from menu option to the named necessary path** to the one measured completion gap (`blocked_13a` at `--min-score ≤ 30`; ingrid ~10s): ×20 budget and 8 seeded reorders both fail the row (probes in [`../benchmarks/fill_quality/`](../benchmarks/fill_quality/README.md)), so only tree-shape change can close it. The cost is contract churn, to be decided deliberately in its own pass: revises §8.4's search description and AC-FILL-3 across an engine version bump, one-time golden regeneration, fill perf-ratchet re-baseline. |
+| Bundle/offer the **Collaborative Word List** as a scored lexicon (decision pass pending) | B | FS-6(b) research (2026-07-15) confirmed CWL is **MIT + fully scored** (567,657 `word;score` entries, integer 0–100, 253k ≥ 50 — drop-in compatible with §8.4a and the `--min-score 50` clean convention), the first bundleable scored candidate. A decision pass must weigh: **staleness** (data frozen 2023-02 vs STW's active curation — measured head-to-head in [`../benchmarks/fill_quality/`](../benchmarks/fill_quality/README.md)), **band semantics** (observed, not documented), **audience fit** (UKACD18 is UK/cryptics-oriented; CWL is American-style), and **default-change blast radius** (every default fill changes: goldens, backward compat, 567k entries vs the `load_inf` ratchet + wasm payload). Until that pass, §8.4a's posture stands: default lexicon UKACD18 (unscored), scored fill opt-in via `--dict`. |
 | Per-entry cluing-potential annotation (`meta.cluing`) | B | Computed at emit-time answer→meta join; engine stays metadata-agnostic. 2026 research: MyCrossword's anagram-%/device-balance heuristic is a ready blueprint. |
 | Nina seeding | Shared | **Absorbed into the fragment-grid primitive** (§6.6) — not a separate feature. (Qxw "free lights" confirm the capability is served nowhere open.) |
 | `min_len:3` hard floor option | B | Soft default for TOC; always *report* sub-3. |
@@ -410,6 +476,7 @@ The **only** sanctioned places where scope is still undecided. A component canno
 
 ### Decision passes
 
+- **DP-6 (2026-07-15).** The FS-4 search-power decision pass ([`plans/fill-scoring-uplift.md`](plans/fill-scoring-uplift.md) §3 FS-4), taken on fresh measurement. *Evidence:* (1) the FS-3(b) completion×min-score frontier (`matrix.sh`, [`benchmarks/fill_quality/`](../benchmarks/fill_quality/README.md)) narrowed the gap to a **single row** — `blocked_13a` at `--min-score ≤ 30` (ingrid_core ~10s): the authored fully-checked American 11×11 completes at every threshold, and `blocked_13b`/`blocked_15a` defeat *both* engines at every threshold. (2) A **budget ladder** (×2/×4/×10/×20 over the hardcoded 800M inferences) fails the row at every rung — 16×10⁹ inferences buy ~6 min of search and no completion; the tail is exponential, confirming the perf campaign's "speedups buy latency, never completion" from the product side. (3) An **ordering-diversity probe** — 8 salted deterministic reorders within equal-score bands, exactly the perturbation a `fill --seed` would apply — completes 0/8 at the default budget: no lucky-ordering escape exists. *Resolution:* adopt the two cheap levers for what they measurably are — **`--budget N`** (control/escape hatch) and **`fill --seed N`/`--shuffle`** (variety, mirroring §7.6 with the engine-internal xorshift PRNG) — as the new **§8.4b** [LOCKED], with the spec required to present neither as a completion fix; and **elevate crossing-aware forward-checking from menu option to the named necessary path** to the reference row — deliberately *not* spec'd here, because it changes the search contract (revises §8.4's search description and AC-FILL-3 across an engine version bump, one-time golden regeneration, fill perf-ratchet re-baseline) and carries FS-4's high-effort tag: it takes its own decision pass (§8.5 row), with this DP's probes as baseline evidence. Honesty pins: `blocked_13b`/`blocked_15a` are genuinely hard, not crosswordsmith-hard — report, don't chase (INV-3); pruning never flipped completion anywhere on the frontier (§8.4a's "never present `--min-score` as helping completion" stands measured). *(Naming note: the §8.5 CWL-bundling candidate was provisionally tagged "DP-6 candidate" before this pass ran; it is relabelled "decision pass pending" — the number is taken.)*
 - **DP-5 (2026-07-15).** Micro-pass resolving §8.4a's two recorded implementation-time refinements, adopting the recommendations of [`research/wordlist-scoring-2026.md`](research/wordlist-scoring-2026.md) §5. **(i) Scale units — research §5.2 option (a):** `--min-score N` is in **the dictionary's own native units** — documented, deterministic, no auto-normalisation and no `--score-scale` flag in v1. Real scored lists are scale-heterogeneous (STW/Broda 0–100, XWord Info 5–60, Crossword Compiler ≤50), and auto-detection was rejected in the research itself as non-deterministic-feeling and data-hiding; AC-FILL-8's "scores 0–100" is reworded to native units accordingly. **(ii) Score-0 default — research §5.3 option (b):** the default prune becomes **`score ≥ 1`**, amending DP-4's "default `N = 0`" sentence — STW reserves score 0 for a deliberate blocklist (harmful/X-rated), so a default that admits score-0 words admits intentionally-excluded entries. The feasibility invariant is reframed from "never silently changes feasibility" to **"the default never removes *usable* words."** Consequence, intended and reported per INV-3: a grid fillable *only* by blocklisted words now fails by default (ordinary AC-FILL-1 no-fill). Two adjacent pins land with (ii): unscored lines' uniform score is **1** ("unrated" ≠ "blocklisted" — it survives the default prune, and claims nothing more), and docs *recommend* `--min-score 50` as the practical clean floor on 0–100-scale lists (documented convention: STW FAQ, XWord Info FAQ, ingrid_core's default) — distinct from the code default. DP-4's core (hard prune + score-descending ordering + sidecar report + license posture) is untouched; OD-10 stays resolved.
 - **DP-4 (2026-07-15).** Resolved OD-10, promoting the ★ scored-fill backlog item (§8.5) through its required decision pass into the LOCKED **§8.4a** extension. Rationale: the 2026 landscape research (§D) + the [`benchmarks/fill_quality/`](../benchmarks/fill_quality/README.md) prototype *measured* scoreless MRV placing non-word junk while a `score≥50` prefilter recovered ingrid_core-parity quality — making scored fill the #1 competitive gap and its fix a small, no-regret extension of the existing MRV engine (one filter + one sort key, not a new engine). Score is treated as an intrinsic dictionary property (word→score), keeping the solver metadata-agnostic (INV-1) and the output layout score-free. `--min-score` defaults to 0 so feasibility is never silently changed; score-descending ordering is layered *above* the §8.4 tiebreak so determinism (INV-2) holds and an unscored dict stays byte-identical to the pre-scoring engine. The bundled default lexicon stays the permissively-licensed UKACD18 (INV-4) — Spread the Wordlist (CC BY-NC-SA) is an opt-in `--dict`, never bundled as default — and the `benchmarks/fill_quality/` harness is the standing regression (native `--min-score 50` must match its `>=50`-dict column). **Not yet implemented at DP-4 time; since built (2026-07-15, [`plans/scored-fill-implementation.md`](plans/scored-fill-implementation.md)) with the harness gate passing on all four completable grids.** *Post-DP-4 evidence:* [`research/wordlist-scoring-2026.md`](research/wordlist-scoring-2026.md) (2026-07-15) confirmed the "50 = clean floor" convention and the licensing verdicts (no cleanly-bundleable scored list *known at that time* — the default-stays-unscored choice is validated; the FS-6(b) follow-up, 2026-07-15, has since confirmed the **Collaborative Word List is MIT + scored**, so a bundleable candidate now exists — bundling it would be its own future decision pass, and the §8.4a default-lexicon posture is unchanged), and surfaced two implementation-time refinements recorded in §8.4a (scale-units + score-0 blocklist), since resolved by DP-5 above.
 - **DP-1 (2026-06-30).** Resolved OD-1, OD-3, OD-5, OD-9 (see rows above). Rationale: these are no-regret — OD-9 was already settled by the shipped `arrange` (Phases 1–7); OD-1/OD-3 reuse existing primitives (the blocked cell model, the fragment-grid pins) so `fill`, *when built*, inherits `arrange`'s seed semantics; OD-5 picks the smallest asset (a mask; slots are derivable). **`fill` (§8.4) stays DEFERRED** — promotion to LOCKED still needs OD-2 (dictionary shape/lexicon) and OD-4 (profiles + no-fill contract). **Stock-grid (§8.3)** moves to buildable: OD-5 fixed here, OD-6 closes as its grids are authored.

@@ -277,6 +277,13 @@ this; only tree-shape changes can.
 squarely in-identity; the *contract churn* is the cost).
 
 **Spec impact.** **Needs a new decision pass — say so and stop there.**
+*(Since resolved by **DP-6**, 2026-07-15: options 1–2 adopted as design-spec
+§8.4b [LOCKED, build pending] — measured as control/variety levers, not
+completion fixes (a ×2/×4/×10/×20 budget ladder and an 8-salt ordering probe
+both fail `blocked_13a` at min ≤ 30, the FS-3(b) frontier's sole vs-ingrid gap
+row); option 3 elevated to the named necessary path and deferred to its own
+decision pass with exactly the contract-churn plan below. Probe evidence:
+[`../../benchmarks/fill_quality/`](../../benchmarks/fill_quality/README.md).)*
 Option 1 edits the LOCKED §5 CLI contract; option 2 mirrors §7.6 into §8.4;
 option 3 revises §8.4's "deterministic (dictionary order + lowest-start
 tiebreak)" search description and AC-FILL-3's byte-stability across the
