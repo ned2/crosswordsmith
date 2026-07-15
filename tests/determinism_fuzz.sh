@@ -124,6 +124,10 @@ det "export exolve" $CS export --to exolve "$WORK/layout.json"
 det "fill 3x3"        $CS fill --grid fixtures/fill_grid_3.json --dict fixtures/wordlist_sample.txt
 det "fill 3x3 seed"   $CS fill --grid fixtures/fill_grid_3.json --seeds fixtures/fill_seed_3.json --dict fixtures/wordlist_sample.txt
 det "fill 13a (infeasible w/ sample dict)" $CS fill --grid grids/blocked_13a.json --dict fixtures/wordlist_sample.txt
+# scored fill (§8.4a): the scored ingestion + prune + score-desc ordering paths
+det "fill scored (default prune)" $CS fill --grid fixtures/fill_grid_3.json --dict fixtures/dict_scored_sample.txt
+det "fill scored --min-score 50"  $CS fill --grid fixtures/fill_grid_3.json --dict fixtures/dict_scored_sample.txt --min-score 50
+det "fill scored min-score prunes all (infeasible)" $CS fill --grid fixtures/fill_grid_3.json --dict fixtures/dict_scored_sample.txt --min-score 99
 
 # --- --out partial-write contract (§5.2) -------------------------------------
 echo "== --out partial-write contract =="
@@ -131,6 +135,7 @@ outcheck nofile_on_fail "arrange ok --out"          $CS arrange --strict --size 
 outcheck nofile_on_fail "arrange infeasible --out"  $CS arrange --strict --size 3 --input $N
 outcheck report_always  "lint FAIL --out (complete report)" $CS lint --profile blocked-uk fixtures/lint_fail_layout.json
 outcheck nofile_on_fail "fill infeasible --out"     $CS fill --grid grids/blocked_13a.json --dict fixtures/wordlist_sample.txt
+outcheck nofile_on_fail "fill scored prune-all --out" $CS fill --grid fixtures/fill_grid_3.json --dict fixtures/dict_scored_sample.txt --min-score 99
 
 echo "== summary: $cases cases, $fails failure(s) =="
 [ "$fails" -eq 0 ] && { echo "DETERMINISM FUZZ PASSED"; exit 0; } || { echo "DETERMINISM FUZZ FAILED"; exit 1; }

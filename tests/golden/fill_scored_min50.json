@@ -1,0 +1,64 @@
+{
+  "grid": [
+    [
+      {"across":1,"down":1,"letter":"D","number":1},
+      {"across":1,"down":2,"letter":"O","number":2},
+      {"across":1,"down":3,"letter":"G","number":3}
+    ],
+    [
+      {"across":4,"down":1,"letter":"E","number":4},
+      {"across":4,"down":2,"letter":"R","number":null},
+      {"across":4,"down":3,"letter":"A","number":null}
+    ],
+    [
+      {"across":5,"down":1,"letter":"W","number":5},
+      {"across":5,"down":2,"letter":"E","number":null},
+      {"across":5,"down":3,"letter":"D","number":null}
+    ]
+  ],
+  "gridLength":3,
+  "words": [
+    {
+      "answer":"DOG",
+      "cells": [ [0, 0 ],  [0, 1 ],  [0, 2 ] ],
+      "direction":"across",
+      "meta": {},
+      "number":1
+    },
+    {
+      "answer":"DEW",
+      "cells": [ [0, 0 ],  [1, 0 ],  [2, 0 ] ],
+      "direction":"down",
+      "meta": {},
+      "number":1
+    },
+    {
+      "answer":"ORE",
+      "cells": [ [0, 1 ],  [1, 1 ],  [2, 1 ] ],
+      "direction":"down",
+      "meta": {},
+      "number":2
+    },
+    {
+      "answer":"GAD",
+      "cells": [ [0, 2 ],  [1, 2 ],  [2, 2 ] ],
+      "direction":"down",
+      "meta": {},
+      "number":3
+    },
+    {
+      "answer":"ERA",
+      "cells": [ [1, 0 ],  [1, 1 ],  [1, 2 ] ],
+      "direction":"across",
+      "meta": {},
+      "number":4
+    },
+    {
+      "answer":"WED",
+      "cells": [ [2, 0 ],  [2, 1 ],  [2, 2 ] ],
+      "direction":"across",
+      "meta": {},
+      "number":5
+    }
+  ]
+}

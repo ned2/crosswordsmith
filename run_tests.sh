@@ -118,6 +118,25 @@ check_golden "fill seeded (canonical)" \
 check_golden "fill seeded (thin form)" \
     tests/golden/fill_3_seeded.json \
     ./crosswordsmith fill --grid fixtures/fill_grid_split3.json --seeds fixtures/fill_seed_cow_top_thin.json --dict fixtures/dict_cow_pig.txt
+# Scored fill (§8.4a, AC-FILL-5/-7): the default `score >= 1` prune excludes
+# the fixture's score-0 entry; --min-score 50 flips the fill to the all-clean
+# square; the --report-json sidecar is byte-pinned while stdout stays the
+# canonical layout (compared against its own golden in the same run).
+check_golden "fill scored (default prune)" \
+    tests/golden/fill_scored.json \
+    ./crosswordsmith fill --grid fixtures/fill_grid_3.json --dict fixtures/dict_scored_sample.txt
+scored_report="$(mktemp)"
+check_golden "fill scored --min-score 50" \
+    tests/golden/fill_scored_min50.json \
+    ./crosswordsmith fill --grid fixtures/fill_grid_3.json --dict fixtures/dict_scored_sample.txt --min-score 50 --report-json "$scored_report"
+if diff -u tests/golden/fill_scored_min50_report.json "$scored_report" >/dev/null; then
+    echo "golden (fill scored report json): OK"
+else
+    echo "golden (fill scored report json): FAILED (differs from tests/golden/fill_scored_min50_report.json)"
+    diff -u tests/golden/fill_scored_min50_report.json "$scored_report" | head -10
+    status=1
+fi
+rm -f "$scored_report"
 # Scale golden (fill bench Phase 0): a 15x15 stock grid filled from full ENABLE.
 # Locks byte-identity of a realistic-scale fill (~10.7M search inferences, a few
 # seconds CLI). Stdout byte-compared; stderr (the --verbose summary path) discarded.
