@@ -10,10 +10,10 @@ auto-cluing). The full product vision and acceptance criteria live in
 [`docs/design-spec.md`](docs/design-spec.md).
 
 Everything is **deterministic by default**: identical input and flags always
-produce byte-identical output — no randomness, no shuffle. (`arrange` takes
-opt-in `--seed N` / `--shuffle` flags for a reproducible or fresh pseudo-random
-layout; neither ever touches the default deterministic path — see below.) One
-CLI, one verb per capability:
+produce byte-identical output — no randomness, no shuffle. (`arrange` and
+`fill` take opt-in `--seed N` / `--shuffle` flags for a reproducible or fresh
+pseudo-random result; neither ever touches the default deterministic path —
+see below.) One CLI, one verb per capability:
 
 - **`arrange`** — lay out *these specific* words into an interlocking,
   crossword-shaped layout (*Flavour A* — a closed word set, aesthetic interlock).
@@ -220,12 +220,17 @@ with `lint`/`export`.
 | `--dict <file>` | word list, one per line, **UTF-8** (default: a small bundled sample; real fills: `--dict UKACD18`). Words are normalized to A–Z: accented Latin letters fold to their base (café → CAFE, Straße → STRASSE), punctuation/digits are squeezed; a word with letters that cannot be folded (Cyrillic, Greek, …) is dropped, and the drop count is reported on stderr (unconditionally — pure-ASCII lists load in silence). A file containing `;` is read as a **scored** list (`word;score`, integer scores in the list's **own** units — no normalisation): candidates are tried score-descending (ties in dictionary order), unscored lines score 1, malformed lines are dropped + reported, and a duplicate word keeps its highest score. |
 | `--min-score <N>` | hard-prune every candidate scoring below `N` (native units) *before* search; default `1` drops only score-0 blocklist entries, so unscored dictionaries are unaffected. `50` is the documented clean floor for 0–100-scale lists (STW/Broda). Pruning shrinks slot domains, so it can only *reduce* feasibility — a hard grid may lose its fill (reported as the ordinary no-fill outcome). Any nonzero prune count is reported on stderr. Text `--dict` path only (index artifacts carry no scores). |
 | `--report-json <file>` | write the fill-quality report for the produced fill to `<file>` as one sorted-key JSON object: `{"belowThreshold":…,"mean":…,"min":…,"n":…,"threshold":50}` (threshold 50 = the clean-floor convention; entries absent from the dict score 0). The stdout layout is byte-unchanged; nothing is written when no fill is produced. Text `--dict` path only. |
+| `--budget <N>` | override the search's inference budget (default 800,000,000). Deterministic: a budget change never alters a *produced* fill, only fill-vs-not-proven — an **escape hatch** for marginal grids, *not* a completion fix for hard ones (measured: ×20 budget still doesn't complete a hard blocked 13×13; [`benchmarks/fill_quality/`](benchmarks/fill_quality/README.md)). Composes with every other flag and both index modes. |
+| `--seed <N>` | (N ≥ 0) a *reproducible alternative fill* of the same grid: perturbs **ties only** — equal-score candidate order and equal-constraint slot picks — so the score-descending quality ordering is untouched. Variety, *not* completion (measured: 0/8 reorderings completed a grid the default couldn't). Text `--dict` path only; mutually exclusive with `--shuffle`. There is no internal restart scheduling — a shell loop over `--seed` × `--budget` composes the same envelope. |
+| `--shuffle` | a *fresh* random alternative fill each run (same ties-only scope as `--seed`). Recoverable: `--verbose` prints `fill: shuffle seed N (reproduce with --seed N)` on stderr (the fill payload carries no diagnostics). Text `--dict` path only. |
 | `--out <file>` | write to `<file>` instead of stdout. |
 | `--verbose` | report the success summary (grid, filled slots) and the fill-quality line (`n/mean/min/below50`) on stderr; a clean success is silent there by default. Failures print regardless. |
 
 Each white cell is a shared logical variable, so crossings are consistent by
 construction; the search is MRV backtracking (most-constrained slot first) over
-an in-memory pattern index, and is **deterministic**. When no complete fill
+an in-memory pattern index, and is **deterministic** (opt-in `--seed`/`--shuffle`
+perturb tie ordering only, exactly like their `arrange` namesakes — with neither
+flag no RNG is consulted). When no complete fill
 exists, `fill` reports the unfillable slot(s) and exits non-zero (it never emits
 a partial grid). The bundled lexicon is a tiny sample for the demo grids; supply
 a real dictionary (UKACD18 — redistributable freeware; ship its license verbatim) with `--dict` for production fills.

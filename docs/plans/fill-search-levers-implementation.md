@@ -1,6 +1,6 @@
 # Implementation plan: §8.4b fill search levers (`--budget`, `--seed`/`--shuffle`)
 
-**Status: EXECUTING (2026-07-15).** Builds the LOCKED §8.4b contract
+**Status: DONE (2026-07-15).** Built the LOCKED §8.4b contract
 ([design-spec](../design-spec.md), DP-6) — AC-FILL-9..11. Scope is **control
 and variety only**: DP-6 measured both levers as non-completion-fixes (×20
 budget ladder and 0/8 ordering probe on `blocked_13a`,

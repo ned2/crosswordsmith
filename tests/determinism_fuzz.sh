@@ -128,6 +128,16 @@ det "fill 13a (infeasible w/ sample dict)" $CS fill --grid grids/blocked_13a.jso
 det "fill scored (default prune)" $CS fill --grid fixtures/fill_grid_3.json --dict fixtures/dict_scored_sample.txt
 det "fill scored --min-score 50"  $CS fill --grid fixtures/fill_grid_3.json --dict fixtures/dict_scored_sample.txt --min-score 50
 det "fill scored min-score prunes all (infeasible)" $CS fill --grid fixtures/fill_grid_3.json --dict fixtures/dict_scored_sample.txt --min-score 99
+# §8.4b search levers: a FIXED --seed is inside the INV-2 contract (3x
+# byte-identity per seed); a too-small --budget must fail deterministically
+# (same clean exit + empty stdout every run). --shuffle is excluded from
+# byte-identity BY CONSTRUCTION (a fresh seed per run) - its covered surface
+# is the --verbose seed-report line, asserted separately below.
+det "fill --seed 7"    $CS fill --grid fixtures/fill_grid_3.json --dict fixtures/wordlist_sample.txt --seed 7
+det "fill --seed 0"    $CS fill --grid fixtures/fill_grid_3.json --dict fixtures/wordlist_sample.txt --seed 0
+det "fill scored --seed 7 --min-score 50" $CS fill --grid fixtures/fill_grid_3.json --dict fixtures/dict_scored_sample.txt --seed 7 --min-score 50
+det "fill --budget 10 (not proven)" $CS fill --grid fixtures/fill_grid_3.json --dict fixtures/wordlist_sample.txt --budget 10
+det "fill --seed 7 --budget 10 (not proven, seeded)" $CS fill --grid fixtures/fill_grid_3.json --dict fixtures/wordlist_sample.txt --seed 7 --budget 10
 
 # --- --out partial-write contract (§5.2) -------------------------------------
 echo "== --out partial-write contract =="
@@ -136,6 +146,31 @@ outcheck nofile_on_fail "arrange infeasible --out"  $CS arrange --strict --size 
 outcheck report_always  "lint FAIL --out (complete report)" $CS lint --profile blocked-uk fixtures/lint_fail_layout.json
 outcheck nofile_on_fail "fill infeasible --out"     $CS fill --grid grids/blocked_13a.json --dict fixtures/wordlist_sample.txt
 outcheck nofile_on_fail "fill scored prune-all --out" $CS fill --grid fixtures/fill_grid_3.json --dict fixtures/dict_scored_sample.txt --min-score 99
+# §8.4b: budget exhaustion is AC-FILL-1's ordinary not-proven failure - same
+# §5.2 no-partial-file contract.
+outcheck nofile_on_fail "fill --budget 10 not-proven --out" $CS fill --grid fixtures/fill_grid_3.json --dict fixtures/wordlist_sample.txt --budget 10
+
+# --- §8.4b --shuffle provenance roundtrip -------------------------------------
+# --shuffle draws a fresh seed per run, so it can't join the 3x-identity
+# matrix; its contract is the --verbose report line "fill: shuffle seed N
+# (reproduce with --seed N)" - and that the reported N actually REPRODUCES
+# the shuffled fill byte-for-byte.
+echo "== --shuffle seed-report roundtrip =="
+cases=$((cases + 1))
+timeout 90 $CS fill --shuffle --verbose --grid fixtures/fill_grid_3.json \
+    --dict fixtures/wordlist_sample.txt >"$WORK/shuf.json" 2>"$WORK/shuf.err"
+shuf_seed="$(sed -n 's/^fill: shuffle seed \([0-9][0-9]*\) (reproduce with --seed \1)$/\1/p' "$WORK/shuf.err")"
+if [ -z "$shuf_seed" ]; then
+    echo "  NO-SEED-LINE  | fill --shuffle --verbose (stderr: $(head -1 "$WORK/shuf.err"))"
+    fails=$((fails + 1))
+else
+    timeout 90 $CS fill --seed "$shuf_seed" --grid fixtures/fill_grid_3.json \
+        --dict fixtures/wordlist_sample.txt >"$WORK/shuf_repro.json" 2>/dev/null
+    if ! cmp -s "$WORK/shuf.json" "$WORK/shuf_repro.json"; then
+        echo "  NO-ROUNDTRIP  | fill --shuffle seed $shuf_seed not reproduced by --seed"
+        fails=$((fails + 1))
+    fi
+fi
 
 echo "== summary: $cases cases, $fails failure(s) =="
 [ "$fails" -eq 0 ] && { echo "DETERMINISM FUZZ PASSED"; exit 0; } || { echo "DETERMINISM FUZZ FAILED"; exit 1; }

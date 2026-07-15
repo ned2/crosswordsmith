@@ -125,7 +125,7 @@ crosswordsmith export  --to ipuz|exolve  layout.json [--out file]           # Fl
 crosswordsmith fill    --grid template.json [--seeds seeds.json]            # Flavour B
                        [--dict words | --index idx | --save-index idx]
                        [--min-score N] [--report-json file]      # §8.4a
-                       [--budget N] [--seed N | --shuffle]       # §8.4b (DP-6; build pending)
+                       [--budget N] [--seed N | --shuffle]       # §8.4b (DP-6)
                        [--verbose] [--out file.json]
 crosswordsmith                                                              # → usage, exit ≠ 0
 ```
@@ -422,9 +422,10 @@ with neither flag, output is byte-identical to the pre-§8.4b engine
 reporting contract (INV-3, quiet-success §5.1) is unchanged by all three
 flags.
 
-*Contract LOCKED at DP-6; not yet built — per OD-8 discipline the build needs
-its own implementation plan, and the [`benchmarks/fill_quality/`](../benchmarks/fill_quality/README.md)
-probes are its baseline evidence.*
+*Contract LOCKED at DP-6; built 2026-07-15 per
+[`plans/fill-search-levers-implementation.md`](plans/fill-search-levers-implementation.md)
+(the [`benchmarks/fill_quality/`](../benchmarks/fill_quality/README.md) probes
+are its baseline evidence).*
 
 ### 8.5 Backlog — tagged, not yet specified
 These are recognised future capabilities. Each is **out of scope until specified here** (a §10 decision pass per feature). Listed so they are tracked, not so they are built. **Evidence & prioritization** for these against the 2026 competitive field live in [`research/setter-tool-landscape-2026.md`](research/setter-tool-landscape-2026.md); the ★-tagged rows below are the three the 2026 research flags as the current highest-leverage backlog and which need a decision pass + spec + implementation plan next.

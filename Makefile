@@ -90,6 +90,9 @@ golden:
 	@diff -u tests/golden/fill_3_seeded.json \
 		<(./crosswordsmith fill --grid fixtures/fill_grid_split3.json --seeds fixtures/fill_seed_cow_top_thin.json --dict fixtures/dict_cow_pig.txt 2>/dev/null) \
 		&& echo "golden (fill seeded, thin form): OK"
+	@diff -u tests/golden/fill_3_rng_seed7.json \
+		<(./crosswordsmith fill --grid fixtures/fill_grid_3.json --dict fixtures/wordlist_sample.txt --seed 7 2>/dev/null) \
+		&& echo "golden (fill --seed 7): OK"
 	@diff -u tests/golden/fill_scored.json \
 		<(./crosswordsmith fill --grid fixtures/fill_grid_3.json --dict fixtures/dict_scored_sample.txt 2>/dev/null) \
 		&& echo "golden (fill scored, default prune): OK"
@@ -115,6 +118,7 @@ update-golden:
 	./crosswordsmith export --to exolve fixtures/titled_layout.json 2>/dev/null > tests/golden/export_titled.exolve
 	./crosswordsmith fill --grid fixtures/fill_grid_3.json --dict fixtures/wordlist_sample.txt 2>/dev/null > tests/golden/fill_3.json
 	./crosswordsmith fill --grid fixtures/fill_grid_split3.json --seeds fixtures/fill_seed_cow_top.json --dict fixtures/dict_cow_pig.txt 2>/dev/null > tests/golden/fill_3_seeded.json
+	./crosswordsmith fill --grid fixtures/fill_grid_3.json --dict fixtures/wordlist_sample.txt --seed 7 2>/dev/null > tests/golden/fill_3_rng_seed7.json
 	./crosswordsmith fill --grid fixtures/fill_grid_3.json --dict fixtures/dict_scored_sample.txt 2>/dev/null > tests/golden/fill_scored.json
 	./crosswordsmith fill --grid fixtures/fill_grid_3.json --dict fixtures/dict_scored_sample.txt --min-score 50 --report-json tests/golden/fill_scored_min50_report.json 2>/dev/null > tests/golden/fill_scored_min50.json
 	@echo "Regenerated golden files (arrange fixed/max/fragment/candidates + lint toc + export ipuz/exolve + export titled ipuz/exolve + fill plain/seeded/scored)"

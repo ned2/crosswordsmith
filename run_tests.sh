@@ -118,6 +118,13 @@ check_golden "fill seeded (canonical)" \
 check_golden "fill seeded (thin form)" \
     tests/golden/fill_3_seeded.json \
     ./crosswordsmith fill --grid fixtures/fill_grid_split3.json --seeds fixtures/fill_seed_cow_top_thin.json --dict fixtures/dict_cow_pig.txt
+# RNG-seeded fill (§8.4b, AC-FILL-10; --seed = PRNG, unrelated to --seeds
+# above): byte-pins one alternative fill. Reproducibility is the golden
+# passing at all; genuine perturbation is its committed divergence from
+# fill_3.json (same grid + dict, no flag).
+check_golden "fill --seed 7 (§8.4b RNG)" \
+    tests/golden/fill_3_rng_seed7.json \
+    ./crosswordsmith fill --grid fixtures/fill_grid_3.json --dict fixtures/wordlist_sample.txt --seed 7
 # Scored fill (§8.4a, AC-FILL-5/-7): the default `score >= 1` prune excludes
 # the fixture's score-0 entry; --min-score 50 flips the fill to the all-clean
 # square; the --report-json sidecar is byte-pinned while stdout stays the
@@ -170,6 +177,22 @@ check_fail_report "fill seed-reused unsolvable -> clean fail" \
 check_fail_report "fill duplicate seeds -> clean fail" \
     ./crosswordsmith fill --grid fixtures/fill_grid_split3.json \
         --seeds fixtures/fill_seed_cow_both.json --dict fixtures/dict_cow.txt
+# §8.4b rejection matrix (AC-FILL-11): --seed/--shuffle are mutually exclusive
+# and text---dict-only (index artifacts pin candidate order); a negative seed
+# is a usage error. --budget composes with --seed (exit 0 sanity leg).
+check_exit "fill --seed + --shuffle rejected" 1 \
+    ./crosswordsmith fill --grid fixtures/fill_grid_3.json --dict fixtures/wordlist_sample.txt --seed 3 --shuffle
+check_exit "fill --seed -5 rejected" 1 \
+    ./crosswordsmith fill --grid fixtures/fill_grid_3.json --dict fixtures/wordlist_sample.txt --seed -5
+seed_idx="$(mktemp)"
+check_exit "fill --seed with --save-index rejected" 1 \
+    ./crosswordsmith fill --save-index "$seed_idx" --dict fixtures/wordlist_sample.txt --seed 3
+./crosswordsmith fill --save-index "$seed_idx" --dict fixtures/wordlist_sample.txt >/dev/null 2>&1
+check_exit "fill --shuffle with --index rejected" 1 \
+    ./crosswordsmith fill --grid fixtures/fill_grid_3.json --index "$seed_idx" --shuffle
+check_exit "fill --seed + --budget composes" 0 \
+    ./crosswordsmith fill --grid fixtures/fill_grid_3.json --dict fixtures/wordlist_sample.txt --seed 7 --budget 1000000
+rm -f "$seed_idx"
 
 # check_stderr <name> <grep-pattern> <want: present|absent> <command...>: run
 # the command (stdout discarded) and assert whether its stderr matches.
@@ -226,6 +249,13 @@ check_stderr "fill quiet by default" "filled" absent \
     ./crosswordsmith fill --grid fixtures/fill_grid_3.json --dict fixtures/wordlist_sample.txt
 check_stderr "fill --verbose summary" "filled" present \
     ./crosswordsmith fill --verbose --grid fixtures/fill_grid_3.json --dict fixtures/wordlist_sample.txt
+# §8.4b --shuffle provenance: fill's payload carries no diagnostics (pinned
+# above), so the fresh seed is reported ONLY under --verbose - quiet-success
+# (§5.1) holds even when shuffling.
+check_stderr "fill --shuffle quiet by default" "shuffle seed" absent \
+    ./crosswordsmith fill --shuffle --grid fixtures/fill_grid_3.json --dict fixtures/wordlist_sample.txt
+check_stderr "fill --shuffle --verbose reports seed" "fill: shuffle seed" present \
+    ./crosswordsmith fill --shuffle --verbose --grid fixtures/fill_grid_3.json --dict fixtures/wordlist_sample.txt
 
 echo
 if [ "$status" -eq 0 ]; then
