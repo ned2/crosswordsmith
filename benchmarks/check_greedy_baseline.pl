@@ -176,7 +176,7 @@ history_path(BenchDir,Path) :- directory_file_path(BenchDir,'greedy_history.json
 append_history(BenchDir,Doc,Extra) :-
     history_path(BenchDir,Path), get_dict(results,Doc,Rows),
     get_time(Now), Epoch is round(Now), format_time(atom(Date),'%Y-%m-%dT%H:%M:%S',Now),
-    git_commit(Commit), current_host(Host),
+    git_commit(Commit), git_dirty(Dirty), current_host(Host),
     ( memberchk('--heavy',Extra) -> Tiers='core+heavy' ; Tiers=core ),
     findall(K-Cell,
             ( member(R,Rows), text_to_atom(R.rung,K), M=R.metrics,
@@ -187,7 +187,8 @@ append_history(BenchDir,Doc,Extra) :-
                      rss_kib:M.command_rss_med_kib} ),
             Pairs),
     dict_pairs(Rungs,rungs,Pairs),
-    Entry=_{epoch:Epoch,date:Date,commit:Commit,host:Host,swi:Doc.swi_prolog,
+    Entry=_{epoch:Epoch,date:Date,commit:Commit,dirty:Dirty,
+            host:Host,swi:Doc.swi_prolog,
             tiers:Tiers,rungs:Rungs},
     with_output_to(string(Raw),json_write_dict(current_output,Entry,[width(0)])),
     normalize_space(string(Line),Raw),
@@ -198,6 +199,13 @@ git_commit(Commit) :-
     process_create(path(git),['rev-parse','--short','HEAD'],
                    [stdout(pipe(S)),stderr(null),process(P)]),
     read_string(S,_,Raw),close(S),process_wait(P,_),normalize_space(atom(Commit),Raw).
+
+git_dirty(Dirty) :-
+    process_create(path(git),['status','--porcelain','--untracked-files=no'],
+                   [stdout(pipe(S)),stderr(null),process(P)]),
+    read_string(S,_,Raw),close(S),process_wait(P,_),
+    normalize_space(string(Text),Raw),
+    ( Text == "" -> Dirty=false ; Dirty=true ).
 
 show_history(BenchDir) :-
     history_path(BenchDir,Path),
