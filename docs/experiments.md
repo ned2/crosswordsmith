@@ -1739,3 +1739,36 @@ p1-backtrack-instrumentation.patch).
   O(n log n); A2-KS clears the <=15s and >=10× gates with zero output or
   inference change. Residual cost is about 33 MiB additional peak RSS on the
   measured `cwl50` run. The re-contract arm is unnecessary and was not taken.
+
+### B0-I — shipped MAC instrumentation — MEASURED, all Track-B arms survive
+
+- **Method:** benchmark-only exact-replay twin at commits `42c7eac` and
+  budget-boundary correction `9a88f36`. Setup and unchanged helpers call
+  `crosswordsmith_fill` internals; local twins only instrument restart,
+  search, placement, propagation, revision, and bump. The correction moved
+  MAC setup inside the same inference limit as root/search, matching product
+  `fill_attempt/8`; the first CWL stop numbers were discarded and rerun.
+- **Soundness:** product/twin outcome, exact layout/words, and final-attempt
+  nodes matched on four easy/seeded/scored rows, both multi-attempt authority
+  rows (`919/919` @30, `228/228` @1), and all five quality masks. Duplicate
+  authority/CWL counter runs matched every non-wall field. Counter overhead
+  was +5.39%, below the pre-registered 15% ceiling.
+- **Reference result:** STW `blocked_13a @30/@1` filled in 7/2 attempts and
+  11,318/729 nodes. Queue length <=2 was only 0.22%/1.04%, while length >=4
+  was 99.51%/98.08%. Fruitful revisions were 27.89%/28.93%; all DWOs came
+  from propagation, not placement.
+- **Learning signal:** 10,945/599 edge bumps; the top edge quartile held
+  83.54%/91.49% of bumps and Gini was 0.737/0.799. F1 queue ordering, F2/F4
+  credit variants, and F3/F5 aging/probing therefore all **SURVIVE** their
+  numeric kill-tests. This is structural headroom, not a win verdict.
+- **Cost mechanism:** propagation/support consumed 99.54%/99.49% of search
+  wall. Track-B latency arms must win by reducing bignum propagation work;
+  at `@1`, setup still accounts for about half of end-to-end wall.
+- **Matrix:** all 11 ladder rows filled; five-mask assignments matched the
+  product with min/mean 50; corrected `cwl50 @50` stopped `not_proven` after
+  charging MAC setup and search to the shipped 800M budget (27,342 nodes,
+  236.1s end to end, before the 240s cap). Product tests, all identity rungs,
+  and both inference ratchets passed at +0.00%; no artifact was re-recorded.
+- **Verdict:** **B0 complete; build B1, then B2/B3 in the registered order.**
+  Runnable evidence:
+  `benchmarks/results/2026-07-16-fill-b0-mac-instrumentation.md`.

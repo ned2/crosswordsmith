@@ -421,6 +421,29 @@ seeds at every length 0..256 (1,285 cases); all matched. A seeded full-ENABLE
 oracle, both inference ratchets, fuzz, and CLI/WASM parity all remained clean;
 nothing was re-baselined.
 
+### B0 MAC instrumentation (2026-07-16)
+
+The Balafoutis follow-up campaign first measured the shipped §8.4c policy
+through an exact-replay benchmark twin. Full tables, commands, correction
+record, and the runnable rig live in
+[`../results/2026-07-16-fill-b0-mac-instrumentation.md`](../results/2026-07-16-fill-b0-mac-instrumentation.md).
+
+| signal | STW `blocked_13a @30` | STW `blocked_13a @1` |
+|---|---:|---:|
+| attempts / nodes | 7 / 11,318 | 2 / 729 |
+| queue pops at length >=4 | 99.51% | 98.08% |
+| fruitful revisions | 27.89% | 28.93% |
+| learned bumps | 10,945 | 599 |
+| top-quartile bump share / Gini | 83.54% / 0.737 | 91.49% / 0.799 |
+| propagation/support share of search wall | 99.54% | 99.49% |
+
+None of B0's kill-tests fired: queue ordering, alternate credit, aging, and
+probing-init all have measured structural surface. This is permission to
+probe them, not evidence that any wins. Product/twin fills matched on both
+authority rows and all five quality masks; all 11 ladder rows filled; the
+corrected `cwl50 @50` stretch remained `not_proven` at 800M inferences.
+Product goldens, identity, and inference ratchets stayed unchanged.
+
 ## Caveats / how to extend
 
 - **`amer11` is also shipped** as `grids/amer11.json` (promoted at DP-9 as

@@ -157,7 +157,7 @@ descending order of authority:
 | CWL clean-floor row | `blocked_13a` × `cwl50` @50 (baseline: not-proven, 3m57s; defeats ingrid too) | open stretch signal — any completion here is news |
 | Quality gate | `benchmarks/fill_quality/run.sh` five-mask table | no quality regression vs the DP-9 table |
 
-### B0. Instrumentation probe first — IN PROGRESS (2026-07-16), effort S
+### B0. Instrumentation probe first — DONE / ALL ARMS SURVIVE (2026-07-16)
 
 The arrange campaign's single best move (P1) was measuring before building;
 its E-H6 rejection shows how a theoretically-sound weight signal dies on an
@@ -206,12 +206,51 @@ bignum-path wins; >=70% outside it means mask width is not the dominant
 cause. B0 succeeds by producing reproducible decision-grade counters, even
 if every variant is killed.
 
-### B1. F1 — weight-ordered revision queue (thesis Ch 5) — effort S, first variant
+**Verdict — measured, no kill-test fired.** The corrected exact-replay rig
+matched the product on both multi-attempt authority rows and all five quality
+masks; repeated counter runs were identical and easy-rung overhead was 5.39%.
+On STW `@30`/`@1`, queue length >=4 accounted for 99.51%/98.08% of pops,
+fruitful revisions were 27.89%/28.93%, and 10,945/599 learned bumps were
+strongly concentrated (top quartile 83.54%/91.49%, Gini 0.737/0.799).
+Therefore F1, F2/F4, and F3/F5 all survive. Propagation/support consumed
+99.54%/99.49% of search wall, so any Track-B latency win is specifically a
+bignum-path work reduction, not a cheap scalar hot-loop win. All ladder rows
+filled, quality assignments matched, and corrected `cwl50 @50` remained
+`not_proven` at the shipped 800M budget. Full evidence and runnable rig:
+`benchmarks/results/2026-07-16-fill-b0-mac-instrumentation.md`.
+
+### B1. F1 — weight-ordered revision queue (thesis Ch 5) — IN PROGRESS (2026-07-16)
 
 Pop the queued slot with smallest dom/wdeg (`v_dom/wdeg`; arms for `v_wdeg`
 and descending-weight edge order within a revision). Gated by B0's worklist
 kill-test. Thesis evidence: up to ~5× cpu swings and node-count cuts from
 revision order alone under a conflict-driven VOH.
+
+**Pre-registration — B1-O, revision-order arms (2026-07-16, before variant
+implementation or measurement).** Four independent arms share B0's exact
+probe policy: `q_dwd` pops the queued slot with minimum current dom/wdeg;
+`q_wdeg` pops maximum current weighted degree; `edge_desc` keeps FIFO slot
+pop but processes that slot's active crossing edges by descending learned
+weight; and `q_dwd_edge` combines `edge_desc` with `q_dwd` only if `q_dwd`
+survives the first three-arm screen. Ties preserve the baseline queue/edge
+order; no arm changes candidate order, branch set, restart caps, credit, or
+PRNG draws.
+
+Every built arm runs STW `blocked_13a @30/@1`, all 11 ladder workloads, the
+five-mask quality table, and a bounded 240s `cwl50 @50` stretch row. Primary
+metrics are deterministic limited-goal inferences, nodes, attempts,
+propagation revisions, and queue pops; wall is secondary because B0 found the
+search 99% propagation-dominated. An arm **wins** only if it completes both
+reference rows and either (a) cuts inferences and propagation revisions by
+>=15% on both, or (b) cuts them by >=25% at `@30` with no >2% regression at
+`@1`; it must also have no >5% inference/node regression on more than one
+ladder rung, no completion loss, and no quality regression (reference means
+at least 45.0/38.7; five-mask min 50 and means no lower than baseline).
+An arm that ties/loses both reference rows is closed after its ladder table;
+a one-rung win never graduates. `cwl50` completion is a stretch win but is
+not required for a latency verdict. Duplicate runs must reproduce outcome,
+fill, inferences, counters, attempts, and weights exactly. Winners remain
+probe-only inputs to Track D; no default-path or identity artifact changes.
 
 ### B2. F2 + F4 — weight-credit variants (thesis §3.4.2/3.4.4/3.4.6) — effort S/M
 
