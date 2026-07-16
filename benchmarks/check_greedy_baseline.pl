@@ -1,0 +1,233 @@
+#!/usr/bin/env swipl
+% benchmarks/check_greedy_baseline.pl - independent greedy inference ratchet.
+% Construction, sweep, and postprocess inferences gate at 0.5%; sweep is the
+% primary metric. Command wall/RSS and semantic counters are informational.
+
+:- set_prolog_flag(verbose, silent).
+:- use_module(library(apply), [foldl/4]).
+:- use_module(library(filesex), [directory_file_path/3]).
+:- use_module(library(json)).
+:- use_module(library(lists)).
+:- use_module(library(process)).
+:- use_module(library(readutil)).
+
+:- prolog_load_context(directory, D), assertz(bench_dir(D)).
+:- dynamic bench_dir/1.
+:- initialization(main, main).
+
+main :-
+    current_prolog_flag(argv, Argv0),
+    ( select('--self-test', Argv0, _) -> self_test, halt(0)
+    ; select('--history', Argv0, _)   -> Mode=history, Extra=[]
+    ; select('--promote', Argv0, Extra) -> Mode=promote
+    ; select('--record', Argv0, Extra)  -> Mode=record
+    ; select('--log', Argv0, Extra)     -> Mode=log
+    ; Mode=check, Extra=Argv0
+    ),
+    bench_dir(BenchDir),
+    ( Mode == history -> show_history(BenchDir), halt(0) ; true ),
+    directory_file_path(BenchDir, 'greedy_baseline.json', Path),
+    load_json(Path, Baseline),
+    run_bench(BenchDir, Extra, Doc),
+    do_check(Baseline, Doc, Fails, Wins),
+    ( Mode == check
+    -> report(Fails,Wins), halt_if(Fails)
+    ; Mode == log
+    -> append_history(BenchDir,Doc,Extra), halt(0)
+    ; Mode == record
+    -> record_checked(Path,Baseline,Doc), append_history(BenchDir,Doc,Extra), halt(0)
+    ; Mode == promote
+    -> report(Fails,Wins),
+       ( Fails =:= 0
+       -> record_checked(Path,Baseline,Doc), append_history(BenchDir,Doc,Extra), halt(0)
+       ;  format("promote: regressions present; baseline unchanged~n"), halt(1) )
+    ).
+
+halt_if(0) :- halt(0).
+halt_if(_) :- halt(1).
+
+load_json(Path, Dict) :-
+    setup_call_cleanup(open(Path,read,S),
+                       json_read_dict(S,Dict,[default_tag(json)]), close(S)).
+
+run_bench(BenchDir, Extra, Doc) :-
+    directory_file_path(BenchDir, 'run_arrange_greedy.pl', Runner),
+    append(['-q',Runner,'--','--format',json], Extra, Args),
+    process_create(path(swipl),Args,
+                   [stdout(pipe(Out)),stderr(std),process(PID)]),
+    read_string(Out,_,Text), close(Out), process_wait(PID,Status),
+    ( Status == exit(0) -> atom_json_dict(Text,Doc,[default_tag(json)])
+    ; throw(error(greedy_bench_failed(Status),_)) ).
+
+do_check(Baseline, Doc, Fails, Wins) :-
+    get_dict(workloads,Baseline,WL), get_dict(results,Doc,Rows),
+    get_dict(regression_tolerance_pct,Baseline,Tol),
+    get_dict(swi_prolog,Baseline,BaseSwi), get_dict(swi_prolog,Doc,RunSwi),
+    same_text(BaseSwi,RunSwi,VMatch),
+    format("greedy inference ratchet (sweep primary; tolerance +~w%)~n",[Tol]),
+    foldl(check_result(WL,Tol,VMatch),Rows,0-0,Fails-Wins),
+    report_unmeasured(WL,Rows).
+
+check_result(WL,Tol,VMatch,Row,F0-W0,F-W) :-
+    get_dict(rung,Row,Rung),
+    format("~n~w~n",[Rung]),
+    check_metric(WL,Rung,construction_inf,Row.metrics.construction_inf_med,
+                 Tol,VMatch,F0-W0,F1-W1),
+    check_metric(WL,Rung,sweep_inf,Row.metrics.sweep_inf_med,
+                 Tol,VMatch,F1-W1,F2-W2),
+    check_metric(WL,Rung,postprocess_inf,Row.metrics.postprocess_inf_med,
+                 Tol,VMatch,F2-W2,F-W),
+    format("  info command wall ~1f ms, rss ~0f KiB~n",
+           [Row.metrics.command_wall_med_ms,Row.metrics.command_rss_med_kib]).
+
+check_metric(WL,Rung,Key,Measured,Tol,VMatch,F0-W0,F-W) :-
+    ( baseline_spec(WL,Rung,Spec), get_dict(Key,Spec,Base)
+    -> delta(Base,Measured,Pct), classify(Pct,Tol,VMatch,Kind),
+       counts(Kind,DF,DW), F is F0+DF, W is W0+DW,
+       format("  ~w: ~D -> ~D (~2f%) ~w~n",[Key,Base,Measured,Pct,Kind])
+    ;  F=F0, W=W0,
+       format("  ~w: NEW at ~D~n",[Key,Measured])
+    ).
+
+delta(0,_M,0.0) :- !.
+delta(Base,M,Pct) :- Pct is (M-Base)/Base*100.0.
+
+classify(P,T,_V,win) :- P =< -T, !.
+classify(P,T,_V,ok) :- P =< T, !.
+classify(_P,_T,true,regression) :- !.
+classify(_P,_T,false,regression_warn).
+counts(win,0,1). counts(ok,0,0). counts(regression,1,0). counts(regression_warn,0,0).
+
+report(F,W) :-
+    ( F > 0 -> format("~nRESULT: FAIL (~d regressions, ~d wins)~n",[F,W])
+    ; W > 0 -> format("~nRESULT: PASS (~d wins, 0 regressions)~n",[W])
+    ; format("~nRESULT: PASS (all deterministic metrics +0.00%)~n") ).
+
+report_unmeasured(WL,Rows) :-
+    dict_pairs(WL,_,Pairs),
+    findall(K,(member(K-_,Pairs),\+ row_for(Rows,K,_)),Missing),
+    ( Missing=[] -> true ; format("not measured this pass: ~w~n",[Missing]) ).
+
+baseline_spec(WL,Rung,Spec) :-
+    dict_pairs(WL,_,Pairs), member(K-Spec,Pairs), same_text(K,Rung,true), !.
+row_for(Rows,Rung,Row) :-
+    member(Row,Rows), same_text(Row.rung,Rung,true), !.
+
+same_text(A,B,Same) :-
+    text_to_string(A,S1), text_to_string(B,S2),
+    ( S1==S2 -> Same=true ; Same=false ).
+
+% Atomic one-measurement recording: write and verify a sibling temporary file,
+% then rename it over the target. A failed write/read-back leaves the committed
+% baseline intact. Unmeasured heavy rows are retained.
+record_checked(Path, Baseline, Doc) :-
+    build_recorded(Baseline,Doc,Recorded),
+    atom_concat(Path,'.tmp',Tmp),
+    setup_call_cleanup(
+        true,
+        ( write_json(Tmp,Recorded),
+          load_json(Tmp,ReadBack),
+          verify_readback(ReadBack,Doc),
+          rename_file(Tmp,Path) ),
+        ( exists_file(Tmp) -> delete_file(Tmp) ; true )),
+    format("baseline recorded and read-back verified: ~w~n",[Path]).
+
+build_recorded(Baseline,Doc,Recorded) :-
+    get_dict(workloads,Baseline,WL0), get_dict(results,Doc,Rows),
+    foldl(record_row,Rows,WL0,WL),
+    current_host(Host),
+    Recorded=Baseline.put(_{host:Host,swi_prolog:Doc.swi_prolog,workloads:WL,
+        generated_note:'construction/sweep/postprocess inferences gate independently at 0.5%; sweep is primary. Wall/RSS and semantic counters are informational. Regenerate with make bench-greedy-record BENCH_ARGS=--heavy.'}).
+
+record_row(Row,WL0,WL) :-
+    text_to_atom(Row.rung,Key), M=Row.metrics,
+    Spec=_{construction_inf:M.construction_inf_med,
+           sweep_inf:M.sweep_inf_med,postprocess_inf:M.postprocess_inf_med,
+           command_wall_med_ms:M.command_wall_med_ms,
+           command_rss_med_kib:M.command_rss_med_kib,
+           tier:Row.tier,fixture:Row.fixture,grid:Row.size,framing:Row.framing,
+           mode:Row.mode,construction:Row.construction,words:Row.words,
+           iterations:Row.iterations,warmup:Row.warmup,
+           info_only:["command_wall_med_ms","command_rss_med_kib","semantic_counters"]},
+    put_dict(Key,WL0,Spec,WL).
+
+text_to_atom(Text,Atom) :- text_to_string(Text,S), atom_string(Atom,S).
+
+write_json(Path,Dict) :-
+    setup_call_cleanup(open(Path,write,S),json_write_dict(S,Dict,[width(100)]),close(S)).
+
+verify_readback(ReadBack,Doc) :-
+    get_dict(workloads,ReadBack,WL), get_dict(results,Doc,Rows),
+    forall(member(Row,Rows),
+           ( baseline_spec(WL,Row.rung,Spec),
+             Spec.construction_inf =:= Row.metrics.construction_inf_med,
+             Spec.sweep_inf =:= Row.metrics.sweep_inf_med,
+             Spec.postprocess_inf =:= Row.metrics.postprocess_inf_med )),
+    length(Rows,Expected),
+    findall(R,(member(R,Rows),baseline_spec(WL,R.rung,_)),Found),
+    length(Found,Expected).
+
+current_host(Host) :-
+    process_create(path(uname),['-nm'],[stdout(pipe(S)),process(P)]),
+    read_string(S,_,Raw),close(S),process_wait(P,_),normalize_space(atom(Host),Raw).
+
+history_path(BenchDir,Path) :- directory_file_path(BenchDir,'greedy_history.jsonl',Path).
+
+append_history(BenchDir,Doc,Extra) :-
+    history_path(BenchDir,Path), get_dict(results,Doc,Rows),
+    get_time(Now), Epoch is round(Now), format_time(atom(Date),'%Y-%m-%dT%H:%M:%S',Now),
+    git_commit(Commit), current_host(Host),
+    ( memberchk('--heavy',Extra) -> Tiers='core+heavy' ; Tiers=core ),
+    findall(K-Cell,
+            ( member(R,Rows), text_to_atom(R.rung,K), M=R.metrics,
+              Cell=_{construction_inf:M.construction_inf_med,
+                     sweep_inf:M.sweep_inf_med,
+                     postprocess_inf:M.postprocess_inf_med,
+                     wall_ms:M.command_wall_med_ms,
+                     rss_kib:M.command_rss_med_kib} ),
+            Pairs),
+    dict_pairs(Rungs,rungs,Pairs),
+    Entry=_{epoch:Epoch,date:Date,commit:Commit,host:Host,swi:Doc.swi_prolog,
+            tiers:Tiers,rungs:Rungs},
+    with_output_to(string(Raw),json_write_dict(current_output,Entry,[width(0)])),
+    normalize_space(string(Line),Raw),
+    setup_call_cleanup(open(Path,append,S),(write(S,Line),nl(S)),close(S)),
+    format("history appended: ~w~n",[Path]).
+
+git_commit(Commit) :-
+    process_create(path(git),['rev-parse','--short','HEAD'],
+                   [stdout(pipe(S)),stderr(null),process(P)]),
+    read_string(S,_,Raw),close(S),process_wait(P,_),normalize_space(atom(Commit),Raw).
+
+show_history(BenchDir) :-
+    history_path(BenchDir,Path),
+    ( exists_file(Path) -> read_file_to_string(Path,Text,[]) ; Text="" ),
+    split_string(Text,"\n","",Lines), exclude(==(""),Lines,NonEmpty),
+    length(NonEmpty,N), format("greedy benchmark history: ~d run(s)~n",[N]),
+    forall(member(Line,NonEmpty),writeln(Line)).
+
+% Fast permanent self-test for promotion safety. It proves core-only recording
+% retains a heavy row, updates an existing row, inserts a new row, and verifies
+% all three measured metrics from the exact one Doc used to write.
+self_test :-
+    tmp_file_stream(text,Path,S), close(S),
+    Initial=_{generated_note:"test",host:"h",metric:"sweep_inf_med",mode:"ratchet",
+              regression_tolerance_pct:0.5,swi_prolog:"10.1.10",tool:"t",
+              workloads:_{core:_{construction_inf:1,sweep_inf:2,postprocess_inf:3},
+                           heavy:_{construction_inf:7,sweep_inf:8,postprocess_inf:9}}},
+    write_json(Path,Initial),
+    R1=_{rung:"core",fixture:"f",size:1,framing:"size",mode:_{kind:"best_effort"},
+         construction:_{},words:1,iterations:1,warmup:0,tier:"core",
+         metrics:_{construction_inf_med:10,sweep_inf_med:20,postprocess_inf_med:30,
+                   command_wall_med_ms:1.0,command_rss_med_kib:2}},
+    R2=R1.put(_{rung:"new"}), Doc=_{swi_prolog:"10.1.10",results:[R1,R2]},
+    record_checked(Path,Initial,Doc), load_json(Path,Back),
+    Back.workloads.heavy.sweep_inf =:= 8,
+    Back.workloads.core.sweep_inf =:= 20,
+    Back.workloads.new.postprocess_inf =:= 30,
+    delete_file(Path),
+    format("greedy baseline self-test: PASS~n").
+
+:- multifile prolog:error_message//1.
+prolog:error_message(greedy_bench_failed(Status)) -->
+    ['greedy benchmark runner failed: ~q'-[Status]].

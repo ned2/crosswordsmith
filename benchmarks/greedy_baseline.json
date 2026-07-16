@@ -1,0 +1,158 @@
+{
+  "generated_note":"construction/sweep/postprocess inferences gate independently at 0.5%; sweep is primary. Wall/RSS and semantic counters are informational. Regenerate with make bench-greedy-record BENCH_ARGS=--heavy.",
+  "host":"bunk x86_64",
+  "metric":"sweep_inf_med",
+  "mode":"ratchet",
+  "regression_tolerance_pct":0.5,
+  "swi_prolog":"10.1.10",
+  "tool":"crosswordsmith-arrange-greedy-bench",
+  "workloads": {
+    "benchmark_08_candidates": {
+      "command_rss_med_kib":12026,
+      "command_wall_med_ms":60.0,
+      "construction": {
+	"corner":"topleft_across",
+	"expected": {"dropped":0,"outcome":"completed","placed":8},
+	"seed_answer":"AOBSCFDMJJJJV"
+      },
+      "construction_inf":52663,
+      "fixture":"fixtures/benchmark_08_words.pl",
+      "framing":"size",
+      "grid":13,
+      "info_only": ["command_wall_med_ms", "command_rss_med_kib", "semantic_counters" ],
+      "iterations":20,
+      "mode": {"drop":"strict","k":5,"kind":"candidates"},
+      "postprocess_inf":5982,
+      "sweep_inf":356854,
+      "tier":"core",
+      "warmup":3,
+      "words":8
+    },
+    "bundled_11_best_effort": {
+      "command_rss_med_kib":11492,
+      "command_wall_med_ms":40.0,
+      "construction": {
+	"corner":"topleft_across",
+	"expected": {"dropped":5,"outcome":"completed","placed":1},
+	"seed_answer":"OMEGA POINT"
+      },
+      "construction_inf":2120,
+      "fixture":"fixtures/bundled_17_clues.pl",
+      "framing":"max_size",
+      "grid":11,
+      "info_only": ["command_wall_med_ms", "command_rss_med_kib", "semantic_counters" ],
+      "iterations":20,
+      "mode": {"kind":"best_effort"},
+      "postprocess_inf":1376,
+      "sweep_inf":15555,
+      "tier":"core",
+      "warmup":3,
+      "words":6
+    },
+    "bundled_17_candidates": {
+      "command_rss_med_kib":11810,
+      "command_wall_med_ms":60.0,
+      "construction": {
+	"corner":"topleft_across",
+	"expected": {"dropped":0,"outcome":"completed","placed":6},
+	"seed_answer":"NARRATIVE FALLACY"
+      },
+      "construction_inf":17267,
+      "fixture":"fixtures/bundled_17_clues.pl",
+      "framing":"size",
+      "grid":17,
+      "info_only": ["command_wall_med_ms", "command_rss_med_kib", "semantic_counters" ],
+      "iterations":20,
+      "mode": {"drop":"strict","k":3,"kind":"candidates"},
+      "postprocess_inf":6926,
+      "sweep_inf":296712,
+      "tier":"core",
+      "warmup":3,
+      "words":6
+    },
+    "ladder_15x15_32w_best_effort": {
+      "command_rss_med_kib":13012,
+      "command_wall_med_ms":300.0,
+      "construction": {
+	"corner":"topleft_across",
+	"expected": {"dropped":4,"outcome":"completed","placed":28},
+	"seed_answer":"FAFB"
+      },
+      "construction_inf":923529,
+      "fixture":"fixtures/ladder_15x15_32w.pl",
+      "framing":"size",
+      "grid":15,
+      "info_only": ["command_wall_med_ms", "command_rss_med_kib", "semantic_counters" ],
+      "iterations":7,
+      "mode": {"kind":"best_effort"},
+      "postprocess_inf":11328,
+      "sweep_inf":6126332,
+      "tier":"heavy",
+      "warmup":2,
+      "words":32
+    },
+    "ladder_21x21_80w_best_effort": {
+      "command_rss_med_kib":19220,
+      "command_wall_med_ms":1250.0,
+      "construction": {
+	"corner":"topleft_across",
+	"expected": {"dropped":71,"outcome":"completed","placed":9},
+	"seed_answer":"EDDE"
+      },
+      "construction_inf":497243,
+      "fixture":"fixtures/ladder_21x21_80w.pl",
+      "framing":"size",
+      "grid":21,
+      "info_only": ["command_wall_med_ms", "command_rss_med_kib", "semantic_counters" ],
+      "iterations":5,
+      "mode": {"kind":"best_effort"},
+      "postprocess_inf":10158,
+      "sweep_inf":28942086,
+      "tier":"heavy",
+      "warmup":2,
+      "words":80
+    },
+    "real_13x13_12w_best_effort": {
+      "command_rss_med_kib":11780,
+      "command_wall_med_ms":90.0,
+      "construction": {
+	"corner":"topleft_across",
+	"expected": {"dropped":4,"outcome":"completed","placed":8},
+	"seed_answer":"KINKINESSES"
+      },
+      "construction_inf":68276,
+      "fixture":"fixtures/real_13x13_12w.pl",
+      "framing":"size",
+      "grid":13,
+      "info_only": ["command_wall_med_ms", "command_rss_med_kib", "semantic_counters" ],
+      "iterations":10,
+      "mode": {"kind":"best_effort"},
+      "postprocess_inf":16277,
+      "sweep_inf":1248301,
+      "tier":"core",
+      "warmup":2,
+      "words":12
+    },
+    "real_15x15_18w_best_effort": {
+      "command_rss_med_kib":12288,
+      "command_wall_med_ms":150.0,
+      "construction": {
+	"corner":"topleft_across",
+	"expected": {"dropped":3,"outcome":"completed","placed":15},
+	"seed_answer":"KATZENJAMMERS"
+      },
+      "construction_inf":218776,
+      "fixture":"fixtures/real_15x15_18w.pl",
+      "framing":"size",
+      "grid":15,
+      "info_only": ["command_wall_med_ms", "command_rss_med_kib", "semantic_counters" ],
+      "iterations":10,
+      "mode": {"kind":"best_effort"},
+      "postprocess_inf":16629,
+      "sweep_inf":2789395,
+      "tier":"core",
+      "warmup":2,
+      "words":18
+    }
+  }
+}

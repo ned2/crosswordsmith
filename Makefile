@@ -2,7 +2,7 @@
 
 SHELL := /bin/bash
 
-.PHONY: test test-wasm test-xword xword-parity unit golden update-golden fuzz bench bench-check bench-record bench-log bench-history bench-matrix bench-arrange-verify bench-arrange-promote
+.PHONY: test test-wasm test-xword xword-parity unit golden update-golden fuzz bench bench-check bench-record bench-log bench-history bench-matrix bench-arrange-verify bench-arrange-promote bench-greedy bench-greedy-check bench-greedy-record bench-greedy-log bench-greedy-history bench-greedy-identity bench-greedy-verify bench-greedy-promote
 
 BENCH_FORMAT ?= text
 BENCH_ARGS ?=
@@ -185,6 +185,38 @@ bench-log:
 #   make bench-history
 bench-history:
 	swipl -q benchmarks/check_baseline.pl --history
+
+# Independent greedy best-effort/candidates substrate. Construction, full
+# four-corner seed sweep, postprocess, and command layers are separate; sweep
+# inferences are primary. This ratchet never reads or writes baseline.json or
+# history.jsonl.
+bench-greedy:
+	swipl -q benchmarks/run_arrange_greedy.pl -- --format $(BENCH_FORMAT) $(BENCH_ARGS)
+
+bench-greedy-check:
+	swipl -q benchmarks/check_greedy_baseline.pl $(BENCH_ARGS)
+
+bench-greedy-record:
+	swipl -q benchmarks/check_greedy_baseline.pl --record $(BENCH_ARGS)
+
+bench-greedy-log:
+	swipl -q benchmarks/check_greedy_baseline.pl --log $(BENCH_ARGS)
+
+bench-greedy-history:
+	swipl -q benchmarks/check_greedy_baseline.pl --history
+
+bench-greedy-identity:
+	benchmarks/check_greedy_identity.sh
+
+bench-greedy-verify:
+	./run_tests.sh
+	benchmarks/check_greedy_identity.sh
+	swipl -q benchmarks/check_greedy_baseline.pl $(BENCH_ARGS)
+
+# Check and record the exact same one measurement, with atomic write plus
+# read-back completeness verification before replacing the baseline.
+bench-greedy-promote:
+	swipl -q benchmarks/check_greedy_baseline.pl --promote $(BENCH_ARGS)
 
 # Strategy x fixture comparison matrix (CSV on stdout). Each fixture runs on
 # its manifest grid (benchmarks/fixtures.pl). Optionally restrict strategies:
