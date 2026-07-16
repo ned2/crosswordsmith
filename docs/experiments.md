@@ -1826,3 +1826,22 @@ p1-backtrack-instrumentation.patch).
   combinations are closed. B3 remains independently warranted using baseline
   credit only. Product tests, 11 identity rungs, and heavy ratchets pass
   unchanged because all variants remain probe-only.
+
+### B3-R — MAC aging and probing init — MEASURED, no arm graduates
+
+- **Method/soundness:** rejected probe branch `experiment/b3-aging-probing`,
+  commit `9782772`. Seams pin normal-failure-only age counting, cap/exception
+  bypass, exact x0.5 aging, per-attempt reset, same-root cap-125 probes,
+  discarded probe fills, and a separate pinned splitmix64 stream that cannot
+  shift production draws. All eight authority duplicate pairs match exactly.
+- **`age20`:** `@1` inferences/revisions -30.8%/-38.0% and no ladder rung
+  over +5%, but `@30` becomes not-proven at 800M after 871 halvings.
+  Persistent concentrated weights are necessary on the wide row. **REJECT.**
+- **`probe4`/`probe8`:** genuine `@30` guidance (-50.9%/-90.2% inferences),
+  but `@1` regresses +8.6%/+38.6%, `@30` mean is 44.6 < 45.0, and both lose
+  `g17_50k` at 2B. Warm cost fails directly: 504/940 warm nodes save only
+  156/490 real `@1` nodes. **REJECT.** Conditional combination not built.
+- **Closure:** all five quality masks remain mean/min 50 and no arm completes
+  CWL. A smaller probe dose cannot satisfy the global ladder node guard because
+  the easy baseline rungs take only 8–107 nodes before any warm tax. Track B
+  closes with no Track D candidate. C1 remains the independent envelope bet.

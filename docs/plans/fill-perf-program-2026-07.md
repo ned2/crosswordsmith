@@ -320,7 +320,7 @@ B1's q_wdeg failure. Five-mask quality stayed 50/50 and no arm completed
 CWL. Alternate credit and the q_wdeg stabilization sequel are closed; no B2
 arm enters Track D. Full result remains on rejected probe commit `80e3edf`.
 
-### B3. F3 + F5 — aging and probing-init arms — IN PROGRESS (2026-07-16)
+### B3. F3 + F5 — aging and probing-init arms — LOST (2026-07-16)
 
 F3: intra-attempt aging (÷2 every ~20 backtracks) vs our between-attempt
 ×0.99. F4-style caveat applies: high per-class variance in the thesis (5×
@@ -355,6 +355,19 @@ hidden prepaid search. Duplicate runs must match every non-wall field. CWL
 completion is the only envelope signal; otherwise all wins are latency-only.
 Any winner remains probe-only for Track D.
 
+**Verdict — no recency/warm-start arm graduates.** `age20` improved `@1`
+inferences/revisions 30.8%/38.0% and had no ladder regression over 5%, but
+lost `@30` completion. `probe4` cut `@30` 50.9%/51.0%, yet regressed `@1`
+8.6%, lowered `@30` mean 45.0 → 44.6, spent 504 warm nodes to save only 156
+real `@1` nodes, and lost `g17_50k` at 2B. `probe8` amplified both sides:
+`@30` -90.2%/-90.9%, but `@1` +38.6%/+46.0%, the same quality miss, and
+the same ladder completion loss. Conditional `probe4_age20` was not built.
+All five quality masks stayed 50/50 and no arm completed CWL. A smaller
+probe dose is not warranted: the fixed warm-node tax already violates the
+ladder node guard on almost every easy rung, whose baseline searches need
+only 8–107 nodes. B3 and Track B are closed with no Track D candidate; full
+result remains on rejected probe commit `9782772`.
+
 Stop conditions for Track B: an arm that loses or ties on the reference row
 AND the ladder is closed with its numbers recorded (experiments-ledger
 discipline); no arm graduates on a single-rung win. If B0's kill-tests fire
@@ -363,7 +376,7 @@ without building them — that IS the completed outcome.
 
 ## Track C — the envelope bet
 
-### C1. F6 — set branching on crossing-letter projections (thesis Ch 7) — effort M/L
+### C1. F6 — set branching on crossing-letter projections (thesis Ch 7) — IN PROGRESS (2026-07-16)
 
 The only candidate aimed at completion rather than latency: candidates
 agreeing on all checked cells are propagation-interchangeable; branch on the
@@ -382,6 +395,45 @@ members (resolve at solution assembly); class enumeration must stay lazy
 (the C3 lesson — eager materialization is how the C2 core died on open
 grids). If the spike fails, the recorded outcome is "F6 measured, does not
 close the blocked rows" and the pins stand unchanged.
+
+**Pre-registration — C1-P, exact projection quotient (2026-07-16, before
+implementation or measurement).** One spike arm only. For the selected slot,
+checked positions are exactly its crossing-edge positions. The lowest live
+candidate bit is a class representative; intersecting the slot domain with
+that representative's letter mask at every checked position obtains the
+whole equivalence-class mask using O(crossings) bignum operations. The next
+class comes from the residual domain with that mask removed, so enumeration
+is lazy by class and preserves representative score order without eager word
+materialization. Propagation may use the representative because every member
+has identical letters at every crossing.
+
+Concrete words and the all-different constraint are deferred, not dropped.
+Search records `slot-class_mask`; at a complete class assignment, a complete
+backtracking matching selects one candidate word per class in bucket order,
+excluding seeded words and duplicates across slots. Matching failure rejects
+the class assignment and resumes projection search. Shared-cell binding then
+hard-verifies the chosen words. This leaf matching is the soundness condition:
+no representative may be committed early, and no class may be refuted merely
+because its first member is used. Executable microcases must prove (a) two
+members propagate identically, (b) a used representative with an unused class
+member remains feasible, (c) Hall-style matching failure backtracks to another
+class assignment, and (d) class enumeration covers every live word exactly
+once. Candidate sets, MAC support, dom/wdeg slot selection, weights, restarts,
+and PRNG policy otherwise stay baseline.
+
+Fixed effort box: one implementation and soundness-correction pass, no tuned
+variants; 800M inferences and 240s limited-goal wall per row. Authority and
+guards are STW `blocked_13a @30/@1`, all 11 ladder rows, and five-mask quality.
+Envelope targets are `blocked_13a × cwl50 @50` plus `blocked_13b` and
+`blocked_15a` × STW at `@30` and `@1`; their bounded non-completion is data,
+never a defect. Report projection class count/size and leaf-matching failures.
+C1 **graduates only if** it validly completes at least one previously unclosed
+target within the box and <=100,000 projection nodes, while retaining both
+reference completions, reference means >=45.0/38.7, five-mask min 50/no mean
+loss, determinism, and no ladder completion loss. A latency-only win does not
+graduate this envelope arm. If no target completes, F6 is closed and DP-6's
+report-don't-chase pins stand. Any completion winner produces a Track D
+dossier; it is not adopted here.
 
 ## Track D — the adoption decision pass (decision pass pending)
 

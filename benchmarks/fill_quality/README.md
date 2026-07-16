@@ -478,6 +478,20 @@ reference shape. The q_wdeg combinations retain local revision savings but
 do not remove B1's ladder instability. All five quality masks remained
 mean/min 50; no arm completed CWL. No B2 arm enters Track D.
 
+### B3 aging and probing initialization (2026-07-16) — no arm graduates
+
+Probe commit `9782772` tested intra-attempt x0.5 aging every 20 failed
+branches and four/eight cap-125 warm searches before greedy attempt 1.
+`age20` improved STW `@1` 30.8% inferences but lost `@30` completion.
+`probe4`/`probe8` cut `@30` inferences 50.9%/90.2%, proving warm guidance is
+real, but regressed `@1` 8.6%/38.6%, lowered `@30` mean to 44.6, and lost
+`g17_50k` at 2B. Their fixed warm-node cost also fails the easy-rung guard.
+
+All five quality masks stayed mean/min 50; no arm completed CWL. Together
+with B1/B2, this closes Track B with no candidate for Track D. The remaining
+C1 spike is independent and must complete a previously unclosed row; Track-B
+latency effects do not lower its envelope bar.
+
 ## Caveats / how to extend
 
 - **`amer11` is also shipped** as `grids/amer11.json` (promoted at DP-9 as
