@@ -90,7 +90,7 @@ only reopens on a concrete user need and would belong in Track D's batch
 (it must re-verify `make test-wasm` — LibBF bignum parity is part of the
 battery).
 
-### A2. Seeded load-walk O(n²) (§8.5 row) — IN PROGRESS (2026-07-16), effort M
+### A2. Seeded load-walk O(n²) (§8.5 row) — WON / BUILT (A2-KS, 2026-07-16)
 
 Facts: `--seed`/`--shuffle` on `dicts/cwl50.dict` costs ~2m45s **at load**
 regardless of grid (85,800-entry score-50 band ≈ 7.4G walk steps; a trivial
@@ -132,6 +132,17 @@ permutations imply identical search behavior, while the golden, exhaustive
 small-sequence comparison, and ladder gates directly test that premise. If
 any permutation differs, A2-KS stops immediately and the re-contract arm is
 prepared for the user's decision rather than taken here.
+
+**Verdict — WON, keep-sequence arm landed.** The draw sequence was replayable:
+`seeded_permutation/2` now uses a local Fenwick tree to select and delete the
+same surviving original position in O(log n). An independent copy of the old
+walk matched the new permutation and following PRNG draw for 1,285 cases
+(five seeds × lengths 0..256). The `cwl50` trivial-grid reproducer fell from
+171.14s to 9.57s (**17.88×**; peak RSS 785,912 → 819,404 KiB), and a seeded
+172,823-word plain-list smoke run completed in 4.91s. `make test`, fuzz,
+CLI/WASM parity, all 11 identity rungs, and both inference layers passed with
+no golden/oracle/ratchet re-recording. The re-contract arm is closed as
+unnecessary; seed semantics and every historical fill remain unchanged.
 
 ## Track B — Balafoutis probe campaign (measurement only; no default-path change)
 
@@ -238,8 +249,8 @@ way the DP-8 probe evidence did, and the default engine stays byte-stable.
 
 1. ~~**A1** (capacity error)~~ — DONE (DP-10, AC-FILL-15; see the A1 update
    above).
-2. **A2** (seeded walk) — micro decision pass, then the keep-sequence
-   rewrite if replayable.
+2. ~~**A2** (seeded walk)~~ — DONE (A2-KS: keep-sequence Fenwick replay,
+   17.88× on the `cwl50` reproducer; byte-identity preserved).
 3. **B0** (instrumentation) — cheap, and its kill-tests may delete half of
    Track B before anything is built.
 4. **B1 → B2 → B3** as surviving arms, on the shared probe rig, each with

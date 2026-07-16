@@ -1711,3 +1711,31 @@ p1-backtrack-instrumentation.patch).
   restated: a per-node cost that is minimal on the heavy rungs can still be the
   whole budget on the light ones - and here it is the shortcut's own admission
   test, which no amount of bookkeeping cleverness can remove.
+
+### A2-KS — Fenwick order-statistic replay for seeded permutation — KEPT
+
+- **Idea:** replace `seeded_permutation/2`'s O(n²) survivor-list selection
+  with an invocation-local Fenwick tree over live original positions. Keep
+  every PRNG draw, `V mod remaining-count`, selected live rank, and deletion
+  exactly unchanged.
+- **Where:** `prolog/crosswordsmith/core.pl`; fill's default pinned
+  `prng_shuffle/2` is untouched. Built on `experiment/a2-seeded-fenwick`,
+  commit `42abb6a`.
+- **Soundness:** an independent test-only implementation of the old walk
+  matched the Fenwick implementation for seeds 0, 1, 7, 42, and 2^64-1 at
+  every length 0..256. All 1,285 permutations and the following PRNG draw
+  matched. The published seed-42 answer and empty-list no-draw, determinism,
+  failure, and error contracts remain locked.
+- **Result:** the trivial 3×3 `cwl50` seeded CLI reproducer fell from 171.14s
+  to 9.57s, a **17.88×** speedup, with exit 0 in both cases. Peak RSS moved
+  from 785,912 to 819,404 KiB (+4.26%). A 172,823-word plain seeded load/fill
+  completed in 4.91s at 601,148 KiB.
+- **Identity and ratchets:** `make test` passed with every golden unchanged;
+  all 11 fill identity digests matched. Heavy fill search and load inference
+  counts were exactly unchanged on all 11 rungs (+0.00% throughout). Fuzz
+  passed 66/66 and `make test-wasm` confirmed native/LibBF seeded parity. No
+  baseline, identity, or golden data was regenerated.
+- **Verdict:** **KEEP.** The historical seeded sequence is replayable in
+  O(n log n); A2-KS clears the <=15s and >=10× gates with zero output or
+  inference change. Residual cost is about 33 MiB additional peak RSS on the
+  measured `cwl50` run. The re-contract arm is unnecessary and was not taken.

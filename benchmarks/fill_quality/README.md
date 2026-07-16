@@ -403,6 +403,24 @@ entries dropped (exactly the 992 lines finding 3 predicted; 567,657 →
    (222 checks); the `amer11` mask itself PASSes `stockgrid_report` — the
    basis for promoting it into `grids/` (DP-9).
 
+### Seeded `cwl50` load after A2-KS (2026-07-16)
+
+The §8.5 seeded-load follow-up retained the historical permutation exactly
+while replacing its O(n²) survivor-list selection with Fenwick-indexed rank
+selection. Same-machine end-to-end command on the trivial 3×3 grid, seed 7:
+
+| implementation | wall | peak RSS | outcome |
+|---|---:|---:|---|
+| historical selection walk | 171.14s | 785,912 KiB | filled |
+| A2-KS exact-sequence replay | **9.57s** | 819,404 KiB | filled |
+
+That is **17.88×** faster with a 4.26% peak-RSS increase. The sequence gate
+compared the old and new permutation plus the following PRNG draw for five
+seeds at every length 0..256 (1,285 cases); all matched. A seeded full-ENABLE
+(172,823 words) smoke run completed in 4.91s. Goldens, the 11-rung identity
+oracle, both inference ratchets, fuzz, and CLI/WASM parity all remained clean;
+nothing was re-baselined.
+
 ## Caveats / how to extend
 
 - **`amer11` is also shipped** as `grids/amer11.json` (promoted at DP-9 as
