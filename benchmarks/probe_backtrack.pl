@@ -1,5 +1,18 @@
 #!/usr/bin/env swipl
-% MEASUREMENT PROBE P1 driver (throwaway; never merged).
+% HISTORICAL P1 ARTIFACT - INTENTIONALLY NON-RUNNABLE.
+%
+% This file calls probe_* hooks removed from product code after the P1 result
+% was recorded. Do not restore those hooks. The durable result is
+% docs/experiments.md P1 and the historical implementation is preserved at
+% docs/experiments/p1-backtrack-instrumentation.patch. New arrange probes live
+% under benchmarks/probe_arrange/ and keep instrumentation outside product.
+:- initialization(historical_only, main).
+historical_only :-
+    format(user_error,
+           'probe_backtrack.pl is historical and non-runnable; see docs/experiments.md P1 and benchmarks/probe_arrange/README.md~n', []),
+    halt(2).
+
+% MEASUREMENT PROBE P1 driver (historical; never merged).
 %
 % Runs the production mrv_inc first-solution arrange search (find_crossword/6)
 % from the two production corners [topleft_across, topright] over the dense
@@ -22,7 +35,7 @@
    consult(Load),
    nb_setval(repo_root, Root).
 
-:- initialization(main, main).
+% The old initialization is deliberately disabled.
 
 % The four subjects: fixture, grid size, tag.
 subject('fixtures/ladder_15x15_12w.pl', 15, control_12w).

@@ -2,7 +2,7 @@
 
 SHELL := /bin/bash
 
-.PHONY: test test-wasm test-xword xword-parity unit golden update-golden fuzz bench bench-check bench-record bench-log bench-history bench-matrix bench-arrange-verify bench-arrange-promote bench-greedy bench-greedy-check bench-greedy-record bench-greedy-log bench-greedy-history bench-greedy-identity bench-greedy-verify bench-greedy-promote
+.PHONY: test test-wasm test-xword xword-parity unit golden update-golden fuzz bench bench-check bench-record bench-log bench-history bench-matrix bench-arrange-verify bench-arrange-promote bench-greedy bench-greedy-check bench-greedy-record bench-greedy-log bench-greedy-history bench-greedy-identity bench-greedy-verify bench-greedy-promote probe-arrange-fixtures probe-arrange-seeds probe-arrange-schema-test probe-arrange-check
 
 BENCH_FORMAT ?= text
 BENCH_ARGS ?=
@@ -225,6 +225,19 @@ bench-greedy-promote:
 BENCH_STRATEGIES ?=
 bench-matrix:
 	swipl -q benchmarks/run_matrix.pl -- $(BENCH_STRATEGIES)
+
+# Campaign-only P0.3/P0.4 checks. These never record baselines, regenerate
+# goldens, or add cliff fixtures to workloads.pl.
+probe-arrange-fixtures:
+	python3 benchmarks/probe_arrange/check_fixtures.py
+
+probe-arrange-seeds:
+	python3 benchmarks/probe_arrange/check_seeds.py
+
+probe-arrange-schema-test:
+	python3 -m unittest benchmarks/probe_arrange/test_schema.py
+
+probe-arrange-check: probe-arrange-fixtures probe-arrange-seeds probe-arrange-schema-test
 
 # --- browser payload/startup bench (payload plan Phase 0) ---------------------
 # Payload/request/startup benchmark for the browser bundle
