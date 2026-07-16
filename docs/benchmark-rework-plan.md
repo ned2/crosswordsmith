@@ -146,7 +146,8 @@ arrange_command_sampler(Fixture, Size, Mode, Sample) :-
     size_flag(Mode, Size, Flag),        % --size N | --max-size N
     process_sampler(['arrange','--input',Fixture,Flag,'--out','/dev/null'], Sample).
 
-% PRODUCT — the search itself (Layer B). The REAL 4-corner path
+% PRODUCT — the search itself (Layer B). The REAL strict path (currently two
+% non-transpose corner representatives under one shared operation budget)
 % (construct_corners + rescore + select + number), module-qualified — verified to
 % reproduce arrange_solve's search exactly (identical placement + deterministic
 % inferences), minus emit and minus check_unique_answers/1 (negligible cost; only
@@ -204,12 +205,13 @@ arrange_workload('fixtures/benchmark_14_words.pl', 17, size, 20, 3, placed).
 `bench_fixture/5` stays in `fixtures.pl`, unchanged — it is the *research*
 manifest and has its own consumers (§3).
 
-*[As built the manifest is `arrange_workload/9`:
-`(Fixture, Size, Mode, Iterations, Warmup, Expected, Tier, Gate, Budget)` —
+*[As built the manifest is `arrange_workload/10`:
+`(Fixture, Size, Mode, Iterations, Warmup, Expected, Tier, Gate, Budget, Words)` —
 `Tier` (core|heavy) selects the default vs `--heavy` set, `Gate` (inf|latency)
-encodes the budget-saturation rule below, and `Budget` lets the search layer
+encodes the budget-saturation rule below, `Budget` lets the search layer
 run hard rungs to true completion above the shipped 500 M. See the
-`workloads.pl` header for the authoritative column semantics.]*
+`workloads.pl` header for the authoritative column semantics, and `Words`
+asserts the exact fixture cardinality.]*
 
 **The existing `benchmark_*` fixtures are mostly UNSUITABLE as product
 workloads** (stress-test M1/M2 — the biggest correction to this plan):
@@ -346,9 +348,10 @@ The exact regression *gate* became a *hill-climbing instrument* (the goal shifte
 to tracking arrange perf toward a WASM runtime, where the inference count is the
 portable signal — identical native vs WASM, only wall-per-inference changes).
 - **Workloads → a cost ladder** (`benchmarks/workloads.pl`): planted-witness mesh
-  fixtures (`gen_mesh_fixture.py`) whose warm search cost climbs ~0.1M→182M across
+  fixtures (`gen_mesh_fixture.py`) whose current gated warm search cost climbs
+  ~0.025M→38.5M across
   three grid sizes — 9×9, 15×15 (deep density ladder), 21×21 — since size changes
-  branching geometry / 4-corner start / N² memory, so a win at one size can regress
+  branching geometry / strict-corner start / N² memory, so a win at one size can regress
   at another. Difficulty is driven by word density + small alphabet K, NOT size.
   Each size has a difficulty *cliff* (fast-resolve or thrash); each "hard" rung is
   the densest that still completes deterministically. `Budget` raised to 2e9 so hard

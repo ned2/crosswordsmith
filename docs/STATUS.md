@@ -25,7 +25,7 @@ Progress tracker for the work specified in [`design-spec.md`](./design-spec.md).
 |---|---|---|---|
 | 1 | Scoring infra (`arrange.pl`): per-word `checked` + capped integer reward over a complete placement (the oracle) | **done** (oracle built + sanity-checked; `layout_reward/4`) | AC-ARR-9 |
 | **1.5** | **Search-value gate**: measured whether search beats the first MRV incumbent | **done (2026-06-30): DESCOPE** — `best==first` 4/5, `prunes=0` 5/5, cap inert | — (decision gate) |
-| 2 | Strict layout (fixed N): **construct + rescore + emit** — best of 4-corner MRV-inc placements, rescored; place-all-or-fail; budget-aware 3-outcome semantics (`placed`/`infeasible`-names-words/`not_proven`) | **done** (`arrange_strict_solve/3`; validated, deterministic) | AC-ARR-1, AC-ARR-3, AC-ARR-4, AC-ARR-9, AC-ARR-10 |
+| 2 | Strict layout (fixed N): **construct + rescore + emit** — best of two non-transpose MRV-inc corner representatives (`topleft_across`, `topright`) under one shared operation budget, rescored; place-all-or-fail; budget-aware 3-outcome semantics (`placed`/`infeasible`-names-words/`not_proven`) | **done** (`arrange_strict_solve/3`; validated, deterministic) | AC-ARR-1, AC-ARR-3, AC-ARR-4, AC-ARR-9, AC-ARR-10 |
 | 3 | Sizing + emit framing: `--size N`; `fixed` (exact N×N) vs `max` (tight square crop, side max(H,W)), default `max` | **done** (`emit_arrange/4`; both framings validated) | AC-ARR-5 |
 | 4 | Best-effort (drop): served by the **greedy constructor path** (drops naturally), not a drop-branch on the strict DFS; lexicographic most-placed → reward across seeds; report dropped | **done** (`arrange_best_effort/6`; +3 plunit tests) | AC-ARR-2 |
 | 5 | Fragment seeding: parse emit-schema fragment (canonical + thin `[{answer,row,col,dir}]` forms, desugared at the parse boundary), reconcile by answer, pre-place + validate, search remainder (words-only) | **done** (`seed_from_fragment/6` + `arrange_fragment_strict/6` / `arrange_fragment_best_effort/7` + `load_fragment/4`; +17 plunit, 2 golden checks over 1 golden file; thin seeds reach `fill --seeds` too — see the fill row) | AC-FRAG-1, AC-FRAG-2, AC-FRAG-3, AC-FRAG-4, AC-EMIT-2 |
@@ -114,7 +114,7 @@ A full 7-lane multi-agent code review (spec-conformance AC-by-AC, per-module cor
 The audit's **four coverage gaps are all closed:**
 
 - **INV-4 license/provenance** — audited every bundled/vendored asset; **no AC-X-4 violation**. Corrected UKACD18's license (redistributable freeware, ship its notice verbatim — **not** BSD-3) and flagged the vendored SWI manual as CC BY-SA 3.0.
-- **§7.3 worst-case latency** — the strict 4-corner sweep now shares one inference budget (R7; `toc_demo`@15 ≈100 s → ≈28 s).
+- **§7.3 worst-case latency** — strict search uses two non-transpose corner representatives under one shared operation-wide inference budget (R7 introduced sharing before E-H1 removed transpose twins; `toc_demo`@15 ≈100 s → ≈28 s at the R7 step).
 - **INV-2 determinism** — `tests/determinism_fuzz.sh` (`make fuzz`): a 54-case verb × flag × degenerate-input fuzz, each run as 3 processes for byte-identity; **INV-2 holds (0 nondeterministic cases, 0 hangs)**.
 - **AC-EXP-2 Exet round-trip** — un-automatable in-repo; a step-by-step manual checklist + audit log ships at [`exet-verification.md`](./exet-verification.md) (the one remaining human-in-the-loop step).
 

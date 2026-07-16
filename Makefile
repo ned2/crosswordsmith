@@ -2,7 +2,7 @@
 
 SHELL := /bin/bash
 
-.PHONY: test test-wasm test-xword xword-parity unit golden update-golden fuzz bench bench-check bench-record bench-log bench-history bench-matrix
+.PHONY: test test-wasm test-xword xword-parity unit golden update-golden fuzz bench bench-check bench-record bench-log bench-history bench-matrix bench-arrange-verify bench-arrange-promote
 
 BENCH_FORMAT ?= text
 BENCH_ARGS ?=
@@ -146,6 +146,20 @@ bench:
 #   make bench-check BENCH_ARGS=--heavy
 bench-check:
 	swipl -q benchmarks/check_baseline.pl $(BENCH_ARGS)
+
+# One-command strict arrange adjudication: full native tests, diagnostics-bearing
+# ladder identity, then the inference ratchet. Selection mirrors bench-check:
+# core by default, core+heavy with BENCH_ARGS=--heavy.
+bench-arrange-verify:
+	./run_tests.sh
+	benchmarks/check_arrange_identity.sh $(BENCH_ARGS)
+	swipl -q benchmarks/check_baseline.pl $(BENCH_ARGS)
+
+# Check and promote ONE strict-ladder measurement. The recorder rejects
+# regressions before writing, appends history only on success, then reads the
+# baseline back and verifies every measured rung/value persisted.
+bench-arrange-promote:
+	swipl -q benchmarks/check_baseline.pl --promote $(BENCH_ARGS)
 
 # Ratchet the baseline DOWN to the currently-measured numbers - run this to accept
 # an improvement (or after an intentional algorithm change) and review the diff.

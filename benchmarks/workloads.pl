@@ -1,12 +1,12 @@
 % benchmarks/workloads.pl - the PRODUCT / performance-tracking manifest for arrange.
 %
-% A "cost ladder" of mesh puzzles whose arrange search cost climbs from ~0.1M to
-% ~182M inferences across THREE realistic grid sizes (9x9 mini, 15x15 daily, 21x21
+% A "cost ladder" of mesh puzzles whose gated arrange search cost climbs from
+% ~0.025M to ~38.5M inferences across THREE realistic grid sizes (9x9 mini, 15x15 daily, 21x21
 % Sunday). This is the product bench's single source of truth (run_arrange.pl reads
 % only this file), deliberately separate from benchmarks/fixtures.pl (the strategy-
 % research matrix) so a research knob can never leak into the product numbers (plan
 % §6). No strategy column exists here - arrange always runs its production mrv_inc
-% 4-corner search.
+% strict search over two non-transpose corner representatives.
 %
 % WHY A LADDER (the hill-climbing charter): arrange search cost (inferences) is
 % deterministic and machine-INDEPENDENT - the SAME count native or under WASM, only
@@ -17,7 +17,7 @@
 %
 % WHY THREE SIZES: grid size is a COVERAGE axis, not a difficulty axis (difficulty
 % comes from word density + small alphabet, per the gen_mesh_fixture.py K knob). But
-% the algorithm BEHAVES differently by size - branching fan-out, the 4-corner start
+% the algorithm BEHAVES differently by size - branching fan-out, the strict-corner
 % logic, and N^2 memory all scale with the grid - so a change that wins at 15x15 can
 % regress at 21x21. 15x15 (the target size) keeps a deep density ladder; 9x9 and
 % 21x21 each get a light + hard pair as size sentinels. Empirically each size has a
@@ -45,11 +45,12 @@
 % LATENCY PROBE: benchmark_16_dense saturates the SHIPPED 500M budget (its count
 % pins to the budget constant - verified 2026-07-06: outcome placed, 500,000,190
 % inf, ~30-40 s) - degenerate as an inference signal, but it IS the user-felt
-% worst-case cliff the README documents (four corners share one budget; a deep
+% worst-case cliff the README documents (two representatives share one budget; a deep
 % corner burns it even after a layout was found). It runs as gate=latency: wall
 % reported, search_inf info-only, never ratchet-gated.
 %
-% arrange_workload(Fixture, Size, Mode, Iterations, Warmup, Expected, Tier, Gate, Budget)
+% arrange_workload(Fixture, Size, Mode, Iterations, Warmup, Expected, Tier, Gate,
+%                  Budget, Words)
 %   Fixture    - path relative to the repo root; read by BOTH layers
 %   Size       - the grid N (== the fixture's generated grid); arrange --size N
 %   Mode       - size (fixed NxN canvas)
@@ -73,29 +74,31 @@
 %   Budget     - per-operation inference budget for the SEARCH layer
 %                (arrange_best_layout/6), raised above the shipped 500M default so a
 %                hard rung runs to true completion (a deterministic, ratchetable count)
-%                instead of saturating. 2e9 is ample for this ladder (top rung ~182M).
+%                instead of saturating. 2e9 is ample for this ladder (top gated rung ~38.5M).
 %                The latency-gated saturation probe instead uses exactly the shipped
 %                500M default, because the user-felt latency of saturation IS its point.
+%   Words      - exact fixture word count, asserted by both benchmark runners so a
+%                truncated or replaced fixture cannot silently change the subject.
 %
 % Order matters: all core rungs precede the heavy rungs, so a --heavy run has already
 % warmed the process before the warmup-0 rungs are measured.
 
 % -- core: fast, run by default (one light rung per size + the 15x15 mid-ladder) --
-arrange_workload('fixtures/ladder_09x09_08w.pl', 9,  size, 20, 3, placed, core, inf,  2_000_000_000).  % 9x9  light,  ~0.10M inf
-arrange_workload('fixtures/ladder_15x15_12w.pl', 15, size, 20, 3, placed, core, inf,  2_000_000_000).  % 15x15 light,  ~0.45M inf
-arrange_workload('fixtures/ladder_21x21_25w.pl', 21, size, 20, 3, placed, core, inf,  2_000_000_000).  % 21x21 light,  ~1.26M inf
-arrange_workload('fixtures/ladder_15x15_28w.pl', 15, size, 15, 3, placed, core, inf,  2_000_000_000).  % 15x15 mid,    ~1.66M inf
-arrange_workload('fixtures/ladder_15x15_32w.pl', 15, size, 10, 3, placed, core, inf,  2_000_000_000).  % 15x15 mid,    ~4.80M inf
+arrange_workload('fixtures/ladder_09x09_08w.pl', 9,  size, 20, 3, placed, core, inf,  2_000_000_000, 8).  % 9x9  light,  ~0.025M inf
+arrange_workload('fixtures/ladder_15x15_12w.pl', 15, size, 20, 3, placed, core, inf,  2_000_000_000, 12). % 15x15 light,  ~0.095M inf
+arrange_workload('fixtures/ladder_21x21_25w.pl', 21, size, 20, 3, placed, core, inf,  2_000_000_000, 25). % 21x21 light,  ~0.28M inf
+arrange_workload('fixtures/ladder_15x15_28w.pl', 15, size, 15, 3, placed, core, inf,  2_000_000_000, 28). % 15x15 mid,    ~0.34M inf
+arrange_workload('fixtures/ladder_15x15_32w.pl', 15, size, 10, 3, placed, core, inf,  2_000_000_000, 32). % 15x15 mid,    ~0.93M inf
 
 % -- core: real-word realism anchors (gen_real_fixture.py G N enable1 4 9 11) ---
-arrange_workload('fixtures/real_13x13_12w.pl',   13, size,  5, 2, placed, core, inf,  2_000_000_000).  % 13x13 real,   ~3.55M inf, moderate anchor
-arrange_workload('fixtures/real_15x15_18w.pl',   15, size, 20, 3, placed, core, inf,  2_000_000_000).  % 15x15 real,   ~0.25M inf, dense-light anchor
+arrange_workload('fixtures/real_13x13_12w.pl',   13, size,  5, 2, placed, core, inf,  2_000_000_000, 12). % 13x13 real,   ~3.55M inf, moderate anchor
+arrange_workload('fixtures/real_15x15_18w.pl',   15, size, 20, 3, placed, core, inf,  2_000_000_000, 18). % 15x15 real,   ~0.25M inf, dense-light anchor
 
 % -- heavy: the hard tail per size; opt in with --heavy -------------------------
-arrange_workload('fixtures/ladder_09x09_16w.pl', 9,  size,  3, 2, placed, heavy, inf, 2_000_000_000).  % 9x9  hard,   ~3.06M inf (near its cliff)
-arrange_workload('fixtures/ladder_21x21_80w.pl', 21, size,  2, 1, placed, heavy, inf, 2_000_000_000).  % 21x21 hard, ~27.8M inf, ~1.4 s
-arrange_workload('fixtures/ladder_15x15_34w.pl', 15, size,  1, 0, placed, heavy, inf, 2_000_000_000).  % 15x15 hard, ~68.5M inf, ~3.2 s
-arrange_workload('fixtures/ladder_15x15_36w.pl', 15, size,  1, 0, placed, heavy, inf, 2_000_000_000).  % 15x15 xhard, ~182M inf, ~8.7 s
+arrange_workload('fixtures/ladder_09x09_16w.pl', 9,  size,  3, 2, placed, heavy, inf, 2_000_000_000, 16). % 9x9  hard,   ~0.66M inf (near its cliff)
+arrange_workload('fixtures/ladder_21x21_80w.pl', 21, size,  2, 1, placed, heavy, inf, 2_000_000_000, 80). % 21x21 hard, ~4.25M inf
+arrange_workload('fixtures/ladder_15x15_34w.pl', 15, size,  1, 0, placed, heavy, inf, 2_000_000_000, 34). % 15x15 hard, ~13.6M inf
+arrange_workload('fixtures/ladder_15x15_36w.pl', 15, size,  1, 0, placed, heavy, inf, 2_000_000_000, 36). % 15x15 xhard, ~38.2M inf
 
 % -- heavy: post-campaign envelope guards (P2 probe, 2026-07-04). One rung per
 % size just past the PRE-campaign cliff, all completing with large headroom
@@ -104,9 +107,9 @@ arrange_workload('fixtures/ladder_15x15_36w.pl', 15, size,  1, 0, placed, heavy,
 % near-cliff regime beyond these is instance-noisy + search-bound (see
 % benchmarks/results/2026-07-04-p2-envelope-probe.md) - do NOT promote
 % marginal ~5e8 instances to rungs; they would flip on any solver change.
-arrange_workload('fixtures/ladder_09x09_17w.pl', 9,  size,  1, 0, placed, heavy, inf, 2_000_000_000).  % 9x9 xhard, past the old cliff, ~46.7M inf, ~2.5 s
-arrange_workload('fixtures/ladder_15x15_40w.pl', 15, size,  2, 1, placed, heavy, inf, 2_000_000_000).  % 15x15 density sentinel, ~13.5M inf, ~0.7 s
-arrange_workload('fixtures/ladder_21x21_82w.pl', 21, size,  2, 1, placed, heavy, inf, 2_000_000_000).  % 21x21 past the old "hard-for-all" line, ~10.8M inf, ~0.6 s
+arrange_workload('fixtures/ladder_09x09_17w.pl', 9,  size,  1, 0, placed, heavy, inf, 2_000_000_000, 17). % 9x9 xhard, past the old cliff, ~38.5M inf
+arrange_workload('fixtures/ladder_15x15_40w.pl', 15, size,  2, 1, placed, heavy, inf, 2_000_000_000, 40). % 15x15 density sentinel, ~10.3M inf
+arrange_workload('fixtures/ladder_21x21_82w.pl', 21, size,  2, 1, placed, heavy, inf, 2_000_000_000, 82). % 21x21 past the old "hard-for-all" line, ~6.56M inf
 
 % -- heavy: the budget-saturation latency probe (see LATENCY PROBE note above) --
-arrange_workload('fixtures/benchmark_16_dense_words.pl', 17, size, 1, 0, placed, heavy, latency, 500_000_000).  % ~30-40 s/layer, wall-latency signal only
+arrange_workload('fixtures/benchmark_16_dense_words.pl', 17, size, 1, 0, placed, heavy, latency, 500_000_000, 16). % ~30-40 s/layer, wall-latency signal only

@@ -232,8 +232,9 @@ cap_status_note(Placed, Note) :-
 % budget-aware 3-outcome semantics.
 % ---------------------------------------------------------------------------
 
-% Construction budget (inferences) for finding ONE complete placement per
-% corner. First solutions on puzzle-shaped inputs are 5-462 ms (well under).
+% Operation-wide construction budget (inferences) shared by the two strict
+% non-transpose corner representatives. First solutions on puzzle-shaped inputs
+% are 5-462 ms (well under).
 arrange_budget(500_000_000).
 
 % The start corners the STRICT construct path sweeps. This is deliberately a
@@ -269,9 +270,10 @@ arrange_best_layout(Words, GridLen, Numbered, Reward, Outcome) :-
 %
 %   Best-scoring complete placement over the strict start corners
 %   (arrange_corners/1), rescored and picked by reward (deterministic:
-%   reward desc, ties by start-corner order). Budget is the per-corner
-%   inference budget; the internal /5 reads the shipped default from
-%   arrange_budget/1, and a tiny Budget drives the AC-ARR-1c / AC-ARR-10
+%   reward desc, ties by start-corner order). Budget is one operation-wide
+%   inference budget shared by both representatives; the internal /5 reads
+%   the shipped default from arrange_budget/1, and a tiny Budget drives the
+%   AC-ARR-1c / AC-ARR-10
 %   "not proven within budget" path (tests/arrange.plt). Always succeeds
 %   exactly once: a non-placement is Outcome=not_proven (budget hit) or
 %   Outcome=infeasible (search completed, no full placement) — never failure.

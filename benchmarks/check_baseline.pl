@@ -1,5 +1,5 @@
 #!/usr/bin/env swipl
-% benchmarks/check_baseline.pl - performance ratchet for the arrange 15x15 ladder.
+% benchmarks/check_baseline.pl - performance ratchet for the strict arrange ladder.
 %
 % Runs the product bench (benchmarks/run_arrange.pl --format json) and diffs the
 % measured search-inference count of every rung against benchmarks/baseline.json,
@@ -22,6 +22,8 @@
 %                                                    %   and append the run to history.jsonl
 %   swipl -q benchmarks/check_baseline.pl --log      % LOG: diff + append to history.jsonl,
 %                                                    %   WITHOUT moving the baseline
+%   swipl -q benchmarks/check_baseline.pl --promote  % PROMOTE: check one run, then if clean
+%                                                    %   record that exact run + history
 %   swipl -q benchmarks/check_baseline.pl --history  % HISTORY: render the recorded trend
 %                                                    %   (no bench run)
 % Extra args pass through to run_arrange, so add --heavy to include the tail rungs:
@@ -32,6 +34,8 @@
 % trajectory. benchmarks/history.jsonl is the append-only, git-tracked ledger: one
 % JSON line per recorded/logged run, stamped with the git commit + timestamp, so the
 % per-rung search_inf is comparable over time regardless of how the baseline moved.
+
+:- module(check_arrange_baseline, []).
 
 :- set_prolog_flag(verbose, silent).
 :- use_module(library(lists)).
@@ -54,10 +58,12 @@ main :-
     ( select('--history', Argv0, _)      -> Mode = history, Extra = []
     ; select('--log', Argv0, Extra)      -> Mode = log
     ; select('--record', Argv0, Extra)   -> Mode = record
+    ; select('--promote', Argv0, Extra)  -> Mode = promote
     ;                                       Mode = check, Extra = Argv0 ),
     bench_dir(BenchDir),
     ( Mode == history -> show_history(BenchDir), halt(0) ; true ),
     directory_file_path(BenchDir, 'baseline.json', BaselinePath),
+    history_path(BenchDir, HistoryPath),
     load_baseline(BaselinePath, Baseline),
     run_note(Extra, Note),
     ( Mode == record
@@ -72,6 +78,16 @@ main :-
         do_check(Baseline, Doc, _Fails, _Wins),
         append_history(BenchDir, Doc, Extra),
         halt(0)
+    ; Mode == promote
+    ->  format("crosswordsmith arrange - PROMOTE (check, then ratchet this run)~s~n~n", [Note]),
+        run_product_bench(BenchDir, Extra, Doc),
+        promote_doc(BaselinePath, HistoryPath, Baseline, Doc, Extra, Fails, Wins),
+        report_result(Fails, Wins),
+        ( Fails =:= 0
+        ->  format("~npromote: clean run recorded from the single measurement~n"),
+            halt(0)
+        ;   format("~npromote: regressions present - baseline and history NOT changed~n"),
+            halt(1) )
     ;   format("crosswordsmith arrange - performance ratchet~s~n~n", [Note]),
         run_product_bench(BenchDir, Extra, Doc),
         do_check(Baseline, Doc, Fails, Wins),
@@ -197,7 +213,23 @@ metric_delta(Spec, Row, Key, Str) :-
 
 % --- RECORD (ratchet the baseline to the measured numbers) -------------------
 
+% Check the in-memory measurement before any write. On a clean result, the
+% exact same Doc is recorded and logged; no second benchmark run can drift from
+% the accepted measurement.
+promote_doc(BaselinePath, HistoryPath, Baseline, Doc, Extra, Fails, Wins) :-
+    do_check(Baseline, Doc, Fails, Wins),
+    (   Fails =:= 0
+    ->  write_record(BaselinePath, Baseline, Doc),
+        append_history_to(HistoryPath, Doc, Extra),
+        verify_recorded_file(BaselinePath, Doc)
+    ;   true
+    ).
+
 do_record(BaselinePath, Baseline, Doc) :-
+    write_record(BaselinePath, Baseline, Doc),
+    verify_recorded_file(BaselinePath, Doc).
+
+write_record(BaselinePath, Baseline, Doc) :-
     get_dict(results, Doc, Results),
     get_dict(swi_prolog, Doc, RunSwi),
     current_host(RunHost),
@@ -214,6 +246,32 @@ do_record(BaselinePath, Baseline, Doc) :-
     format("baseline updated: ~w~n~n", [BaselinePath]),
     forall(member(Row, Results), report_recorded(WL0, Row)),
     unmeasured_note(WL0, Results).
+
+verify_recorded_file(BaselinePath, Doc) :-
+    get_dict(results, Doc, Results),
+    load_baseline(BaselinePath, Written),
+    verify_recorded_results(Written, Results).
+
+% A success banner is not evidence that persistence worked. Read the file back
+% and verify every measured rung carries every value the writer records.
+verify_recorded_results(Written, Results) :-
+    get_dict(workloads, Written, Workloads),
+    forall(member(Row, Results), verify_recorded_row(Workloads, Row)).
+
+verify_recorded_row(Workloads, Row) :-
+    get_dict(fixture, Row, Fixture),
+    (   find_baseline(Workloads, Fixture, Spec)
+    ->  verify_recorded_value(Fixture, search_inf, Spec, Row.search_inf_med),
+        verify_recorded_value(Fixture, cmd_wall_med_ms, Spec, Row.cmd_wall_med_ms),
+        verify_recorded_value(Fixture, cmd_rss_med_kib, Spec, Row.cmd_rss_med_kib)
+    ;   throw(error(record_readback_missing(Fixture), _))
+    ).
+
+verify_recorded_value(Fixture, Key, Spec, Expected) :-
+    (   get_dict(Key, Spec, Actual), Actual =:= Expected
+    ->  true
+    ;   throw(error(record_readback_mismatch(Fixture, Key, Expected), _))
+    ).
 
 record_pair(Results, K-V0, K-V1) :-
     ( result_for(Results, K, Row)
@@ -328,6 +386,9 @@ history_path(BenchDir, Path) :-
 
 append_history(BenchDir, Doc, Extra) :-
     history_path(BenchDir, Path),
+    append_history_to(Path, Doc, Extra).
+
+append_history_to(Path, Doc, Extra) :-
     get_dict(results, Doc, Results),
     get_dict(swi_prolog, Doc, Swi),
     current_host(Host),
@@ -442,3 +503,7 @@ prolog:error_message(baseline_missing(Path)) -->
     [ 'check_baseline: ~w not found (regenerate with: make bench-record)'-[Path] ].
 prolog:error_message(bench_run_failed(Status)) -->
     [ 'check_baseline: the product bench (run_arrange.pl) failed: ~q'-[Status] ].
+prolog:error_message(record_readback_missing(Fixture)) -->
+    [ 'check_baseline: recorded rung ~w is absent after baseline read-back'-[Fixture] ].
+prolog:error_message(record_readback_mismatch(Fixture, Key, Expected)) -->
+    [ 'check_baseline: recorded rung ~w field ~w does not equal measured value ~w after read-back'-[Fixture, Key, Expected] ].

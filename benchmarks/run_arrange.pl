@@ -5,8 +5,9 @@
 % SAME word set and reports both plus their difference:
 %
 %   command  - end-to-end `crosswordsmith arrange ...` process latency (the number
-%              a user feels): SWI startup + load + parse + 4-corner search + emit.
-%   search   - the in-process arrange_best_layout/5 search alone.
+%              a user feels): SWI startup + load + parse + strict two-corner
+%              representative search + emit.
+%   search   - the in-process budget-explicit arrange_best_layout/6 search alone.
 %   rest     - command - search: the fixed CLI-wrapper overhead, clamped at 0.
 %
 % Wall/rss are machine-dependent; SEARCH INFERENCES are the portable, deterministic
@@ -57,11 +58,13 @@ main :-
     memberchk(iterations(ItOv), Opts),
     memberchk(warmup(WuOv), Opts),
     findall(Row,
-            ( arrange_workload(F, Size, Mode, It0, Wu0, Exp, Tier, Gate, Budget),
+            ( arrange_workload(F, Size, Mode, It0, Wu0, Exp, Tier, Gate, Budget, Words),
               workload_selected(Filter, Heavy, F, Tier),
               apply_override(ItOv, It0, It),
               apply_override(WuOv, Wu0, Wu),
-              run_workload(F, Size, Mode, It, Wu, Exp, Budget, Row0),
+              format(user_error, "bench arrange: START ~w (~w)~n", [F, Tier]),
+              run_workload(F, Size, Mode, It, Wu, Exp, Budget, Words, Row0),
+              format(user_error, "bench arrange: DONE  ~w~n", [F]),
               Row = Row0.put(_{tier: Tier, gate: Gate}) ),
             Rows),
     emit(Fmt, Rows).
@@ -74,7 +77,7 @@ opts_spec(
       [opt(fixture),    type(atom),    default(''),
        longflags([fixture]),  help('only workloads whose fixture basename contains this substring (any tier)')],
       [opt(heavy),      type(boolean), default(false),
-       longflags([heavy]),    help('also run the heavy tail: the hard ladder rungs (~0.6-9s each) and the budget-saturating latency probe (~1 min)')],
+       longflags([heavy]),    help('also run the heavy tail: hard ladder rungs (subsecond to a few seconds) and the budget-saturating latency probe (~1 min)')],
       [opt(iterations), type(integer), default(-1),
        longflags([iterations]), help('override measured iterations for every workload')],
       [opt(warmup),     type(integer), default(-1),
@@ -99,9 +102,12 @@ apply_override(-1, Default, Default) :- !.
 apply_override(Override, _, Override).
 
 % --- one workload: measure both layers, derive the breakdown -----------------
-run_workload(Fixture, Size, Mode, Iters, Warmup, Expected, Budget, Row) :-
+run_workload(Fixture, Size, Mode, Iters, Warmup, Expected, Budget, ExpectedWords, Row) :-
     repo_file(Fixture, File),
     read_clues(File, Words),
+    length(Words, NumWords),
+    ( NumWords =:= ExpectedWords -> true
+    ; throw(error(fixture_word_count(Fixture, expected(ExpectedWords), got(NumWords)), _)) ),
     file_base_name(Fixture, Name),
     crosswordsmith_exe(Exe),
     Opts = _{warmup: Warmup, iterations: Iters},
@@ -116,7 +122,6 @@ run_workload(Fixture, Size, Mode, Iters, Warmup, Expected, Budget, Row) :-
     SearchInfMed     = Search.stats.inferences.median,
     RestMedMs       is max(0.0, CmdWallMedMs - SearchWallMedMs),
     ( CmdWallMedMs > 0.0 -> Share is 100.0 * SearchWallMedMs / CmdWallMedMs ; Share = 0.0 ),
-    length(Words, NumWords),
     % warmup/budget/words ride along (with tier + gate, added by the caller) so a
     % recorder can build a COMPLETE baseline spec for a rung it has never seen
     % (check_baseline --record adds new ladder rungs from these fields).
@@ -193,3 +198,5 @@ print_csv_row(R) :-
 :- multifile prolog:error_message//1.
 prolog:error_message(fixture_missing_clues(Fixture)) -->
     [ 'benchmark fixture ~q does not define clues/1'-[Fixture] ].
+prolog:error_message(fixture_word_count(Fixture, expected(Expected), got(Got))) -->
+    [ 'benchmark fixture ~q has ~d words; manifest requires ~d'-[Fixture, Got, Expected] ].

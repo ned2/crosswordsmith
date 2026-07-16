@@ -123,7 +123,7 @@ test(strict_grid_too_small_infeasible) :-
     Outcome == infeasible,
     Numbered == [].
 
-% AC-ARR-1 outcome (c) + AC-ARR-10 (R4, revamp audit): when the per-corner
+% AC-ARR-1 outcome (c) + AC-ARR-10 (R4, revamp audit): when the operation-wide
 % inference budget is exhausted before any corner completes, the outcome is
 % `not_proven` - DISTINCT from `infeasible`. A budget too small to finish even
 % one corner (1000 inferences << a 6-word grid-17 construction) forces it.
@@ -141,11 +141,11 @@ test(strict_budget_not_proven_is_not_infeasible) :-
     crosswordsmith_arrange:arrange_best_layout(Words, 17, _N, _R, Outcome),
     Outcome == placed.
 
-% R7 (revamp audit): the 4-corner sweep shares ONE inference budget, so a HARD
+% R7 (revamp audit): the two strict representatives share ONE inference budget, so a HARD
 % input (toc_demo at size 15 - the finding's repro, which the full budget cannot
-% finish) costs ~Budget total, not Budget x 4. With a 5M budget too small for
+% finish) costs ~Budget total, not Budget x 2. With a 5M budget too small for
 % any corner to complete, the total inferences consumed stay near one budget,
-% well under the 4x the per-corner version would burn.
+% well under the 2x a per-corner version would burn.
 test(arrange_budget_shared_across_corners) :-
     arrange_toc(Words),
     B = 5_000_000,

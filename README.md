@@ -399,8 +399,9 @@ The driver is `assign_words/8`. It is a greedy, backtracking placement:
 This describes the shared **legality core** (`prolog/crosswordsmith/core.pl`),
 which `arrange`
 reuses. `arrange` drives it with a deterministic most-constrained-first
-(MRV) ordering, constructs over the four start corners, rescores each complete
-layout by a capped interlock objective, and emits the best — so by default the
+(MRV) ordering, constructs over two non-transpose start-corner
+representatives (`topleft_across`, `topright`) under one shared operation-wide
+inference budget, and emits the best — so by default the
 output is stable and shuffle-free.
 
 For variety, two opt-in flags perturb only the branch **ordering** of the same
@@ -570,9 +571,10 @@ witness layout by `benchmarks/gen_real_fixture.py`):
 
 For each workload it reports three layers over the same word set: `cmd_wall`
 (end-to-end `crosswordsmith arrange` process latency), `search` (the in-process
-4-corner search alone), and `rest` (the CLI-wrapper overhead between them,
-`cmd_wall - search`). Core workloads run by default; the heavy tail — the hard
-ladder rungs (~0.6–9 s each) plus one budget-saturating **latency probe**
+two-representative strict search alone), and `rest` (the CLI-wrapper overhead
+between them, `cmd_wall - search`). Core workloads run by default; the heavy
+tail — the hard ladder rungs (subsecond to a few seconds each) plus one
+budget-saturating **latency probe**
 (`benchmark_16_dense`, ~30–40 s per layer; its inference count pins to the
 budget constant, so it is reported latency-only and never gates) — is opt-in:
 
@@ -580,8 +582,9 @@ budget constant, so it is reported latency-only and never gates) — is opt-in:
     $ make bench BENCH_FORMAT=csv BENCH_ARGS="--fixture real"
 
 `rss` is the whole-process peak footprint, not a search-memory metric. Note that
-`arrange` latency is bimodal: `arrange` tries four start corners under a shared
-inference budget, so an input whose non-placing corners fail fast is ~0.1-1 s,
+`arrange` latency is bimodal: strict mode tries two non-transpose start-corner
+representatives under a shared inference budget, so an input whose non-placing
+corners fail fast is ~0.1-1 s,
 while one whose corner triggers deep search burns the whole budget (~26-40 s)
 even after a valid layout was already found — the latency probe exists to keep
 that cliff visible.
@@ -591,6 +594,11 @@ the same count native or under WASM). `benchmarks/baseline.json` records each
 rung as a **ratchet**: `make bench-check` fails on a rise past tolerance, a drop
 is a win you accept with `make bench-record` (which also appends the run to the
 `benchmarks/history.jsonl` trend ledger; `make bench-history` renders it).
+`make bench-arrange-verify` runs the native tests, diagnostics-bearing ladder
+identity, and ratchet in one fail-fast flow. `make bench-arrange-promote` checks
+and records one measurement (rather than rerunning an accepted result), then
+read-verifies every persisted measured rung; add `BENCH_ARGS=--heavy` to either
+target for the complete core+heavy selection.
 
 **Strategy matrix** — algorithm research (comparing the solver strategies, not a
 shipped path). One CSV row per (strategy, fixture) over `benchmarks/fixtures.pl`,
@@ -600,8 +608,8 @@ each on its manifest grid:
     $ make bench-matrix BENCH_STRATEGIES="baseline mrv_capped"
 
 The matrix measures the single-corner search directly, so its per-fixture numbers
-are lighter than the product command (which runs all four corners). The synthetic
-fixtures it drives:
+are lighter than the product command (which runs both strict representatives).
+The synthetic fixtures it drives:
 
 | fixture | words | grid |
 | --- | ---: | ---: |
