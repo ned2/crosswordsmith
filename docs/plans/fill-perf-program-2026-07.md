@@ -90,7 +90,7 @@ only reopens on a concrete user need and would belong in Track D's batch
 (it must re-verify `make test-wasm` — LibBF bignum parity is part of the
 battery).
 
-### A2. Seeded load-walk O(n²) (§8.5 row) — effort M
+### A2. Seeded load-walk O(n²) (§8.5 row) — IN PROGRESS (2026-07-16), effort M
 
 Facts: `--seed`/`--shuffle` on `dicts/cwl50.dict` costs ~2m45s **at load**
 regardless of grid (85,800-entry score-50 band ≈ 7.4G walk steps; a trivial
@@ -110,6 +110,28 @@ arm (one-time seeded-fill churn, `fill_3_rng_seed7` regenerated, AC-FILL-10
 wording) get priced. Acceptance either way: seeded goldens byte-identical
 (keep-sequence) or regenerated under an explicit decision record
 (re-contract); `--seed` on cwl50 drops from minutes to seconds.
+
+**Pre-registration — A2-KS, keep-sequence order-statistic replay
+(2026-07-16, before implementation or fresh measurement).** Hypothesis: the
+walk is exactly replayable because step `i` draws once, computes `V mod N`,
+and selects that rank among the surviving original positions; a Fenwick tree
+over live positions can perform the same rank selection and deletion in
+O(log n) without changing either the draw stream or permutation. The arm
+replaces only the survivor representation used by `seeded_permutation/2`;
+it does not adopt a draw-key shuffle and does not alter seed semantics.
+
+Success requires all of the following: (1) exact old-vs-new permutations for
+seeds 0, 1, 7, 42, and 2^64-1 over lengths 0..256, plus the existing published
+known answer; (2) the `fill --seed 7` golden remains byte-identical, with no
+golden/identity/ratchet re-recording; (3) all 11 fill identity rungs and both
+inference-ratchet layers remain clean (the default path should be untouched);
+and (4) seeded `cwl50` load on the existing trivial-grid reproducer falls from
+the recorded ~2m43s to <=15s and by at least 10x on the same machine. The
+Track-B reference/quality rows are not re-run for this arm: identical
+permutations imply identical search behavior, while the golden, exhaustive
+small-sequence comparison, and ladder gates directly test that premise. If
+any permutation differs, A2-KS stops immediately and the re-contract arm is
+prepared for the user's decision rather than taken here.
 
 ## Track B — Balafoutis probe campaign (measurement only; no default-path change)
 
