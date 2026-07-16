@@ -492,6 +492,22 @@ with B1/B2, this closes Track B with no candidate for Track D. The remaining
 C1 spike is independent and must complete a previously unclosed row; Track-B
 latency effects do not lower its envelope bar.
 
+### C1 exact projection set branching (2026-07-16) — lost
+
+Probe commit `896ea1c` implemented the sound exact quotient: lazy class masks
+from checked-letter intersections, complete leaf all-different matching, and
+shared-cell verification. It completed **0/5** previously unclosed targets.
+The premise failed quantitatively: 77,495 visited target classes represented
+77,513 words, only **1.00023×** compression; only `blocked_13b @1` had any
+non-singletons (18 size-2 classes).
+
+With no compression, deferred all-different became an anti-propagator. The
+fully checked ladder produced 526,643 failed leaf matchings and lost
+`g17_full`, `g21_full`, and `g17_50k` completion at 2B. Reference and
+five-mask quality still passed, but latency without a new target completion
+cannot graduate an envelope arm. F6 is closed and DP-6's report-don't-chase
+pins stand.
+
 ## Caveats / how to extend
 
 - **`amer11` is also shipped** as `grids/amer11.json` (promoted at DP-9 as

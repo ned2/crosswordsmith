@@ -1845,3 +1845,24 @@ p1-backtrack-instrumentation.patch).
   CWL. A smaller probe dose cannot satisfy the global ladder node guard because
   the easy baseline rungs take only 8–107 nodes before any warm tax. Track B
   closes with no Track D candidate. C1 remains the independent envelope bet.
+
+### C1-P — exact projection set branching — LOST
+
+- **Method/soundness:** rejected probe branch `experiment/c1-projection`,
+  commit `896ea1c`. Class masks are lazy checked-letter bignum intersections;
+  complete score/bit-order leaf matching carries seed/global all-different and
+  backtracks projection search; shared-cell binding validates every fill.
+  Five executable seams cover propagation equivalence, used-representative
+  alternate, Hall backtracking, exact high-bit coverage, and class top-3.
+- **Target result:** **0/5** unclosed rows complete. Across target states,
+  77,495 classes represent 77,513 words (1.00023×); only `blocked_13b @1`
+  sees non-singletons, just 18 size-2 classes among 22,388. The assumption
+  that unchecked cells create large exact projection classes is falsified.
+- **Ladder mechanism:** every class is singleton, so sound deferred
+  all-different buys no quotienting and postpones duplicate rejection to
+  complete assignments. Of 526,651 matching calls, 526,643 fail;
+  `g17_full`, `g21_full`, and `g17_50k` lose completion at 2B.
+- **Gates/verdict:** authority completion and quality pass; five-mask min/mean
+  remains 50. No envelope completion plus three ladder losses makes C1
+  **LOST**. Approximate clustering would invalidate whole-class refutation
+  and was not attempted. DP-6 pins stand; no Track D dossier input.

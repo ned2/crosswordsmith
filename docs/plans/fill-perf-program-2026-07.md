@@ -3,8 +3,10 @@
 A program of work for exploring fill performance uplifts, folding together
 (a) the two engineering rows surfaced by the DP-9 grounding runs and (b) the
 six search-power candidates from the Balafoutis thesis review. Status:
-PROPOSED — nothing here is spec'd or locked; Track D is where any contract
-change would be decided.
+**COMPLETE (2026-07-16)** — A2 won and landed without contract churn; B0
+measured the search surface; B1/B2/B3/C1 all closed on evidence; no Track D
+adoption basket or decision pass was triggered. Closeout:
+`docs/research/fill-perf-program-closeout-2026-07.md`.
 
 Evidence base:
 
@@ -376,7 +378,7 @@ without building them — that IS the completed outcome.
 
 ## Track C — the envelope bet
 
-### C1. F6 — set branching on crossing-letter projections (thesis Ch 7) — IN PROGRESS (2026-07-16)
+### C1. F6 — set branching on crossing-letter projections (thesis Ch 7) — LOST (2026-07-16)
 
 The only candidate aimed at completion rather than latency: candidates
 agreeing on all checked cells are propagation-interchangeable; branch on the
@@ -435,7 +437,21 @@ graduate this envelope arm. If no target completes, F6 is closed and DP-6's
 report-don't-chase pins stand. Any completion winner produces a Track D
 dossier; it is not adopted here.
 
-## Track D — the adoption decision pass (decision pass pending)
+**Verdict — exact quotient sound, premise falsified.** C1 completed 0/5
+previously unclosed targets and lost three ladder completions. Across target
+states, 77,495 projection classes represented 77,513 words: only 1.00023×
+compression. Only `blocked_13b @1` saw any non-singletons (18 size-2 classes
+among 22,388). Unchecked cells therefore do not imply useful exact classes
+once the joint checked-letter tuple is considered. On the fully checked
+ladder every class was singleton; soundly deferred all-different then moved
+duplicate rejection to the leaf, causing 526,643 failed matchings and making
+`g17_full`, `g21_full`, and `g17_50k` not-proven at 2B. Reference and
+five-mask quality passed, but no target completion means no envelope signal.
+Approximate clustering would forfeit whole-class refutation and was not
+attempted. F6 is closed, DP-6's pins stand, and no C1 arm enters Track D.
+Full result remains on rejected probe commit `896ea1c`.
+
+## Track D — NOT TRIGGERED (no qualifying B/C arm)
 
 *(Naming note: this was drafted as "DP-10 candidate", but DP-10 was taken
 the same day by the Track A1 capacity pass — the number is assigned when
@@ -451,19 +467,26 @@ requires new randomness), and honesty pins for anything an arm does *not*
 buy. NO-GO is a fine outcome: the evidence attaches to the §8.5 backlog the
 way the DP-8 probe evidence did, and the default engine stays byte-stable.
 
+**Closure:** every B/C arm failed at least one pre-registered completion,
+quality, or ladder guard, and C1 completed no new row. There is therefore no
+winner dossier to take to a user decision pass and no DP number is assigned.
+The shipped §8.4c engine, goldens, identity oracle, and inference baseline
+remain unchanged. This is not a user NO-GO decision taken by the program; it
+is the absence of any qualifying proposal to decide.
+
 ## Sequencing
 
 1. ~~**A1** (capacity error)~~ — DONE (DP-10, AC-FILL-15; see the A1 update
    above).
 2. ~~**A2** (seeded walk)~~ — DONE (A2-KS: keep-sequence Fenwick replay,
    17.88× on the `cwl50` reproducer; byte-identity preserved).
-3. **B0** (instrumentation) — cheap, and its kill-tests may delete half of
-   Track B before anything is built.
-4. **B1 → B2 → B3** as surviving arms, on the shared probe rig, each with
-   recorded numbers.
-5. **C1** in parallel with B2/B3 once B0's rig exists (it reuses the
-   counters).
-6. **D** only when the arms are exhausted or a clear winning basket exists.
+3. ~~**B0** (instrumentation)~~ — DONE; all premises survived, propagation
+   measured at >99% of authority search wall.
+4. ~~**B1 → B2 → B3**~~ — DONE; every ordering, credit, aging, and probing
+   arm lost a registered guard; no Track B winner.
+5. ~~**C1**~~ — DONE; exact projection classes measured singleton on target
+   states, 0/5 envelope completions.
+6. ~~**D**~~ — NOT TRIGGERED; no qualifying B/C basket exists.
 
 Tracks A and B/C are independent; A can land while B is still measuring.
 
