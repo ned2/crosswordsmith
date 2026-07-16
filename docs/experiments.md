@@ -1801,3 +1801,28 @@ p1-backtrack-instrumentation.patch).
   One distinct B2 sequel is warranted by the thesis's interaction result:
   pair `q_wdeg` with `alldel`/fully-assigned order-robust credit and require it
   to remove the two-rung regression before it can graduate.
+
+### B2-C — MAC conflict credit — MEASURED, no arm graduates
+
+- **Method/soundness:** rejected probe branch `experiment/b2-credit`, commit
+  `80e3edf`. Executable seams pin target-specific H1/H2/H3 formulas,
+  immediate/final `alldel`, whole-episode distinct fully-assigned credit,
+  fresh backtrack-safe episode lifetime, persistent learned weights, and
+  B1-exact q_wdeg ties/denominator. Baseline reproduces B0 exactly; all 16
+  authority duplicate pairs match every non-wall field.
+- **Completion:** H1, H3, `alldel`, fully-assigned, `alldel_qw`, and
+  `fully_qw` all lose STW `@30` completion at 800M. Most also produce severe
+  `@1` and ladder regressions.
+- **H2:** the only two-row completer; `@30` inferences/revisions
+  -43.4%/-49.5%, but quality mean 44.4 < 45.0, `@1` only -1.2%/-12.6%, and
+  `g17_50k` becomes not-proven at 2B. **REJECT.** Deleted-count magnitude
+  creates highly concentrated, search-shape-specific guidance.
+- **Broad credit mechanism:** `alldel`/fully-assigned flatten learned-weight
+  Gini from 0.737/0.799 to 0.257-0.328 standalone. More deletion evidence is
+  not better conflict guidance; dom/wdeg loses discrimination and restart
+  trajectories deteriorate. The q_wdeg combinations do not stabilize B1.
+- **Matrix/verdict:** all five quality masks stay mean/min 50; no arm
+  completes CWL. No B2 arm enters Track D, and alternate-credit/order
+  combinations are closed. B3 remains independently warranted using baseline
+  credit only. Product tests, 11 identity rungs, and heavy ratchets pass
+  unchanged because all variants remain probe-only.

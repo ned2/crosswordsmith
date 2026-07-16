@@ -462,6 +462,22 @@ learning destabilizes `g17_50k` restarts. No standalone ordering enters Track
 D. B2 retains only the evidence-driven `q_wdeg` × order-robust-credit
 interaction; it is a new arm that must independently clear the ladder guard.
 
+### B2 conflict credit (2026-07-16) — no arm graduates
+
+Probe commit `80e3edf` tested target-specific H1/H2/H3 credit, `alldel`,
+fully-assigned, and the two q_wdeg stabilization combinations. H2 was the
+only arm to complete both authority rows: it cut `@30` inferences/revisions
+43.4%/49.5%, but mean fell to 44.4 and `g17_50k` exhausted 2B. Every other
+arm lost `@30` completion.
+
+The explanatory result is weight concentration. `alldel`/fully-assigned
+spread hundreds of thousands of credits and flatten Gini from baseline
+0.737/0.799 to as low as 0.257/0.277, weakening dom/wdeg discrimination.
+H2 concentrates deleted-count credit (Gini 0.783/0.899) and overfits the wide
+reference shape. The q_wdeg combinations retain local revision savings but
+do not remove B1's ladder instability. All five quality masks remained
+mean/min 50; no arm completed CWL. No B2 arm enters Track D.
+
 ## Caveats / how to extend
 
 - **`amer11` is also shipped** as `grids/amer11.json` (promoted at DP-9 as

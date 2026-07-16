@@ -268,7 +268,7 @@ credit schemes to test whether better credit removes the measured learning
 instability. Full result stays on rejected probe commit `76147fc` and is
 summarized in the benchmark README/experiment ledger.
 
-### B2. F2 + F4 — weight-credit variants (thesis §3.4.2/3.4.4/3.4.6) — IN PROGRESS (2026-07-16)
+### B2. F2 + F4 — weight-credit variants (thesis §3.4.2/3.4.4/3.4.6) — LOST (2026-07-16)
 
 One multi-arm experiment: H1/H2/H3 (deletion-responsible credit at DWO),
 `alldel` (credit on every deletion), fully-assigned (credit fruitful
@@ -308,13 +308,52 @@ warranted stabilization; authority speed alone is insufficient. CWL
 completion is stretch evidence only. Any winner remains probe-only for Track
 D; default-path weights and identity artifacts do not change.
 
-### B3. F3 + F5 — aging and probing-init arms — effort S
+**Verdict — no credit arm graduates.** H1, H3, `alldel`, fully-assigned,
+and both q_wdeg combinations lost STW `@30` completion at 800M. H2 alone
+completed both authority rows and cut `@30` inferences/revisions 43.4%/49.5%,
+but mean fell 45.0 → 44.4, `@1` improved only 1.2%/12.6%, and `g17_50k`
+lost completion at 2B. Broad credit flattened the sparse learned signal
+(Gini 0.737/0.799 → as low as 0.257/0.277), making dom/wdeg less
+discriminating; H2's deleted-count magnitude moved the other way and
+overfit the wide reference shape. `alldel_qw`/`fully_qw` did not stabilize
+B1's q_wdeg failure. Five-mask quality stayed 50/50 and no arm completed
+CWL. Alternate credit and the q_wdeg stabilization sequel are closed; no B2
+arm enters Track D. Full result remains on rejected probe commit `80e3edf`.
+
+### B3. F3 + F5 — aging and probing-init arms — IN PROGRESS (2026-07-16)
 
 F3: intra-attempt aging (÷2 every ~20 backtracks) vs our between-attempt
 ×0.99. F4-style caveat applies: high per-class variance in the thesis (5×
 win to outright worst), a pure bench gamble. F5: pinned probing runs to warm
 weights before the greedy attempt 1 (which currently searches with uniform
 weights, i.e. degraded dom/wdeg). Both are small arms appended to B2's rig.
+
+**Pre-registration — B3-R, recency and warm-start arms (2026-07-16, before
+variant implementation or measurement).** `age20` keeps baseline credit and
+inter-attempt aging, but after every 20 failed candidate branches within an
+attempt divides every conflict weight by 2; the failure counter resets per
+attempt and aging is non-backtracking global learning state. `probe4` and
+`probe8` run respectively four/eight deterministic top-3 warm-up searches
+at cap 125 before the real greedy attempt 1, keeping only learned baseline
+weights. Warm-ups use a separate pinned splitmix64 stream, age weights 0.99
+between probes, discard every assignment, and then restore the real default
+attempt policy/stream so probe draws cannot shift production attempts. Their
+nodes and inferences count against the same outer budget and reported total.
+`probe4_age20` is built only if either standalone mechanism clears the first
+screen. No arm changes conflict credit, queue/revision order, candidate set,
+or final score order.
+
+Baseline and every built arm run duplicate STW `@30/@1`, all 11 ladder rows,
+five-mask quality, and bounded `cwl50 @50`. The B1/B2 gates remain: both
+reference rows complete; >=15% inference+revision reduction on both or >=25%
+at `@30` with no >2% `@1` regression; no completion loss; no >5%
+inference/node regression on more than one ladder rung; means >=45.0/38.7;
+five-mask min 50 and no mean loss. Probe overhead is part of F5's cost, never
+subtracted. A probing arm additionally must beat baseline by more than its
+warm-up node count on both authority rows, demonstrating guidance rather than
+hidden prepaid search. Duplicate runs must match every non-wall field. CWL
+completion is the only envelope signal; otherwise all wins are latency-only.
+Any winner remains probe-only for Track D.
 
 Stop conditions for Track B: an arm that loses or ties on the reference row
 AND the ladder is closed with its numbers recorded (experiments-ledger
