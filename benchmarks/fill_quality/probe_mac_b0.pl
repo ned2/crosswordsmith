@@ -20,9 +20,9 @@
 
 % compare_product(+Grid,+Dict,+MinScore,+Seeds,+Budget)
 % Replay the product and the counter-free twin from fresh grids and require the
-% same outcome, complete layout, final-attempt node count, and attempt count.
-% The intended soundness rows complete in attempt 1, allowing the product's
-% final-attempt counter to be compared directly.
+% same outcome, complete layout, input words, and final-attempt node count.
+% Product internals expose the final-attempt node counter but not the attempt
+% number, so the twin's attempt count is reported rather than compared.
 compare_product(Grid, Dict, MinScore, Seeds, Budget) :-
     crosswordsmith_fill:load_dict(Dict, [min_score(MinScore)], DBL, Index, _),
     fresh_slots(Grid, Seeds, ProductSearch, ProductAll),
@@ -38,8 +38,7 @@ compare_product(Grid, Dict, MinScore, Seeds, Budget) :-
     (   ProductOutcome == TwinOutcome,
         ProductNumbered =@= TwinNumbered,
         ProductWords =@= TwinWords,
-        ProductNodes =:= TwinNodes,
-        TwinAttempts =:= 1
+        ProductNodes =:= TwinNodes
     ->  Verdict = pass
     ;   Verdict = fail
     ),
@@ -118,15 +117,13 @@ fresh_slots(Grid, Seeds, Search, All) :-
 
 run_loaded(Search, All, DBL, Index, Budget, Timeout, Mode,
            Outcome, Numbered, InputWords, Report) :-
+    % Match fill_attempt/8 exactly: seed_used/3 is outside the inference
+    % budget, while every operation corresponding to fill_search/5 is inside.
     crosswordsmith_fill:seed_used(All, Search, Used),
-    get_time(TSetup0),
-    setup_core(Search, DBL, Index, Used, Mode, State),
-    get_time(TSetup1),
-    MacSetupSeconds is TSetup1-TSetup0,
-    get_time(T0),
-    run_limited(Timeout, Budget, b0_core(State, Assign), Stop),
-    get_time(T1),
-    SearchSeconds is T1-T0,
+    init_run_state(Mode),
+    run_limited(Timeout, Budget,
+                b0_fill_search(Search, DBL, Index, Used, State, Assign), Stop),
+    run_times(MacSetupSeconds, SearchSeconds),
     finish_active_attempt(Stop),
     map_stop(Stop, Outcome0),
     (   Outcome0 == filled
@@ -135,8 +132,40 @@ run_loaded(Search, All, DBL, Index, Budget, Timeout, Mode,
         Outcome = filled
     ;   Outcome = Outcome0, Numbered = [], InputWords = []
     ),
-    core_report(State, SearchSeconds, Report0),
+    core_report(SearchSeconds, Report0),
     Report=Report0.put(mac_setup_seconds,MacSetupSeconds).
+
+init_run_state(Mode) :-
+    nb_setval(cw_b0_mode, Mode),
+    nb_setval(cw_b0_setup_complete, false),
+    nb_setval(cw_b0_mac_setup_seconds, 0.0),
+    nb_setval(cw_b0_search_started, 0.0),
+    nb_setval(cw_b0_attempt_count, 0),
+    nb_setval(cw_b0_attempt_records, []),
+    nb_setval(cw_b0_attempt_active, none),
+    nb_setval(cw_b0_root_record, _{}).
+
+% Local equivalent of fill_search/5's non-empty arm. Setup timing is itself
+% inside the limited goal, and all report state needed after an inference/time
+% interrupt is persisted before root propagation begins.
+b0_fill_search(Search, DBL, Index, Used, State, Assign) :-
+    get_time(TSetup0),
+    setup_core(Search, DBL, Index, Used, State),
+    get_time(TSetup1),
+    MacSetupSeconds is TSetup1-TSetup0,
+    nb_setval(cw_b0_mac_setup_seconds, MacSetupSeconds),
+    nb_setval(cw_b0_edge_a, State.edge_a),
+    nb_setval(cw_b0_setup_complete, true),
+    nb_setval(cw_b0_search_started, TSetup1),
+    b0_core(State, Assign).
+
+run_times(MacSetupSeconds, SearchSeconds) :-
+    nb_getval(cw_b0_mac_setup_seconds, MacSetupSeconds),
+    (   nb_getval(cw_b0_setup_complete, true)
+    ->  nb_getval(cw_b0_search_started, SearchStart),
+        get_time(Now), SearchSeconds is Now-SearchStart
+    ;   SearchSeconds = 0.0
+    ).
 
 run_limited(0, Budget, Goal, Stop) :- !,
     call_with_inference_limit((Goal -> R=ok ; R=exhausted), Budget, Limit),
@@ -154,7 +183,7 @@ map_stop(exhausted, infeasible).
 map_stop(budget, not_proven).
 map_stop(timeout, timeout).
 
-setup_core(Slots, DBL, Index, Used, Mode, State) :-
+setup_core(Slots, DBL, Index, Used, State) :-
     crosswordsmith_fill:build_masks(Index, MA),
     crosswordsmith_fill:mac_flat_masks(MA, LmA),
     crosswordsmith_fill:mac_buckets(DBL, BucketA),
@@ -166,13 +195,11 @@ setup_core(Slots, DBL, Index, Used, Mode, State) :-
     crosswordsmith_fill:mac_init_weights(NEdges),
     maplist(crosswordsmith_fill:mac_init_domain(DBL, LmA), IdSlots, IdDoms),
     list_to_assoc(IdDoms, DomA0),
-    init_probe(Mode, N, NEdges),
+    init_probe(N, NEdges),
     State = state{ids:Ids,id_slots:IdSlots,len_a:LenA,bucket_a:BucketA,
-                  edge_a:EdgeA,lm_a:LmA,dom_a:DomA0,used:Used,
-                  n_edges:NEdges,mode:Mode}.
+                   edge_a:EdgeA,lm_a:LmA,dom_a:DomA0,used:Used}.
 
-init_probe(Mode, NSlots, NEdges) :-
-    nb_setval(cw_b0_mode, Mode),
+init_probe(NSlots, NEdges) :-
     nb_setval(cw_b0_attempt_count, 0),
     nb_setval(cw_b0_attempt_records, []),
     nb_setval(cw_b0_attempt_active, none),
@@ -401,19 +428,33 @@ finish_active_attempt(Stop) :-
     -> record_attempt(Stop)
     ;  true ).
 
-core_report(State, SearchSeconds, Report) :-
+core_report(SearchSeconds, Report) :-
+    (   nb_getval(cw_b0_setup_complete, true)
+    ->  core_report_ready(SearchSeconds, Report)
+    ;   Report=_{search_seconds:SearchSeconds,setup_complete:false,root:_{},
+                 attempts:[],attempts_count:0,last_attempt_nodes:0,
+                 bump_counts:[],final_weights:[],peak_weights:[],edges:[],
+                 weight_concentration:_{learned_bumps:0,
+                                        top_quartile_share:0.0,gini:0.0},
+                 phase_seconds:_{selection_candidate:0.0,placement:0.0,
+                                 propagation_support:0.0,other_search:0.0}}
+    ).
+
+core_report_ready(SearchSeconds, Report) :-
     nb_getval(cw_b0_root_record,Root),
     nb_getval(cw_b0_attempt_records,Attempts),
     nb_getval(cw_b0_attempt_count,AttemptCount),
     ( Attempts=[] -> LastNodes=0 ; last(Attempts,Last), LastNodes=Last.attempt_nodes ),
     bump_vector(Bumps), weight_vector(Weights), peak_vector(Peaks),
     concentration(Bumps, Concentration),
-    edge_rows(State.edge_a, Bumps, Weights, Peaks, Edges),
+    nb_getval(cw_b0_edge_a,EdgeA),
+    edge_rows(EdgeA, Bumps, Weights, Peaks, Edges),
     nb_getval(cw_b0_times,Times), compound_args(Times,PhaseValues),
     PhaseValues=[SelectionSeconds,PlacementSeconds,PropagationSeconds],
     OtherSeconds is max(0.0,SearchSeconds-SelectionSeconds-PlacementSeconds-
                              PropagationSeconds),
-    Report=_{search_seconds:SearchSeconds,root:Root,attempts:Attempts,
+    Report=_{search_seconds:SearchSeconds,setup_complete:true,
+             root:Root,attempts:Attempts,
              attempts_count:AttemptCount,last_attempt_nodes:LastNodes,
              bump_counts:Bumps,final_weights:Weights,peak_weights:Peaks,
              weight_concentration:Concentration,edges:Edges,

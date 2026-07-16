@@ -3,6 +3,15 @@
 Measurement-only result for `docs/plans/fill-perf-program-2026-07.md` B0-I.
 No file under `prolog/`, no oracle, and no baseline was changed.
 
+**Budget-accounting correction.** Adjudication found that the first rig revision
+placed MAC setup before `call_with_inference_limit/3`, unlike product
+`fill_attempt/8`, where only `seed_used/3` is outside and all of
+`fill_search/5` is inside. The canonical values below come from the corrected
+rig: `setup_core/5` (mask construction, domains, edges, weights), root AC, and
+all attempts share the supplied inference budget. Setup wall is recorded from
+inside that goal, and interrupted runs retain valid setup/attempt state. The
+authority counters did not move; the bounded CWL row did and is replaced here.
+
 ## Provenance and method
 
 - Base: `c7ae472a99ce31b20a99bd35b02466ff8f1500fa`, branch
@@ -17,6 +26,9 @@ No file under `prolog/`, no oracle, and no baseline was changed.
   remains the shipped lazy `mac_candidate/4`; bit clearing remains xor; attempt
   1 is greedy, attempts 2+ use the pinned `0xCC9E2D51` stream; caps are
   `500 x 1.5`; weights persist and age `x 0.99`; root AC precedes attempts.
+- Budget boundary: exactly as `fill_attempt/8` lines 1689-1707, `seed_used/3`
+  is outside; the complete probe equivalent of `fill_search/5`, beginning with
+  mask/setup construction, is inside both the inference and optional wall cap.
 - Every accepted fill is rebound to the original shared slot cells through
   `mac_bind_fill/2` before `slots_to_layout/3`. A crossing error therefore
   fails the probe rather than producing data.
@@ -52,10 +64,16 @@ was then run for all five quality masks: product/twin nodes were open4 `8/8`,
 open5 `20/20`, mini7 `23/23`, mini9 `28/28`, amer11 `90/90`; every complete
 layout and word list matched.
 
-Counter mode was run twice independently on `sq04_50k` and both authority
-rows. After deleting only label and wall-time fields, outcome, fill digest,
-every counter, every attempt record, and every final/peak weight were exactly
-equal. Authority fill digests are @30
+The corrected multi-attempt replay also passed both authority rows against the
+product under the same 800M accounting. STW @30 matched outcome, exact
+`Numbered`, exact `InputWords`, and final-attempt nodes `919/919` (twin reports
+7 attempts); STW @1 matched the same fields and nodes `228/228` (2 attempts).
+
+Counter mode was run twice independently on `sq04_50k` and, after correction,
+both authority rows; the corrected bounded CWL row was also repeated. After
+deleting only label and wall-time fields, outcome, fill digest, every counter,
+every attempt record, and every final/peak weight were exactly equal. Authority
+fill digests are @30
 `f1e37425d9ac5b6ba9fcbfad46a5a2416d87453224d6019a2c2ffe95d51308ee`
 and @1 `82cd1956ced834415a59c3fd910670b158ccaa91bb3c32f496c81def1e887d78`.
 
@@ -86,13 +104,15 @@ per-edge learned bump counts (the aging-independent learned-excess measure).
 | g15_full | filled | 1 | 99 | 854 | 50.47 | 22.01 | 27.52 | 2,061 | 758 | 11 | 26.78 | 0 | 196,890 | 11 | 100.00 | 0.937 |
 | g17_50k | filled | 4 | 2,744 | 20,084 | 29.57 | 28.23 | 42.20 | 35,373 | 24,337 | 1,393 | 39.83 | 0 | 1,122,996 | 1,393 | 87.51 | 0.774 |
 | g09_full | filled | 2 | 533 | 925 | 68.65 | 16.86 | 14.49 | 1,509 | 677 | 18 | 30.72 | 0 | 138,001 | 18 | 100.00 | 0.935 |
-| cwl50 @50 | not_proven | 9 | 27,529 | 1,178,440 | 0.91 | 1.12 | 97.97 | 4,956,257 | 1,564,124 | 26,558 | 23.89 | 0 | 815,970,672 | 26,558 | 93.75 | 0.808 |
+| cwl50 @50 | not_proven | 9 | 27,342 | 1,169,547 | 0.91 | 1.11 | 97.98 | 4,914,095 | 1,552,820 | 26,381 | 23.91 | 0 | 811,392,821 | 26,381 | 93.83 | 0.808 |
 
 The ladder used its committed 2B per-search harness budget to obtain exact
 completion; the two STW rows and CWL stretch used the shipped 800M budget.
-The stretch hit that inference budget after 215.1s, before the 240s wall cap:
-it is `not_proven`, not infeasible. All placement DWOs were zero; all learned
-bumps came from propagation revision DWOs.
+The corrected stretch charged 2.963s of MAC setup and 229.466s of root/attempt
+search to the same 800M inference-limited goal. It hit that budget after
+232.4s limited / 236.1s end to end, before the 240s wall cap: it is
+`not_proven`, not infeasible. All placement DWOs were zero; all learned bumps
+came from propagation revision DWOs.
 
 ## Attempt table
 
@@ -119,7 +139,7 @@ complete per-edge bump/final/peak vectors and edge endpoint map.
 | CWL | 6 | 3,798 | cap | 3,799 | 150,097 | 633,155 | 203,310 | 3,705 | 105,879,800 | 3,705 | 46 | 923.560 | 923.560 |
 | CWL | 7 | 5,697 | cap | 5,698 | 247,307 | 1,066,283 | 321,189 | 5,461 | 176,042,801 | 5,461 | 45 | 1,660.261 | 1,660.261 |
 | CWL | 8 | 8,546 | cap | 8,547 | 311,601 | 1,305,734 | 424,478 | 8,196 | 198,311,077 | 8,196 | 48 | 1,914.181 | 1,914.181 |
-| CWL | 9 | 12,819 | budget | 2,885 | 134,031 | 572,914 | 174,687 | 2,811 | 99,023,306 | 2,811 | 45 | 2,143.221 | 2,143.221 |
+| CWL | 9 | 12,819 | budget | 2,698 | 125,138 | 530,752 | 163,383 | 2,634 | 94,445,455 | 2,634 | 44 | 2,143.221 | 2,143.221 |
 
 ## Kill tests and mechanism
 
@@ -151,14 +171,14 @@ Coarse timing runs produced the same fill digests as counter runs:
 
 | row | total s | setup s (% total) | select/candidate s | placement s | propagation/support s (% total; % search) | other search s |
 |---|---:|---:|---:|---:|---:|---:|
-| STW @30 | 139.468 | 6.163 (4.42%) | 0.059 | 0.384 | 132.311 (94.87%; 99.25%) | 0.551 |
-| STW @1 | 17.678 | 8.876 (50.21%) | 0.015 | 0.024 | 8.343 (47.19%; 94.78%) | 0.420 |
+| STW @30 | 146.262 | 6.037 (4.13%) | 0.058 | 0.525 | 139.583 (95.43%; 99.54%) | 0.059 |
+| STW @1 | 17.738 | 8.947 (50.44%) | 0.015 | 0.024 | 8.746 (49.31%; 99.49%) | 0.006 |
 
 Search is unequivocally propagation/support dominated at both wide bands, so
 subsequent search-latency claims must be described as bignum-path wins. At @1,
 however, end-to-end latency is co-dominated by dictionary/grid/MAC setup; a
 search-only win cannot remove that half. The current STW snapshot reproduces
-the historical timing/quality closely (@30 139.5s vs 140s, @1 17.7s vs 19s),
+the historical timing/quality closely (@30 146.3s vs 140s, @1 17.7s vs 19s),
 but @1 now completes in 2 attempts rather than the historical note's 4; the
 product CLI independently showed the same 2-attempt result.
 
@@ -189,15 +209,17 @@ matched the product assignment exactly.
 
 > ### B0-I - shipped MAC instrumentation - MEASURED, all Track-B arms survive
 > Measurement-only `probe_mac_dwd`-lineage twin at commit `c7ae472`: exact
-> product replay on four easy/seeded/scored rows and all five quality masks;
+> product replay on four easy/seeded/scored rows, both multi-attempt authority
+> rows, and all five quality masks;
 > duplicate authority runs matched all fills/counters/weights; easy-rung
 > overhead +5.39%. STW `blocked_13a` @30/@1 filled in 7/2 attempts. Queue
 > `<=2` was 0.22%/1.04%, `>=4` 99.51%/98.08%; fruitful revisions
 > 27.89%/28.93%; 10,945/599 learned bumps; top-quartile excess
 > 83.54%/91.49%, Gini 0.737/0.799. Therefore F1, F2/F4, and F3/F5 survive
 > their B0 gates; build variants in preregistered order. Propagation/support
-> consumed 99.25%/94.78% of search wall (bignum-path dominated). All 11 ladder
+> consumed 99.54%/99.49% of search wall (bignum-path dominated). All 11 ladder
 > rows filled at their 2B harness budgets; CWL @50 stopped `not_proven` on the
-> shipped 800M budget before 240s. Quality replay stayed min/mean 50 with exact
+> shipped 800M budget before 240s, with MAC setup charged inside that budget.
+> Quality replay stayed min/mean 50 with exact
 > product assignments. Product tests, identity, and ratchets PASS at +0.00%; no
 > baseline/oracle/plan/ledger change.
