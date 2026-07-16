@@ -292,10 +292,9 @@ plain_dict_words(Lines, File, Words) :-
 % restart portfolio on open grids over big uniform dicts (g17_50k) where
 % permuted order converges in a handful of attempts. Scored dicts are NOT
 % touched on the default path - §8.4a's score-desc-then-lex order is the
-% quality contract. NB the default path uses an O(n log n) draw-key shuffle,
-% not seeded_permutation/2's O(n^2) selection walk (minutes at ENABLE
-% scale); the seeded path keeps the O(n^2) form byte-for-byte (its draws
-% are contract - DP-6 goldens/fuzz reproduce per seed).
+% quality contract. The default path keeps its pinned draw-key shuffle; the
+% seeded path replays its contracted selection sequence through
+% seeded_permutation/2's order-statistic structure.
 seed_perturb_plain(Ws, Out) :-
     (   current_search_seed(_)
     ->  seeded_permutation(Ws, Out)

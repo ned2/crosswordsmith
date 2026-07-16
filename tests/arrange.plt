@@ -562,6 +562,69 @@ test(seeded_permutation_known_answer,
     crosswordsmith_core:seeded_permutation([a,b,c,d,e,f,g], P),
     P == [f,b,e,a,d,c,g].
 
+% Independent oracle for A2-KS: this is the pre-optimisation survivor-list
+% walk. Comparing the next draw too locks both the selected positions and the
+% exact one-draw-per-survivor discipline (including the empty no-draw case).
+reference_seeded_permutation([], []) :- !.
+reference_seeded_permutation(List, [X|Perm]) :-
+    length(List, N),
+    prng_draw(V),
+    I is V mod N,
+    reference_nth0_rest(I, List, X, Rest),
+    reference_seeded_permutation(Rest, Perm).
+
+reference_nth0_rest(0, [X|Rest], X, Rest) :- !.
+reference_nth0_rest(I, [H|T], X, [H|Rest]) :-
+    I > 0,
+    I1 is I - 1,
+    reference_nth0_rest(I1, T, X, Rest).
+
+seeded_test_list(0, []) :- !.
+seeded_test_list(N, List) :-
+    Last is N - 1,
+    numlist(0, Last, List).
+
+test(seeded_permutation_matches_selection_walk,
+     [cleanup(set_search_seed(-1))]) :-
+    Seeds = [0, 1, 7, 42, 0xFFFFFFFFFFFFFFFF],
+    forall(( member(Seed, Seeds), between(0, 256, N) ),
+           ( seeded_test_list(N, List),
+             set_search_seed(Seed),
+             reference_seeded_permutation(List, Reference),
+             prng_draw(ReferenceNext),
+             set_search_seed(Seed),
+             crosswordsmith_core:seeded_permutation(List, Actual),
+             prng_draw(ActualNext),
+             assertion(Actual == Reference),
+             assertion(ActualNext =:= ReferenceNext) )).
+
+test(seeded_permutation_is_deterministic,
+     [ setup(set_search_seed(7)), cleanup(set_search_seed(-1)) ]) :-
+    crosswordsmith_core:seeded_permutation([a,b,c,d], _),
+    deterministic(Det),
+    Det == true.
+
+test(seeded_permutation_empty_draw_free,
+     [ setup(set_search_seed(7)), cleanup(set_search_seed(-1)) ]) :-
+    crosswordsmith_core:seeded_permutation([], []),
+    prng_draw(V),
+    crosswordsmith_core:splitmix64(7, V, _).
+
+test(seeded_permutation_output_mismatch_draw_free,
+     [ setup(set_search_seed(7)), cleanup(set_search_seed(-1)) ]) :-
+    \+ crosswordsmith_core:seeded_permutation([a], []),
+    prng_draw(V),
+    crosswordsmith_core:splitmix64(7, V, _).
+
+test(seeded_permutation_improper_list_error,
+     [ error(type_error(list, not_a_list)) ]) :-
+    crosswordsmith_core:seeded_permutation(not_a_list, _).
+
+test(seeded_permutation_unseeded_error,
+     [ setup(set_search_seed(-1)),
+       error(existence_error(prng_state, unseeded)) ]) :-
+    crosswordsmith_core:seeded_permutation([a], _).
+
 % Placement fingerprint: the sorted (answer, start, dir) triples of a layout.
 layout_sig(Numbered, Sig) :-
     findall(A-S-D,

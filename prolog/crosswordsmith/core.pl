@@ -819,24 +819,86 @@ prng_seed_state(N) :-
 %   Selection shuffle driven by prng_draw/1 — one draw per element, index by
 %   V mod remaining-length. The tiny modulo bias (~len/2^64) is irrelevant
 %   here: the contract is reproducibility, not statistical uniformity.
-%   O(n^2), fine at word-list scale. THROWS (existence_error) if no search
-%   seed is installed — every caller guards on current_search_seed/1 first.
-%   Exported since §8.4b (DP-6): fill's perturbation seams reorder candidate
-%   ties and MRV slot ties through this same PRNG stream, so arrange and
-%   fill inherit the identical CLI↔WASM reproducibility guarantee.
+%   A local Fenwick tree selects and deletes the same surviving original
+%   position in O(log n), without changing the draw sequence. THROWS
+%   (existence_error) if no search seed is installed — every caller guards on
+%   current_search_seed/1 first. Exported since §8.4b (DP-6): fill's
+%   perturbation seams reorder candidate ties and MRV slot ties through this
+%   same PRNG stream, so arrange and fill inherit the identical CLI↔WASM
+%   reproducibility guarantee.
 seeded_permutation([], []) :- !.
-seeded_permutation(List, [X|Perm]) :-
+seeded_permutation(List, Perm) :-
     length(List, N),
-    prng_draw(V),
-    I is V mod N,
-    list_nth0_rest(I, List, X, Rest),
-    seeded_permutation(Rest, Perm).
+    compound_name_arguments(Items, items, List),
+    functor(Live, fenwick, N),
+    fenwick_init(1, N, Live),
+    seeded_permutation_(N, Items, Live, Perm).
 
-list_nth0_rest(0, [X|Rest], X, Rest) :- !.
-list_nth0_rest(I, [H|T], X, [H|Rest]) :-
-    I > 0,
-    I1 is I - 1,
-    list_nth0_rest(I1, T, X, Rest).
+seeded_permutation_(0, _Items, _Live, []) :- !.
+seeded_permutation_(N, Items, Live, [X|Perm]) :-
+    prng_draw(V),
+    Rank is V mod N,
+    fenwick_select(Live, Rank, I),
+    arg(I, Items, X),
+    fenwick_delete(I, Live),
+    N1 is N - 1,
+    seeded_permutation_(N1, Items, Live, Perm).
+
+% With every original position live, Fenwick cell I starts at lowbit(I).
+fenwick_init(I, N, Live) :-
+    (   I > N
+    ->  true
+    ;   Count is I /\ -I,
+        nb_setarg(I, Live, Count),
+        I1 is I + 1,
+        fenwick_init(I1, N, Live)
+    ).
+
+% Find the smallest original index whose live-prefix count exceeds Rank.
+fenwick_select(Live, Rank, I) :-
+    functor(Live, fenwick, N),
+    fenwick_top_bit(N, Bit),
+    fenwick_select_bit(Bit, Live, N, Rank, 0, Pos),
+    I is Pos + 1.
+
+fenwick_top_bit(N, Bit) :-
+    fenwick_top_bit_(1, N, Bit).
+
+fenwick_top_bit_(Bit0, N, Bit) :-
+    Bit1 is Bit0 << 1,
+    (   Bit1 > N
+    ->  Bit = Bit0
+    ;   fenwick_top_bit_(Bit1, N, Bit)
+    ).
+
+fenwick_select_bit(0, _Live, _N, _Rank, Pos, Pos) :- !.
+fenwick_select_bit(Bit, Live, N, Rank0, Pos0, Pos) :-
+    Next is Pos0 + Bit,
+    (   Next =< N,
+        arg(Next, Live, Count),
+        Count =< Rank0
+    ->  Pos1 = Next,
+        Rank1 is Rank0 - Count
+    ;   Pos1 = Pos0,
+        Rank1 = Rank0
+    ),
+    Bit1 is Bit >> 1,
+    fenwick_select_bit(Bit1, Live, N, Rank1, Pos1, Pos).
+
+fenwick_delete(I, Live) :-
+    functor(Live, fenwick, N),
+    fenwick_delete_(I, N, Live).
+
+fenwick_delete_(I, N, Live) :-
+    (   I > N
+    ->  true
+    ;   arg(I, Live, Count0),
+        Count is Count0 - 1,
+        nb_setarg(I, Live, Count),
+        Step is I /\ -I,
+        I1 is I + Step,
+        fenwick_delete_(I1, N, Live)
+    ).
 
 % Seed-word order: which word anchors the layout. Deterministic = input order;
 % seeded = a shuffled copy (the single biggest source of layout variety).
