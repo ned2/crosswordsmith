@@ -157,7 +157,7 @@ descending order of authority:
 | CWL clean-floor row | `blocked_13a` × `cwl50` @50 (baseline: not-proven, 3m57s; defeats ingrid too) | open stretch signal — any completion here is news |
 | Quality gate | `benchmarks/fill_quality/run.sh` five-mask table | no quality regression vs the DP-9 table |
 
-### B0. Instrumentation probe first — effort S, do before any variant
+### B0. Instrumentation probe first — IN PROGRESS (2026-07-16), effort S
 
 The arrange campaign's single best move (P1) was measuring before building;
 its E-H6 rejection shows how a theoretically-sound weight signal dies on an
@@ -175,6 +175,36 @@ counters on the probe rig:
 - **Where wall-time goes at wide bands** (mask width vs node count) — sizes
   whether Track B latency wins matter at CWL scale or the cost is all
   bignum arithmetic (which only A1-adjacent representation work touches).
+
+**Pre-registration — B0-I, instrumentation and kill-tests (2026-07-16,
+before probe implementation or measurement).** The probe must replay the
+shipped §8.4c policy in benchmark-land and report, per row and attempt:
+queue length at pop; revision outcomes (redundant, fruitful, DWO, and
+popcount deleted); node/attempt counts; final and peak edge-weight
+distributions; and wall split among setup, selection/candidate work,
+placement, and propagation/support. Counters must not alter candidate,
+revision, or PRNG order; two identical runs must produce identical fills,
+counts, nodes, attempts, and weight vectors. Instrumentation overhead must
+stay <=15% on a representative easy ladder rung so the wall split remains
+interpretable.
+
+Rows: the authority rows are `blocked_13a` × the local 2026-07-16 STW
+snapshot at `@30` and `@1`; all 11 ladder workloads size generality and
+easy-rung behavior; `blocked_13a` × `cwl50 @50` is a bounded 240s stretch
+run; the five-mask quality table is checked by replaying the same completed
+assignments/scores, not by changing any engine artifact. Numeric kill-tests:
+(1) **F1 queue ordering dies** if >=90% of queue pops have length <=2 on
+both reference rows, or if no row has at least 20% of pops at length >=4;
+(2) **F4 fruitful-credit dies** if fruitful revisions are <2% on both
+reference rows; (3) **F2/F3 sharpening dies** if, on both reference rows,
+there are fewer than 20 learned bumps per completed/last bounded attempt OR
+the top 25% of edges hold <50% of learned excess weight and weight Gini is
+<0.25. A fired test closes the corresponding build arm immediately. The
+wide-band wall split is explanatory rather than an adoption gate: >=70% in
+propagation/support means subsequent latency claims must be stated as
+bignum-path wins; >=70% outside it means mask width is not the dominant
+cause. B0 succeeds by producing reproducible decision-grade counters, even
+if every variant is killed.
 
 ### B1. F1 — weight-ordered revision queue (thesis Ch 5) — effort S, first variant
 
