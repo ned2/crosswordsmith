@@ -444,6 +444,24 @@ authority rows and all five quality masks; all 11 ladder rows filled; the
 corrected `cwl50 @50` stretch remained `not_proven` at 800M inferences.
 Product goldens, identity, and inference ratchets stayed unchanged.
 
+### B1 revision ordering (2026-07-16) — no arm graduates
+
+Probe commit `76147fc` tested minimum queue dom/wdeg (`q_dwd`), maximum queue
+weighted degree (`q_wdeg`), and descending learned-weight edge order. The
+authority mechanism was large, but it did not generalize:
+
+| arm | STW @30 inference / revision delta | STW @1 delta | decisive loss |
+|---|---:|---:|---|
+| `q_dwd` | -70.4% / -86.2% | -49.1% / -80.0% | mean 43.9 < 45.0; `g17_50k` +4,381% inferences |
+| `q_wdeg` | -66.7% / -82.4% | -27.3% / -62.8% | `g17_full` +6.0%; `g17_50k` +184.8% inferences |
+| `edge_desc` | @30 not proven | +15.6% / +7.6% | lost reference completion |
+
+All five quality masks stayed mean/min 50 and CWL remained not proven. Queue
+ordering does reach DWOs earlier on wide masks, validating B0, but changed
+learning destabilizes `g17_50k` restarts. No standalone ordering enters Track
+D. B2 retains only the evidence-driven `q_wdeg` × order-robust-credit
+interaction; it is a new arm that must independently clear the ladder guard.
+
 ## Caveats / how to extend
 
 - **`amer11` is also shipped** as `grids/amer11.json` (promoted at DP-9 as

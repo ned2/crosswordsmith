@@ -1772,3 +1772,32 @@ p1-backtrack-instrumentation.patch).
 - **Verdict:** **B0 complete; build B1, then B2/B3 in the registered order.**
   Runnable evidence:
   `benchmarks/results/2026-07-16-fill-b0-mac-instrumentation.md`.
+
+### B1-O — MAC revision ordering — MEASURED, no arm graduates
+
+- **Method:** rejected probe branch `experiment/b1-revision-order`, commit
+  `76147fc`. Its baseline call graph reproduces corrected B0 authority/CWL
+  counters exactly; seam checks lock stable ties, full-unfilled-neighbour
+  weighted degree, inactive-edge retention, and shared-cell bind validity.
+  Eight authority duplicate pairs matched fills, limited-goal inferences,
+  counters, attempts, and weights exactly.
+- **`q_dwd`:** authority inferences -70.4%/-49.1% and revisions
+  -86.2%/-80.0%, but `@30` mean fell 45.0 → 43.9. The ladder also exposed
+  `g17_50k` +4,381% inferences/+6,969% nodes and `g09_full` +31%/+352%.
+  **REJECT.** Conditional `q_dwd_edge` was therefore not built.
+- **`q_wdeg`:** authority inferences -66.7%/-27.3%, revisions
+  -82.4%/-62.8%, means 46.5/40.0. It still failed the registered ladder
+  guard: `g17_full` +6.0% inferences and `g17_50k` +184.8% inferences/+298.0%
+  nodes. **REJECT as a standalone/global policy.**
+- **`edge_desc`:** exhausted the `@30` 800M budget where baseline fills and
+  regressed `@1` +15.6% inferences/+7.6% revisions; `g17_50k` was +572.5%.
+  **REJECT.** High learned weight is not a useful local ASAP edge signal here.
+- **Matrix:** every ladder variant still filled, all five quality masks stayed
+  mean/min 50, and no arm completed `cwl50 @50`. Product tests, identity, and
+  both inference ratchets remained unchanged because all code was probe-only.
+- **Mechanism/verdict:** B0's premise was right: ordering can remove most
+  expensive wide-mask revisions. The failure is generality: order changes
+  conflict learning and later restart trajectories. No B1 arm enters Track D.
+  One distinct B2 sequel is warranted by the thesis's interaction result:
+  pair `q_wdeg` with `alldel`/fully-assigned order-robust credit and require it
+  to remove the two-rung regression before it can graduate.

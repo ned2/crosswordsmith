@@ -219,7 +219,7 @@ filled, quality assignments matched, and corrected `cwl50 @50` remained
 `not_proven` at the shipped 800M budget. Full evidence and runnable rig:
 `benchmarks/results/2026-07-16-fill-b0-mac-instrumentation.md`.
 
-### B1. F1 — weight-ordered revision queue (thesis Ch 5) — IN PROGRESS (2026-07-16)
+### B1. F1 — weight-ordered revision queue (thesis Ch 5) — LOST (2026-07-16)
 
 Pop the queued slot with smallest dom/wdeg (`v_dom/wdeg`; arms for `v_wdeg`
 and descending-weight edge order within a revision). Gated by B0's worklist
@@ -252,7 +252,23 @@ not required for a latency verdict. Duplicate runs must reproduce outcome,
 fill, inferences, counters, attempts, and weights exactly. Winners remain
 probe-only inputs to Track D; no default-path or identity artifact changes.
 
-### B2. F2 + F4 — weight-credit variants (thesis §3.4.2/3.4.4/3.4.6) — effort S/M
+**Verdict — no standalone arm graduates.** `q_dwd` cut authority
+inferences 70.4%/49.1% and revisions 86.2%/80.0%, but lowered `@30` mean
+45.0 → 43.9 and exploded `g17_50k` inferences by 4,381%. `q_wdeg` was the
+strongest authority arm (inferences -66.7%/-27.3%, revisions -82.4%/-62.8%,
+means 46.5/40.0) but failed the ladder guard on `g17_full` (+6.0%) and
+`g17_50k` (+184.8% inferences, +298.0% nodes). `edge_desc` lost `@30`
+completion and regressed `@1`; conditional `q_dwd_edge` was not built.
+Five-mask quality stayed 50/50 and no arm completed CWL. Mechanism: queue
+ordering genuinely reaches expensive DWOs earlier, but altered conflict
+learning catastrophically redirects some restart trajectories. No B1 arm
+enters Track D. The one warranted sequel is a **distinct B2 interaction**:
+combine `q_wdeg` with the thesis's order-robust `alldel` and fully-assigned
+credit schemes to test whether better credit removes the measured learning
+instability. Full result stays on rejected probe commit `76147fc` and is
+summarized in the benchmark README/experiment ledger.
+
+### B2. F2 + F4 — weight-credit variants (thesis §3.4.2/3.4.4/3.4.6) — IN PROGRESS (2026-07-16)
 
 One multi-arm experiment: H1/H2/H3 (deletion-responsible credit at DWO),
 `alldel` (credit on every deletion), fully-assigned (credit fruitful
@@ -261,6 +277,36 @@ the thesis's §5.5 variance study says credit scheme and revision order
 interact (alldel/fully-assigned are order-robust; plain dom/wdeg is not).
 Thesis evidence: plain dom/wdeg (ours) won zero instances outright in its
 tables.
+
+**Pre-registration — B2-C, conflict-credit arms (2026-07-16, before variant
+implementation or measurement).** Standalone arms: `h1` bumps once every
+edge that fruitfully deleted values from the eventual wiped domain during
+that propagation episode; `h2` credits those edges by deleted-candidate
+count; `h3` credits each by its deleted fraction of the target's episode-
+start domain; `alldel` credits every fruitful revision immediately by one;
+`fully_assigned` bumps each distinct fruitful edge in a DWO-terminated
+episode once, including the final edge. Episode logs are attempt-local,
+backtrack-safe where search state requires it, and cleared at each top-level
+placement/propagation call; credit state itself remains global learning just
+like baseline weights. Exact formulas and lifetime must be executable seam
+tests before measurement.
+
+B1 combinations are narrowed by evidence rather than multiplied blindly:
+only `alldel_qw` and `fully_qw` pair the rejected-but-authority-strong
+`q_wdeg` order with the two schemes the thesis reports as order-robust.
+H1/H2/H3 do not get an ordering combination; no `q_dwd` combination is
+built. Baseline and every seven built arms run STW `@30/@1`, all 11 ladder
+rows, five-mask quality, and bounded `cwl50 @50`, with exact duplicate
+authority runs. Primary metrics and success gates are B1's: both reference
+rows complete; >=15% inference+revision cuts on both or >=25% at `@30` with
+no >2% `@1` regression; no completion loss; no >5% inference/node regression
+on more than one ladder rung; reference means >=45.0/38.7; five-mask means
+not below baseline and min 50. A standalone arm that ties/loses both
+reference rows closes after its ladder table. A q_wdeg combination must also
+remove q_wdeg's two-rung regression (at most one rung >5%) to count as the
+warranted stabilization; authority speed alone is insufficient. CWL
+completion is stretch evidence only. Any winner remains probe-only for Track
+D; default-path weights and identity artifacts do not change.
 
 ### B3. F3 + F5 — aging and probing-init arms — effort S
 
