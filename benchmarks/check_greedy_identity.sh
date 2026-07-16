@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Semantic identity gate for the complete greedy ladder. The generated JSON
-# includes ordered direct raw pools, selected semantics, normalized assocs,
-# distances, and CLI stdout/stderr hashes; the committed file stores its SHA-256.
+# includes ordered direct attempts, exact mode-specific raw pools, selected
+# semantics, normalized assocs, distances, and CLI stdout/stderr hashes; the
+# committed file stores its SHA-256.
 
 set -euo pipefail
 cd "$(dirname "$0")/.."

@@ -78,7 +78,8 @@ run_spec(ItOverride, WOverride,
     format(user_error, "heartbeat: ~w postprocess setup (outside timing)~n", [Id]),
     greedy_subjects:build_raw_pool(Words, Size, Command, Raw),
     layer_measure(Id, postprocess,
-                  greedy_subjects:postprocess_sampler(Raw,Size,Total,K), Opts, Post),
+                  greedy_subjects:postprocess_sampler(
+                      Raw,Size,Total,Command,K), Opts, Post),
     repo_path(crosswordsmith, Exe),
     layer_measure(Id, command,
                   greedy_subjects:command_sampler(
@@ -149,7 +150,7 @@ command_json(best_effort, _{kind:best_effort}).
 
 repo_path(Rel, Path) :- repo_root(Root), directory_file_path(Root, Rel, Path).
 
-identity_document(Specs, _{tool:'crosswordsmith-arrange-greedy-identity',schema:1,
+identity_document(Specs, _{tool:'crosswordsmith-arrange-greedy-identity',schema:2,
                            results:Rows}) :-
     repo_path(crosswordsmith, Exe),
     maplist(identity_spec(Exe), Specs, Rows).

@@ -8,7 +8,7 @@
   "tool":"crosswordsmith-arrange-greedy-bench",
   "workloads": {
     "benchmark_08_candidates": {
-      "command_rss_med_kib":12026,
+      "command_rss_med_kib":11934,
       "command_wall_med_ms":60.0,
       "construction": {
 	"corner":"topleft_across",
@@ -22,14 +22,14 @@
       "info_only": ["command_wall_med_ms", "command_rss_med_kib", "semantic_counters" ],
       "iterations":20,
       "mode": {"drop":"strict","k":5,"kind":"candidates"},
-      "postprocess_inf":5982,
-      "sweep_inf":356854,
+      "postprocess_inf":5974,
+      "sweep_inf":356853,
       "tier":"core",
       "warmup":3,
       "words":8
     },
     "bundled_11_best_effort": {
-      "command_rss_med_kib":11492,
+      "command_rss_med_kib":11432,
       "command_wall_med_ms":40.0,
       "construction": {
 	"corner":"topleft_across",
@@ -43,14 +43,14 @@
       "info_only": ["command_wall_med_ms", "command_rss_med_kib", "semantic_counters" ],
       "iterations":20,
       "mode": {"kind":"best_effort"},
-      "postprocess_inf":1376,
-      "sweep_inf":15555,
+      "postprocess_inf":29,
+      "sweep_inf":15624,
       "tier":"core",
       "warmup":3,
       "words":6
     },
     "bundled_17_candidates": {
-      "command_rss_med_kib":11810,
+      "command_rss_med_kib":11722,
       "command_wall_med_ms":60.0,
       "construction": {
 	"corner":"topleft_across",
@@ -64,14 +64,14 @@
       "info_only": ["command_wall_med_ms", "command_rss_med_kib", "semantic_counters" ],
       "iterations":20,
       "mode": {"drop":"strict","k":3,"kind":"candidates"},
-      "postprocess_inf":6926,
-      "sweep_inf":296712,
+      "postprocess_inf":6910,
+      "sweep_inf":296711,
       "tier":"core",
       "warmup":3,
       "words":6
     },
     "ladder_15x15_32w_best_effort": {
-      "command_rss_med_kib":13012,
+      "command_rss_med_kib":13212,
       "command_wall_med_ms":300.0,
       "construction": {
 	"corner":"topleft_across",
@@ -85,15 +85,15 @@
       "info_only": ["command_wall_med_ms", "command_rss_med_kib", "semantic_counters" ],
       "iterations":7,
       "mode": {"kind":"best_effort"},
-      "postprocess_inf":11328,
-      "sweep_inf":6126332,
+      "postprocess_inf":233,
+      "sweep_inf":6126445,
       "tier":"heavy",
       "warmup":2,
       "words":32
     },
     "ladder_21x21_80w_best_effort": {
-      "command_rss_med_kib":19220,
-      "command_wall_med_ms":1250.0,
+      "command_rss_med_kib":19608,
+      "command_wall_med_ms":1190.0,
       "construction": {
 	"corner":"topleft_across",
 	"expected": {"dropped":71,"outcome":"completed","placed":9},
@@ -106,14 +106,14 @@
       "info_only": ["command_wall_med_ms", "command_rss_med_kib", "semantic_counters" ],
       "iterations":5,
       "mode": {"kind":"best_effort"},
-      "postprocess_inf":10158,
-      "sweep_inf":28942086,
+      "postprocess_inf":593,
+      "sweep_inf":28942375,
       "tier":"heavy",
       "warmup":2,
       "words":80
     },
     "real_13x13_12w_best_effort": {
-      "command_rss_med_kib":11780,
+      "command_rss_med_kib":11934,
       "command_wall_med_ms":90.0,
       "construction": {
 	"corner":"topleft_across",
@@ -127,15 +127,15 @@
       "info_only": ["command_wall_med_ms", "command_rss_med_kib", "semantic_counters" ],
       "iterations":10,
       "mode": {"kind":"best_effort"},
-      "postprocess_inf":16277,
-      "sweep_inf":1248301,
+      "postprocess_inf":90,
+      "sweep_inf":1248410,
       "tier":"core",
       "warmup":2,
       "words":12
     },
     "real_15x15_18w_best_effort": {
-      "command_rss_med_kib":12288,
-      "command_wall_med_ms":150.0,
+      "command_rss_med_kib":12222,
+      "command_wall_med_ms":160.0,
       "construction": {
 	"corner":"topleft_across",
 	"expected": {"dropped":3,"outcome":"completed","placed":15},
@@ -148,8 +148,8 @@
       "info_only": ["command_wall_med_ms", "command_rss_med_kib", "semantic_counters" ],
       "iterations":10,
       "mode": {"kind":"best_effort"},
-      "postprocess_inf":16629,
-      "sweep_inf":2789395,
+      "postprocess_inf":130,
+      "sweep_inf":2789556,
       "tier":"core",
       "warmup":2,
       "words":18

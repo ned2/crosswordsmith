@@ -6,7 +6,7 @@
             construction_sampler/6,
             sweep_sampler/4,
             build_raw_pool/4,
-            postprocess_sampler/5,
+            postprocess_sampler/6,
             command_sampler/7,
             semantic_counters/4,
             replay_equivalent/4,
@@ -24,9 +24,6 @@
 
 load_words(File, Words) :-
     load_clues(File, Words).
-
-drop_contract(candidates(Drop, _), Drop).
-drop_contract(best_effort, best_effort).
 
 command_k(candidates(_, K), K).
 command_k(best_effort, 1).
@@ -68,44 +65,77 @@ sweep_sampler(Words, GridLen, Command, Sample) :-
 
 sweep_operation(Words, GridLen, Command, Raw) :-
     crosswordsmith_core:reset_search_memos,
-    raw_pool_no_reset(Words, GridLen, Command, Raw).
+    raw_pool_no_reset(Command, Words, GridLen, Raw).
 
 build_raw_pool(Words, GridLen, Command, Raw) :-
     crosswordsmith_core:reset_search_memos,
-    raw_pool_no_reset(Words, GridLen, Command, Raw).
+    raw_pool_no_reset(Command, Words, GridLen, Raw).
 
-raw_pool_no_reset(Words, GridLen, Command, Raw) :-
+% Exact pre-sort twin of arrange_candidate_pool/4, lines 1053-1064. Keep the
+% conjunction and template in lockstep with product code: candidates Raw carries
+% Placed only and strict eligibility is tested before layout_reward/4.
+raw_pool_no_reset(candidates(DropContract, _K), Words, GridLen, Raw) :-
     crosswordsmith_arrange:arrange_weights(WCap, WTail),
     length(Words, Total),
     crosswordsmith_arrange:seed_candidates(Words, Seeds),
     start_locs(Locs),
-    drop_contract(Command, DropContract),
-    findall(score(NP, Reward)-pd(Placed, Dropped),
+    findall(score(NP, Reward)-Placed,
             ( member(Loc, Locs),
               member(Seed, Seeds),
               crosswordsmith_arrange:greedy_construct(
-                  Words, GridLen, Loc, Seed, Placed, Dropped),
+                  Words, GridLen, Loc, Seed, Placed, _Dropped),
               length(Placed, NP),
               ( DropContract == strict -> NP =:= Total ; true ),
               crosswordsmith_arrange:layout_reward(
                   WCap, WTail, Placed, Reward) ),
             Raw).
 
-% Raw is prebuilt by the caller outside call_time/2. This timed layer contains
-% only stable ranking, translation-normalized assocs, diversity, and numbering.
-postprocess_sampler(Raw, GridLen, Total, K, Sample) :-
-    inproc_sampler(greedy_subjects:postprocess(Raw, GridLen, Total, K, _), Sample).
+% Exact pre-sort twin of arrange_best_effort/6, lines 418-428. Best-effort Raw
+% carries ordered dropped ANSWERS, with that map performed inside the sweep.
+raw_pool_no_reset(best_effort, Words, GridLen, Raw) :-
+    crosswordsmith_arrange:arrange_weights(WCap, WTail),
+    crosswordsmith_arrange:seed_candidates(Words, Seeds),
+    start_locs(Locs),
+    findall(score(NP, Reward)-pd(Placed, DroppedAnswers),
+            ( member(Loc, Locs),
+              member(Seed, Seeds),
+              crosswordsmith_arrange:greedy_construct(
+                  Words, GridLen, Loc, Seed, Placed, DroppedEntries),
+              length(Placed, NP),
+              crosswordsmith_arrange:layout_reward(
+                  WCap, WTail, Placed, Reward),
+              maplist(entry_answer, DroppedEntries, DroppedAnswers) ),
+            Raw).
 
-postprocess(Raw, GridLen, Total, K, Numbered) :-
-    maplist(raw_placed_pair, Raw, Keyed),
-    sort(1, @>=, Keyed, Sorted),
+% Raw is prebuilt by the caller outside call_time/2. Clause dispatch preserves
+% each mode's actual product work rather than charging candidate diversity to
+% best-effort.
+postprocess_sampler(Raw, GridLen, Total, Command, K, Sample) :-
+    inproc_sampler(
+        greedy_subjects:postprocess(Command, Raw, GridLen, Total, K, _),
+        Sample).
+
+% Exact post-sweep work from arrange_candidate_pool/4 + arrange_candidates/6:
+% stable rank, placement assocs, non-empty gate, diversity, and numbering.
+postprocess(candidates(_Drop, _CommandK), Raw, GridLen, Total, K,
+            candidates(Numbered, Returned)) :-
+    sort(1, @>=, Raw, Sorted),
     pairs_values(Sorted, Placeds),
     maplist(crosswordsmith_arrange:tag_with_assoc(GridLen), Placeds, Pool),
+    Pool = [_|_],
     crosswordsmith_arrange:candidate_tau_pct(TauPct),
     crosswordsmith_arrange:pick_diverse(Pool, TauPct, Total, K, Picked),
-    maplist(crosswordsmith_arrange:numbered_candidate, Picked, Numbered).
+    maplist(crosswordsmith_arrange:numbered_candidate, Picked, Numbered),
+    length(Numbered, Returned).
 
-raw_placed_pair(Score-pd(Placed, _Dropped), Score-Placed).
+% Exact post-sweep work from arrange_best_effort/6: non-empty gate, stable
+% best-first selection, and numbering. No assoc or diversity work occurs here.
+postprocess(best_effort, Raw, _GridLen, _Total, _K,
+            best_effort(Numbered, Reward, NumPlaced, Dropped)) :-
+    Raw = [_|_],
+    sort(1, @>=, Raw,
+         [score(NumPlaced, Reward)-pd(BestPlaced, Dropped)|_]),
+    crosswordsmith_core:assign_clue_numbers(BestPlaced, Numbered).
 
 command_sampler(Exe, File, GridLen, Framing, Command, ExpectedExit,
                 _{wall:Wall, rss:Rss}) :-
@@ -276,9 +306,11 @@ replay_word_best(Entry, Placed, GridLen, Grid, BBox, Counter, Score, Best) :-
 
 identity_row(Id, File, GridLen, Framing, Command, SeedAnswer, Corner,
              Expected, Exe, Row) :-
-    format(user_error, "heartbeat: identity ~w raw-pool~n", [Id]),
     load_words(File, Words),
-    tagged_raw_pool(Words, GridLen, Command, Raw),
+    format(user_error, "heartbeat: identity ~w direct-attempts~n", [Id]),
+    direct_attempts(Words, GridLen, Command, Attempts),
+    format(user_error, "heartbeat: identity ~w raw-pool~n", [Id]),
+    identity_raw_pool(Words, GridLen, Command, Raw),
     format(user_error, "heartbeat: identity ~w selected~n", [Id]),
     selected_layouts(Words, GridLen, Command, Selected),
     selected_signatures(Words, GridLen, Framing, Selected,
@@ -291,32 +323,68 @@ identity_row(Id, File, GridLen, Framing, Command, SeedAnswer, Corner,
     Row = _{rung:Id, fixture:File, size:GridLen, framing:Framing,
             mode:CommandJson, construction:_{seed_answer:SeedAnswer,
                 corner:Corner, expected:ExpectedJson},
-            raw_pool:Raw, selected:SelectedSigs,
+            direct_attempts:Attempts, raw_pool:Raw, selected:SelectedSigs,
             candidate_count:CandidateCount,
             pairwise_distances:Distances, cli:Cli}.
 
-tagged_raw_pool(Words, GridLen, Command, Rows) :-
+% Identity-only observer: one explicit row for every direct corner x seed slot,
+% including failed setup and strict-ineligible completed constructions. It runs
+% under its own reset and never participates in gated sweep measurement.
+direct_attempts(Words, GridLen, Command, Attempts) :-
     crosswordsmith_core:reset_search_memos,
     crosswordsmith_arrange:arrange_weights(WC, WT),
     crosswordsmith_arrange:seed_candidates(Words, Seeds),
     start_locs(Locs),
     length(Words, Total),
-    drop_contract(Command, Drop),
-    findall(Row,
+    findall(Attempt,
             ( member(Corner, Locs), member(Seed, Seeds),
               Seed = [SeedAnswer|_],
-              crosswordsmith_arrange:greedy_construct(
-                  Words, GridLen, Corner, Seed, Placed, Dropped),
-              length(Placed, NP),
-              ( Drop == strict -> NP =:= Total ; true ),
-              crosswordsmith_arrange:layout_reward(WC, WT, Placed, Reward),
-              placed_signature(Placed, PlacedSig),
-              maplist(entry_answer, Dropped, DroppedSig),
-              Row = _{corner:Corner, seed_answer:SeedAnswer,
-                      score:_{placed:NP,reward:Reward},
-                      placed_signature:PlacedSig,
-                      dropped_signature:DroppedSig} ),
-            Rows).
+              direct_attempt(Words, GridLen, Command, Total, WC, WT,
+                             Corner, Seed, SeedAnswer, Attempt) ),
+            Attempts).
+
+direct_attempt(Words, GridLen, Command, Total, WC, WT,
+               Corner, Seed, SeedAnswer, Attempt) :-
+    (   crosswordsmith_arrange:greedy_construct(
+            Words, GridLen, Corner, Seed, Placed, Dropped)
+    ->  length(Placed, NP), length(Dropped, ND),
+        attempt_eligible(Command, NP, Total, Eligible),
+        crosswordsmith_arrange:layout_reward(WC, WT, Placed, Reward),
+        placed_signature(Placed, PlacedSig),
+        maplist(entry_answer, Dropped, DroppedSig),
+        Attempt = _{corner:Corner,seed_answer:SeedAnswer,outcome:completed,
+                    eligibility:Eligible,
+                    score:_{placed:NP,dropped:ND,reward:Reward},
+                    placed_signature:PlacedSig,dropped_signature:DroppedSig}
+    ;   Attempt = _{corner:Corner,seed_answer:SeedAnswer,outcome:setup_failed,
+                    eligibility:false,score:null,
+                    placed_signature:null,dropped_signature:null}
+    ).
+
+attempt_eligible(candidates(Drop, _), NP, Total, Eligible) :-
+    ( Drop == strict
+    -> ( NP =:= Total -> Eligible=true ; Eligible=false )
+    ;  Eligible=true
+    ).
+attempt_eligible(best_effort, _NP, _Total, true).
+
+% The exact entries that reach product's pre-sort pool, observed under a fresh
+% reset so the richer direct-attempt traversal cannot perturb memo lifecycle.
+identity_raw_pool(Words, GridLen, Command, Rows) :-
+    build_raw_pool(Words, GridLen, Command, Raw),
+    maplist(identity_raw_entry(Command), Raw, Rows).
+
+identity_raw_entry(candidates(_, _), score(NP, Reward)-Placed,
+                   _{score:_{placed:NP,reward:Reward},
+                     placed_signature:PlacedSig}) :-
+    !,
+    placed_signature(Placed, PlacedSig).
+identity_raw_entry(best_effort,
+                   score(NP, Reward)-pd(Placed, DroppedAnswers),
+                   _{score:_{placed:NP,reward:Reward},
+                     placed_signature:PlacedSig,
+                     dropped_answers:DroppedAnswers}) :-
+    placed_signature(Placed, PlacedSig).
 
 selected_layouts(Words, GridLen, candidates(Drop, K), Layouts) :-
     crosswordsmith_arrange:arrange_candidates(
