@@ -230,23 +230,108 @@ test(setarg_bucket_update_restores_on_backtracking) :-
     ;   arg(1, Buckets, Restored), Restored =:= 1
     ).
 
-test(full_tree_solution_count_matches_assoc_reference) :-
+test(delta_previous_zero_uses_newest_source_count_and_residue) :-
+    crosswordsmith_core:direct_delta_result(
+        0, 1, ['TARGET'], _Residues, _Older, 9, _GS,
+        1, proof('NEW', 7, down, 11, across), Count, Residue),
+    Count =:= 1,
+    Residue == proof('NEW', 7, down, 11, across).
+
+test(bucket_one_residue_survives_and_fails_exact_validation) :-
+    residue_fixture(Entry, Older, GS, Proof),
+    Residues = residues(Proof, _Guard),
+    crosswordsmith_core:direct_delta_result(
+        1, 1, Entry, Residues, Older, 9, GS, 0, none,
+        SurvivingCount, SurvivingResidue),
+    SurvivingCount =:= 1,
+    SurvivingResidue == Proof,
+    GS = gs(LGrid, _), arg(10, LGrid, z),
+    crosswordsmith_core:direct_delta_result(
+        1, 1, Entry, Residues, Older, 9, GS, 0, none,
+        FailedCount, FailedResidue),
+    FailedCount =:= 0,
+    FailedResidue == none.
+
+test(residue_validation_locks_source_and_orientation) :-
+    residue_fixture(Entry, Older, GS,
+                    proof(Source, SourceStart, SourceDir, Start, Dir)),
+    crosswordsmith_core:direct_residue_valid(
+        Entry, Older, 9, GS,
+        proof(Source, SourceStart, SourceDir, Start, Dir)),
+    \+ crosswordsmith_core:direct_residue_valid(
+           Entry, Older, 9, GS,
+           proof('WRONG SOURCE', SourceStart, SourceDir, Start, Dir)),
+    crosswordsmith_core:swap_dir(SourceDir, WrongSourceDir),
+    \+ crosswordsmith_core:direct_residue_valid(
+           Entry, Older, 9, GS,
+           proof(Source, SourceStart, WrongSourceDir, Start, Dir)).
+
+test(proof_counter_preserves_multiplicity_without_geometry_dedup) :-
+    crosswordsmith_core:count_upto2_proof(
+        plunit_direct_buckets:duplicate_proof,
+        _Proof, Count, Residue),
+    Count =:= 2,
+    Residue == proof(same, 1, across, 2, down).
+
+test(previous_bucket_two_always_full_recounts, [nondet]) :-
+    residue_fixture(Entry, Placed, GS, ExpectedResidue),
+    Buckets = buckets(2, _BucketGuard),
+    Residues = residues(none, _ResidueGuard),
+    crosswordsmith_core:direct_delta_recount(
+        1, Entry, 2, Buckets, Residues, Placed, 9, _Start, _Dir, GS),
+    arg(1, Buckets, Count), Count =:= 1,
+    arg(1, Residues, Residue), Residue == ExpectedResidue.
+
+test(nonsharing_word_retains_stale_residue_with_bucket) :-
+    Proof = proof('OLD', 1, across, 3, down),
+    Buckets = buckets(1, _BucketGuard),
+    Residues = residues(Proof, _ResidueGuard),
+    crosswordsmith_core:tag_words([['XYZ', _{meta:_}]], Tagged),
+    crosswordsmith_core:refresh_delta_counts(
+        Tagged, Buckets, Residues, [a], _Placed, _Grid, _Start, _Dir, _GS),
+    arg(1, Buckets, Count), Count =:= 1,
+    arg(1, Residues, Retained), Retained == Proof.
+
+test(bucket_and_residue_updates_restore_together_on_backtracking) :-
+    Old = proof('OLD', 1, across, 3, down),
+    Buckets = buckets(1, _BucketGuard),
+    Residues = residues(Old, _ResidueGuard),
+    (   crosswordsmith_core:direct_store_count(
+            1, Buckets, Residues, 0, none),
+        arg(1, Buckets, 0), arg(1, Residues, none), fail
+    ;   arg(1, Buckets, RestoredCount), RestoredCount =:= 1,
+        arg(1, Residues, RestoredResidue), RestoredResidue == Old
+    ).
+
+test(full_tree_solution_count_matches_assoc_reference,
+     [forall(member(Corner, [topleft_across,topright]))]) :-
     Words = [['OMEGA POINT', _{meta:_}],
              ['GNOSTIC GOSPELS', _{meta:_}]],
     crosswordsmith_core:reset_search_memos,
     aggregate_all(count,
         ( init_gs(17, GS0),
-          start_loc(topleft_across, 17, Start0, Dir0),
+          start_loc(Corner, 17, Start0, Dir0),
           assign_words_inc(Words, [], none, 17, Start0, Dir0, GS0, _, _) ),
         AssocCount),
     crosswordsmith_core:reset_search_memos,
     aggregate_all(count,
         ( init_gs(17, GS1),
-          start_loc(topleft_across, 17, Start1, Dir1),
+          start_loc(Corner, 17, Start1, Dir1),
           assign_words_direct(Words, [], 17, Start1, Dir1, GS1, _, _) ),
         DirectCount),
     DirectCount =:= AssocCount,
     DirectCount > 0.
+
+residue_fixture(['BDEA'], [Placed], GS, Proof) :-
+    init_gs(9, GS),
+    crosswordsmith_core:assign_word(
+        'BDDA', ['B','D','D','A'], 4, 1, across, 9, GS, Placed, GS),
+    crosswordsmith_core:direct_count_proofs(
+        ['BDEA'], [Placed], 9, _Start, _Dir, GS, Count, Proof),
+    Count =:= 1.
+
+duplicate_proof(proof(same, 1, across, 2, down)).
+duplicate_proof(proof(same, 1, across, 2, down)).
 
 :- end_tests(direct_buckets).
 

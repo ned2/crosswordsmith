@@ -699,23 +699,26 @@ assign_words_inc([W|Ws], PlacedWords, StateIn, GridLen, Start, Dir, GIn, GOut, O
 %!                      -PlacedWords:list) is nondet.
 %
 %   Strict-search-only twin of assign_words_inc/9 using stable input-order
-%   integer IDs and one fixed-arity, backtrackable count term. The visible
-%   bucket for remaining ID I is argument I of that term. Letter-sharing words
+%   integer IDs and fixed-arity, backtrackable count/residue terms. The visible
+%   bucket for remaining ID I is argument I of the count term; a bucket-1 ID's
+%   sole source proof is argument I of the residue term. Letter-sharing words
 %   are refreshed after a placement; non-sharing words retain their previous
-%   (possibly stale) 0/1/2 bucket exactly as in the assoc implementation.
+%   (possibly stale) bucket and residue exactly as in the assoc implementation.
 %   Ordinary setarg/3 updates are restored by the trail on backtracking.
 %
 %   The tagged entries retain the original, possibly non-ground input terms;
 %   selection and removal use the integer ID rather than term identity. The
-%   final unused argument of the count term is an unshared variable, following
-%   the SWI setarg/3 guidance that prevents accidental sharing on term copies.
+%   final unused argument of each mutable term is an unshared variable,
+%   following the SWI setarg/3 guidance against accidental sharing on copies.
 assign_words_direct(Words, Placed0, GridLen, Start, Dir, GIn, GOut, Out) :-
     tag_words(Words, Tagged),
     length(Words, Count),
     Arity is Count + 1,
     functor(Buckets, buckets, Arity),
+    functor(Residues, residues, Arity),
     state_perturb(none, Perturb),
-    assign_words_direct_(Tagged, Placed0, direct(Buckets, none, Perturb),
+    assign_words_direct_(Tagged, Placed0,
+                         direct(Buckets, Residues, none, Perturb),
                          GridLen, Start, Dir, GIn, GOut, Out).
 
 assign_words_direct_([], P, _State, _, _, _, G, G, P).
@@ -745,20 +748,23 @@ tag_words_([Entry|Entries], ID, [wid(ID, Entry)|Tagged]) :-
 
 % The seed branch preserves the existing seeded permutation and input-order
 % behavior. Counts are first populated at the following interior node.
-select_direct(Words, [], direct(Buckets, _LastLetters, Perturb),
-              _GridLen, _Start, _Dir, _GIn,
-              Tagged, RemWords, direct(Buckets, EntryLetters, Perturb)) :-
+select_direct(Words, [], direct(Buckets, Residues, _LastLetters, Perturb),
+               _GridLen, _Start, _Dir, _GIn,
+               Tagged, RemWords,
+               direct(Buckets, Residues, EntryLetters, Perturb)) :-
     seed_word_order(Words, SeedOrder),
     member(Tagged, SeedOrder),
     Tagged = wid(ID, Entry),
     remove_word_id(ID, Words, RemWords),
     entry_letters(Entry, EntryLetters).
-select_direct(Words, [P|Ps], direct(Buckets, LastLetters, Perturb),
-              GridLen, Start, Dir, GIn,
-              Tagged, RemWords, direct(Buckets, EntryLetters, Perturb)) :-
+select_direct(Words, [P|Ps],
+               direct(Buckets, Residues, LastLetters, Perturb),
+               GridLen, Start, Dir, GIn,
+               Tagged, RemWords,
+               direct(Buckets, Residues, EntryLetters, Perturb)) :-
     PlacedWords = [P|Ps],
-    refresh_direct_counts(Words, Buckets, LastLetters, PlacedWords,
-                          GridLen, Start, Dir, GIn),
+    refresh_delta_counts(Words, Buckets, Residues, LastLetters, PlacedWords,
+                         GridLen, Start, Dir, GIn),
     direct_partitions(Words, Buckets, Ones, Twos),
     direct_order(Perturb, Ones, Twos, Ordered),
     member(Tagged, Ordered),
@@ -789,6 +795,123 @@ refresh_direct_counts([wid(ID, Entry)|Words], Buckets, LastLetters,
 direct_recount(ID, Entry, Buckets, PlacedWords, GridLen, Start, Dir, GIn) :-
     mrv_count(2, PlacedWords, GridLen, Start, Dir, GIn, Entry, Count),
     setarg(ID, Buckets, Count).
+
+% A-D2's product refresh. The old refresh_direct_counts/8 above deliberately
+% remains the unchanged full-recount A-D1 reference used by differential probes.
+% Counts and sole-proof residues are parallel ID-indexed trailed terms.
+refresh_delta_counts([], _, _, _, _, _, _, _, _).
+refresh_delta_counts([wid(ID, Entry)|Words], Buckets, Residues, LastLetters,
+                     PlacedWords, GridLen, Start, Dir, GIn) :-
+    arg(ID, Buckets, Previous),
+    (   var(Previous)
+    ->  direct_full_recount(ID, Entry, Buckets, Residues, PlacedWords,
+                            GridLen, Start, Dir, GIn)
+    ;   entry_letters(Entry, ELetters),
+        (   shares_letter(ELetters, LastLetters)
+        ->  direct_delta_recount(ID, Entry, Previous, Buckets, Residues,
+                                 PlacedWords, GridLen, Start, Dir, GIn)
+        ;   true
+        )
+    ),
+    refresh_delta_counts(Words, Buckets, Residues, LastLetters, PlacedWords,
+                         GridLen, Start, Dir, GIn).
+
+direct_full_recount(ID, Entry, Buckets, Residues, PlacedWords,
+                    GridLen, Start, Dir, GIn) :-
+    direct_count_proofs(Entry, PlacedWords, GridLen, Start, Dir, GIn,
+                        Count, Residue),
+    direct_store_count(ID, Buckets, Residues, Count, Residue).
+
+% Previous bucket 2 has unobserved proofs beyond the cap and is always fully
+% recounted. Buckets 0/1 scan only the newest source. A bucket-1 old proof is
+% checked only when the newest source did not itself saturate the cap.
+direct_delta_recount(ID, Entry, 2, Buckets, Residues, PlacedWords,
+                     GridLen, Start, Dir, GIn) :-
+    direct_full_recount(ID, Entry, Buckets, Residues, PlacedWords,
+                        GridLen, Start, Dir, GIn).
+direct_delta_recount(ID, Entry, Previous, Buckets, Residues,
+                     [Newest|Older], GridLen, Start, Dir, GIn) :-
+    Previous < 2,
+    direct_count_proofs(Entry, [Newest], GridLen, Start, Dir, GIn,
+                        NewestCount, NewestResidue),
+    direct_delta_result(Previous, ID, Entry, Residues, Older,
+                        GridLen, GIn, NewestCount, NewestResidue,
+                        Count, Residue),
+    direct_store_count(ID, Buckets, Residues, Count, Residue).
+
+direct_delta_result(0, _ID, _Entry, _Residues, _Older, _GridLen, _GIn,
+                    Count, Residue, Count, Residue).
+direct_delta_result(1, _ID, _Entry, _Residues, _Older, _GridLen, _GIn,
+                    2, _NewestResidue, 2, none).
+direct_delta_result(1, ID, Entry, Residues, Older, GridLen, GIn,
+                    NewestCount, NewestResidue, Count, Residue) :-
+    NewestCount < 2,
+    arg(ID, Residues, OldResidue),
+    OldResidue = proof(_, _, _, _, _),
+    (   direct_residue_valid(Entry, Older, GridLen, GIn, OldResidue)
+    ->  direct_add_old_proof(NewestCount, NewestResidue, OldResidue,
+                             Count, Residue)
+    ;   Count = NewestCount,
+        Residue = NewestResidue
+    ).
+
+direct_add_old_proof(0, _NewestResidue, OldResidue, 1, OldResidue).
+direct_add_old_proof(1, _NewestResidue, _OldResidue, 2, none).
+
+direct_store_count(ID, Buckets, Residues, Count, Residue) :-
+    setarg(ID, Buckets, Count),
+    setarg(ID, Residues, Residue).
+
+% Count legal support proofs in original placed-source/crossing order and stop
+% at Cap=2. The retained descriptor is ground and names both the exact old
+% source and candidate geometry; equal geometries from distinct proofs remain
+% distinct solutions of the generator.
+direct_count_proofs(Entry, PlacedWords, GridLen, Start, Dir, GIn,
+                    Count, Residue) :-
+    entry_letters(Entry, Letters),
+    length(Letters, WLen),
+    count_upto2_proof(
+        viable_placement_proof(Letters, WLen, PlacedWords, GridLen,
+                               Start, Dir, GIn),
+        _Proof, Count, Residue0),
+    ( Count =:= 1 -> Residue = Residue0 ; Residue = none ).
+
+:- meta_predicate count_upto2_proof(1, -, -, -).
+count_upto2_proof(Goal, Proof, Count, Residue) :-
+    Counter = counter(0, none),
+    (   \+ ( call(Goal, Proof),
+             arg(1, Counter, N0),
+             N is N0 + 1,
+             nb_setarg(1, Counter, N),
+             ( N =:= 1 -> nb_setarg(2, Counter, Proof) ; true ),
+             N >= 2 )
+    ->  true
+    ;   true
+    ),
+    arg(1, Counter, Count),
+    arg(2, Counter, Residue).
+
+viable_placement_proof(Letters, WLen, PlacedWords, GridLen, Start, Dir,
+                       GIn, Proof) :-
+    intersecting_source(Letters, WLen, PlacedWords, GridLen,
+                        Start, Dir, Source),
+    source_proof(Source, Start, Dir, Proof),
+    check_word_fits(Letters, Start, Dir, GridLen, GIn).
+
+source_proof(PW, Start, Dir,
+             proof(SourceAnswer, SourceStart, SourceDir, Start, Dir)) :-
+    pw_answer(PW, SourceAnswer),
+    pw_start(PW, SourceStart),
+    pw_dir(PW, SourceDir).
+
+% Re-run the full proof, not merely its geometry: source identity/orientation,
+% matching crossing positions, finite-canvas fit, boundaries, letters, and
+% adjacency must all still hold. Older sources remain in their original order.
+direct_residue_valid(Entry, Older, GridLen, GIn, Residue) :-
+    entry_letters(Entry, Letters),
+    length(Letters, WLen),
+    once(viable_placement_proof(Letters, WLen, Older, GridLen,
+                                _Start, _Dir, GIn, Residue)).
 
 % A stable one-pass partition is equivalent to stable keysort/2 over the only
 % positive capped keys, 1 and 2. Bucket 0 remains visible in Buckets but is not
@@ -1179,6 +1302,21 @@ find_intersecting_word(Letters, WLen, PlacedWords, GridLen, Start, Dir) :-
     % pair_crossings/3 (tabled) and replayed here. member/2 walks the precomputed
     % list in the SAME order the former inline intersection/list_to_set/nth1/nth1
     % conjunction produced (HARD requirement: order is golden-visible).
+    pair_crossings(Letters, PLetters, Crossings),
+    member(x(PPos, Pos), Crossings),
+    calc_num(PDir, GridLen, PPos, PStart, PNum),
+    swap_dir(PDir, Dir),
+    calc_start(Dir, GridLen, Pos, PNum, Start),
+    fits_on_grid(Dir, Start, WLen, GridLen).
+
+% Source-retaining twin used only by A-D2 proof counts. Its conjunction is kept
+% verbatim with find_intersecting_word/6 so source/crossing order and proof
+% multiplicity match while existing greedy/assoc callers pay no wrapper call.
+intersecting_source(Letters, WLen, PlacedWords, GridLen, Start, Dir, PW) :-
+    member(PW, PlacedWords),
+    pw_letters(PW, PLetters),
+    pw_dir(PW, PDir),
+    pw_start(PW, PStart),
     pair_crossings(Letters, PLetters, Crossings),
     member(x(PPos, Pos), Crossings),
     calc_num(PDir, GridLen, PPos, PStart, PNum),

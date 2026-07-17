@@ -1,6 +1,8 @@
 :- use_module(library(plunit)).
 :- use_module('../benchmarks/probe_arrange/probe_arrange.pl').
 :- use_module('../benchmarks/probe_arrange/ad1_buckets.pl').
+:- use_module('../benchmarks/probe_arrange/d0_support.pl').
+:- use_module('../benchmarks/probe_arrange/ad2_delta.pl').
 
 :- begin_tests(probe_arrange).
 
@@ -76,6 +78,38 @@ test(ad1_assoc_and_direct_count_selection_decision_traces_match,
     Direct = result(DirectPlaced, Reward),
     probe_arrange:layout_signature(AssocPlaced, Signature),
     probe_arrange:layout_signature(DirectPlaced, Signature).
+
+test(ad2_full_and_delta_count_selection_decision_traces_match,
+     [forall((member(Fixture-Grid-Count,
+                     ['fixtures/ladder_09x09_08w.pl'-9-8,
+                      'fixtures/ladder_15x15_12w.pl'-15-12,
+                      'fixtures/ladder_15x15_32w.pl'-15-32,
+                      'fixtures/ladder_21x21_80w.pl'-21-80]),
+              member(Corner, [topleft_across,topright])))]) :-
+    probe_arrange:load_fixture(Fixture, Count, Words),
+    probe_arrange_ad1:ad1_corner(
+        direct, Words, Grid, Corner, null, Full, FullCounts, FullDecisions),
+    probe_arrange_ad2:ad2_corner(
+        Words, Grid, Corner, null, Delta, Summary,
+        trace(DeltaCounts, _RefreshTrace), DeltaDecisions),
+    Full == Delta,
+    FullCounts == DeltaCounts,
+    FullDecisions == DeltaDecisions,
+    Summary.refreshes =:= Summary.verified_refreshes,
+    Summary.proposed_candidate_checks =< Summary.exact_candidate_checks.
+
+test(ad2_seeded_full_and_delta_traces_match_both_corners,
+     [forall(member(Corner, [topleft_across,topright]))]) :-
+    probe_arrange:load_fixture('fixtures/ladder_15x15_12w.pl', 12, Words),
+    probe_arrange_ad1:ad1_corner(
+        direct, Words, 15, Corner, 42, Full, FullCounts, FullDecisions),
+    probe_arrange_ad2:ad2_corner(
+        Words, 15, Corner, 42, Delta, Summary,
+        trace(DeltaCounts, _RefreshTrace), DeltaDecisions),
+    Full == Delta,
+    FullCounts == DeltaCounts,
+    FullDecisions == DeltaDecisions,
+    Summary.refreshes =:= Summary.verified_refreshes.
 
 test(canonical_state_key_is_absolute_and_orientation_sensitive) :-
     Words = [['ONE'],['TWO']],
