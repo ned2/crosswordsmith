@@ -1,7 +1,7 @@
 # Research: next performance leads for `arrange` (2026-07)
 
-Status: literature reconnaissance complete; Phase 0, A-G1/A-G2, and A-D1/A-D2
-accepted; A-C1/A-C2 closed; output-changing A-R1 parked; bounded A-T0 next.
+Status: transparent campaign complete; A-G1/A-G2 and A-D1/A-D2 accepted;
+A-C1/A-C2 and A-T0 closed; output-changing A-R1 parked.
 
 ## Execution update (2026-07-17)
 
@@ -21,7 +21,9 @@ deltas and improved all 14 current strict rungs by 5.51%-62.63%, with strict,
 greedy, and WASM identity exact. Its paired dense wall result was null. Bounded
 global A-C2 then cut its hard targets by 74%-80% but two exact representations
 both regressed six strict rows by up to 3.70%. A-C1 and A-C2 are now closed;
-bounded topology-first A-T0 is next.
+bounded topology-first A-T0 then passed toy and non-root-merge gates but
+exhausted 500M on 9x9/17w without a product-valid leaf. No transparent sequel
+remains.
 
 The authoritative record is `docs/experiments.md`, with detailed evidence in
 `benchmarks/results/2026-07-17-a-g1-legality-before-score-premise.md`,
@@ -331,6 +333,14 @@ Prototype gates:
 - Demonstrate a merge where neither component contains the anchor.
 - Reproduce known incumbent feasibility/reward before seeking improvements.
 - Stop if geometric legality remains almost entirely leaf-checked.
+
+A-T0 stopped at the third ordered gate. Six toy oracle controls matched and an
+explicit non-anchor component merge reached a legal layout. Bundled 6w/grid17
+reached reward 72, above its floor of 60, but 9x9/17w exhausted 500M after 5,645
+complete relative topologies, all rejected by product legality. Despite 83,446
+span and 80,730 partial-geometry prunes, the abstraction remained too loose.
+Threshold propagation and 15x15/36w were correctly not admitted. Revisit only
+with a sound nonlocal legality propagator that changes this measured premise.
 
 ### Iterated threshold feasibility
 

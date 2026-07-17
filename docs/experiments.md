@@ -2121,3 +2121,32 @@ p1-backtrack-instrumentation.patch).
   close global exact negative-state caching;** do not add a size/depth switch,
   approximate key, floor, or third representation. Revisit only with new
   external evidence for a zero-tax lookup seam.
+
+### A-T0 — topology-first feasibility prototype — REJECTED AT GATE 3
+- **Prototype/soundness:** benchmark-only commit `3fe2afe` on `experiment/a-t0`
+  precomputes every matching-letter occurrence and searches increasing selected-
+  event spanning forests over stable word IDs. Component merges maintain
+  orientation parity, relative starts, whole-component main-diagonal transpose,
+  translation-only normalization, spans, and selected connectivity. Every
+  partial and complete candidate is rebuilt in selected-edge BFS order through
+  unchanged `init_gs/2` and `assign_word/9`; only product-valid leaves are
+  scored by `layout_reward/4`. No product or policy code changed.
+- **Gates 1-2:** six 4-5 word exhaustive product-oracle controls matched with
+  zero false negatives; 21 product-rejected relative leaves were counted rather
+  than treated as feasible. An explicit branch merges non-anchor components
+  `{3}` and `{4}`, then obtains a product-valid reward-48 layout with four actual
+  crossings from three selected edges.
+- **Gate 3:** bundled exact 6w/grid17 has 82 events and reaches reward 72
+  (incumbent floor 60) in 55,026 inferences. The 9x9/17w control has 322 events
+  and exhausts 500,000,035 inferences after 22,243 topology nodes, 229,598 event
+  branches, 80,243 non-root merges, 83,446 span prunes, 80,730 partial-geometry
+  prunes, and 5,645 complete relative topologies; all 5,645 leaves fail unchanged
+  product validation. Final-run peak RSS was 11,980 KiB.
+- **Verdict:** **REJECT/STOP at Gate 3.** Gate 4 threshold propagation and Gate
+  5 15x15/36w were not admitted. Geometry rejects before leaves, but the
+  abstraction remains too loose to reproduce the first dense incumbent within
+  its cap. Full native tests, all strict identities and core+heavy ratchets,
+  greedy identity, and greedy core+heavy ratchets remained exact. No shipping
+  sequel is nominated; revisit only with a sound nonlocal legality propagator,
+  not event reordering or a leaf-only reward threshold. Branch report commit:
+  `6b7d64c`.

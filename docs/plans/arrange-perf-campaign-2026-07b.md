@@ -1,8 +1,8 @@
 # Plan: the next `arrange` performance campaign
 
-Status: IN PROGRESS (2026-07-17). A-G1, A-G2, A-D1, and A-D2 are accepted and
-ratcheted; A-C1 and A-C2 are measured closed. Track R remains behind its explicit
-product-policy checkpoint; bounded topology prototype A-T0 is next.
+Status: CLOSE-OUT (2026-07-17). A-G1, A-G2, A-D1, and A-D2 are accepted and
+ratcheted; A-C1/A-C2 and A-T0 are measured closed. Track R remains parked behind
+its explicit product-policy checkpoint.
 
 ## Execution update (2026-07-17)
 
@@ -18,7 +18,9 @@ strict and greedy identity while improving all 14 strict rungs by 5.51%-62.63%.
 Its paired dense wall result was null, so only the deterministic inference win
 is claimed. A-C2 then preserved exact identity and cut its two nominated hard
 rungs by 74%-80%, but two exact-key representations both regressed six strict
-rungs by up to 3.70%; the global-cache avenue is closed. A-T0 is next.
+rungs by up to 3.70%; the global-cache avenue is closed. A-T0 passed toy and
+non-root-merge gates but exhausted 500M on 9x9/17w with no product-valid leaf,
+so the topology sequel is also closed. Transparent work is complete.
 
 The authoritative record is `docs/experiments.md`, with detailed evidence in
 `benchmarks/results/2026-07-17-a-g1-legality-before-score-premise.md`,
