@@ -10,6 +10,7 @@
 :- use_module(library(lists)).
 :- use_module(library(readutil)).
 :- use_module('bench_process.pl', [capture_process/6]).
+:- use_module('bench_cli.pl', [checker_mode/3]).
 
 :- prolog_load_context(directory, D), assertz(bench_dir(D)).
 :- dynamic bench_dir/1.
@@ -17,13 +18,9 @@
 
 main :-
     current_prolog_flag(argv, Argv0),
-    ( select('--self-test', Argv0, _) -> self_test, halt(0)
-    ; select('--history', Argv0, _)   -> Mode=history, Extra=[]
-    ; select('--promote', Argv0, Extra) -> Mode=promote
-    ; select('--record', Argv0, Extra)  -> Mode=record
-    ; select('--log', Argv0, Extra)     -> Mode=log
-    ; Mode=check, Extra=Argv0
-    ),
+    ( Argv0 == ['--self-test'] -> self_test, halt(0) ; true ),
+    catch(checker_mode(Argv0, Mode, Extra),
+          E, (print_message(error, E), halt(2))),
     bench_dir(BenchDir),
     ( Mode == history -> show_history(BenchDir), halt(0) ; true ),
     directory_file_path(BenchDir, 'greedy_baseline.json', Path),

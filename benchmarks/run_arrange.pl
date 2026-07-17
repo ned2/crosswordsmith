@@ -40,6 +40,8 @@
    consult(Load),
    directory_file_path(BenchDir, 'bench_core.pl', BenchCore),
    use_module(BenchCore),
+   directory_file_path(BenchDir, 'bench_cli.pl', BenchCli),
+   use_module(BenchCli),
    directory_file_path(BenchDir, 'subjects.pl', Subjects),
    use_module(Subjects),
    directory_file_path(BenchDir, 'workloads.pl', Workloads),
@@ -50,24 +52,35 @@
 main :-
     current_prolog_flag(argv, Argv),
     opts_spec(Spec),
-    catch(opt_parse(Spec, Argv, Opts, _Pos), E, (print_message(error, E), halt(2))),
-    ( memberchk(help(true), Opts) -> usage, halt(0) ; true ),
+    catch(opt_parse(Spec, Argv, Opts, Pos), E, (print_message(error, E), halt(2))),
     memberchk(format(Fmt), Opts),
     memberchk(fixture(Filter), Opts),
     memberchk(heavy(Heavy), Opts),
     memberchk(iterations(ItOv), Opts),
     memberchk(warmup(WuOv), Opts),
-    findall(Row,
-            ( arrange_workload(F, Size, Mode, It0, Wu0, Exp, Tier, Gate, Budget, Words),
-              workload_selected(Filter, Heavy, F, Tier),
-              apply_override(ItOv, It0, It),
-              apply_override(WuOv, Wu0, Wu),
-              format(user_error, "bench arrange: START ~w (~w)~n", [F, Tier]),
-              run_workload(F, Size, Mode, It, Wu, Exp, Budget, Words, Row0),
-              format(user_error, "bench arrange: DONE  ~w~n", [F]),
-              Row = Row0.put(_{tier: Tier, gate: Gate}) ),
-            Rows),
+    catch(validate_runner_options(arrange, Pos, Fmt, ItOv, WuOv),
+          E, (print_message(error, E), halt(2))),
+    ( memberchk(help(true), Opts) -> usage, halt(0) ; true ),
+    selected_workloads(Filter, Heavy, Workloads),
+    catch(require_selected(arrange, Filter, Workloads),
+          E, (print_message(error, E), halt(2))),
+    maplist(run_selected_workload(ItOv, WuOv), Workloads, Rows),
     emit(Fmt, Rows).
+
+selected_workloads(Filter, Heavy, Workloads) :-
+    findall(workload(F, Size, Mode, It0, Wu0, Exp, Tier, Gate, Budget, Words),
+            ( arrange_workload(F, Size, Mode, It0, Wu0, Exp, Tier, Gate, Budget, Words),
+              workload_selected(Filter, Heavy, F, Tier) ),
+            Workloads).
+
+run_selected_workload(ItOv, WuOv,
+        workload(F, Size, Mode, It0, Wu0, Exp, Tier, Gate, Budget, Words), Row) :-
+    apply_override(ItOv, It0, It),
+    apply_override(WuOv, Wu0, Wu),
+    format(user_error, "bench arrange: START ~w (~w)~n", [F, Tier]),
+    run_workload(F, Size, Mode, It, Wu, Exp, Budget, Words, Row0),
+    format(user_error, "bench arrange: DONE  ~w~n", [F]),
+    Row = Row0.put(_{tier: Tier, gate: Gate}).
 
 opts_spec(
     [ [opt(help),       type(boolean), default(false),

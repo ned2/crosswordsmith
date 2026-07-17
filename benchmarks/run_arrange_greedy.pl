@@ -4,7 +4,6 @@
 :- set_prolog_flag(verbose, silent).
 :- use_module(library(json)).
 :- use_module(library(optparse)).
-:- use_module(library(process)).
 :- use_module(library(filesex), [directory_file_path/3]).
 
 :- prolog_load_context(directory, BenchDir),
@@ -13,6 +12,7 @@
    assertz(repo_root(Root)),
    directory_file_path(Root, 'load.pl', Load), consult(Load),
    directory_file_path(BenchDir, 'bench_core.pl', Core), use_module(Core),
+   directory_file_path(BenchDir, 'bench_cli.pl', BenchCli), use_module(BenchCli),
    directory_file_path(BenchDir, 'greedy_subjects.pl', Subjects), use_module(Subjects),
    directory_file_path(BenchDir, 'greedy_workloads.pl', Workloads), consult(Workloads).
 
@@ -22,15 +22,19 @@
 main :-
     current_prolog_flag(argv, Argv),
     opts_spec(Spec),
-    catch(opt_parse(Spec, Argv, Opts, _), E, (print_message(error, E), halt(2))),
-    ( memberchk(help(true), Opts) -> usage, halt(0) ; true ),
+    catch(opt_parse(Spec, Argv, Opts, Pos), E, (print_message(error, E), halt(2))),
     memberchk(identity(Identity), Opts),
     memberchk(format(Format), Opts),
     memberchk(fixture(Filter), Opts),
     memberchk(heavy(Heavy), Opts),
     memberchk(iterations(ItOverride), Opts),
     memberchk(warmup(WOverride), Opts),
+    catch(validate_runner_options(greedy, Pos, Format, ItOverride, WOverride),
+          E, (print_message(error, E), halt(2))),
+    ( memberchk(help(true), Opts) -> usage, halt(0) ; true ),
     selected_specs(Filter, Heavy, Specs),
+    catch(require_selected(greedy, Filter, Specs),
+          E, (print_message(error, E), halt(2))),
     ( Identity == true
     -> identity_document(Specs, Doc), json_write_dict(current_output, Doc, [width(0)]), nl
     ;  maplist(run_spec(ItOverride, WOverride), Specs, Rows),

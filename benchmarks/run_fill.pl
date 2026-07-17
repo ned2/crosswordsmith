@@ -50,6 +50,8 @@
    consult(Load),
    directory_file_path(BenchDir, 'bench_core.pl', BenchCore),
    use_module(BenchCore),
+   directory_file_path(BenchDir, 'bench_cli.pl', BenchCli),
+   use_module(BenchCli),
    directory_file_path(BenchDir, 'fill_subjects.pl', Subjects),
    use_module(Subjects),
    directory_file_path(BenchDir, 'fill_workloads.pl', Workloads),
@@ -60,22 +62,33 @@
 main :-
     current_prolog_flag(argv, Argv),
     opts_spec(Spec),
-    catch(opt_parse(Spec, Argv, Opts, _Pos), E, (print_message(error, E), halt(2))),
-    ( memberchk(help(true), Opts) -> usage, halt(0) ; true ),
+    catch(opt_parse(Spec, Argv, Opts, Pos), E, (print_message(error, E), halt(2))),
     memberchk(format(Fmt), Opts),
     memberchk(fixture(Filter), Opts),
     memberchk(heavy(Heavy), Opts),
     memberchk(iterations(ItOv), Opts),
     memberchk(warmup(WuOv), Opts),
-    findall(Row,
-            ( fill_workload(Id, Grid, Dict, Seeds, It0, Wu0, Exp, Tier, Budget),
-              workload_selected(Filter, Heavy, Id, Tier),
-              apply_override(ItOv, It0, It),
-              apply_override(WuOv, Wu0, Wu),
-              run_workload(Id, Grid, Dict, Seeds, It, Wu, Exp, Budget, Row0),
-              Row = Row0.put(_{tier: Tier}) ),
-            Rows),
+    catch(validate_runner_options(fill, Pos, Fmt, ItOv, WuOv),
+          E, (print_message(error, E), halt(2))),
+    ( memberchk(help(true), Opts) -> usage, halt(0) ; true ),
+    selected_workloads(Filter, Heavy, Workloads),
+    catch(require_selected(fill, Filter, Workloads),
+          E, (print_message(error, E), halt(2))),
+    maplist(run_selected_workload(ItOv, WuOv), Workloads, Rows),
     emit(Fmt, Rows).
+
+selected_workloads(Filter, Heavy, Workloads) :-
+    findall(workload(Id, Grid, Dict, Seeds, It0, Wu0, Exp, Tier, Budget),
+            ( fill_workload(Id, Grid, Dict, Seeds, It0, Wu0, Exp, Tier, Budget),
+              workload_selected(Filter, Heavy, Id, Tier) ),
+            Workloads).
+
+run_selected_workload(ItOv, WuOv,
+        workload(Id, Grid, Dict, Seeds, It0, Wu0, Exp, Tier, Budget), Row) :-
+    apply_override(ItOv, It0, It),
+    apply_override(WuOv, Wu0, Wu),
+    run_workload(Id, Grid, Dict, Seeds, It, Wu, Exp, Budget, Row0),
+    Row = Row0.put(_{tier: Tier}).
 
 opts_spec(
     [ [opt(help),       type(boolean), default(false),

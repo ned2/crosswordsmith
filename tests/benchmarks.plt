@@ -11,6 +11,7 @@
 :- use_module('../benchmarks/check_baseline.pl', []).
 :- use_module('../benchmarks/check_fill_baseline.pl', []).
 :- use_module('../benchmarks/bench_process.pl', [capture_process/6]).
+:- use_module('../benchmarks/bench_cli.pl', [checker_mode/3]).
 :- use_module('bench_core_caller.pl', []).
 
 :- begin_tests(arrange_benchmark_promotion).
@@ -148,6 +149,30 @@ test(fill_failed_write_leaves_live_baseline_unchanged) :-
           atom_concat(Path, '.tmp', TempPath),
           assertion(\+ exists_file(TempPath)) )).
 
+test(runners_reject_invalid_arguments_before_measurement,
+     [forall((runner_script(Script), invalid_runner_args(Args)))]) :-
+    append(['-q', Script, '--'], Args, Argv),
+    capture_process(path(swipl), Argv, capture, _Stdout, _Stderr, Status),
+    assertion(Status == exit(2)).
+
+test(checker_mode_rejects_conflicts,
+     [throws(error(bench_conflicting_modes([record,log]), _))]) :-
+    checker_mode(['--record', '--log'], _, _).
+
+test(checkers_reject_conflicting_modes_before_measurement,
+     [forall(checker_script(Script))]) :-
+    capture_process(path(swipl),
+                    ['-q', Script, '--record', '--log'], capture,
+                    _Stdout, _Stderr, Status),
+    assertion(Status == exit(2)).
+
+test(checkers_reject_history_runner_arguments,
+     [forall(checker_script(Script))]) :-
+    capture_process(path(swipl),
+                    ['-q', Script, '--history', '--heavy'], capture,
+                    _Stdout, _Stderr, Status),
+    assertion(Status == exit(2)).
+
 :- end_tests(arrange_benchmark_promotion).
 
 baseline_doc(Pairs0, _{host:"test-host", swi_prolog:"10.1.10",
@@ -234,3 +259,17 @@ with_temp_fill_baseline(Baseline, Path, Goal) :-
 
 fill_baseline_spec(Baseline, Rung, Spec) :-
     check_fill_baseline:find_baseline(Baseline.workloads, Rung, Spec).
+
+runner_script('benchmarks/run_arrange.pl').
+runner_script('benchmarks/run_fill.pl').
+runner_script('benchmarks/run_arrange_greedy.pl').
+
+invalid_runner_args([positional]).
+invalid_runner_args(['--format', bogus]).
+invalid_runner_args(['--iterations', '0']).
+invalid_runner_args(['--warmup', '-2']).
+invalid_runner_args(['--fixture', 'definitely-no-such-workload']).
+
+checker_script('benchmarks/check_baseline.pl').
+checker_script('benchmarks/check_fill_baseline.pl').
+checker_script('benchmarks/check_greedy_baseline.pl').

@@ -43,6 +43,7 @@
 :- use_module(library(readutil)).
 :- use_module(library(json)).
 :- use_module('bench_process.pl', [capture_process/6]).
+:- use_module('bench_cli.pl', [checker_mode/3]).
 
 % directory_file_path/3 is autoload-only (library(filesex)); explicit so this
 % root also runs under autoload(false) (P11/C5, matching load.pl).
@@ -55,11 +56,8 @@
 
 main :-
     current_prolog_flag(argv, Argv0),
-    ( select('--history', Argv0, _)      -> Mode = history, Extra = []
-    ; select('--log', Argv0, Extra)      -> Mode = log
-    ; select('--record', Argv0, Extra)   -> Mode = record
-    ; select('--promote', Argv0, Extra)  -> Mode = promote
-    ;                                       Mode = check, Extra = Argv0 ),
+    catch(checker_mode(Argv0, Mode, Extra),
+          E, (print_message(error, E), halt(2))),
     bench_dir(BenchDir),
     ( Mode == history -> show_history(BenchDir), halt(0) ; true ),
     directory_file_path(BenchDir, 'baseline.json', BaselinePath),
