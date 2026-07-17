@@ -157,12 +157,17 @@ launchers. Deleted source: 339 lines.
 
 Initial disposition: EXTRACT EVIDENCE REFERENCES, THEN REMOVE.
 
-`probe_f1/` reconstructs the 2026-07-05 fill loader and copied pre-MAC search.
+Status: COMPLETE (2026-07-18). The reconstruction index now records each
+measurement base, source snapshot, and required patch recipe. All 1,111 lines
+were removed: the 44-line one-off landed with V1 and the remaining 1,067 lines
+landed here. No test, Make target, or current source imported either directory.
+
+`probe_f1/` reconstructed the 2026-07-05 fill loader and copied pre-MAC search.
 The current engine is MAC plus dom/wdeg, so these probes no longer attribute the
 shipping path. Their findings are in
 `benchmarks/results/2026-07-05-p-f1-attribution.md` and `docs/experiments.md`.
 
-`probe_fh2/` reconstructs the pre-current count/index path and includes hard-coded
+`probe_fh2/` reconstructed the pre-current count/index path and included hard-coded
 `/tmp/claude-1000/f-h2/` inputs in `build_probe.pl`, `phase_a.pl`, and
 `phase_b.pl`. Its gate and attribution results are already in the two dated F-H2
 reports. `kernel_bench.pl` should remain only if the review identifies a current
