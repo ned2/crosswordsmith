@@ -9,14 +9,15 @@ from collections import defaultdict
 
 REQUIRED = {
     "rig", "limit_kind", "operation_id", "attempt_index", "fixture",
-    "fixture_seed", "search_seed", "corner", "arm", "cutoff", "outcome",
+    "fixture_seed", "search_seed", "corner", "arm", "cutoff", "termination",
+    "outcome",
     "success_inferences", "censored", "max_depth", "places", "unplaces",
     "wipeouts", "reward", "layout_signature", "swi_version", "commit",
 }
 ENUMS = {
     "rig": {"authority", "instrumented"},
     "limit_kind": {"inferences", "nodes", "decisions", "none"},
-    "cutoff": {"ok", "budget", "exhausted", "interrupted"},
+    "termination": {"ok", "budget", "exhausted", "interrupted"},
     "outcome": {"placed", "not_proven", "infeasible", "interrupted"},
 }
 COUNTERS = ("max_depth", "places", "unplaces", "wipeouts", "nodes", "decisions")
@@ -35,12 +36,21 @@ def validate(row: dict) -> None:
         raise ValueError("attempt_index must be a non-negative integer")
     if not isinstance(row["censored"], bool):
         raise ValueError("censored must be boolean")
+    cutoff = row["cutoff"]
+    if row["limit_kind"] == "none":
+        if cutoff is not None:
+            raise ValueError("limit_kind=none requires cutoff=null")
+    elif (isinstance(cutoff, bool) or not isinstance(cutoff, (int, float))
+          or cutoff < 0):
+        raise ValueError("limited rows require a non-negative numeric cutoff")
     if row["outcome"] == "placed":
         if row["reward"] is None or row["layout_signature"] is None:
             raise ValueError("placed rows require reward and layout_signature")
     elif row["reward"] is not None or row["layout_signature"] is not None:
         raise ValueError("non-placed rows require null reward/layout_signature")
     if row["rig"] == "authority":
+        if row["limit_kind"] != "inferences":
+            raise ValueError("authority rows require limit_kind=inferences")
         if any(row.get(field) is not None for field in COUNTERS):
             raise ValueError("authority mechanism counters must be null")
         if row["outcome"] == "placed" and row["success_inferences"] is None:
@@ -50,8 +60,18 @@ def validate(row: dict) -> None:
             raise ValueError("instrumented success_inferences must be null")
         if row["limit_kind"] == "inferences":
             raise ValueError("instrumented rows cannot use inference limits")
-    if row["cutoff"] in {"budget", "interrupted"} and not row["censored"]:
-        raise ValueError("budget/interrupted rows must be censored")
+    expected_termination = {
+        "ok": ("placed", False),
+        "budget": ("not_proven", True),
+        "exhausted": ("infeasible", False),
+        "interrupted": ("interrupted", True),
+    }
+    expected_outcome, expected_censored = expected_termination[row["termination"]]
+    if (row["outcome"], row["censored"]) != (expected_outcome, expected_censored):
+        raise ValueError(
+            f"termination={row['termination']} requires outcome={expected_outcome} "
+            f"and censored={expected_censored}"
+        )
     for field in COUNTERS:
         value = row.get(field)
         if value is not None and (not isinstance(value, int) or value < 0):

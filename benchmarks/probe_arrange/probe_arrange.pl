@@ -329,14 +329,15 @@ layout_signature(Numbered, Signature) :-
 
 % trace_row(+Rig,+Meta,+Result,+Stats,+Timing,+Commit,+Swi,-Row)
 trace_row(Rig, Meta,
-          result(Outcome,Cutoff,Censored,SuccessInf,Numbered,Reward),
+          result(Outcome,Termination,Censored,SuccessInf,Numbered,Reward),
           Stats, Timing, Commit, Swi, Row) :-
     layout_signature(Numbered, Signature),
     Base = _{rig:Rig,limit_kind:Meta.limit_kind,
              operation_id:Meta.operation_id,attempt_index:Meta.attempt_index,
              fixture:Meta.fixture,fixture_seed:Meta.fixture_seed,
              search_seed:Meta.search_seed,corner:Meta.corner,arm:Meta.arm,
-             cutoff:Cutoff,outcome:Outcome,success_inferences:SuccessInf,
+             cutoff:Meta.cutoff,termination:Termination,outcome:Outcome,
+             success_inferences:SuccessInf,
              censored:Censored,max_depth:Stats.max_depth,places:Stats.places,
              unplaces:Stats.unplaces,wipeouts:Stats.wipeouts,reward:Reward,
              layout_signature:Signature,swi_version:Swi,commit:Commit,

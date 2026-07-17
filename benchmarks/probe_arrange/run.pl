@@ -35,21 +35,23 @@ dispatch(_) :- throw(error(usage, _)).
 command_request('authority-operation',
     [Fixture,G0,N0,FS0,SS0,B0,Op,A0,Arm,O0], Request, Outer) :-
     common(Fixture,G0,N0,FS0,SS0,Op,A0,Arm,O0,Request0,Outer),
-    number_atom(B0, Budget),
+    limit_number_atom(B0, Budget),
     Request = Request0.put(_{command:authority_operation,budget:Budget,
-                             corner:null,limit_kind:inferences,mode:none}).
+                             corner:null,limit_kind:inferences,cutoff:Budget,
+                             mode:none}).
 command_request('authority-corner',
     [Fixture,G0,N0,FS0,SS0,B0,Corner,Op,A0,Arm,O0], Request, Outer) :-
     common(Fixture,G0,N0,FS0,SS0,Op,A0,Arm,O0,Request0,Outer),
-    number_atom(B0, Budget),
+    limit_number_atom(B0, Budget),
     Request = Request0.put(_{command:authority_corner,budget:Budget,
-                             corner:Corner,limit_kind:inferences,mode:none}).
+                             corner:Corner,limit_kind:inferences,cutoff:Budget,
+                             mode:none}).
 command_request(instrumented,
     [Fixture,G0,N0,FS0,SS0,Corner,Mode,Kind,L0,Op,A0,Arm,O0], Request, Outer) :-
     common(Fixture,G0,N0,FS0,SS0,Op,A0,Arm,O0,Request0,Outer),
     parse_limit(Kind, L0, Limit),
     Request = Request0.put(_{command:instrumented,corner:Corner,mode:Mode,
-                             limit_kind:Kind,limit:Limit}).
+                             limit_kind:Kind,limit:Limit,cutoff:Limit}).
 
 common(Fixture,G0,N0,FS0,SS0,Op,A0,Arm,O0,Request,Outer) :-
     number_atom(G0, Grid), number_atom(N0, Count), number_atom(FS0, FixtureSeed),
@@ -59,8 +61,9 @@ common(Fixture,G0,N0,FS0,SS0,Op,A0,Arm,O0,Request,Outer) :-
                 operation_id:Op,attempt_index:Attempt,arm:Arm}.
 
 parse_limit(none, _, null).
-parse_limit(nodes, A, N) :- number_atom(A, N).
-parse_limit(decisions, A, N) :- number_atom(A, N).
+parse_limit(nodes, A, N) :- limit_number_atom(A, N).
+parse_limit(decisions, A, N) :- limit_number_atom(A, N).
+limit_number_atom(A, N) :- number_atom(A, N), N >= 0.
 number_atom(A, N) :- atom_number(A, N).
 search_seed(none, null) :- !.
 search_seed(A, N) :- number_atom(A, N).
@@ -90,7 +93,8 @@ null_stats(_{nodes:null,decisions:null,places:null,unplaces:null,wipeouts:null,
 
 row_context(R, Rig, Meta, Commit, Swi) :-
     file_base_name(R.fixture_path, Fixture),
-    Meta = _{limit_kind:R.limit_kind,operation_id:R.operation_id,
+    Meta = _{limit_kind:R.limit_kind,cutoff:R.cutoff,
+             operation_id:R.operation_id,
              attempt_index:R.attempt_index,fixture:Fixture,
              fixture_seed:R.fixture_seed,search_seed:R.search_seed,
              corner:R.corner,arm:R.arm},

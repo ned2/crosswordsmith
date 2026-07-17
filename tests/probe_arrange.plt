@@ -71,6 +71,38 @@ test(decision_limit_is_censored) :-
         result(not_proven,budget,true,null,[],null),run(Stats,_)),
     Stats.decisions =:= 1.
 
+test(trace_row_keeps_configured_cutoff_separate_from_termination) :-
+    Meta = _{limit_kind:inferences,cutoff:500000000,operation_id:op,
+             attempt_index:0,fixture:'f.pl',fixture_seed:11,search_seed:null,
+             corner:null,arm:control},
+    null_probe_stats(Stats),
+    Timing = _{inferences:10,wall:0.1,cpu:0.1},
+    probe_arrange:trace_row(authority,Meta,
+        result(placed,ok,false,10,[pw('A',[],[],across,0,1,1,1)],12),
+        Stats,Timing,"commit","10.1.10",Row),
+    Row.cutoff =:= 500000000,
+    Row.termination == ok,
+    Row.outcome == placed.
+
+test(trace_row_interruption_preserves_configured_cutoff) :-
+    Meta = _{limit_kind:inferences,cutoff:1000,operation_id:op,
+             attempt_index:0,fixture:'f.pl',fixture_seed:11,search_seed:null,
+             corner:null,arm:control},
+    null_probe_stats(Stats),
+    Timing = _{inferences:null,wall:null,cpu:null},
+    probe_arrange:trace_row(authority,Meta,
+        result(interrupted,interrupted,true,null,[],null),
+        Stats,Timing,"commit","10.1.10",Row),
+    Row.cutoff =:= 1000,
+    Row.termination == interrupted,
+    Row.censored == true.
+
+null_probe_stats(_{nodes:null,decisions:null,places:null,unplaces:null,
+                   wipeouts:null,max_depth:null,state_entries_max:null,
+                   letter_cells_max:null,boundary_cells_max:null,
+                   support_transitions:null,duplicate_children:null,
+                   duplicate_states:null}).
+
 direct_result(placed, N, R, result(placed,N,R)).
 direct_result(not_proven, _, _, result(not_proven,[],null)).
 direct_result(infeasible, _, _, result(infeasible,[],null)).

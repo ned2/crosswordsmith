@@ -31,8 +31,9 @@ inferences. This is a completing control, not a strict baseline or identity
 gate.
 
 An outer 1ms health timeout on a seeded hard control emitted
-`outcome=interrupted`, `cutoff=interrupted`, `censored=true`, null reward and
-signature. Unit probes verified seed cleanup on normal result, failure,
+`outcome=interrupted`, `termination=interrupted`, `censored=true`, null reward
+and signature while retaining its configured numeric inference cutoff. Unit
+probes verified seed cleanup on normal result, failure,
 exception, and interruption paths.
 
 ## Instrumented replay
@@ -132,6 +133,25 @@ state-size/duplicate counters, measured wall/CPU/inferences, and optional proces
 wall/RSS. Unavailable values are JSON null. Synthetic tests and actual emitted
 authority/instrumented rows passed validation. A deliberately same-group mixed
 rig aggregation was rejected.
+
+Schema correction (2026-07-17): `cutoff` is the configured numeric threshold,
+not a termination label. Rows now carry
+`termination=ok|budget|exhausted|interrupted` separately. Authority rows retain their exact inference budget,
+semantic node/decision rows retain their exact limit, unbounded rows use null,
+and outer interruption does not erase the configured cutoff. This correction
+changes row shape only; authority/replay measurements and frozen artifacts are
+unchanged.
+
+Representative shape correction:
+
+```json
+{"limit_kind":"inferences","cutoff":"ok","outcome":"placed"}
+{"limit_kind":"inferences","cutoff":500000000,"termination":"ok","outcome":"placed"}
+```
+
+For a tiny exhausted budget the corrected row retains `cutoff:1000` and reports
+`termination:"budget"`; an unbounded instrumented row uses `cutoff:null` and
+`termination:"ok"`.
 
 ## Gate verdict and risks
 
