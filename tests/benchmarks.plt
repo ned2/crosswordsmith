@@ -73,6 +73,15 @@ test(meta_closures_resolve_in_caller_module) :-
     assertion(number(Sample.cpu)),
     assertion(integer(Sample.inferences)).
 
+test(sample_schema_rejects_missing_numeric_metric,
+     [throws(error(bench_sample_schema_mismatch([cpu,wall], [wall]), _))]) :-
+    bench_core:summarize_samples([_{cpu:1, wall:2}, _{wall:3}], _).
+
+test(sample_schema_rejects_added_numeric_metric,
+     [throws(error(bench_sample_schema_mismatch([wall], [rss,wall]), _))]) :-
+    bench_core:summarize_samples([_{tag:ok, wall:1},
+                                  _{rss:2, tag:ok, wall:3}], _).
+
 test(dual_capture_drains_large_stderr_before_stdout_close) :-
     Goal = 'forall(between(1,1048576,_),put_char(user_error,x)),format("done"),close(user_output)',
     call_with_time_limit(

@@ -29,8 +29,9 @@
 %   Summary : _{iterations:N, warmup:W, stats:_{Metric:_{min,median,mean}, ...}}
 %
 % Runs W warmup samples (discarded), then N measured samples; for each NUMERIC
-% metric key present it computes {min, median, mean}. Heterogeneous metric sets
-% are fine (command samples carry wall+rss; search samples wall+cpu+inferences).
+% metric key present it computes {min, median, mean}. Metric sets may differ
+% between samplers (command has wall+rss; search has wall+cpu+inferences), but
+% every measured sample from one sampler must carry the same numeric keys.
 %
 % SUCCESS-ONLY contract (plan §4, stress-test m1): measure/3 assumes the caller
 % has already established that the sampler will succeed - run_matrix gates each
@@ -102,12 +103,23 @@ read_time_file(TimeFile, Wall, Rss) :-
     ->  true
     ;   throw(error(bench_time_parse_failed(Str), _)) ).
 
-% Per-metric {min,median,mean} over the samples, for every NUMERIC-valued key in
-% the first sample. Non-numeric annotations are skipped.
+% Per-metric {min,median,mean} over the samples, for every NUMERIC-valued key.
+% Non-numeric annotations are skipped, but numeric keys must be stable across
+% samples so a missing metric cannot silently reduce its sample count.
 summarize_samples(Samples, Stats) :-
     Samples = [First|_],
-    findall(K, ( get_dict(K, First, V), number(V) ), NumKeys),
+    numeric_keys(First, NumKeys),
+    maplist(require_numeric_keys(NumKeys), Samples),
     foldl(summarize_key(Samples), NumKeys, _{}, Stats).
+
+numeric_keys(Sample, Keys) :-
+    findall(Key, ( get_dict(Key, Sample, Value), number(Value) ), Keys0),
+    sort(Keys0, Keys).
+
+require_numeric_keys(Expected, Sample) :-
+    numeric_keys(Sample, Actual),
+    ( Actual == Expected -> true
+    ; throw(error(bench_sample_schema_mismatch(Expected, Actual), _)) ).
 
 summarize_key(Samples, Key, SIn, SOut) :-
     findall(V, ( member(S, Samples), get_dict(Key, S, V) ), Vs),
@@ -141,3 +153,6 @@ prolog:error_message(bench_sampler_failed(_)) -->
     [ 'bench_core: a measured sampler failed; the caller must gate for success (solve_status) before measure/3' ].
 prolog:error_message(bench_bad_opt(Key, Val)) -->
     [ 'bench_core: measure/3 option ~w must be a valid count, got ~q'-[Key, Val] ].
+prolog:error_message(bench_sample_schema_mismatch(Expected, Actual)) -->
+    [ 'bench_core: measured sample numeric keys changed; expected ~q, got ~q'-
+      [Expected, Actual] ].
