@@ -39,6 +39,8 @@ campaign's measured negative results.
 
 Companions:
 
+- `arrange-performance-campaign-2026-07b-summary.md` is the completed campaign's
+  cumulative impact, close-out envelope, corrected premises, and revisit triggers.
 - `arrange-perf-campaign-2026-07.md` records the shipped 71--84% inference
   reduction and the remaining policy trade around E-H10b.
 - `arrange-search-algorithms.md` records the prior tree-search review.

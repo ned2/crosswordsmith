@@ -2150,3 +2150,31 @@ p1-backtrack-instrumentation.patch).
   sequel is nominated; revisit only with a sound nonlocal legality propagator,
   not event reordering or a leaf-only reward threshold. Branch report commit:
   `6b7d64c`.
+
+### Arrange 2026-07b campaign close-out — MEASURED, TRANSPARENT WORK COMPLETE
+- **Scope/authority:** close-out at product base `5dcf975` used counter-free
+  current product authority for 500M outcomes, rewards, inference counts, and
+  censoring. A benchmark-only current A-D2 direct twin supplies tree counters
+  outside any inference cap. Product, baselines, histories, identities, goldens,
+  and workloads were unchanged by the close-out probe.
+- **Tree shape:** exact current-direct replay confirms 15x15 hard-corner
+  asymmetry: 34w TLA/TR `143/3,107` nodes and 36w `40/3,454`, with right-corner
+  unplacements `3,073/3,418` and wipeouts `1,757/2,117`. Both 21x21/80w corners
+  are straight 80-node descents with zero unplacement or wipeout. All six rows
+  match product result, reward, absolute layout, and exact A-D2 traces.
+- **Envelope/cliffs:** robust unseeded operation guards 9x9/17w, 15x15/40w, and
+  21x21/82w place at `19,699,727`, `4,478,919`, and `3,763,253` authority
+  inferences with rewards `182/443/916`. Fixed unseeded cliffs 9x9/18w seed12,
+  15x15/44w seed11, and 21x21/88w seed11 exhaust 500M and remain right-censored
+  `not_proven`, never infeasible.
+- **Cumulative impact:** from the protected pre-candidate ratchets, all 14 strict
+  rows improve 10.83%-63.17%; greedy sweeps improve 35.76%-83.03% with
+  postprocess unchanged. A-G1, A-G2, and A-D1 have paired wall support. A-D2's
+  paired dense wall result remains null, so its accepted claim is inference-only.
+- **Verification/verdict:** focused and duplicate current-direct replay, full
+  native tests, strict identity, duplicate exact strict ratchets, greedy
+  identity/ratchet, final WASM battery, and diff checks pass. A-G1/A-G2/A-D1/A-D2
+  are the final transparent product state; A-C1/A-C2/A-T0 remain closed. Track R
+  is a measured parked option at its explicit output-changing policy checkpoint.
+  Detailed evidence: `benchmarks/results/2026-07-17-arrange-campaign-closeout.md`;
+  summary: `docs/research/arrange-performance-campaign-2026-07b-summary.md`.

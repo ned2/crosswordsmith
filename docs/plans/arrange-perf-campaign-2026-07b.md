@@ -1,6 +1,6 @@
 # Plan: the next `arrange` performance campaign
 
-Status: CLOSE-OUT (2026-07-17). A-G1, A-G2, A-D1, and A-D2 are accepted and
+Status: COMPLETE (2026-07-17). A-G1, A-G2, A-D1, and A-D2 are accepted and
 ratcheted; A-C1/A-C2 and A-T0 are measured closed. Track R remains parked behind
 its explicit product-policy checkpoint.
 
@@ -28,7 +28,10 @@ The authoritative record is `docs/experiments.md`, with detailed evidence in
 `benchmarks/results/2026-07-17-a-g2-transpose-product.md`, plus the P-D0, P-C0,
 and P-R0 reports under `benchmarks/results/2026-07-17-p-*.md`. Strict product
 evidence is in `benchmarks/results/2026-07-17-a-d1-direct-buckets.md` and
-`benchmarks/results/2026-07-17-a-d2-newest-source-delta.md`.
+`benchmarks/results/2026-07-17-a-d2-newest-source-delta.md`. Final attribution,
+envelope, cumulative impact, and verification are in
+`benchmarks/results/2026-07-17-arrange-campaign-closeout.md`, summarized by
+`docs/research/arrange-performance-campaign-2026-07b-summary.md`.
 
 This campaign investigates the leads in
 `docs/research/arrange-performance-leads-2026-07.md` using the measured,
@@ -673,6 +676,11 @@ After the last accepted transparent change:
 - append the final ledger entry;
 - write a research summary covering wins, rejections, corrected premises,
   product impact, and named revisit triggers.
+
+Completed at close-out commit `60c67c6`: both ratchets and identities reproduced,
+the current-direct attribution and 500M envelope probes ran, the final WASM
+battery passed, and the durable report/summary were written. The final ledger
+entry records the composed result above.
 
 If Track R ships, its close-out separately reports success curves, tail latency,
 reward distribution, deterministic seed semantics, and native/WASM parity. Do
