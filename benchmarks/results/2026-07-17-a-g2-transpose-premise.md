@@ -67,11 +67,12 @@ instead of 108 (50%). The omitted partners must still occupy their historical
 raw slot blocks; the 12 failed setup slots imply 6 direct failures plus 6
 symmetric omitted failures. This probe does not implement that synthesis.
 
-Every direct `pw/8` clue-number field was an unbound variable distinct from all
-other direct records. The independent transpose helper creates a fresh variable
-per transformed record, verifies it does not alias the source or another record,
-and verifies two transposes restore geometry while creating another fresh set.
-A product synthesizer must preserve that behavior.
+Every directly compared source/partner `pw/8` clue-number field was an unbound
+variable distinct within and across the paired placement lists. The independent
+transpose helper creates a fresh variable per transformed record, verifies it
+does not alias the source or another transformed record, and verifies two
+transposes restore geometry while creating another fresh set. A product
+synthesizer must preserve that behavior.
 
 ## Verification
 
