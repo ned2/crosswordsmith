@@ -1984,3 +1984,58 @@ p1-backtrack-instrumentation.patch).
   verification covered all 15 strict identities and every strict core+heavy
   inference gate exactly. `bench-greedy-promote --heavy` persisted/read back
   all seven wins and appended history. **KEEP.**
+
+### P-D0 — support delta and proof multiplicity — MEASURED, A-D1/A-D2 NOMINATED
+- **Rig/soundness:** benchmark-only exact replay at shared Phase 2 base
+  `1bccf47`, integrated as `9ee66ed`. Pure threaded residues and independent
+  proof scans cannot influence MRV, grids, tables, or budget semantics. Previous
+  buckets 0/1 are classified from newest-source proofs plus the sole old
+  residue; bucket 2 always falls back. Every claim was checked against a full
+  exact Cap=2 recount.
+- **Result:** classified 186/246 light refreshes (75.61%) and 2,985/6,232 dense
+  refreshes (47.90%). Hypothetical candidate checks changed `2,191 -> 954`
+  light and `144,647 -> 67,572` dense, with reductions on every light corner.
+  All 3,171 classifications were exact.
+- **Multiplicity/representation:** 31 recounts had more legal proofs than
+  unique geometries (`153/151` light, `8,122/8,093` dense), killing geometry
+  dedup. Dense controls also performed 7,544 assoc writes, 8,636 assoc reads,
+  and sorted 5,798 items over 322 interior nodes, warranting isolated A-D1.
+- **Verdict:** nominate A-D1 with zero light-rung regressions mandatory; if it
+  passes, run proof-preserving A-D2 for previous buckets 0/1 only. Do not reopen
+  geometry-only or bucket-2 residue designs without a complete proof model.
+
+### P-C0 — duplicate failed work — MEASURED, GLOBAL PREMISE PASSES; A-C1 KILLED
+- **Rig/soundness:** observe-only exact replay at `1bccf47`, integrated as
+  `55a0fde`. Absolute canonical keys contain grid size, sorted remaining stable
+  IDs, and sorted `(ID,start,dir)` placements. Dual fingerprints only select a
+  bucket; every hit is full-key verified. States become dead only after normal
+  exhaustive failure, never cutoff or interruption.
+- **Result:** the 15x15/34w and 15x15/36w hard `topright` controls revisited
+  proved-dead states at 2,763/3,107 (88.93%) and 3,019/3,454 (87.41%) recursive
+  entries. Each repeated subtree was a one-node wipeout, so node share is not
+  yet an inference/wall claim.
+- **Parent-local result:** same-parent legal duplicate children and post-failure
+  captures were zero on both hard controls and all sentinels despite
+  4,006/8,347 duplicate crossing proofs. A-C1 misses its 80% gate at 0% and is
+  closed.
+- **Verdict:** admit one separately gated global negative-state-cache candidate,
+  registered as A-C2, subject to zero light regressions, <=32 MiB RSS, exact
+  identity, and WASM checks. Do not build parent-local A-C1.
+
+### P-R0 — fixed-instance seeded distributions — MEASURED, TRACK R GATED IN
+- **Protocol:** unchanged counter-free standalone authority at both
+  non-transpose corners for four fixed cliff instances over frozen pilot seed
+  indices `[0,16)`, plus one completing control per grid size. Integrated runner,
+  131-row JSONL, and report are in `c73a049`; the schema CLI fix is separate at
+  `910ddd2`.
+- **Result:** cliff rows produced 60/128 placements and 68/128 right-censored
+  `not_proven`, with no infeasible or interrupted rows. Either-corner completion
+  ranged from 10/16 to 15/16 and every fixture gained +1 to +4 seeds over its
+  better individual corner. The three controls completed.
+- **Budget/scope:** consumed 1,887.630 child CPU-seconds (0.524 hours), below the
+  1.5-hour pilot cap. The early stop did not apply. Tuning `[16,32)` and held-out
+  `[32,64)` remain untouched; standalone complementarity is not a live
+  operation-wide controller claim.
+- **Verdict:** Track R passes its premise gate. A-R1 remains parked at the
+  explicit output-changing product-policy checkpoint before any tuning or
+  tournament is run.

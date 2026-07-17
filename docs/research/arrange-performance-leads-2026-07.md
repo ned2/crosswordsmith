@@ -1,7 +1,7 @@
 # Research: next performance leads for `arrange` (2026-07)
 
 Status: literature reconnaissance complete; Phase 0 and greedy A-G1/A-G2
-accepted; Phase 2 probes next.
+accepted; Phase 2 premise probes adjudicated; A-D1 next.
 
 ## Execution update (2026-07-17)
 
@@ -9,14 +9,19 @@ A-G1 kept legality-first candidate filtering: dense sweep inferences fell from
 `6,126,445 -> 2,335,326` (-61.88%) and `28,942,375 -> 9,362,822` (-67.65%).
 A-G2 then kept exact transpose-partner synthesis: direct attempts halved and
 those sweeps fell again to `1,241,744` (-46.83%) and `4,910,962` (-47.55%),
-with raw-pool and output identity preserved. In the ranked queue below, the
-first two entries are completed/kept; A-R0, A-C0, and A-D0 are the active next
-wave.
+with raw-pool and output identity preserved. P-D0 then classified 75.61% of
+light and 47.90% of dense recounts exactly, nominating A-D1 and proof-preserving
+A-D2 while rejecting geometry dedup. P-C0 found 87-89% hard-state dead revisits
+but zero parent-local captures, killing A-C1 and admitting a bounded global
+cache candidate. P-R0 placed 60/128 fixed cliff rows and gates Track R; policy
+tuning remains behind the explicit product checkpoint. A-D1 is the active next
+serial experiment.
 
 The authoritative record is `docs/experiments.md`, with detailed evidence in
 `benchmarks/results/2026-07-17-a-g1-legality-before-score-premise.md`,
 `benchmarks/results/2026-07-17-a-g2-transpose-premise.md`, and
-`benchmarks/results/2026-07-17-a-g2-transpose-product.md`.
+`benchmarks/results/2026-07-17-a-g2-transpose-product.md`, plus the P-D0, P-C0,
+and P-R0 reports under `benchmarks/results/2026-07-17-p-*.md`.
 
 This note consolidates five research threads opened after the July arrange
 performance campaign: incremental support maintenance, restart portfolios,

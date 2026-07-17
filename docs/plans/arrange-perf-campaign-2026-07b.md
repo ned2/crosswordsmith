@@ -12,13 +12,18 @@ Phase 0 passed. A-G1 legality-before-score and A-G2 transpose-partner synthesis
 were accepted and ratcheted; the accepted product/ratchet base is `4771b97`.
 Cumulatively, dense sweep inferences changed by 15x15/32w
 `6,126,445 -> 1,241,744` (-79.74%) and 21x21/80w
-`28,942,375 -> 4,910,962` (-83.03%). Phase 2 P-D0/P-C0/P-R0 is next, and all
-three probes must share one pinned post-doc-sync HEAD.
+`28,942,375 -> 4,910,962` (-83.03%). The Phase 2 P-D0/P-C0/P-R0 wave then
+completed from shared base `1bccf47`: P-D0 nominates A-D1 and proof-preserving
+A-D2 while killing geometry dedup; P-C0 kills parent-local A-C1 but admits a
+bounded global dead-state-cache candidate (A-C2); P-R0 gates Track R with the
+policy tournament still behind its explicit product-policy checkpoint. A-D1 is
+the next serial candidate.
 
 The authoritative record is `docs/experiments.md`, with detailed evidence in
 `benchmarks/results/2026-07-17-a-g1-legality-before-score-premise.md`,
 `benchmarks/results/2026-07-17-a-g2-transpose-premise.md`, and
-`benchmarks/results/2026-07-17-a-g2-transpose-product.md`.
+`benchmarks/results/2026-07-17-a-g2-transpose-product.md`, plus the P-D0, P-C0,
+and P-R0 reports under `benchmarks/results/2026-07-17-p-*.md`.
 
 This campaign investigates the leads in
 `docs/research/arrange-performance-leads-2026-07.md` using the measured,
