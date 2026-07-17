@@ -162,7 +162,7 @@ mode_args(best_effort, ['--best-effort']).
 % Benchmark-only exact replay twin and semantic counters.
 % ---------------------------------------------------------------------------
 
-new_counter(counter(0, 0, 0, 0, 0, 0)).
+new_counter(counter(0, 0, 0, 0, 0, 0, 0, 0, 0, 0)).
 
 counter_inc(I, Counter) :-
     arg(I, Counter, N0),
@@ -175,20 +175,32 @@ counter_add(I, Add, Counter) :-
     nb_setarg(I, Counter, N).
 
 counter_dict(C, _{generated_crossing_descriptors:Generated,
+                  candidates_reaching_legality:Probes,
                   legality_probes:Probes,
+                  legality_successes:Successes,
+                  legality_rejects:Rejects,
+                  rejected_percentage:RejectedPct,
                   scored_candidates:Scored,
                   score_cell_visits:Visits,
+                  avoidable_score_cell_visits:AvoidableVisits,
+                  start_lt_one:Underflows,
                   greedy_steps:Steps,
                   completed_constructions:Completed}) :-
-    arg(1, C, Generated), arg(2, C, Probes), arg(3, C, Scored),
-    arg(4, C, Visits), arg(5, C, Steps), arg(6, C, Completed).
+    arg(1, C, Generated), arg(2, C, Probes), arg(3, C, Successes),
+    arg(4, C, Rejects), arg(5, C, Scored), arg(6, C, Visits),
+    arg(7, C, AvoidableVisits), arg(8, C, Underflows),
+    arg(9, C, Steps), arg(10, C, Completed),
+    ( Probes =:= 0 -> RejectedPct = 0.0
+    ; RejectedPct is 100.0 * Rejects / Probes
+    ).
 
 % Counter semantics: generated increments for every descriptor yielded by
 % find_intersecting_word/6; scored after placement_key/8 succeeds; score-cell
 % visits counts both full word walks performed by placement_key (crossing count
-% and bbox extension); legality increments only after scoring, preserving the
-% current score-before-legality order; a greedy step is one realized non-seed
-% winner; completed is one construction whose seed setup and loop complete.
+% and bbox extension). Legality is called only after scoring, preserving the
+% current order. Avoidable visits is the same exact 2*WLen charge restricted to
+% legality rejects. A greedy step is one realized non-seed winner; completed is
+% one construction whose seed setup and loop complete.
 semantic_counters(Words, GridLen, Command, Counters) :-
     crosswordsmith_core:reset_search_memos,
     new_counter(C),
@@ -248,7 +260,7 @@ replay_construct(Words, GridLen, Corner, Seed, Counter, Placed, Dropped) :-
     crosswordsmith_core:remove_x(Seed, Words, Rest),
     crosswordsmith_arrange:seed_word(Seed, Start, Dir, GridLen, G0, SeedPW, G1),
     replay_loop(Rest, [SeedPW], GridLen, G1, Counter, Placed, Dropped),
-    counter_inc(6, Counter).
+    counter_inc(10, Counter).
 
 replay_loop(Remaining, Placed, GridLen, Grid, Counter, Final, Dropped) :-
     replay_next_move(Remaining, Placed, GridLen, Grid, Counter, Move),
@@ -258,7 +270,7 @@ replay_apply_move(none, Remaining, Placed, _GridLen, _Counter, Placed, Remaining
 replay_apply_move(move(Answer, NewPW, NewGrid), Remaining, Placed, GridLen,
                   Counter, Final, Dropped) :-
     selectchk([Answer|_], Remaining, Remaining1),
-    counter_inc(5, Counter),
+    counter_inc(9, Counter),
     replay_loop(Remaining1, [NewPW|Placed], GridLen, NewGrid,
                 Counter, Final, Dropped).
 
@@ -286,19 +298,32 @@ replay_word_best(Entry, Placed, GridLen, Grid, BBox, Counter, Score, Best) :-
             ( crosswordsmith_core:find_intersecting_word(
                   Letters, WLen, Placed, GridLen, Start, Dir),
               counter_inc(1, Counter),
+              count_underflow(Start, Counter),
               crosswordsmith_arrange:placement_key(
                   Letters, Start, Dir, WLen, GridLen, LGrid, BBox, Key),
-              counter_inc(3, Counter),
+              counter_inc(5, Counter),
               Visits is 2 * WLen,
-              counter_add(4, Visits, Counter),
+              counter_add(6, Visits, Counter),
               counter_inc(2, Counter),
-              crosswordsmith_core:check_word_fits(
-                  Letters, Start, Dir, GridLen, Grid) ),
+              counted_legality(
+                  Letters, Start, Dir, GridLen, Grid, Visits, Counter) ),
             Keyed),
     Keyed = [K0|Ks],
     foldl(crosswordsmith_arrange:max_key_first, Ks, K0,
           Score-(BestStart-BestDir)),
     Best = best(Answer, Letters, WLen, BestStart, BestDir).
+
+count_underflow(Start, Counter) :-
+    ( Start < 1 -> counter_inc(8, Counter) ; true ).
+
+counted_legality(Letters, Start, Dir, GridLen, Grid, Visits, Counter) :-
+    (   crosswordsmith_core:check_word_fits(
+            Letters, Start, Dir, GridLen, Grid)
+    ->  counter_inc(3, Counter)
+    ;   counter_inc(4, Counter),
+        counter_add(7, Visits, Counter),
+        fail
+    ).
 
 % ---------------------------------------------------------------------------
 % Semantic identity document.

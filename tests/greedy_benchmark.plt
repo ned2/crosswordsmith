@@ -23,6 +23,22 @@ test(replay_equivalence_heavy) :-
     load_clues('fixtures/ladder_21x21_80w.pl', Words),
     greedy_subjects:replay_equivalent(Words, 21, topright, 'EDDE').
 
+test(semantic_counter_partitions) :-
+    load_clues('fixtures/benchmark_08_words.pl', Words),
+    greedy_subjects:semantic_counters(
+        Words, 13, candidates(strict, 5), Counters),
+    assertion(Counters.candidates_reaching_legality =:=
+              Counters.scored_candidates),
+    assertion(Counters.legality_successes + Counters.legality_rejects =:=
+              Counters.candidates_reaching_legality),
+    assertion(Counters.generated_crossing_descriptors >=
+              Counters.scored_candidates),
+    assertion(Counters.score_cell_visits >=
+              Counters.avoidable_score_cell_visits),
+    assertion(Counters.start_lt_one =:=
+              Counters.generated_crossing_descriptors -
+              Counters.scored_candidates).
+
 test(candidate_phases_match_product) :-
     load_clues('fixtures/benchmark_08_words.pl', Words),
     greedy_subjects:build_raw_pool(Words, 13, candidates(strict, 5), Raw),
