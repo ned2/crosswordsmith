@@ -11,10 +11,14 @@ control(easy_topleft, 'fixtures/bundled_17_clues.pl', 17, 6, null, topleft_acros
 control(hard_topleft, 'fixtures/ladder_09x09_16w.pl', 9, 16, null, topleft_across).
 control(seeded_topleft, 'fixtures/bundled_17_clues.pl', 17, 6, 7, topleft_across).
 control(corner_topright, 'fixtures/bundled_17_clues.pl', 17, 6, null, topright).
+control(hard_15x15_34_topright, 'fixtures/ladder_15x15_34w.pl', 15, 34, null, topright).
+control(hard_15x15_36_topright, 'fixtures/ladder_15x15_36w.pl', 15, 36, null, topright).
 
 main :-
-    findall(Row, control_row(Row), Rows),
-    json_write_dict(user_output, _{controls:Rows}, [width(0)]), nl.
+    findall(Row, control_row(Row), CornerRows),
+    operation_row(OperationRow),
+    json_write_dict(user_output,
+                    _{controls:CornerRows,both_corner:OperationRow}, [width(0)]), nl.
 
 control_row(Row) :-
     control(Name, Fixture, Grid, Count, Seed, Corner),
@@ -28,6 +32,8 @@ control_row(Row) :-
     equivalent(Authority,Lean,Sig,Reward),
     equivalent(Authority,Full,Sig,Reward),
     LS.decisions =:= FS.decisions,
+    LS.decision_trace == FS.decision_trace,
+    length(FS.decision_trace, FS.decisions),
     Row = _{control:Name,fixture:Fixture,corner:Corner,search_seed:Seed,
             outcome:placed,reward:Reward,layout_signature:Sig,
             lean_decisions:LS.decisions,full_decisions:FS.decisions,
@@ -36,6 +42,24 @@ control_row(Row) :-
             unplaces:LS.unplaces,wipeouts:LS.wipeouts,
             lean_inferences:LT.inferences,full_inferences:FT.inferences,
             uninstrumented_twin_inferences:NT.inferences},
+    format(user_error, 'probe-arrange heartbeat control=~w phase=done~n', [Name]).
+
+operation_row(Row) :-
+    Name = both_corner_operation,
+    Fixture = 'fixtures/bundled_17_clues.pl', Grid = 17, Count = 6, Seed = 7,
+    format(user_error, 'probe-arrange heartbeat control=~w phase=start~n', [Name]),
+    probe_arrange:load_fixture(Fixture, Count, Words),
+    probe_arrange:authority_operation(Words,Grid,500000000,Seed,Authority,_),
+    probe_arrange:twin_operation(Words,Grid,Seed,lean,Lean,LS,_),
+    probe_arrange:twin_operation(Words,Grid,Seed,full,Full,FS,_),
+    equivalent(Authority,Lean,Sig,Reward),
+    equivalent(Authority,Full,Sig,Reward),
+    LS.decisions =:= FS.decisions,
+    LS.decision_trace == FS.decision_trace,
+    length(FS.decision_trace, FS.decisions),
+    Row = _{control:Name,fixture:Fixture,search_seed:Seed,outcome:placed,
+            reward:Reward,layout_signature:Sig,decisions:FS.decisions,
+            nodes:FS.nodes},
     format(user_error, 'probe-arrange heartbeat control=~w phase=done~n', [Name]).
 
 equivalent(result(placed,ok,false,_,AN,R),

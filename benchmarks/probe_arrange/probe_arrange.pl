@@ -22,6 +22,10 @@
 % explicit before product pair_crossings/3 reaches it.
 :- lists:use_module(library(error), [must_be/2]).
 
+:- dynamic pc0_exact/5.
+:- dynamic pc0_simple/4.
+:- dynamic pc0_decision/3.
+
 % load_fixture(+File, +ExpectedCount, -Words)
 load_fixture(File, ExpectedCount, Words) :-
     read_file_to_terms(File, Terms, []),
@@ -84,13 +88,16 @@ install_seed(Seed) :- crosswordsmith_core:set_search_seed(Seed).
 % mutable seed stream. It has no inference cutoff and is therefore only an
 % exact-replay control, never a substitute for authority at 500M.
 twin_operation(Words, Grid, Seed, Mode, Result, Stats, Timing) :-
-    init_holder(Mode, none, null, Holder),
-    with_search_seed(Seed,
-        ( crosswordsmith_core:reset_search_memos,
-          call_time(twin_corners([topleft_across,topright], Words, Grid,
-                                 Holder, Tagged), T) )),
-    twin_best_result(Tagged, Result),
-    holder_stats(Holder, Stats),
+    init_holder(Mode, none, null, Words, Holder),
+    setup_call_cleanup(
+        true,
+        ( with_search_seed(Seed,
+              ( crosswordsmith_core:reset_search_memos,
+                call_time(twin_corners([topleft_across,topright], Words, Grid,
+                                       Holder, Tagged), T) )),
+          twin_best_result(Tagged, Result),
+          holder_stats(Holder, Stats) ),
+        cleanup_holder(Holder)),
     Timing = _{wall:T.wall, cpu:T.cpu, inferences:T.inferences}.
 
 twin_corners([], _, _, _, []).
@@ -119,17 +126,20 @@ twin_best_result(_, result(infeasible, exhausted, false, null, [], null)).
 % LimitKind is none|nodes|decisions. Instrumented limits are semantic work
 % limits outside any product inference cutoff.
 twin_corner(Words, Grid, Corner, Seed, Mode, LimitKind, Limit, Result,
-            run(Stats, Timing)) :-
-    init_holder(Mode, LimitKind, Limit, Holder),
-    with_search_seed(Seed,
-        ( crosswordsmith_core:reset_search_memos,
-          call_time(
-              catch(twin_corner_goal(Words, Grid, Corner, Holder, Result0),
-                    probe_limit(_Kind),
-                    Result0 = result(not_proven, budget, true, null, [], null)),
-              T) )),
-    Result = Result0,
-    holder_stats(Holder, Stats),
+             run(Stats, Timing)) :-
+    init_holder(Mode, LimitKind, Limit, Words, Holder),
+    setup_call_cleanup(
+        true,
+        ( with_search_seed(Seed,
+              ( crosswordsmith_core:reset_search_memos,
+                call_time(
+                    catch(twin_corner_goal(Words, Grid, Corner, Holder, Result0),
+                          probe_limit(_Kind),
+                          Result0 = result(not_proven,budget,true,null,[],null)),
+                    T) )),
+          Result = Result0,
+          holder_stats(Holder, Stats) ),
+        cleanup_holder(Holder)),
     Timing = _{wall:T.wall, cpu:T.cpu, inferences:T.inferences}.
 
 twin_corner_goal(Words, Grid, Corner, Holder, Result) :-
@@ -146,12 +156,29 @@ twin_corner_goal(Words, Grid, Corner, Holder, Result) :-
 % This is a local replay of assign_words_inc/9. The ordering and support logic
 % below call product helpers verbatim; only event calls are added around branch
 % boundaries. Grid and boundary behavior remain product assign_word/9 behavior.
-twin_assign([], Placed, _State, _, _, _, GS, GS, Placed, Depth, Holder) :-
-    event_leaf(Holder, Depth).
-twin_assign([W|Ws], Placed0, State0, Grid, Start, Dir, GS0, GS, Placed,
+twin_assign(Words, Placed0, State0, Grid, Start, Dir, GS0, GS, Placed,
             Depth, Holder) :-
+    twin_assign_(Words, Placed0, State0, Grid, Start, Dir, GS0, GS, Placed,
+                 Depth, Holder, false, false).
+
+twin_assign_([], Placed, _State, _, _, _, GS, GS, Placed, Depth, Holder,
+             _StateRepeat, _ParentRepeat) :-
+    event_leaf(Holder, Depth).
+twin_assign_([W|Ws], Placed0, State0, Grid, Start, Dir, GS0, GS, Placed,
+             Depth, Holder, StateRepeat0, ParentRepeat0) :-
     Words = [W|Ws],
-    event_node(Holder, Depth, Words, Placed0, GS0, Parent),
+    event_node(Holder, Depth, Grid, Words, Placed0, GS0, Parent,
+               StateKey, StateKnownDead, NodeBefore),
+    repeat_context(StateRepeat0, StateKnownDead, StateRepeat, StateRepeatRoot),
+    ( twin_assign_body(Words, Placed0, State0, Grid, Start, Dir, GS0,
+                       GS, Placed, Depth, Holder, Parent, StateRepeat,
+                       ParentRepeat0)
+    ; event_node_exhausted(Holder, StateKey, StateRepeatRoot, NodeBefore), fail
+    ).
+
+twin_assign_body(Words, Placed0, State0, Grid, Start, Dir, GS0,
+                 GS, Placed, Depth, Holder, Parent, StateRepeat,
+                 ParentRepeat0) :-
     twin_select(Words, Placed0, State0, Grid, Start, Dir, GS0,
                 Entry, Remaining, State, Holder),
     Entry = [Answer|_],
@@ -159,13 +186,18 @@ twin_assign([W|Ws], Placed0, State0, Grid, Start, Dir, GS0, GS, Placed,
     length(Letters, Length),
     crosswordsmith_core:find_intersecting_word(
         Letters, Length, Placed0, Grid, Start, Dir),
+    word_id(Holder, Answer, WordID),
+    event_proof(Holder, Parent, WordID, Start, Dir),
     crosswordsmith_core:assign_word(
         Answer, Letters, Length, Start, Dir, Grid, GS0, PW, GS1),
-    event_place(Holder, Parent, Answer, Start, Dir),
+    event_child(Holder, Parent, WordID, Start, Dir, ParentRepeat0,
+                ParentRepeat, ParentRepeatRoot, ChildBefore),
     Depth1 is Depth + 1,
-    ( twin_assign(Remaining, [PW|Placed0], State, Grid, _S, _D,
-                  GS1, GS, Placed, Depth1, Holder)
-    ; event_unplace(Holder), fail
+    ( twin_assign_(Remaining, [PW|Placed0], State, Grid, _S, _D,
+                   GS1, GS, Placed, Depth1, Holder, StateRepeat, ParentRepeat)
+    ; event_child_exhausted(Holder, Parent, WordID, Start, Dir,
+                            ParentRepeatRoot, ChildBefore),
+      event_unplace(Holder), fail
     ).
 
 % Exact local replay of select_inc/10. Equal-count bucket order, crossing proof
@@ -193,11 +225,30 @@ twin_select(Words, [P|Ps], State0, Grid, Start, Dir, GS,
     State = state(CountMap, EntryLetters, Perturb).
 
 % Counter holder fields are intentionally fixed and extensible. Mode=none has
-% no event work; lean has depth/churn/decision counters; full adds support,
-% duplicate-state, and explicit state-size observations.
-init_holder(Mode, Kind, Limit,
-            h(Mode,Kind,Limit,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,Children,States)) :-
-    empty_assoc(Children), empty_assoc(States).
+% no event work; lean has depth/churn/decision counters; full adds exact
+% duplicate/dead-state observation. Fingerprints only select a bucket: every
+% possible hit is verified against the bucket's canonical keys with (==).
+init_holder(Mode, Kind, Limit, Words,
+            h(Mode,Kind,Limit,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+              Run,none,0,0,0,0,0,0,0,0,0,none,none,IDs,none,0,none)) :-
+    flag(pc0_probe_run, Run, Run+1), stable_word_ids(Words, IDs).
+
+cleanup_holder(Holder) :-
+    arg(19, Holder, Run),
+    retractall(pc0_exact(Run, _, _, _, _)),
+    retractall(pc0_simple(Run, _, _, _)),
+    retractall(pc0_decision(Run, _, _)).
+
+stable_word_ids(Words, IDs) :-
+    empty_assoc(Empty), stable_word_ids(Words, 1, Empty, IDs).
+stable_word_ids([], _, IDs, IDs).
+stable_word_ids([[Answer|_]|Words], ID, IDs0, IDs) :-
+    put_assoc(Answer, IDs0, ID, IDs1),
+    ID1 is ID + 1,
+    stable_word_ids(Words, ID1, IDs1, IDs).
+
+word_id(Holder, Answer, ID) :-
+    arg(32, Holder, IDs), get_assoc(Answer, IDs, ID).
 
 event_leaf(none_holder, _) :- !.
 event_leaf(Holder, Depth) :- holder_mode(Holder, Mode), event_leaf_mode(Mode, Holder, Depth).
@@ -207,27 +258,89 @@ event_leaf_mode(full, Holder, Depth) :- update_depth(Holder, Depth).
 
 holder_mode(Holder, Mode) :- arg(1, Holder, Mode).
 
-event_node(Holder, Depth, Words, Placed, GS, Parent) :-
+event_node(Holder, Depth, Grid, Words, Placed, GS, Parent,
+           StateKey, KnownDead, NodeBefore) :-
     holder_mode(Holder, Mode),
-    event_node_mode(Mode, Holder, Depth, Words, Placed, GS, Parent).
-event_node_mode(none, _, _, _, _, _, 0).
-event_node_mode(lean, Holder, Depth, _, _, _, Parent) :-
+    event_node_mode(Mode, Holder, Depth, Grid, Words, Placed, GS, Parent,
+                    StateKey, KnownDead, NodeBefore).
+event_node_mode(none, _, _, _, _, _, _, 0, none, false, 0).
+event_node_mode(lean, Holder, Depth, _, _, _, _, Parent,
+                none, false, NodeBefore) :-
+    arg(4, Holder, NodeBefore),
     check_limit(Holder, nodes, 4),
     bump_arg(Holder, 4), update_depth(Holder, Depth), next_parent(Holder, Parent).
-event_node_mode(full, Holder, Depth, Words, Placed, GS, Parent) :-
-    event_node_mode(lean, Holder, Depth, Words, Placed, GS, Parent),
+event_node_mode(full, Holder, Depth, Grid, Words, Placed, GS, Parent,
+                StateKey, KnownDead, NodeBefore) :-
+    event_node_mode(lean, Holder, Depth, Grid, Words, Placed, GS, Parent,
+                    _LeanKey, _LeanDead, NodeBefore),
     state_sizes(Holder, Words, GS),
-    state_duplicate(Holder, Words, Placed).
+    canonical_state_key(Holder, Grid, Words, Placed, StateKey),
+    state_observe(Holder, StateKey, KnownDead).
 
-event_place(Holder, Parent, Answer, Start, Dir) :-
+event_proof(Holder, Parent, WordID, Start, Dir) :-
     holder_mode(Holder, Mode),
-    event_place_mode(Mode, Holder, Parent, Answer, Start, Dir).
-event_place_mode(none, _, _, _, _, _).
-event_place_mode(lean, Holder, _, _, _, _) :-
-    check_limit(Holder, decisions, 5), bump_arg(Holder, 5), bump_arg(Holder, 6).
-event_place_mode(full, Holder, Parent, Answer, Start, Dir) :-
-    event_place_mode(lean, Holder, Parent, Answer, Start, Dir),
-    child_duplicate(Holder, Parent-Answer-Start-Dir).
+    event_proof_mode(Mode, Holder, Parent-WordID-Start-Dir).
+event_proof_mode(none, _, _).
+event_proof_mode(lean, _, _).
+event_proof_mode(full, Holder, Key) :-
+    bump_arg(Holder, 21), remember_or_duplicate(Holder, proof, Key, 22).
+
+event_child(Holder, Parent, WordID, Start, Dir, ParentRepeat0,
+            ParentRepeat, ParentRepeatRoot, NodeBefore) :-
+    holder_mode(Holder, Mode),
+    event_child_mode(Mode, Holder, Parent-WordID-Start-Dir, ParentRepeat0,
+                     ParentRepeat, ParentRepeatRoot, NodeBefore).
+event_child_mode(none, _, _, ParentRepeat, ParentRepeat, false, 0).
+event_child_mode(lean, Holder, Key, ParentRepeat, ParentRepeat, false,
+                 NodeBefore) :-
+    arg(4, Holder, NodeBefore),
+    check_limit(Holder, decisions, 5), bump_arg(Holder, 5), bump_arg(Holder, 6),
+    arg(5, Holder, Index), arg(19, Holder, Run),
+    assertz(pc0_decision(Run, Index, Key)).
+event_child_mode(full, Holder, Key, ParentRepeat0,
+                 ParentRepeat, ParentRepeatRoot, NodeBefore) :-
+    event_child_mode(lean, Holder, Key, ParentRepeat0, _, _, NodeBefore),
+    remember_or_duplicate(Holder, child, Key, 15),
+    ( simple_lookup(Holder, failed, Key)
+    -> bump_arg(Holder, 25), KnownFailed = true
+    ;  KnownFailed = false
+    ),
+    repeat_context(ParentRepeat0, KnownFailed, ParentRepeat, ParentRepeatRoot).
+
+event_child_exhausted(Holder, Parent, WordID, Start, Dir,
+                      ParentRepeatRoot, NodeBefore) :-
+    holder_mode(Holder, Mode),
+    event_child_exhausted_mode(Mode, Holder, Parent-WordID-Start-Dir,
+                               ParentRepeatRoot, NodeBefore).
+event_child_exhausted_mode(none, _, _, _, _).
+event_child_exhausted_mode(lean, _, _, _, _).
+event_child_exhausted_mode(full, Holder, Key, ParentRepeatRoot, NodeBefore) :-
+    remember_key(Holder, failed, Key),
+    ( ParentRepeatRoot == true
+    -> arg(4, Holder, Nodes), Repeated is Nodes - NodeBefore,
+       add_arg(Holder, 26, Repeated)
+    ;  true
+    ).
+
+event_node_exhausted(Holder, StateKey, StateRepeatRoot, NodeBefore) :-
+    holder_mode(Holder, Mode),
+    event_node_exhausted_mode(Mode, Holder, StateKey, StateRepeatRoot, NodeBefore).
+event_node_exhausted_mode(none, _, _, _, _).
+event_node_exhausted_mode(lean, _, _, _, _).
+event_node_exhausted_mode(full, Holder, StateKey, StateRepeatRoot, NodeBefore) :-
+    exact_table_add(Holder, dead, StateKey, Added),
+    ( Added == true -> bump_arg(Holder, 27) ; true ),
+    ( StateRepeatRoot == true
+    -> arg(4, Holder, Nodes), Repeated is Nodes - NodeBefore,
+       add_arg(Holder, 24, Repeated)
+    ;  true
+    ).
+
+repeat_context(Inside0, Known, Inside, Root) :-
+    ( Known == true
+    -> Inside = true, ( Inside0 == true -> Root = false ; Root = true )
+    ;  Inside = Inside0, Root = false
+    ).
 
 event_unplace(Holder) :-
     holder_mode(Holder, Mode),
@@ -276,20 +389,66 @@ bound_args(I, Arity, Term, Count0, Count) :-
     arg(I, Term, V), ( nonvar(V) -> Count1 is Count0 + 1 ; Count1 = Count0 ),
     I1 is I + 1, bound_args(I1, Arity, Term, Count1, Count).
 
-child_duplicate(Holder, Key) :-
-    arg(19, Holder, Seen0),
-    ( get_assoc(Key, Seen0, _) -> bump_arg(Holder, 15)
-    ; put_assoc(Key, Seen0, true, Seen), nb_setarg(19, Holder, Seen)
+remember_or_duplicate(Holder, Table, Key, DuplicateArg) :-
+    ( simple_lookup(Holder, Table, Key) -> bump_arg(Holder, DuplicateArg)
+    ; arg(19, Holder, Run), term_hash(Key, Hash),
+      assertz(pc0_simple(Run, Table, Hash, Key))
     ).
 
-state_duplicate(Holder, Words, Placed) :-
-    maplist(entry_answer, Words, Remaining0), msort(Remaining0, Remaining),
-    maplist(placed_key, Placed, Placed0), msort(Placed0, PlacedKeys),
-    Key = state(Remaining, PlacedKeys),
-    arg(20, Holder, Seen0),
-    ( get_assoc(Key, Seen0, _) -> bump_arg(Holder, 16)
-    ; put_assoc(Key, Seen0, true, Seen), nb_setarg(20, Holder, Seen)
+remember_key(Holder, Table, Key) :-
+    ( simple_lookup(Holder, Table, Key) -> true
+    ; arg(19, Holder, Run), term_hash(Key, Hash),
+      assertz(pc0_simple(Run, Table, Hash, Key))
     ).
+
+simple_lookup(Holder, Table, Key) :-
+    arg(19, Holder, Run), term_hash(Key, Hash),
+    pc0_simple(Run, Table, Hash, Stored), Stored == Key, !.
+
+canonical_state_key(Holder, Grid, Words, Placed,
+                    state(Grid, Remaining, PlacedKeys)) :-
+    maplist(entry_id(Holder), Words, Remaining0), msort(Remaining0, Remaining),
+    maplist(placed_id_key(Holder), Placed, Placed0), msort(Placed0, PlacedKeys).
+entry_id(Holder, [Answer|_], ID) :- word_id(Holder, Answer, ID).
+placed_id_key(Holder, PW, p(ID,Start,Dir)) :-
+    crosswordsmith_core:pw_answer(PW, Answer), word_id(Holder, Answer, ID),
+    crosswordsmith_core:pw_start(PW, Start),
+    crosswordsmith_core:pw_dir(PW, Dir).
+
+state_observe(Holder, Key, KnownDead) :-
+    exact_table_lookup(Holder, seen, Key, Seen),
+    ( Seen == true -> bump_arg(Holder, 16)
+    ; exact_table_add(Holder, seen, Key, _), bump_arg(Holder, 34)
+    ),
+    exact_table_lookup(Holder, dead, Key, KnownDead),
+    ( KnownDead == true -> bump_arg(Holder, 23) ; true ).
+
+exact_table_lookup(Holder, Table, Key, Found) :-
+    state_fingerprint(Key, fp(H1,H2)), arg(19, Holder, Run),
+    findall(Stored, pc0_exact(Run, Table, H1, H2, Stored), Bucket),
+    ( Bucket = [_|_]
+    -> ( exact_member(Key, Bucket)
+       -> Found = true, bump_arg(Holder, 29)
+       ;  Found = false, bump_arg(Holder, 28)
+       )
+    ; Found = false
+    ).
+
+exact_table_add(Holder, Table, Key, Added) :-
+    exact_table_lookup(Holder, Table, Key, Found),
+    ( Found == true -> Added = false
+    ; state_fingerprint(Key, fp(H1,H2)), arg(19, Holder, Run),
+      assertz(pc0_exact(Run, Table, H1, H2, Key)), Added = true
+    ).
+
+state_fingerprint(Key, fp(H1,H2)) :-
+    ( ground(Key) -> true ; throw(error(non_ground_pc0_state(Key), _)) ),
+    term_hash(Key, -1, 2147483647, H1),
+    term_hash(pc0-Key, -1, 2147483629, H2).
+
+exact_member(Key, [Stored|_]) :- Stored == Key, !.
+exact_member(Key, [_|Stored]) :- exact_member(Key, Stored).
+
 entry_answer([Answer|_], Answer).
 placed_key(PW, Answer-Start-Dir) :-
     crosswordsmith_core:pw_answer(PW, Answer),
@@ -303,23 +462,42 @@ holder_stats_mode(none, _,
     _{nodes:null,decisions:null,places:null,unplaces:null,wipeouts:null,
       max_depth:null,state_entries_max:null,letter_cells_max:null,
       boundary_cells_max:null,support_transitions:null,
-      duplicate_children:null,duplicate_states:null}).
+      crossing_proofs:null,duplicate_proofs:null,duplicate_children:null,
+      duplicate_states:null,repeated_dead_entries:null,
+      repeated_dead_nodes:null,parent_dedup_hits:null,
+      parent_dedup_nodes:null,dead_states:null,canonical_states:null,
+      exact_hash_hits:null,hash_collisions:null,decision_trace:null}).
 holder_stats_mode(Mode, Holder, Stats) :-
     Mode \== none,
     arg(4,Holder,Nodes), arg(5,Holder,Decisions), arg(6,Holder,Places),
     arg(7,Holder,Unplaces), arg(8,Holder,Wipeouts), arg(9,Holder,Depth),
+    arg(19,Holder,Run), findall(Key, pc0_decision(Run, _, Key), DecisionTrace),
     ( Mode == full
     -> arg(10,Holder,Entries), arg(11,Holder,Letters), arg(12,Holder,Bounds),
-       arg(14,Holder,Transitions), arg(15,Holder,DupChildren),
-       arg(16,Holder,DupStates)
+        arg(14,Holder,Transitions), arg(15,Holder,DupChildren),
+       arg(16,Holder,DupStates), arg(21,Holder,Proofs),
+       arg(22,Holder,DupProofs), arg(23,Holder,DeadEntries),
+       arg(24,Holder,DeadNodes), arg(25,Holder,ParentHits),
+       arg(26,Holder,ParentNodes), arg(27,Holder,DeadStates),
+       arg(28,Holder,HashCollisions), arg(29,Holder,ExactHashHits),
+       arg(34,Holder,CanonicalStates)
     ; Entries=null, Letters=null, Bounds=null, Transitions=null,
-      DupChildren=null, DupStates=null
+      Proofs=null, DupProofs=null, DupChildren=null, DupStates=null,
+      DeadEntries=null, DeadNodes=null, ParentHits=null, ParentNodes=null,
+      DeadStates=null, HashCollisions=null, ExactHashHits=null,
+      CanonicalStates=null
     ),
     Stats = _{nodes:Nodes,decisions:Decisions,places:Places,
               unplaces:Unplaces,wipeouts:Wipeouts,max_depth:Depth,
               state_entries_max:Entries,letter_cells_max:Letters,
               boundary_cells_max:Bounds,support_transitions:Transitions,
-              duplicate_children:DupChildren,duplicate_states:DupStates}.
+              crossing_proofs:Proofs,duplicate_proofs:DupProofs,
+              duplicate_children:DupChildren,duplicate_states:DupStates,
+              repeated_dead_entries:DeadEntries,repeated_dead_nodes:DeadNodes,
+              parent_dedup_hits:ParentHits,parent_dedup_nodes:ParentNodes,
+              dead_states:DeadStates,canonical_states:CanonicalStates,
+              exact_hash_hits:ExactHashHits,hash_collisions:HashCollisions,
+              decision_trace:DecisionTrace}.
 
 layout_signature([], null).
 layout_signature(Numbered, Signature) :-
@@ -346,9 +524,19 @@ trace_row(Rig, Meta,
              state_entries_max:Stats.state_entries_max,
              letter_cells_max:Stats.letter_cells_max,
              boundary_cells_max:Stats.boundary_cells_max,
-             support_transitions:Stats.support_transitions,
-             duplicate_children:Stats.duplicate_children,
-             duplicate_states:Stats.duplicate_states},
+              support_transitions:Stats.support_transitions,
+              crossing_proofs:Stats.crossing_proofs,
+              duplicate_proofs:Stats.duplicate_proofs,
+              duplicate_children:Stats.duplicate_children,
+              duplicate_states:Stats.duplicate_states,
+              repeated_dead_entries:Stats.repeated_dead_entries,
+              repeated_dead_nodes:Stats.repeated_dead_nodes,
+              parent_dedup_hits:Stats.parent_dedup_hits,
+              parent_dedup_nodes:Stats.parent_dedup_nodes,
+              dead_states:Stats.dead_states,
+              canonical_states:Stats.canonical_states,
+              exact_hash_hits:Stats.exact_hash_hits,
+              hash_collisions:Stats.hash_collisions},
     Row = Base.
 
 :- multifile prolog:error_message//1.

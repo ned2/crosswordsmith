@@ -17,9 +17,16 @@ the product's single mutable seed stream across both corners. Seed cleanup uses
 equal-count bucket order, crossing proof order/multiplicity, capped stale
 overcounts, product grid/boundary trails, and one-reset memo lifecycle. `lean`
 counts nodes, decisions, places, unplaces, wipeouts, and max depth. `full` also
-counts support-bucket transitions, exact duplicate child/state keys, and maximum
-count-map/letter-grid/boundary-grid sizes. It runs unbounded or under semantic
-`nodes`/`decisions` caps, never inside a product inference cap. Its
+counts support-bucket transitions, crossing-proof versus legal-child duplicates,
+exact canonical state revisits, states known dead only after normal exhaustive
+failure, repeated failed-subtree nodes, parent-local post-failure capture, and
+maximum count-map/letter-grid/boundary-grid sizes. Stable word IDs are input-order
+integers. A canonical state is the grid size, sorted remaining IDs, and sorted
+absolute `(ID,start,dir)` placements; it is never translation-normalized. Dual
+fingerprints select copied-key buckets, but every possible hit is verified by
+exact canonical equality. Per-run observation facts are cleaned after each twin.
+It runs unbounded or under semantic `nodes`/`decisions` caps, never inside a
+product inference cap. Its
 `measured_inferences` is overhead evidence, not product success inferences.
 
 `P-D0` is a second benchmark-local exact replay in `d0_support.pl`. It observes
@@ -62,6 +69,7 @@ swipl -q benchmarks/probe_arrange/measure_overhead.pl -- \
 
 swipl -q benchmarks/probe_arrange/test_d0_support.pl
 swipl -q benchmarks/probe_arrange/measure_d0.pl > /tmp/p-d0.json
+swipl -q benchmarks/probe_arrange/pc0_duplicate_work.pl
 ```
 
 An outer timeout is batch-health protection only. It emits

@@ -47,6 +47,51 @@ test(twin_replays_seeded_layout) :-
     probe_arrange:layout_signature(TN, Sig),
     integer(Stats.support_transitions).
 
+test(full_observer_preserves_exact_decision_order) :-
+    probe_arrange:load_fixture('fixtures/bundled_17_clues.pl', 6, Words),
+    probe_arrange:twin_corner(Words,17,topleft_across,null,lean,none,null,
+                              Lean,run(LS,_)),
+    probe_arrange:twin_corner(Words,17,topleft_across,null,full,none,null,
+                              Full,run(FS,_)),
+    same_twin_result(Lean, Full),
+    LS.decision_trace == FS.decision_trace,
+    length(FS.decision_trace, FS.decisions).
+
+test(canonical_state_key_is_absolute_and_orientation_sensitive) :-
+    Words = [['ONE'],['TWO']],
+    probe_arrange:init_holder(full,none,null,Words,H),
+    setup_call_cleanup(
+        true,
+        ( probe_arrange:canonical_state_key(
+              H, 5, [['TWO']], [pw('ONE',[],[],across,3,2,4,_)], Across),
+          probe_arrange:canonical_state_key(
+              H, 5, [['TWO']], [pw('ONE',[],[],down,3,2,12,_)], Down),
+          Across == state(5,[2],[p(1,2,across)]),
+          Down == state(5,[2],[p(1,2,down)]),
+          Across \== Down ),
+        probe_arrange:cleanup_holder(H)).
+
+test(fingerprint_bucket_never_establishes_equality) :-
+    Words = [['ONE']], Key = state(5,[],[p(1,1,across)]),
+    Other = state(5,[],[p(1,1,down)]),
+    probe_arrange:init_holder(full,none,null,Words,H),
+    setup_call_cleanup(
+        true,
+        ( probe_arrange:state_fingerprint(Key, fp(H1,H2)),
+          arg(19,H,Run),
+          assertz(probe_arrange:pc0_exact(Run,seen,H1,H2,Other)),
+          probe_arrange:exact_table_lookup(H,seen,Key,false),
+          arg(28,H,1) ),
+        probe_arrange:cleanup_holder(H)).
+
+test(semantic_cutoff_never_marks_dead) :-
+    probe_arrange:load_fixture('fixtures/bundled_17_clues.pl', 6, Words),
+    probe_arrange:twin_corner(Words,17,topleft_across,null,full,nodes,0,
+        result(not_proven,budget,true,null,[],null),run(Stats,_)),
+    Stats.nodes =:= 0,
+    Stats.dead_states =:= 0,
+    Stats.repeated_dead_entries =:= 0.
+
 test(twin_operation_preserves_shared_seed_stream) :-
     probe_arrange:load_fixture('fixtures/bundled_17_clues.pl', 6, Words),
     probe_arrange:authority_operation(Words,17,500000000,7,Authority,_),
@@ -98,10 +143,15 @@ test(trace_row_interruption_preserves_configured_cutoff) :-
     Row.censored == true.
 
 null_probe_stats(_{nodes:null,decisions:null,places:null,unplaces:null,
-                   wipeouts:null,max_depth:null,state_entries_max:null,
-                   letter_cells_max:null,boundary_cells_max:null,
-                   support_transitions:null,duplicate_children:null,
-                   duplicate_states:null}).
+                    wipeouts:null,max_depth:null,state_entries_max:null,
+                    letter_cells_max:null,boundary_cells_max:null,
+                    support_transitions:null,crossing_proofs:null,
+                    duplicate_proofs:null,duplicate_children:null,
+                    duplicate_states:null,repeated_dead_entries:null,
+                    repeated_dead_nodes:null,parent_dedup_hits:null,
+                    parent_dedup_nodes:null,dead_states:null,
+                    canonical_states:null,exact_hash_hits:null,
+                    hash_collisions:null}).
 
 direct_result(placed, N, R, result(placed,N,R)).
 direct_result(not_proven, _, _, result(not_proven,[],null)).
@@ -111,5 +161,10 @@ same_product_result(result(Outcome,_,_,_,AN,AR), result(Outcome,DN,DR)) :-
     AR == DR,
     probe_arrange:layout_signature(AN, Sig),
     probe_arrange:layout_signature(DN, Sig).
+
+same_twin_result(result(Outcome,Termination,Censored,_,AN,Reward),
+                 result(Outcome,Termination,Censored,_,BN,Reward)) :-
+    probe_arrange:layout_signature(AN, Sig),
+    probe_arrange:layout_signature(BN, Sig).
 
 :- end_tests(probe_arrange).

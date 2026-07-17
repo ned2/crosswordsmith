@@ -89,7 +89,12 @@ execute_probe(R, Words, Result, Stats, Timing, instrumented) :-
 null_stats(_{nodes:null,decisions:null,places:null,unplaces:null,wipeouts:null,
              max_depth:null,state_entries_max:null,letter_cells_max:null,
              boundary_cells_max:null,support_transitions:null,
-             duplicate_children:null,duplicate_states:null}).
+             crossing_proofs:null,duplicate_proofs:null,
+             duplicate_children:null,duplicate_states:null,
+             repeated_dead_entries:null,repeated_dead_nodes:null,
+             parent_dedup_hits:null,parent_dedup_nodes:null,
+             dead_states:null,canonical_states:null,
+             exact_hash_hits:null,hash_collisions:null}).
 
 row_context(R, Rig, Meta, Commit, Swi) :-
     file_base_name(R.fixture_path, Fixture),
