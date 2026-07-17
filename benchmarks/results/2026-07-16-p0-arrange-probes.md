@@ -134,7 +134,7 @@ wall/RSS. Unavailable values are JSON null. Synthetic tests and actual emitted
 authority/instrumented rows passed validation. A deliberately same-group mixed
 rig aggregation was rejected.
 
-Schema correction (2026-07-17): `cutoff` is the configured numeric threshold,
+Schema correction (2026-07-17): `cutoff` is the configured integer threshold,
 not a termination label. Rows now carry
 `termination=ok|budget|exhausted|interrupted` separately. Authority rows retain their exact inference budget,
 semantic node/decision rows retain their exact limit, unbounded rows use null,

@@ -67,16 +67,17 @@ class SchemaTests(unittest.TestCase):
     def test_limit_kind_cutoff_mismatches_rejected(self):
         cases = [
             (row("instrumented", "none", None), "none requires cutoff=null"),
-            (row("instrumented", "nodes", 10), "non-negative numeric cutoff"),
-            (row("instrumented", "decisions", 10), "non-negative numeric cutoff"),
-            (row("instrumented", "nodes", -1), "non-negative numeric cutoff"),
+            (row("instrumented", "nodes", 10), "non-negative integer cutoff"),
+            (row("instrumented", "decisions", 10), "non-negative integer cutoff"),
+            (row("instrumented", "nodes", -1), "non-negative integer cutoff"),
+            (row("instrumented", "nodes", 1.5), "non-negative integer cutoff"),
             (row("authority"), "authority rows require limit_kind=inferences"),
             (row("instrumented", "inferences", 100), "cannot use inference limits"),
         ]
         cases[0][0]["cutoff"] = 0
         cases[1][0]["cutoff"] = None
         cases[2][0]["cutoff"] = "10"
-        cases[4][0]["limit_kind"] = "nodes"
+        cases[5][0]["limit_kind"] = "nodes"
         for value, message in cases:
             with self.subTest(value=value), self.assertRaisesRegex(ValueError, message):
                 validate(value)

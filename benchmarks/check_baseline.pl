@@ -220,16 +220,31 @@ promote_doc(BaselinePath, HistoryPath, Baseline, Doc, Extra, Fails, Wins) :-
     do_check(Baseline, Doc, Fails, Wins),
     (   Fails =:= 0
     ->  write_record(BaselinePath, Baseline, Doc),
-        append_history_to(HistoryPath, Doc, Extra),
-        verify_recorded_file(BaselinePath, Doc)
+        append_history_to(HistoryPath, Doc, Extra)
     ;   true
     ).
 
 do_record(BaselinePath, Baseline, Doc) :-
-    write_record(BaselinePath, Baseline, Doc),
-    verify_recorded_file(BaselinePath, Doc).
+    write_record(BaselinePath, Baseline, Doc).
 
 write_record(BaselinePath, Baseline, Doc) :-
+    build_recorded_baseline(Baseline, Doc, Recorded),
+    atom_concat(BaselinePath, '.tmp', TempPath),
+    setup_call_cleanup(
+        true,
+        ( setup_call_cleanup(open(TempPath, write, S),
+                             json_write_dict(S, Recorded, [width(90)]),
+                             close(S)),
+          verify_recorded_file(TempPath, Doc),
+          rename_file(TempPath, BaselinePath) ),
+        ( exists_file(TempPath) -> delete_file(TempPath) ; true )),
+    get_dict(results, Doc, Results),
+    get_dict(workloads, Baseline, WL0),
+    format("baseline updated and read-back verified: ~w~n~n", [BaselinePath]),
+    forall(member(Row, Results), report_recorded(WL0, Row)),
+    unmeasured_note(WL0, Results).
+
+build_recorded_baseline(Baseline, Doc, Recorded) :-
     get_dict(results, Doc, Results),
     get_dict(swi_prolog, Doc, RunSwi),
     current_host(RunHost),
@@ -239,13 +254,7 @@ write_record(BaselinePath, Baseline, Doc) :-
     new_rung_pairs(WL0, Results, NewPairs),
     append(Pairs1, NewPairs, Pairs2),
     dict_pairs(WL1, Tag, Pairs2),
-    B1 = Baseline.put(_{host: RunHost, swi_prolog: RunSwi, workloads: WL1}),
-    setup_call_cleanup(open(BaselinePath, write, S),
-                       json_write_dict(S, B1, [width(90)]),
-                       close(S)),
-    format("baseline updated: ~w~n~n", [BaselinePath]),
-    forall(member(Row, Results), report_recorded(WL0, Row)),
-    unmeasured_note(WL0, Results).
+    Recorded = Baseline.put(_{host: RunHost, swi_prolog: RunSwi, workloads: WL1}).
 
 verify_recorded_file(BaselinePath, Doc) :-
     get_dict(results, Doc, Results),

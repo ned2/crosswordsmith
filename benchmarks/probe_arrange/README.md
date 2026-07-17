@@ -77,7 +77,7 @@ instrumented rows. Its grouping guard rejects any aggregation group containing
 both rigs. Authority and instrumented rows may be joined for replay checks but
 must never be pooled for outcome/cutoff analysis.
 
-`limit_kind` identifies the threshold unit. `cutoff` is that configured numeric
+`limit_kind` identifies the threshold unit. `cutoff` is that configured integer
 threshold, or JSON `null` when `limit_kind=none`; it is independent of observed
 termination. `termination` is `ok|budget|exhausted|interrupted`. Thus a placed
 authority row still carries `cutoff=500000000, termination=ok`, while an outer

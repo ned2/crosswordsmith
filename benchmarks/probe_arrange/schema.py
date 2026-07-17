@@ -40,9 +40,8 @@ def validate(row: dict) -> None:
     if row["limit_kind"] == "none":
         if cutoff is not None:
             raise ValueError("limit_kind=none requires cutoff=null")
-    elif (isinstance(cutoff, bool) or not isinstance(cutoff, (int, float))
-          or cutoff < 0):
-        raise ValueError("limited rows require a non-negative numeric cutoff")
+    elif isinstance(cutoff, bool) or not isinstance(cutoff, int) or cutoff < 0:
+        raise ValueError("limited rows require a non-negative integer cutoff")
     if row["outcome"] == "placed":
         if row["reward"] is None or row["layout_signature"] is None:
             raise ValueError("placed rows require reward and layout_signature")

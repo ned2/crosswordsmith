@@ -63,7 +63,7 @@ common(Fixture,G0,N0,FS0,SS0,Op,A0,Arm,O0,Request,Outer) :-
 parse_limit(none, _, null).
 parse_limit(nodes, A, N) :- limit_number_atom(A, N).
 parse_limit(decisions, A, N) :- limit_number_atom(A, N).
-limit_number_atom(A, N) :- number_atom(A, N), N >= 0.
+limit_number_atom(A, N) :- number_atom(A, N), integer(N), N >= 0.
 number_atom(A, N) :- atom_number(A, N).
 search_seed(none, null) :- !.
 search_seed(A, N) :- number_atom(A, N).
