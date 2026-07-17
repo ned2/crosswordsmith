@@ -1,8 +1,8 @@
 # Plan: the next `arrange` performance campaign
 
 Status: COMPLETE (2026-07-17). A-G1, A-G2, A-D1, and A-D2 are accepted and
-ratcheted; A-C1/A-C2 and A-T0 are measured closed. Track R remains parked behind
-its explicit product-policy checkpoint.
+ratcheted; A-C1/A-C2 and A-T0 are measured closed. Track R was closed at its
+product-policy checkpoint without running A-R1. No campaign track remains open.
 
 ## Execution update (2026-07-17)
 
@@ -512,7 +512,12 @@ on the measured native probes without an explicit browser-memory review, and no
 unbounded request-to-request growth. Accepted structural changes also run the
 WASM battery.
 
-## Phase 4: restart policy tournament (conditional, output-changing)
+## Phase 4: restart policy tournament — closed without experiment
+
+The close-out product decision declined an output-changing rescue mode. A-R1
+therefore consumed no tuning or held-out seeds and introduced no controller, CLI,
+seed-policy, or diagnostic changes. The design below remains the registered
+revisit contract if that product decision changes; it is not unfinished work.
 
 Track R begins only after P-R0. It lives on an experiment branch until the user
 accepts the product trade: first rescue placement may differ from the current

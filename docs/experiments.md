@@ -2178,3 +2178,16 @@ p1-backtrack-instrumentation.patch).
   is a measured parked option at its explicit output-changing policy checkpoint.
   Detailed evidence: `benchmarks/results/2026-07-17-arrange-campaign-closeout.md`;
   summary: `docs/research/arrange-performance-campaign-2026-07b-summary.md`.
+
+### A-R1 — restart/rescue policy tournament — CLOSED WITHOUT EXPERIMENT
+- **Decision:** after transparent campaign close-out, the product-policy
+  checkpoint was resolved against adding an output-changing rescue mode. P-R0's
+  premise result remains valid: 60/128 fixed-instance seeded corner rows placed,
+  demonstrating trajectory-sensitive completion mass under the 500M budget.
+- **Scope:** no A-R1 tuning `[16,32)`, held-out tournament `[32,64)`, controller,
+  CLI option, seed policy, or diagnostic contract was implemented or measured.
+  Default deterministic and one-shot seeded behavior remain unchanged.
+- **Verdict:** **CLOSE Track R and the 2026-07b arrange campaign.** Reopening
+  requires a new product decision that explicitly accepts an opt-in mode whose
+  first successful layout and reward may differ; P-R0 is evidence for that
+  future decision, not unfinished engineering.

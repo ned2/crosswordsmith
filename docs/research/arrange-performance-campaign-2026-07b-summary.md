@@ -1,6 +1,6 @@
 # Arrange performance campaign 2026-07b summary
 
-Status: transparent campaign complete; Track R policy decision parked.
+Status: campaign complete; Track R closed without an experiment.
 
 ## Goal and method
 
@@ -117,12 +117,12 @@ Primary artifacts:
 - `benchmarks/baseline.json`, `benchmarks/greedy_baseline.json`, and their
   histories
 
-## Remaining Track R decision
+## Track R closure
 
 P-R0 clears the premise gate for a same-budget restart tournament but does not
-authorize product work. Tuning `[16,32)` and held-out seeds `[32,64)` remain
-untouched. Proceed only after a product decision accepts an explicit rescue mode
-whose first successful layout and reward may differ, while retaining the
-registered master-seed, attempt-zero compatibility, diagnostics, reward-floor,
-and one-operation-wide-500M contracts. If that trade is not wanted, Track R is
-complete as a measured parked option rather than unfinished engineering.
+authorize product work. Close-out declined an explicit rescue mode whose first
+successful layout and reward may differ, so tuning `[16,32)` and held-out seeds
+`[32,64)` remain untouched and no product machinery was built. Track R is closed,
+not unfinished engineering. Reopening requires a new product decision accepting
+that output trade while retaining the registered master-seed, attempt-zero
+compatibility, diagnostics, reward-floor, and one-operation-wide-500M contracts.

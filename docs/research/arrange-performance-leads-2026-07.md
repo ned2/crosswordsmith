@@ -1,7 +1,7 @@
 # Research: next performance leads for `arrange` (2026-07)
 
 Status: transparent campaign complete; A-G1/A-G2 and A-D1/A-D2 accepted;
-A-C1/A-C2 and A-T0 closed; output-changing A-R1 parked.
+A-C1/A-C2, A-T0, and output-changing A-R1 closed. No track remains open.
 
 ## Execution update (2026-07-17)
 
@@ -177,7 +177,12 @@ separate result columns.
 Proceed only if repeated search streams show useful short-run mass or material
 corner/perturbation complementarity.
 
-### A-R1: policy tournament
+### A-R1: policy tournament — closed by product decision
+
+P-R0 passed the empirical premise, but campaign close-out declined the product
+trade of an opt-in rescue mode returning a different first layout or reward.
+No tuning or held-out tournament was run. Revisit only after a new explicit
+product decision; the design below remains the registered contract.
 
 Under one unchanged operation-wide inference budget, compare:
 
