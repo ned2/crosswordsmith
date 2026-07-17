@@ -22,6 +22,14 @@ count-map/letter-grid/boundary-grid sizes. It runs unbounded or under semantic
 `nodes`/`decisions` caps, never inside a product inference cap. Its
 `measured_inferences` is overhead evidence, not product success inferences.
 
+`P-D0` is a second benchmark-local exact replay in `d0_support.pl`. It observes
+every letter-sharing refresh after unchanged product `inc_counts/8`: previous
+and exact buckets, capped proof versus geometry multiplicity, old residues,
+newest-source proofs, candidate checks, and letter/boundary/adjacency watch
+dirtiness. Its proposed classifier is observational only and is checked against
+the full exact recount. Bucket 2 always falls back; no shadow value enters MRV
+ordering or grid state.
+
 ## Commands
 
 All commands run from the repository root and emit one JSON row on stdout plus
@@ -51,6 +59,9 @@ swipl -q benchmarks/probe_arrange/profile.pl -- \
 swipl -q benchmarks/probe_arrange/verify_controls.pl
 swipl -q benchmarks/probe_arrange/measure_overhead.pl -- \
   fixtures/bundled_17_clues.pl 17 6 none topleft_across lean 21
+
+swipl -q benchmarks/probe_arrange/test_d0_support.pl
+swipl -q benchmarks/probe_arrange/measure_d0.pl > /tmp/p-d0.json
 ```
 
 An outer timeout is batch-health protection only. It emits

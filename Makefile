@@ -2,7 +2,7 @@
 
 SHELL := /bin/bash
 
-.PHONY: test test-wasm test-xword xword-parity unit golden update-golden fuzz bench bench-check bench-record bench-log bench-history bench-matrix bench-arrange-verify bench-arrange-promote bench-greedy bench-greedy-check bench-greedy-record bench-greedy-log bench-greedy-history bench-greedy-identity bench-greedy-verify bench-greedy-promote probe-arrange-fixtures probe-arrange-seeds probe-arrange-schema-test probe-arrange-check
+.PHONY: test test-wasm test-xword xword-parity unit golden update-golden fuzz bench bench-check bench-record bench-log bench-history bench-matrix bench-arrange-verify bench-arrange-promote bench-greedy bench-greedy-check bench-greedy-record bench-greedy-log bench-greedy-history bench-greedy-identity bench-greedy-verify bench-greedy-promote probe-arrange-fixtures probe-arrange-seeds probe-arrange-schema-test probe-arrange-d0-test probe-arrange-check
 
 BENCH_FORMAT ?= text
 BENCH_ARGS ?=
@@ -237,7 +237,10 @@ probe-arrange-seeds:
 probe-arrange-schema-test:
 	python3 -m unittest benchmarks/probe_arrange/test_schema.py
 
-probe-arrange-check: probe-arrange-fixtures probe-arrange-seeds probe-arrange-schema-test
+probe-arrange-d0-test:
+	swipl -q benchmarks/probe_arrange/test_d0_support.pl
+
+probe-arrange-check: probe-arrange-fixtures probe-arrange-seeds probe-arrange-schema-test probe-arrange-d0-test
 
 # --- browser payload/startup bench (payload plan Phase 0) ---------------------
 # Payload/request/startup benchmark for the browser bundle
