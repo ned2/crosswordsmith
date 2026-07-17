@@ -48,6 +48,8 @@
 % FILE BACK and verify every rung is present (the tool's own success message is
 % not evidence; the state is).
 
+:- module(check_fill_baseline, []).
+
 :- set_prolog_flag(verbose, silent).
 :- use_module(library(lists)).
 :- use_module(library(apply)).
@@ -233,6 +235,15 @@ metric_delta(Spec, Row, Key, Str) :-
 % --- RECORD (ratchet the baseline to the measured numbers) -------------------
 
 do_record(BaselinePath, Baseline, Doc) :-
+    build_recorded_baseline(Baseline, Doc, Recorded),
+    write_record(BaselinePath, Recorded, Doc),
+    get_dict(results, Doc, Results),
+    get_dict(workloads, Baseline, WL0),
+    format("baseline updated and read-back verified: ~w~n~n", [BaselinePath]),
+    forall(member(Row, Results), report_recorded(WL0, Row)),
+    unmeasured_note(WL0, Results).
+
+build_recorded_baseline(Baseline, Doc, Recorded) :-
     get_dict(results, Doc, Results),
     get_dict(swi_prolog, Doc, RunSwi),
     current_host(RunHost),
@@ -242,13 +253,44 @@ do_record(BaselinePath, Baseline, Doc) :-
     new_rung_pairs(WL0, Results, NewPairs),
     append(Pairs1, NewPairs, Pairs2),
     dict_pairs(WL1, Tag, Pairs2),
-    B1 = Baseline.put(_{host: RunHost, swi_prolog: RunSwi, workloads: WL1}),
-    setup_call_cleanup(open(BaselinePath, write, S),
-                       json_write_dict(S, B1, [width(90)]),
-                       close(S)),
-    format("baseline updated: ~w~n~n", [BaselinePath]),
-    forall(member(Row, Results), report_recorded(WL0, Row)),
-    unmeasured_note(WL0, Results).
+    Recorded = Baseline.put(_{host: RunHost, swi_prolog: RunSwi, workloads: WL1}).
+
+write_record(BaselinePath, Recorded, Doc) :-
+    atom_concat(BaselinePath, '.tmp', TempPath),
+    setup_call_cleanup(
+        true,
+        ( setup_call_cleanup(open(TempPath, write, S),
+                             json_write_dict(S, Recorded, [width(90)]),
+                             close(S)),
+          verify_recorded_file(TempPath, Doc),
+          rename_file(TempPath, BaselinePath) ),
+        ( exists_file(TempPath) -> delete_file(TempPath) ; true )).
+
+verify_recorded_file(Path, Doc) :-
+    load_baseline(Path, Written),
+    get_dict(results, Doc, Results),
+    verify_recorded_results(Written, Results).
+
+verify_recorded_results(Written, Results) :-
+    get_dict(workloads, Written, Workloads),
+    forall(member(Row, Results), verify_recorded_row(Workloads, Row)).
+
+verify_recorded_row(Workloads, Row) :-
+    get_dict(rung, Row, Rung),
+    (   find_baseline(Workloads, Rung, Spec)
+    ->  verify_recorded_value(Rung, search_inf, Spec, Row.search_inf_med),
+        verify_recorded_value(Rung, load_inf, Spec, Row.load_inf),
+        verify_recorded_value(Rung, grid_inf, Spec, Row.grid_inf),
+        verify_recorded_value(Rung, cmd_wall_med_ms, Spec, Row.cmd_wall_med_ms),
+        verify_recorded_value(Rung, cmd_rss_med_kib, Spec, Row.cmd_rss_med_kib)
+    ;   throw(error(fill_record_readback_missing(Rung), _))
+    ).
+
+verify_recorded_value(Rung, Key, Spec, Expected) :-
+    (   get_dict(Key, Spec, Actual), Actual =:= Expected
+    ->  true
+    ;   throw(error(fill_record_readback_mismatch(Rung, Key, Expected), _))
+    ).
 
 record_pair(Results, K-V0, K-V1) :-
     ( result_for(Results, K, Row)
@@ -477,3 +519,7 @@ prolog:error_message(fill_baseline_missing(Path)) -->
     [ 'check_fill_baseline: ~w not found (regenerate with: make bench-fill-record)'-[Path] ].
 prolog:error_message(fill_bench_run_failed(Status)) -->
     [ 'check_fill_baseline: the fill product bench (run_fill.pl) failed: ~q'-[Status] ].
+prolog:error_message(fill_record_readback_missing(Rung)) -->
+    [ 'check_fill_baseline: recorded rung ~w is absent after baseline read-back'-[Rung] ].
+prolog:error_message(fill_record_readback_mismatch(Rung, Key, Expected)) -->
+    [ 'check_fill_baseline: recorded rung ~w field ~w does not equal measured value ~w after read-back'-[Rung, Key, Expected] ].

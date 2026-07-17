@@ -9,6 +9,7 @@
 :- use_module(library(process), [process_wait/2]).
 :- use_module(library(apply), [exclude/3]).
 :- use_module('../benchmarks/check_baseline.pl', []).
+:- use_module('../benchmarks/check_fill_baseline.pl', []).
 :- use_module('../benchmarks/bench_process.pl', [capture_process/6]).
 :- use_module('bench_core_caller.pl', []).
 
@@ -98,6 +99,55 @@ test(process_cleanup_waits_after_goal_exception) :-
     catch(process_wait(PID, _), ReapedError, true),
     assertion(nonvar(ReapedError)).
 
+test(fill_core_record_retains_heavy_and_verifies_readback) :-
+    fill_baseline_doc(['core'-fill_spec(core, 100, 200, 300),
+                       'heavy'-fill_spec(heavy, 500, 600, 700)], Baseline),
+    fill_result_row('core', core, 90, 190, 290, CoreRow),
+    run_temp_fill_record(Baseline, [CoreRow], Written),
+    fill_baseline_spec(Written, 'core', CoreSpec),
+    assertion(CoreSpec.search_inf =:= 90),
+    assertion(CoreSpec.load_inf =:= 190),
+    assertion(CoreSpec.grid_inf =:= 290),
+    fill_baseline_spec(Written, 'heavy', HeavySpec),
+    assertion(HeavySpec.search_inf =:= 500),
+    assertion(HeavySpec.load_inf =:= 600),
+    assertion(HeavySpec.grid_inf =:= 700).
+
+test(fill_new_rung_record_is_complete) :-
+    fill_baseline_doc([], Baseline),
+    fill_result_row('new', heavy, 321, 654, 987, NewRow),
+    run_temp_fill_record(Baseline, [NewRow], Written),
+    fill_baseline_spec(Written, 'new', Spec),
+    assertion(Spec.search_inf =:= 321),
+    assertion(Spec.load_inf =:= 654),
+    assertion(Spec.grid_inf =:= 987),
+    assertion(Spec.cmd_wall_med_ms =:= 12.5),
+    assertion(Spec.cmd_rss_med_kib =:= 12345),
+    assertion(Spec.grid_file == "grids/test.json"),
+    assertion(Spec.dict_file == "dicts/test.txt"),
+    assertion(Spec.seeds == "none"),
+    assertion(Spec.grid =:= 15),
+    assertion(Spec.words =:= 10),
+    assertion(Spec.tier == "heavy"),
+    assertion(Spec.iterations =:= 1),
+    assertion(Spec.warmup =:= 0),
+    assertion(Spec.budget =:= 800000000).
+
+test(fill_failed_write_leaves_live_baseline_unchanged) :-
+    fill_baseline_doc(['core'-fill_spec(core, 100, 200, 300)], Baseline),
+    fill_result_row('core', core, 90, 190, 290, Row0),
+    Row = Row0.put(cmd_wall_med_ms, not_json(foo)),
+    with_temp_fill_baseline(Baseline, Path,
+        ( catch(check_fill_baseline:do_record(
+                    Path, Baseline, _{swi_prolog:"10.1.10", results:[Row]}),
+                _, true),
+          check_fill_baseline:load_baseline(Path, Written),
+          fill_baseline_spec(Written, 'core', Spec),
+          get_dict(search_inf, Spec, SearchInf),
+          assertion(SearchInf =:= 100),
+          atom_concat(Path, '.tmp', TempPath),
+          assertion(\+ exists_file(TempPath)) )).
+
 :- end_tests(arrange_benchmark_promotion).
 
 baseline_doc(Pairs0, _{host:"test-host", swi_prolog:"10.1.10",
@@ -147,3 +197,40 @@ history_line_count(Path, Count) :-
     split_string(Text, "\n", "\n", Lines0),
     exclude(==(""), Lines0, Lines),
     length(Lines, Count).
+
+fill_baseline_doc(Pairs0, _{host:"test-host", swi_prolog:"10.1.10",
+                             regression_tolerance_pct:0.5,
+                             workloads:Workloads}) :-
+    maplist(fill_baseline_pair, Pairs0, Pairs),
+    dict_pairs(Workloads, workloads, Pairs).
+
+fill_baseline_pair(Name-fill_spec(Tier, Search, Load, Grid), Name-Spec) :-
+    Spec = _{search_inf:Search, load_inf:Load, grid_inf:Grid,
+             cmd_wall_med_ms:10.0, cmd_rss_med_kib:12000,
+             grid_file:"grids/original.json", dict_file:"dicts/original.txt",
+             seeds:"none", grid:15, words:10, tier:Tier,
+             iterations:1, warmup:0, budget:800000000,
+             info_only:["grid_inf", "cmd_wall_med_ms", "cmd_rss_med_kib"]}.
+
+fill_result_row(Rung, Tier, Search, Load, Grid,
+                _{rung:Rung, search_inf_med:Search, load_inf:Load,
+                  grid_inf:Grid, cmd_wall_med_ms:12.5,
+                  cmd_rss_med_kib:12345, grid_file:"grids/test.json",
+                  dict_file:"dicts/test.txt", seeds:"none", size:15,
+                  words:10, tier:Tier, iterations:1, warmup:0,
+                  budget:800000000}).
+
+run_temp_fill_record(Baseline, Rows, Written) :-
+    with_temp_fill_baseline(Baseline, Path,
+        ( check_fill_baseline:do_record(
+              Path, Baseline, _{swi_prolog:"10.1.10", results:Rows}),
+          check_fill_baseline:load_baseline(Path, Written) )).
+
+with_temp_fill_baseline(Baseline, Path, Goal) :-
+    tmp_file_stream(text, Path, Stream),
+    json_write_dict(Stream, Baseline),
+    close(Stream),
+    setup_call_cleanup(true, Goal, delete_file(Path)).
+
+fill_baseline_spec(Baseline, Rung, Spec) :-
+    check_fill_baseline:find_baseline(Baseline.workloads, Rung, Spec).
