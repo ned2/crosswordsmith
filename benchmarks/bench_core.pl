@@ -9,6 +9,9 @@
 
 :- module(bench_core, [ measure/3, inproc_sampler/2, process_sampler/5 ]).
 
+:- meta_predicate measure(1, +, -).
+:- meta_predicate inproc_sampler(0, -).
+
 :- use_module(library(lists)).
 :- use_module(library(apply)).
 :- use_module(library(process)).

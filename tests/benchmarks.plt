@@ -7,6 +7,7 @@
 :- use_module(library(readutil)).
 :- use_module(library(apply), [exclude/3]).
 :- use_module('../benchmarks/check_baseline.pl', []).
+:- use_module('bench_core_caller.pl', []).
 
 :- begin_tests(arrange_benchmark_promotion).
 
@@ -58,6 +59,14 @@ test(regression_rejected_without_writes) :-
           history_line_count(HistoryPath, HistoryLines),
           assertion(Fails =:= 1),
           assertion(HistoryLines =:= 0) )).
+
+test(meta_closures_resolve_in_caller_module) :-
+    bench_core_test_caller:measure_local(Summary),
+    assertion(Summary.stats.value.median =:= 7),
+    bench_core_test_caller:inproc_local(Sample),
+    assertion(number(Sample.wall)),
+    assertion(number(Sample.cpu)),
+    assertion(integer(Sample.inferences)).
 
 :- end_tests(arrange_benchmark_promotion).
 
