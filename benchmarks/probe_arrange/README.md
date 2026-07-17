@@ -108,3 +108,22 @@ make probe-arrange-seeds
 make probe-arrange-schema-test
 python3 benchmarks/probe_arrange/schema.py traces.jsonl
 ```
+
+## P-R0 pilot
+
+`run_pr0.py` is the base-locked, serial launcher for the registered fixed-instance
+pilot. It writes one fsynced authority row at a time, resumes by operation ID,
+and stops before exceeding 5,400 child CPU-seconds. Its only early stop is the
+registered all-censored condition after the first eight seeds.
+
+```sh
+python3 benchmarks/probe_arrange/run_pr0.py
+python3 benchmarks/probe_arrange/schema.py \
+  benchmarks/results/2026-07-17-p-r0-pilot.jsonl
+python3 benchmarks/probe_arrange/analyze_pr0.py \
+  benchmarks/results/2026-07-17-p-r0-pilot.jsonl
+```
+
+The launcher deliberately runs no instrumented row. The analysis treats
+standalone corners as screening distributions only; it does not reproduce or
+claim operation-wide memo or mutable-stream accounting.
