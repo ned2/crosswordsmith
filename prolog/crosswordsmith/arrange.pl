@@ -77,7 +77,6 @@
                 cell_coord/3,
                 init_gs/2,
                 start_loc/4,
-                start_locs/1,
                 next_cell/4,
                 fits_on_grid/4,
                 assign_word/9,
@@ -405,8 +404,10 @@ word_shares_letter(Entry, Words) :-
 % --- Phase 4: best-effort (drop) via the greedy constructor ----------------
 % Per the Phase-1.5 result, best-effort is served by metrics.pl's greedy
 % constructor (which drops words it cannot place), NOT a drop-branch on the
-% strict DFS. Construct over the seed x start-corner sweep on the given grid,
-% rescore, and pick lexicographically: most words placed, then highest reward.
+% strict DFS. Construct all four visible corner blocks on the given grid,
+% deriving each transpose partner from one directly searched representative,
+% then rescore and pick lexicographically: most words placed, then highest
+% reward.
 
 % Best greedy layout on GridLen. The key score(NumPlaced, Reward) compared in
 % standard term order ranks most-placed first, then highest reward.
@@ -414,16 +415,13 @@ arrange_best_effort(Words, GridLen, Numbered, Reward, NumPlaced, Dropped) :-
     % Top-level search entry: one memo reset per request (core.pl
     % reset_search_memos/0, C1/C48 - this greedy path never reset before, so
     % its tables grew without bound in persistent processes and its inference
-    % counts depended on call history). The seed x corner sweep below SHARES
+    % counts depended on call history). The two direct seed blocks below SHARE
     % the memos - do not reset per greedy_construct.
     reset_search_memos,
     arrange_weights(WCap, WTail),
-    seed_candidates(Words, Seeds),
-    start_locs(Locs),
+    greedy_constructions(Words, GridLen, Constructions),
     findall(score(NP, R)-pd(Placed, DroppedAnswers),
-            ( member(Loc, Locs),
-              member(Seed, Seeds),
-              greedy_construct(Words, GridLen, Loc, Seed, Placed, DroppedEntries),
+            ( member(gc(Placed, DroppedEntries), Constructions),
               length(Placed, NP),
               layout_reward(WCap, WTail, Placed, R),
               maplist(entry_answer, DroppedEntries, DroppedAnswers) ),
@@ -1047,19 +1045,17 @@ prolog:error_message(fragment_thin_off_grid(Answer, Row, Col, Dir, GridLen)) -->
 % to be calibrated against the fixtures alongside epsilon/target).
 candidate_tau_pct(30).
 
-% The candidate pool: every greedy construction over seed x start-corner,
-% ranked best-first by score(NumPlaced, Reward) in standard term order. Under
-% --strict only full placements are eligible. Each entry is tagged with its
+% The candidate pool: all four historical corner-major blocks, with each
+% transpose partner derived from a directly searched representative, ranked
+% best-first by score(NumPlaced, Reward) in standard term order. Under --strict
+% only full placements are eligible. Each entry is tagged with its
 % translation-invariant placement assoc (answer -> RelRow-RelCol-Dir).
 arrange_candidate_pool(Words, GridLen, DropContract, Pool) :-
     arrange_weights(WCap, WTail),
     length(Words, Total),
-    seed_candidates(Words, Seeds),
-    start_locs(Locs),
+    greedy_constructions(Words, GridLen, Constructions),
     findall(score(NP, R)-Placed,
-            ( member(Loc, Locs),
-              member(Seed, Seeds),
-              greedy_construct(Words, GridLen, Loc, Seed, Placed, _Dropped),
+            ( member(gc(Placed, _Dropped), Constructions),
               length(Placed, NP),
               ( DropContract == strict -> NP =:= Total ; true ),
               layout_reward(WCap, WTail, Placed, R) ),
@@ -1237,6 +1233,51 @@ seed_candidates(Words, Seeds) :-
     ;   Seeds = ByLenDesc ).
 
 answer_len(Entry, WLen) :- word_letters(Entry, _, WLen).
+
+% Build the four visible corner blocks in their historical order while directly
+% searching one representative per transpose pair. A failed source setup emits
+% neither source nor partner, matching the two symmetric old failures. Dropped
+% entries remain copies of the original input terms; they are never rebuilt from
+% answer atoms.
+greedy_constructions(Words, GridLen, Constructions) :-
+    seed_candidates(Words, Seeds),
+    greedy_direct_block(Words, GridLen, topleft_across, Seeds, TLA),
+    transpose_construction_block(TLA, GridLen, TLD),
+    greedy_direct_block(Words, GridLen, topright, Seeds, TR),
+    transpose_construction_block(TR, GridLen, BL),
+    append(TLA, TLD, TopLeft),
+    append(TR, BL, OtherCorners),
+    append(TopLeft, OtherCorners, Constructions).
+
+greedy_direct_block(Words, GridLen, Loc, Seeds, Block) :-
+    findall(gc(Placed, Dropped),
+            ( member(Seed, Seeds),
+              greedy_construct(Words, GridLen, Loc, Seed, Placed, Dropped) ),
+            Block).
+
+transpose_construction_block([], _GridLen, []).
+transpose_construction_block([gc(Placed,Dropped)|Constructions], GridLen,
+                             [gc(Transposed,TransposedDropped)|Rest]) :-
+    transpose_placed(Placed, GridLen, Transposed),
+    copy_term(Dropped, TransposedDropped),
+    transpose_construction_block(Constructions, GridLen, Rest).
+
+transpose_placed([], _GridLen, []).
+transpose_placed([pw(A,L,Cells,Dir,Len,Start,End,_)|Placed], GridLen,
+                 [pw(A,L,TCells,TDir,Len,TStart,TEnd,_)|Transposed]) :-
+    maplist(transpose_cell(GridLen), Cells, TCells),
+    transpose_dir(Dir, TDir),
+    transpose_cell(GridLen, Start, TStart),
+    transpose_cell(GridLen, End, TEnd),
+    transpose_placed(Placed, GridLen, Transposed).
+
+transpose_cell(GridLen, Cell, Transposed) :-
+    Row is (Cell - 1) // GridLen,
+    Col is (Cell - 1) mod GridLen,
+    Transposed is Col * GridLen + Row + 1.
+
+transpose_dir(across, down).
+transpose_dir(down, across).
 
 % --- greedy construction from one start location --------------------------
 

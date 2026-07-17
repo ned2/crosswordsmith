@@ -34,12 +34,14 @@ test(semantic_counter_partitions) :-
               Counters.legality_probes),
     assertion(Counters.legality_successes =:= Counters.scored_candidates),
     assertion(Counters.start_lt_one =< Counters.legality_rejects),
-    assertion(Counters.generated_crossing_descriptors =:= 2119),
-    assertion(Counters.legality_rejects =:= 1771),
-    assertion(Counters.scored_candidates =:= 348),
-    assertion(Counters.score_cell_visits =:= 9048),
-    assertion(Counters.rejected_score_cell_visits_avoided =:= 7280),
-    assertion(Counters.start_lt_one =:= 1491).
+    assertion(Counters.generated_crossing_descriptors =:= 1308),
+    assertion(Counters.legality_rejects =:= 1134),
+    assertion(Counters.scored_candidates =:= 174),
+    assertion(Counters.score_cell_visits =:= 4524),
+    assertion(Counters.rejected_score_cell_visits_avoided =:= 3640),
+    assertion(Counters.start_lt_one =:= 994),
+    assertion(Counters.direct_attempted_constructions =:= 10),
+    assertion(Counters.completed_constructions =:= 10).
 
 test(candidate_phases_match_product) :-
     load_clues('fixtures/benchmark_08_words.pl', Words),
@@ -116,6 +118,48 @@ test(g2_transpose_is_involution_with_fresh_clue_vars) :-
     assertion(SourceNum \== OnceNum), assertion(SourceNum \== TwiceNum),
     assertion(OnceNum \== TwiceNum).
 
+test(g2_product_transpose_geometry_and_fresh_clue_vars) :-
+    Placed = [pw('CAT',[c,a,t],[1,2,3],across,3,1,3,SourceNum1),
+              pw('CAR',[c,a,r],[1,8,15],down,3,1,15,SourceNum2)],
+    crosswordsmith_arrange:transpose_placed(Placed, 7, Once),
+    crosswordsmith_arrange:transpose_placed(Once, 7, Twice),
+    Once = [pw('CAT',[c,a,t],[1,8,15],down,3,1,15,OnceNum1),
+            pw('CAR',[c,a,r],[1,2,3],across,3,1,3,OnceNum2)],
+    Twice = [pw('CAT',[c,a,t],[1,2,3],across,3,1,3,TwiceNum1),
+             pw('CAR',[c,a,r],[1,8,15],down,3,1,15,TwiceNum2)],
+    term_variables([SourceNum1,SourceNum2,OnceNum1,OnceNum2,
+                    TwiceNum1,TwiceNum2], ClueVars),
+    assertion(length(ClueVars, 6)).
+
+test(g2_product_preserves_four_corner_block_order) :-
+    Words = [['CAT', _{sample:only}]],
+    crosswordsmith_arrange:greedy_constructions(Words, 7, Constructions),
+    maplist(construction_seed_start_dir, Constructions, StartsDirs),
+    assertion(StartsDirs == [1-across,1-down,7-down,43-across]).
+
+test(g2_product_omits_symmetric_setup_failures) :-
+    g2_transpose_probe:additional_sample(
+        setup_failure, Words, 3, _Command, setup_failure),
+    crosswordsmith_arrange:greedy_constructions(Words, 3, Constructions),
+    assertion(length(Constructions, 8)),
+    maplist(construction_seed_start_dir, Constructions, StartsDirs),
+    assertion(StartsDirs == [1-across,1-across,1-down,1-down,
+                             3-down,3-down,7-across,7-across]).
+
+test(g2_product_preserves_dropped_terms_order_and_fresh_copies) :-
+    Words = [['CAT',meta(CatTag)],['CAR',meta(CarTag)],['DOG',meta(DogTag)]],
+    crosswordsmith_arrange:greedy_constructions(Words, 7, Constructions),
+    Constructions = [gc(_,DroppedSource),gc(_,_)|_],
+    nth0(3, Constructions, gc(_,DroppedPartner)),
+    assertion(DroppedSource =@= [['DOG',meta(_)] ]),
+    assertion(DroppedPartner =@= [['DOG',meta(_)] ]),
+    DroppedSource = [['DOG',meta(SourceTag)]],
+    DroppedPartner = [['DOG',meta(PartnerTag)]],
+    assertion(SourceTag \== PartnerTag),
+    assertion(SourceTag \== DogTag),
+    assertion(PartnerTag \== DogTag),
+    assertion(var(CatTag)), assertion(var(CarTag)).
+
 test(g2_additional_samples_cover_required_behaviors) :-
     findall(Row,
             ( g2_transpose_probe:additional_sample(Id, Words, Size, Command, Behavior),
@@ -137,5 +181,10 @@ test(g2_additional_samples_cover_required_behaviors) :-
 attempt_slot(Attempt, Corner-SeedAnswer) :-
     get_dict(corner, Attempt, Corner),
     get_dict(seed_answer, Attempt, SeedAnswer).
+
+construction_seed_start_dir(gc(Placed, _Dropped), Start-Dir) :-
+    last(Placed, PW),
+    pw_start(PW, Start),
+    pw_dir(PW, Dir).
 
 :- end_tests(greedy_benchmark).

@@ -56,10 +56,10 @@ construction_operation(Words, GridLen, SeedAnswer, Corner, Expected, Outcome) :-
     ; throw(error(greedy_construction_outcome(Expected, Outcome), _))
     ).
 
-% Primary gated subject: unchanged product greedy_construct/layout_reward calls
-% over the direct member(Loc),member(Seed) product. No semantic counter executes
-% here. The single reset is outside the corner/seed loops, so all constructions
-% share product memos exactly as arrange_candidate_pool/4 does.
+% Primary gated subject: the product's two directly searched blocks plus their
+% derived visible partners. No semantic counter executes here. The single reset
+% is outside the construction helper, so both direct blocks share product memos
+% exactly as arrange_candidate_pool/4 does.
 sweep_sampler(Words, GridLen, Command, Sample) :-
     inproc_sampler(greedy_subjects:sweep_operation(Words, GridLen, Command, _), Sample).
 
@@ -71,36 +71,27 @@ build_raw_pool(Words, GridLen, Command, Raw) :-
     crosswordsmith_core:reset_search_memos,
     raw_pool_no_reset(Command, Words, GridLen, Raw).
 
-% Exact pre-sort twin of arrange_candidate_pool/4, lines 1053-1064. Keep the
-% conjunction and template in lockstep with product code: candidates Raw carries
-% Placed only and strict eligibility is tested before layout_reward/4.
+% Exact pre-sort twin of arrange_candidate_pool/4. Candidates Raw carries Placed
+% only and strict eligibility is tested before layout_reward/4.
 raw_pool_no_reset(candidates(DropContract, _K), Words, GridLen, Raw) :-
     crosswordsmith_arrange:arrange_weights(WCap, WTail),
     length(Words, Total),
-    crosswordsmith_arrange:seed_candidates(Words, Seeds),
-    start_locs(Locs),
+    crosswordsmith_arrange:greedy_constructions(Words, GridLen, Constructions),
     findall(score(NP, Reward)-Placed,
-            ( member(Loc, Locs),
-              member(Seed, Seeds),
-              crosswordsmith_arrange:greedy_construct(
-                  Words, GridLen, Loc, Seed, Placed, _Dropped),
+            ( member(gc(Placed, _Dropped), Constructions),
               length(Placed, NP),
               ( DropContract == strict -> NP =:= Total ; true ),
               crosswordsmith_arrange:layout_reward(
                   WCap, WTail, Placed, Reward) ),
             Raw).
 
-% Exact pre-sort twin of arrange_best_effort/6, lines 418-428. Best-effort Raw
-% carries ordered dropped ANSWERS, with that map performed inside the sweep.
+% Exact pre-sort twin of arrange_best_effort/6. Best-effort Raw carries ordered
+% dropped ANSWERS, with that map performed inside the sweep.
 raw_pool_no_reset(best_effort, Words, GridLen, Raw) :-
     crosswordsmith_arrange:arrange_weights(WCap, WTail),
-    crosswordsmith_arrange:seed_candidates(Words, Seeds),
-    start_locs(Locs),
+    crosswordsmith_arrange:greedy_constructions(Words, GridLen, Constructions),
     findall(score(NP, Reward)-pd(Placed, DroppedAnswers),
-            ( member(Loc, Locs),
-              member(Seed, Seeds),
-              crosswordsmith_arrange:greedy_construct(
-                  Words, GridLen, Loc, Seed, Placed, DroppedEntries),
+            ( member(gc(Placed, DroppedEntries), Constructions),
               length(Placed, NP),
               crosswordsmith_arrange:layout_reward(
                   WCap, WTail, Placed, Reward),
@@ -162,7 +153,7 @@ mode_args(best_effort, ['--best-effort']).
 % Benchmark-only exact replay twin and semantic counters.
 % ---------------------------------------------------------------------------
 
-new_counter(counter(0, 0, 0, 0, 0, 0, 0, 0, 0, 0)).
+new_counter(counter(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)).
 
 counter_inc(I, Counter) :-
     arg(I, Counter, N0),
@@ -181,14 +172,15 @@ counter_dict(C, _{generated_crossing_descriptors:Generated,
                   rejected_percentage:RejectedPct,
                   scored_candidates:Scored,
                   score_cell_visits:Visits,
-                  rejected_score_cell_visits_avoided:AvoidedVisits,
-                  start_lt_one:Underflows,
-                  greedy_steps:Steps,
-                  completed_constructions:Completed}) :-
+                   rejected_score_cell_visits_avoided:AvoidedVisits,
+                   start_lt_one:Underflows,
+                   greedy_steps:Steps,
+                   completed_constructions:Completed,
+                   direct_attempted_constructions:Attempted}) :-
     arg(1, C, Generated), arg(2, C, Probes), arg(3, C, Successes),
     arg(4, C, Rejects), arg(5, C, Scored), arg(6, C, Visits),
     arg(7, C, AvoidedVisits), arg(8, C, Underflows),
-    arg(9, C, Steps), arg(10, C, Completed),
+    arg(9, C, Steps), arg(10, C, Completed), arg(11, C, Attempted),
     ( Probes =:= 0 -> RejectedPct = 0.0
     ; RejectedPct is 100.0 * Rejects / Probes
     ).
@@ -206,12 +198,14 @@ semantic_counters(Words, GridLen, Command, Counters) :-
     crosswordsmith_core:reset_search_memos,
     new_counter(C),
     crosswordsmith_arrange:seed_candidates(Words, Seeds),
-    start_locs(Locs),
+    Locs = [topleft_across, topright],
     forall((member(Loc, Locs), member(Seed, Seeds)),
-           replay_pair_checked(Words, GridLen, Loc, Seed, C)),
+           ( counter_inc(11, C),
+             replay_pair_checked(Words, GridLen, Loc, Seed, C) )),
     % Command is intentionally accepted to pin the same manifest subject. The
-    % semantic sweep observes every attempted direct construction, including
-    % setup failures, before strict eligibility filtering.
+    % semantic sweep observes every product direct construction, including setup
+    % failures, before strict eligibility filtering. The independent identity
+    % observer below deliberately remains a four-corner direct replay.
     nonvar(Command),
     counter_dict(C, Counters).
 

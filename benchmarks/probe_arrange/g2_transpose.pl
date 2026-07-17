@@ -1,8 +1,8 @@
 % A-G2 measurement-only direct greedy transpose probe.
 %
-% This is deliberately benchmark code. It enumerates the unchanged product's
-% four corner-major, seed-major construction blocks and compares direct results;
-% it does not synthesize entries for the product candidate pool.
+% This is deliberately benchmark code. It independently enumerates the old
+% four corner-major, seed-major direct construction blocks and compares them to
+% the product's synthesized raw pool.
 
 :- module(g2_transpose_probe,
           [ probe_all/1,
