@@ -1,5 +1,6 @@
 :- use_module(library(plunit)).
 :- use_module('../benchmarks/probe_arrange/probe_arrange.pl').
+:- use_module('../benchmarks/probe_arrange/ad1_buckets.pl').
 
 :- begin_tests(probe_arrange).
 
@@ -56,6 +57,25 @@ test(full_observer_preserves_exact_decision_order) :-
     same_twin_result(Lean, Full),
     LS.decision_trace == FS.decision_trace,
     length(FS.decision_trace, FS.decisions).
+
+test(ad1_assoc_and_direct_count_selection_decision_traces_match,
+     [forall((member(Fixture-Grid-Count,
+                     ['fixtures/ladder_09x09_08w.pl'-9-8,
+                      'fixtures/ladder_15x15_12w.pl'-15-12,
+                      'fixtures/ladder_15x15_32w.pl'-15-32,
+                      'fixtures/ladder_21x21_80w.pl'-21-80]),
+              member(Corner, [topleft_across,topright])))]) :-
+    probe_arrange:load_fixture(Fixture, Count, Words),
+    probe_arrange_ad1:ad1_corner(
+        assoc, Words, Grid, Corner, null, Assoc, AssocCounts, AssocDecisions),
+    probe_arrange_ad1:ad1_corner(
+        direct, Words, Grid, Corner, null, Direct, DirectCounts, DirectDecisions),
+    AssocCounts == DirectCounts,
+    AssocDecisions == DirectDecisions,
+    Assoc = result(AssocPlaced, Reward),
+    Direct = result(DirectPlaced, Reward),
+    probe_arrange:layout_signature(AssocPlaced, Signature),
+    probe_arrange:layout_signature(DirectPlaced, Signature).
 
 test(canonical_state_key_is_absolute_and_orientation_sensitive) :-
     Words = [['ONE'],['TWO']],

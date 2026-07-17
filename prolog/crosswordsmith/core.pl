@@ -42,6 +42,7 @@
             check_word_fits/5,
             find_intersecting_word/6,
             assign_words_inc/9,
+            assign_words_direct/8,
             find_crossword/6,
             all_crossword/5,
             % the memo-hygiene seam every top-level search entry runs
@@ -692,6 +693,143 @@ assign_words_inc([W|Ws], PlacedWords, StateIn, GridLen, Start, Dir, GIn, GOut, O
     assign_word(Answer, Letters, WLen, Start, Dir, GridLen, GIn, Placed, G1),
     assign_words_inc(RemWords, [Placed|PlacedWords], StateOut, GridLen,
                      _Start, _Dir, G1, GOut, Out).
+
+%!  assign_words_direct(+Words:list, +Placed0:list, +GridLen:integer,
+%!                      ?Start:integer, ?Dir:atom, +GSIn, -GSOut,
+%!                      -PlacedWords:list) is nondet.
+%
+%   Strict-search-only twin of assign_words_inc/9 using stable input-order
+%   integer IDs and one fixed-arity, backtrackable count term. The visible
+%   bucket for remaining ID I is argument I of that term. Letter-sharing words
+%   are refreshed after a placement; non-sharing words retain their previous
+%   (possibly stale) 0/1/2 bucket exactly as in the assoc implementation.
+%   Ordinary setarg/3 updates are restored by the trail on backtracking.
+%
+%   The tagged entries retain the original, possibly non-ground input terms;
+%   selection and removal use the integer ID rather than term identity. The
+%   final unused argument of the count term is an unshared variable, following
+%   the SWI setarg/3 guidance that prevents accidental sharing on term copies.
+assign_words_direct(Words, Placed0, GridLen, Start, Dir, GIn, GOut, Out) :-
+    tag_words(Words, Tagged),
+    length(Words, Count),
+    Arity is Count + 1,
+    functor(Buckets, buckets, Arity),
+    state_perturb(none, Perturb),
+    assign_words_direct_(Tagged, Placed0, direct(Buckets, none, Perturb),
+                         GridLen, Start, Dir, GIn, GOut, Out).
+
+assign_words_direct_([], P, _State, _, _, _, G, G, P).
+assign_words_direct_([W|Ws], PlacedWords, StateIn, GridLen, Start, Dir,
+                     GIn, GOut, Out) :-
+    Words = [W|Ws],
+    select_direct(Words, PlacedWords, StateIn, GridLen, Start, Dir, GIn,
+                  Tagged, RemWords, StateOut),
+    Tagged = wid(_ID, Entry),
+    Entry = [Answer|_],
+    entry_letters(Entry, Letters),
+    length(Letters, WLen),
+    find_intersecting_word(Letters, WLen, PlacedWords, GridLen, Start, Dir),
+    assign_word(Answer, Letters, WLen, Start, Dir, GridLen, GIn, Placed, G1),
+    assign_words_direct_(RemWords, [Placed|PlacedWords], StateOut, GridLen,
+                         _Start, _Dir, G1, GOut, Out).
+
+% Stable IDs are positional and therefore independent of entry identity or
+% metadata variables. Wrapping retains each original entry without copying it.
+tag_words(Words, Tagged) :-
+    tag_words_(Words, 1, Tagged).
+
+tag_words_([], _, []).
+tag_words_([Entry|Entries], ID, [wid(ID, Entry)|Tagged]) :-
+    ID1 is ID + 1,
+    tag_words_(Entries, ID1, Tagged).
+
+% The seed branch preserves the existing seeded permutation and input-order
+% behavior. Counts are first populated at the following interior node.
+select_direct(Words, [], direct(Buckets, _LastLetters, Perturb),
+              _GridLen, _Start, _Dir, _GIn,
+              Tagged, RemWords, direct(Buckets, EntryLetters, Perturb)) :-
+    seed_word_order(Words, SeedOrder),
+    member(Tagged, SeedOrder),
+    Tagged = wid(ID, Entry),
+    remove_word_id(ID, Words, RemWords),
+    entry_letters(Entry, EntryLetters).
+select_direct(Words, [P|Ps], direct(Buckets, LastLetters, Perturb),
+              GridLen, Start, Dir, GIn,
+              Tagged, RemWords, direct(Buckets, EntryLetters, Perturb)) :-
+    PlacedWords = [P|Ps],
+    refresh_direct_counts(Words, Buckets, LastLetters, PlacedWords,
+                          GridLen, Start, Dir, GIn),
+    direct_partitions(Words, Buckets, Ones, Twos),
+    direct_order(Perturb, Ones, Twos, Ordered),
+    member(Tagged, Ordered),
+    Tagged = wid(ID, Entry),
+    remove_word_id(ID, Words, RemWords),
+    entry_letters(Entry, EntryLetters).
+
+% At the first interior node every remaining argument is fresh and receives a
+% full count. Thereafter only letter-sharing IDs are overwritten; all other
+% arguments retain the old assoc path's visible stale overestimate.
+refresh_direct_counts([], _, _, _, _, _, _, _).
+refresh_direct_counts([wid(ID, Entry)|Words], Buckets, LastLetters,
+                      PlacedWords, GridLen, Start, Dir, GIn) :-
+    arg(ID, Buckets, Previous),
+    (   var(Previous)
+    ->  direct_recount(ID, Entry, Buckets, PlacedWords,
+                       GridLen, Start, Dir, GIn)
+    ;   entry_letters(Entry, ELetters),
+        (   shares_letter(ELetters, LastLetters)
+        ->  direct_recount(ID, Entry, Buckets, PlacedWords,
+                           GridLen, Start, Dir, GIn)
+        ;   true
+        )
+    ),
+    refresh_direct_counts(Words, Buckets, LastLetters, PlacedWords,
+                          GridLen, Start, Dir, GIn).
+
+direct_recount(ID, Entry, Buckets, PlacedWords, GridLen, Start, Dir, GIn) :-
+    mrv_count(2, PlacedWords, GridLen, Start, Dir, GIn, Entry, Count),
+    setarg(ID, Buckets, Count).
+
+% A stable one-pass partition is equivalent to stable keysort/2 over the only
+% positive capped keys, 1 and 2. Bucket 0 remains visible in Buckets but is not
+% offered as a candidate, matching positive_key/1 on the assoc path.
+direct_partitions(Words, Buckets, Ones, Twos) :-
+    direct_partitions_(Words, Buckets, Ones, [], Twos, []).
+
+direct_partitions_([], _, Ones, Ones, Twos, Twos).
+direct_partitions_([Tagged|Words], Buckets, Ones0, Ones, Twos0, Twos) :-
+    Tagged = wid(ID, _),
+    arg(ID, Buckets, Count),
+    direct_bucket(Count, Tagged, Ones0, Ones1, Twos0, Twos1),
+    direct_partitions_(Words, Buckets, Ones1, Ones, Twos1, Twos).
+
+direct_bucket(0, _, Ones, Ones, Twos, Twos).
+direct_bucket(1, Tagged, [Tagged|Ones], Ones, Twos, Twos).
+direct_bucket(2, Tagged, Ones, Ones, [Tagged|Twos], Twos).
+
+direct_order(false, Ones, Twos, Ordered) :-
+    append(Ones, Twos, Ordered).
+direct_order(true, [], Twos, Ordered) :-
+    direct_shuffle_nonempty(Twos, Ordered).
+direct_order(true, [One|Ones], [], Ordered) :-
+    seeded_permutation([One|Ones], Ordered).
+direct_order(true, [One|Ones], [Two|Twos], Ordered) :-
+    seeded_permutation([One|Ones], ShuffledOnes),
+    seeded_permutation([Two|Twos], ShuffledTwos),
+    append(ShuffledOnes, ShuffledTwos, Ordered).
+
+direct_shuffle_nonempty([], []).
+direct_shuffle_nonempty([X|Xs], Ordered) :-
+    seeded_permutation([X|Xs], Ordered).
+
+remove_word_id(_, [], []).
+remove_word_id(ID, [Tagged|Words], Rest) :-
+    Tagged = wid(Here, _),
+    (   ID == Here
+    ->  Rest = Words
+    ;   Rest = [Tagged|Tail],
+        remove_word_id(ID, Words, Tail)
+    ).
 
 % --- search perturbation (the arrange --seed knob) --------------------------
 % The mrv_inc search is DETERMINISTIC by default. With no seed installed,

@@ -83,6 +83,7 @@
                 check_word_fits/5,
                 find_intersecting_word/6,
                 assign_words_inc/9,
+                assign_words_direct/8,
                 all_crossword/5,
                 % the C1/C48 memo-hygiene seam: run ONCE at each of this
                 % module's top-level search entries (see core.pl)
@@ -340,18 +341,18 @@ construct_one(Loc, Words, GridLen, WCap, WTail, Budget, Res) :-
     ;   layout_reward(WCap, WTail, Found, R), Res = ok(R, Found)
     ).
 
-% One strict corner: core's mrv_inc driver composed DIRECTLY (init_gs +
-% start_loc + assign_words_inc, the same primitives construct_from_seed
-% composes for the fragment path), NOT via find_crossword/6 - that entry runs
+% One strict corner: core's direct-bucket MRV driver composed DIRECTLY (init_gs
+% + start_loc + assign_words_direct), NOT via find_crossword/6 - that entry runs
 % reset_search_memos/0 on every call (it is its own top-level seam), which
 % would flush the memo tables between corners. arrange_best_layout/6 owns
 % this request's single reset; the corners share the memos (C1 consolidation:
-% exactly one reset per external call).
+% exactly one reset per external call). Fragment and enumerate retain the
+% assoc-backed assign_words_inc/9 path; this representation is strict-only.
 corner_search(Loc, Words, GridLen, PlacedWords) :-
     init_gs(GridLen, G1),
     start_loc(Loc, GridLen, StartNum, StartDir),
-    assign_words_inc(Words, [], none, GridLen, StartNum, StartDir,
-                     G1, _Grid, PlacedWords).
+    assign_words_direct(Words, [], GridLen, StartNum, StartDir,
+                        G1, _Grid, PlacedWords).
 
 % Construct the best strict layout, emit it (framed by SizeMode) on stdout,
 % report on stderr. On any non-placed outcome: report + fail with no stdout

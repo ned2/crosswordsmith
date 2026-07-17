@@ -185,6 +185,72 @@ test(matches_reference, [forall(member(L, [[], [x], [x,y], [x,y,z], [x,y,z,w]]))
 :- end_tests(count_upto2).
 
 
+% Strict direct count buckets (A-D1)
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+:- begin_tests(direct_buckets).
+
+test(stable_ids_do_not_depend_on_nonground_entry_identity) :-
+    Words = [First0, Second0],
+    First0 = ['ONE', _{slot:X}], Second0 = ['TWO', _{slot:Y}],
+    copy_term(Words, Copied),
+    Copied = [CopiedFirst0, CopiedSecond0],
+    CopiedFirst0 = ['ONE', _{slot:CX}],
+    CopiedSecond0 = ['TWO', _{slot:CY}],
+    X \== CX, Y \== CY,
+    crosswordsmith_core:tag_words(Words, Tagged),
+    crosswordsmith_core:tag_words(Copied, CopiedTagged),
+    Tagged = [wid(1, First), wid(2, Second)],
+    CopiedTagged = [wid(1, CopiedFirst), wid(2, CopiedSecond)],
+    First == First0,
+    Second == Second0,
+    CopiedFirst == CopiedFirst0,
+    CopiedSecond == CopiedSecond0.
+
+test(stable_bucket_ties_keep_input_order) :-
+    Words = [['A'], ['B'], ['C'], ['D'], ['E']],
+    crosswordsmith_core:tag_words(Words, Tagged),
+    Buckets = buckets(2, 1, 1, 2, 0, _Guard),
+    crosswordsmith_core:direct_partitions(Tagged, Buckets, Ones, Twos),
+    append(Ones, Twos, Ordered),
+    findall(ID, member(wid(ID, _), Ordered), IDs),
+    IDs == [2, 3, 1, 4].
+
+test(nonsharing_word_retains_stale_visible_bucket) :-
+    crosswordsmith_core:tag_words([['XYZ', _{meta:_}]], Tagged),
+    Buckets = buckets(2, _Guard),
+    crosswordsmith_core:refresh_direct_counts(
+        Tagged, Buckets, [a], _Placed, _Grid, _Start, _Dir, _GS),
+    arg(1, Buckets, Count),
+    Count =:= 2.
+
+test(setarg_bucket_update_restores_on_backtracking) :-
+    Buckets = buckets(1, _Guard),
+    (   setarg(1, Buckets, 2), arg(1, Buckets, 2), fail
+    ;   arg(1, Buckets, Restored), Restored =:= 1
+    ).
+
+test(full_tree_solution_count_matches_assoc_reference) :-
+    Words = [['OMEGA POINT', _{meta:_}],
+             ['GNOSTIC GOSPELS', _{meta:_}]],
+    crosswordsmith_core:reset_search_memos,
+    aggregate_all(count,
+        ( init_gs(17, GS0),
+          start_loc(topleft_across, 17, Start0, Dir0),
+          assign_words_inc(Words, [], none, 17, Start0, Dir0, GS0, _, _) ),
+        AssocCount),
+    crosswordsmith_core:reset_search_memos,
+    aggregate_all(count,
+        ( init_gs(17, GS1),
+          start_loc(topleft_across, 17, Start1, Dir1),
+          assign_words_direct(Words, [], 17, Start1, Dir1, GS1, _, _) ),
+        DirectCount),
+    DirectCount =:= AssocCount,
+    DirectCount > 0.
+
+:- end_tests(direct_buckets).
+
+
 % The solver
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
