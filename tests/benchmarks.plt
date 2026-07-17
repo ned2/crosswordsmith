@@ -11,7 +11,9 @@
 :- use_module('../benchmarks/check_baseline.pl', []).
 :- use_module('../benchmarks/check_fill_baseline.pl', []).
 :- use_module('../benchmarks/bench_process.pl', [capture_process/6]).
-:- use_module('../benchmarks/bench_cli.pl', [checker_mode/3]).
+:- use_module('../benchmarks/bench_cli.pl',
+              [checker_mode/3, exact_runner_args/2]).
+:- use_module('../benchmarks/bench_exact.pl', [exact_metric/4]).
 :- use_module('bench_core_caller.pl', []).
 
 :- begin_tests(arrange_benchmark_promotion).
@@ -81,6 +83,65 @@ test(sample_schema_rejects_added_numeric_metric,
      [throws(error(bench_sample_schema_mismatch([wall], [rss,wall]), _))]) :-
     bench_core:summarize_samples([_{tag:ok, wall:1},
                                   _{rss:2, tag:ok, wall:3}], _).
+
+test(exact_mode_rejects_one_inference_increase) :-
+    exact_arrange_fails(101, "10.1.10", Fails),
+    assertion(Fails =:= 1),
+    exact_metric(100, 101, increase, 1).
+
+test(exact_mode_rejects_one_inference_decrease) :-
+    exact_arrange_fails(99, "10.1.10", Fails),
+    assertion(Fails =:= 1),
+    exact_metric(100, 99, decrease, 1).
+
+test(exact_mode_accepts_identical_inferences) :-
+    exact_arrange_fails(100, "10.1.10", Fails),
+    assertion(Fails =:= 0).
+
+test(exact_mode_uses_reference_gate) :-
+    baseline_doc(['core.pl'-spec(core, inf, 100)], Baseline),
+    result_row('core.pl', core, latency, 101, Row),
+    with_output_to(string(_),
+                   check_arrange_baseline:do_exact_check(
+                       Baseline, _{swi_prolog:"10.1.10", results:[Row]}, Fails)),
+    assertion(Fails =:= 1).
+
+test(exact_mode_skips_reference_latency_metric) :-
+    baseline_doc(['latency.pl'-spec(heavy, latency, 100)], Baseline),
+    result_row('latency.pl', heavy, inf, 101, Row),
+    with_output_to(string(_),
+                   check_arrange_baseline:do_exact_check(
+                       Baseline, _{swi_prolog:"10.1.10", results:[Row]}, Fails)),
+    assertion(Fails =:= 0).
+
+test(exact_mode_requires_same_swi) :-
+    exact_arrange_fails(100, "99.0.0", Fails),
+    assertion(Fails =:= 1).
+
+test(exact_mode_requires_every_core_and_heavy_row) :-
+    baseline_doc(['core.pl'-spec(core, inf, 100),
+                  'heavy.pl'-spec(heavy, inf, 200)], Baseline),
+    result_row('core.pl', core, inf, 100, CoreRow),
+    with_output_to(string(_),
+                   check_arrange_baseline:do_exact_check(
+                       Baseline, _{swi_prolog:"10.1.10", results:[CoreRow]}, Fails)),
+    assertion(Fails =:= 1).
+
+test(exact_mode_forces_full_ladder) :-
+    checker_mode(['--exact'], exact, []),
+    exact_runner_args([], ['--heavy']).
+
+test(exact_mode_rejects_partial_selection,
+     [throws(error(bench_exact_args(['--fixture', core]), _))]) :-
+    exact_runner_args(['--fixture', core], _).
+
+test(fill_exact_mode_checks_load_inferences) :-
+    fill_baseline_doc(['core'-fill_spec(core, 100, 200, 300)], Baseline),
+    fill_result_row('core', core, 100, 199, 300, Row),
+    with_output_to(string(_),
+                   check_fill_baseline:do_exact_check(
+                       Baseline, _{swi_prolog:"10.1.10", results:[Row]}, Fails)),
+    assertion(Fails =:= 1).
 
 test(dual_capture_drains_large_stderr_before_stdout_close) :-
     Goal = 'forall(between(1,1048576,_),put_char(user_error,x)),format("done"),close(user_output)',
@@ -289,6 +350,13 @@ with_temp_fill_baseline(Baseline, Path, Goal) :-
 
 fill_baseline_spec(Baseline, Rung, Spec) :-
     check_fill_baseline:find_baseline(Baseline.workloads, Rung, Spec).
+
+exact_arrange_fails(Measured, Swi, Fails) :-
+    baseline_doc(['core.pl'-spec(core, inf, 100)], Baseline),
+    result_row('core.pl', core, inf, Measured, Row),
+    with_output_to(string(_),
+                   check_arrange_baseline:do_exact_check(
+                       Baseline, _{swi_prolog:Swi, results:[Row]}, Fails)).
 
 runner_script('benchmarks/run_arrange.pl').
 runner_script('benchmarks/run_fill.pl').

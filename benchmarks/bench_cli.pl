@@ -1,7 +1,8 @@
 :- module(bench_cli,
-          [ validate_runner_options/5,
-            require_selected/3,
-            checker_mode/3
+           [ validate_runner_options/5,
+             require_selected/3,
+             checker_mode/3,
+             exact_runner_args/2
           ]).
 
 :- use_module(library(apply), [exclude/3]).
@@ -49,9 +50,19 @@ checker_mode_arg('--history', history).
 checker_mode_arg('--log', log).
 checker_mode_arg('--record', record).
 checker_mode_arg('--promote', promote).
+checker_mode_arg('--exact', exact).
 
 is_checker_mode_arg(Arg) :-
     checker_mode_arg(Arg, _).
+
+%!  exact_runner_args(+RunnerArgs, -FullRunnerArgs) is det.
+%
+%   Exact comparison always covers the complete core and heavy ladder. Reject
+%   selection and sampling overrides that would make the proof partial.
+exact_runner_args(RunnerArgs, ['--heavy']) :-
+    exclude(==('--heavy'), RunnerArgs, OtherArgs),
+    ( OtherArgs == [] -> true
+    ; throw(error(bench_exact_args(OtherArgs), _)) ).
 
 :- multifile prolog:error_message//1.
 prolog:error_message(bench_positional_args(Tool, Args)) -->
@@ -66,3 +77,5 @@ prolog:error_message(bench_conflicting_modes(Modes)) -->
     [ 'benchmark checker modes conflict: ~q'-[Modes] ].
 prolog:error_message(bench_history_args(Args)) -->
     [ 'benchmark history mode accepts no additional arguments: ~q'-[Args] ].
+prolog:error_message(bench_exact_args(Args)) -->
+    [ 'benchmark exact mode accepts no selection or sampling overrides: ~q'-[Args] ].

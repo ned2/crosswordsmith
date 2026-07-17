@@ -2,15 +2,19 @@
 % benchmarks/check_greedy_baseline.pl - independent greedy inference ratchet.
 % Construction, sweep, and postprocess inferences gate at 0.5%; sweep is the
 % primary metric. Command wall/RSS and semantic counters are informational.
+% --exact requires same-SWI equality over every core and heavy gated metric.
 
 :- set_prolog_flag(verbose, silent).
 :- use_module(library(apply), [foldl/4]).
 :- use_module(library(filesex), [directory_file_path/3]).
 :- use_module(library(json)).
 :- use_module(library(lists)).
+:- use_module(library(pairs), [pairs_keys/2]).
 :- use_module(library(readutil)).
 :- use_module('bench_process.pl', [capture_process/6]).
-:- use_module('bench_cli.pl', [checker_mode/3]).
+:- use_module('bench_cli.pl', [checker_mode/3, exact_runner_args/2]).
+:- use_module('bench_exact.pl',
+              [exact_version/4, exact_metric/4, exact_presence/5]).
 
 :- prolog_load_context(directory, D), assertz(bench_dir(D)).
 :- dynamic bench_dir/1.
@@ -25,19 +29,26 @@ main :-
     ( Mode == history -> show_history(BenchDir), halt(0) ; true ),
     directory_file_path(BenchDir, 'greedy_baseline.json', Path),
     load_json(Path, Baseline),
-    run_bench(BenchDir, Extra, Doc),
-    do_check(Baseline, Doc, Fails, Wins),
-    ( Mode == check
-    -> report(Fails,Wins), halt_if(Fails)
-    ; Mode == log
-    -> append_history(BenchDir,Doc,Extra), halt(0)
-    ; Mode == record
-    -> record_checked(Path,Baseline,Doc), append_history(BenchDir,Doc,Extra), halt(0)
-    ; Mode == promote
-    -> report(Fails,Wins),
-       ( Fails =:= 0
+    ( Mode == exact
+    -> catch(exact_runner_args(Extra, ExactArgs),
+             E, (print_message(error, E), halt(2))),
+       run_bench(BenchDir, ExactArgs, Doc),
+       do_exact_check(Baseline, Doc, Fails),
+       report_exact_result(Fails), halt_if(Fails)
+    ;  run_bench(BenchDir, Extra, Doc),
+       do_check(Baseline, Doc, Fails, Wins),
+       ( Mode == check
+       -> report(Fails,Wins), halt_if(Fails)
+       ; Mode == log
+       -> append_history(BenchDir,Doc,Extra), halt(0)
+       ; Mode == record
        -> record_checked(Path,Baseline,Doc), append_history(BenchDir,Doc,Extra), halt(0)
-       ;  format("promote: regressions present; baseline unchanged~n"), halt(1) )
+       ; Mode == promote
+       -> report(Fails,Wins),
+          ( Fails =:= 0
+          -> record_checked(Path,Baseline,Doc), append_history(BenchDir,Doc,Extra), halt(0)
+          ;  format("promote: regressions present; baseline unchanged~n"), halt(1) )
+       )
     ).
 
 halt_if(0) :- halt(0).
@@ -62,6 +73,55 @@ do_check(Baseline, Doc, Fails, Wins) :-
     format("greedy inference ratchet (sweep primary; tolerance +~w%)~n",[Tol]),
     foldl(check_result(WL,Tol,VMatch),Rows,0-0,Fails-Wins),
     report_unmeasured(WL,Rows).
+
+do_exact_check(Baseline, Doc, Fails) :-
+    get_dict(swi_prolog, Baseline, BaseSwi),
+    get_dict(swi_prolog, Doc, RunSwi),
+    exact_version(BaseSwi, RunSwi, VersionStatus, VersionFails),
+    format("greedy exact inference check (+heavy tail)~n"),
+    format("exact SWI: ~w -> ~w (~w)~n", [BaseSwi, RunSwi, VersionStatus]),
+    get_dict(workloads, Baseline, WL),
+    get_dict(results, Doc, Rows),
+    exact_row_presence(WL, Rows, Missing, Unexpected, PresenceFails),
+    foldl(exact_greedy_row(WL), Rows, 0, MetricFails),
+    report_exact_presence(Missing, Unexpected),
+    Fails is VersionFails + PresenceFails + MetricFails.
+
+exact_greedy_row(WL, Row, F0, F3) :-
+    get_dict(rung, Row, Rung),
+    format("~n~w~n", [Rung]),
+    (   baseline_spec(WL, Rung, Spec)
+    ->  exact_greedy_metric(construction_inf, Spec.construction_inf,
+                            Row.metrics.construction_inf_med, F0, F1),
+        exact_greedy_metric(sweep_inf, Spec.sweep_inf,
+                            Row.metrics.sweep_inf_med, F1, F2),
+        exact_greedy_metric(postprocess_inf, Spec.postprocess_inf,
+                            Row.metrics.postprocess_inf_med, F2, F3)
+    ;   F3 = F0,
+        format("  gated metrics: no_reference~n")
+    ).
+
+exact_greedy_metric(Metric, Base, Measured, F0, F1) :-
+    exact_metric(Base, Measured, Status, MetricFails),
+    F1 is F0 + MetricFails,
+    format("  ~w: ~D -> ~D ~w~n", [Metric, Base, Measured, Status]).
+
+exact_row_presence(WL, Rows, Missing, Unexpected, Fails) :-
+    dict_pairs(WL, _, Pairs),
+    pairs_keys(Pairs, ReferenceIds),
+    findall(Rung, (member(Row, Rows), get_dict(rung, Row, Rung)), MeasuredIds),
+    exact_presence(ReferenceIds, MeasuredIds, Missing, Unexpected, Fails).
+
+report_exact_presence([], []) :- !.
+report_exact_presence(Missing, Unexpected) :-
+    ( Missing == [] -> true ; format("missing exact rows: ~w~n", [Missing]) ),
+    ( Unexpected == [] -> true ; format("rows without reference: ~w~n", [Unexpected]) ).
+
+report_exact_result(0) :-
+    format("~nEXACT RESULT: PASS (all gated inferences identical)~n").
+report_exact_result(Fails) :-
+    Fails > 0,
+    format("~nEXACT RESULT: FAIL (~d exact comparison failure(s))~n", [Fails]).
 
 check_result(WL,Tol,VMatch,Row,F0-W0,F-W) :-
     get_dict(rung,Row,Rung),

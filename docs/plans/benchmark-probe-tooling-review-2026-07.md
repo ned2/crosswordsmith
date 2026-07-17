@@ -1,8 +1,9 @@
 # Candidate plan: benchmark and probe tooling review
 
-Status: IN PROGRESS (2026-07-17). This is a review and cleanup plan, not an
-authorization to delete every item listed below. Each candidate must pass its
-own reachability, evidence, and replacement-coverage gate before removal.
+Status: IN PROGRESS (2026-07-17). Phases 0 and 1 are complete; Phase 2 has not
+started. This is a review and cleanup plan, not an authorization to delete every
+item listed below. Each candidate must pass its own reachability, evidence, and
+replacement-coverage gate before removal.
 
 ## 1. Goal
 

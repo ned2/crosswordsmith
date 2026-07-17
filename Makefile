@@ -2,7 +2,7 @@
 
 SHELL := /bin/bash
 
-.PHONY: test test-wasm test-xword xword-parity unit golden update-golden fuzz bench bench-check bench-record bench-log bench-history bench-matrix bench-arrange-verify bench-arrange-promote bench-greedy bench-greedy-check bench-greedy-record bench-greedy-log bench-greedy-history bench-greedy-identity bench-greedy-verify bench-greedy-promote probe-arrange-fixtures probe-arrange-seeds probe-arrange-schema-test probe-arrange-d0-test probe-arrange-check
+.PHONY: test test-wasm test-xword xword-parity unit golden update-golden fuzz bench bench-check bench-exact bench-record bench-log bench-history bench-matrix bench-arrange-verify bench-arrange-promote bench-greedy bench-greedy-check bench-greedy-exact bench-greedy-record bench-greedy-log bench-greedy-history bench-greedy-identity bench-greedy-verify bench-greedy-promote probe-arrange-fixtures probe-arrange-seeds probe-arrange-schema-test probe-arrange-d0-test probe-arrange-check
 
 BENCH_FORMAT ?= text
 BENCH_ARGS ?=
@@ -147,6 +147,11 @@ bench:
 bench-check:
 	swipl -q benchmarks/check_baseline.pl $(BENCH_ARGS)
 
+# Refactor gate: require exact same-SWI inference counts over every core and
+# heavy rung. Unlike bench-check, both increases and decreases fail.
+bench-exact:
+	swipl -q benchmarks/check_baseline.pl --exact
+
 # One-command strict arrange adjudication: full native tests, diagnostics-bearing
 # ladder identity, then the inference ratchet. Selection mirrors bench-check:
 # core by default, core+heavy with BENCH_ARGS=--heavy.
@@ -195,6 +200,9 @@ bench-greedy:
 
 bench-greedy-check:
 	swipl -q benchmarks/check_greedy_baseline.pl $(BENCH_ARGS)
+
+bench-greedy-exact:
+	swipl -q benchmarks/check_greedy_baseline.pl --exact
 
 bench-greedy-record:
 	swipl -q benchmarks/check_greedy_baseline.pl --record $(BENCH_ARGS)
@@ -273,7 +281,7 @@ bench-wasm-payload-check:
 #   make bench-fill
 #   make bench-fill BENCH_ARGS=--heavy
 #   make bench-fill BENCH_FORMAT=csv BENCH_ARGS="--fixture g11"
-.PHONY: bench-fill bench-fill-check bench-fill-record bench-fill-log bench-fill-history bench-fill-verify bench-fill-promote
+.PHONY: bench-fill bench-fill-check bench-fill-exact bench-fill-record bench-fill-log bench-fill-history bench-fill-verify bench-fill-promote
 bench-fill:
 	swipl -q benchmarks/run_fill.pl -- --format $(BENCH_FORMAT) $(BENCH_ARGS)
 
@@ -285,6 +293,9 @@ bench-fill:
 #   make bench-fill-check BENCH_ARGS=--heavy
 bench-fill-check:
 	swipl -q benchmarks/check_fill_baseline.pl $(BENCH_ARGS)
+
+bench-fill-exact:
+	swipl -q benchmarks/check_fill_baseline.pl --exact
 
 # Ratchet the fill baseline to the currently-measured numbers (accept a win /
 # intentional change) and append to benchmarks/fill_history.jsonl. After ANY

@@ -17,6 +17,8 @@
 %
 % Modes:
 %   swipl -q benchmarks/check_baseline.pl            % CHECK: diff + PASS/FAIL (exit 0/1)
+%   swipl -q benchmarks/check_baseline.pl --exact    % EXACT: same-SWI equality over the
+%                                                    %   complete core + heavy ladder
 %   swipl -q benchmarks/check_baseline.pl --record   % RECORD: ratchet baseline.json to
 %                                                    %   the measured numbers (accept wins),
 %                                                    %   and append the run to history.jsonl
@@ -42,8 +44,11 @@
 :- use_module(library(apply)).
 :- use_module(library(readutil)).
 :- use_module(library(json)).
+:- use_module(library(pairs), [pairs_keys/2]).
 :- use_module('bench_process.pl', [capture_process/6]).
-:- use_module('bench_cli.pl', [checker_mode/3]).
+:- use_module('bench_cli.pl', [checker_mode/3, exact_runner_args/2]).
+:- use_module('bench_exact.pl',
+              [exact_version/4, exact_metric/4, exact_presence/5]).
 
 % directory_file_path/3 is autoload-only (library(filesex)); explicit so this
 % root also runs under autoload(false) (P11/C5, matching load.pl).
@@ -86,6 +91,14 @@ main :-
             halt(0)
         ;   format("~npromote: regressions present - baseline and history NOT changed~n"),
             halt(1) )
+    ; Mode == exact
+    ->  catch(exact_runner_args(Extra, ExactArgs),
+              E, (print_message(error, E), halt(2))),
+        format("crosswordsmith arrange - exact inference check (+heavy tail)~n~n"),
+        run_product_bench(BenchDir, ExactArgs, Doc),
+        do_exact_check(Baseline, Doc, Fails),
+        report_exact_result(Fails),
+        ( Fails =:= 0 -> halt(0) ; halt(1) )
     ;   format("crosswordsmith arrange - performance ratchet~s~n~n", [Note]),
         run_product_bench(BenchDir, Extra, Doc),
         do_check(Baseline, Doc, Fails, Wins),
@@ -128,6 +141,62 @@ do_check(Baseline, Doc, Fails, Wins) :-
     foldl(check_row(WL, Tol, VMatch), Results, 0-0, Fails-Wins),
     report_unmeasured(WL, Results),
     info_section(WL, Results, HMatch).
+
+do_exact_check(Baseline, Doc, Fails) :-
+    get_dict(swi_prolog, Baseline, BaseSwi),
+    get_dict(swi_prolog, Doc, RunSwi),
+    exact_version(BaseSwi, RunSwi, VersionStatus, VersionFails),
+    format("exact SWI: ~w -> ~w (~w)~n", [BaseSwi, RunSwi, VersionStatus]),
+    get_dict(workloads, Baseline, WL),
+    get_dict(results, Doc, Results),
+    exact_row_presence(WL, Results, Missing, Unexpected, PresenceFails),
+    format("~w~t~30|~t~w~14+~t~w~14+   ~w~n",
+           ['rung', 'baseline', 'measured', 'exact status']),
+    foldl(exact_row(WL), Results, 0, MetricFails),
+    report_exact_presence(Missing, Unexpected),
+    Fails is VersionFails + PresenceFails + MetricFails.
+
+exact_row(WL, Row, F0, F1) :-
+    get_dict(fixture, Row, Fixture),
+    get_dict(search_inf_med, Row, Measured),
+    (   find_baseline(WL, Fixture, Spec)
+    ->  get_dict(search_inf, Spec, Base),
+        (   baseline_latency_gated(Spec)
+        ->  Status = not_gated, MetricFails = 0
+        ;   exact_metric(Base, Measured, Status, MetricFails)
+        ),
+        format("~w~t~30|~t~D~14+~t~D~14+   ~w~n",
+               [Fixture, Base, Measured, Status])
+    ;   MetricFails = 0,
+        format("~w~t~30|~t~w~14+~t~D~14+   no_reference~n",
+               [Fixture, '(none)', Measured])
+    ),
+    F1 is F0 + MetricFails.
+
+exact_row_presence(WL, Results, Missing, Unexpected, Fails) :-
+    dict_pairs(WL, _, Pairs),
+    pairs_keys(Pairs, ReferenceIds),
+    findall(Fixture,
+            ( member(Row, Results), get_dict(fixture, Row, Fixture) ),
+            MeasuredIds),
+    exact_presence(ReferenceIds, MeasuredIds, Missing, Unexpected, Fails).
+
+report_exact_presence([], []) :- !.
+report_exact_presence(Missing, Unexpected) :-
+    ( Missing == [] -> true ; format("missing exact rows: ~w~n", [Missing]) ),
+    ( Unexpected == [] -> true ; format("rows without reference: ~w~n", [Unexpected]) ).
+
+report_exact_result(0) :-
+    format("~nEXACT RESULT: PASS (all gated inferences identical)~n").
+report_exact_result(Fails) :-
+    Fails > 0,
+    format("~nEXACT RESULT: FAIL (~d exact comparison failure(s))~n", [Fails]).
+
+% Exact mode trusts the committed reference policy, not a measured row that the
+% code under review produced.
+baseline_latency_gated(Spec) :-
+    get_dict(gate, Spec, Gate),
+    same_text(Gate, latency).
 
 check_row(WL, Tol, VMatch, Row, F0-W0, F1-W1) :-
     get_dict(fixture, Row, Fx),
