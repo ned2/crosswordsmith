@@ -1941,3 +1941,46 @@ p1-backtrack-instrumentation.patch).
   `ffc32b71cae9dfa55d532f000e639cf1a4c0feb272a1926c35d0dac7440f1c29`.
   `bench-greedy-promote --heavy` persisted and read back all seven improved
   rows and appended history. **KEEP; A-G2 now starts from this ratcheted base.**
+
+### A-G2 premise — greedy direct transpose pairs — MEASURED, PRODUCT EXPERIMENT GATED IN
+- **Method/soundness:** measurement-only benchmark replay at base `c584962`,
+  probe commits `7d82081`/`d7b5dfb`. It enumerated the unchanged four
+  corner-major then seed-major blocks, retaining setup failures, strict
+  eligibility, complete `pw/8` records, and original dropped terms. Direct
+  pairs were checked with an independent row/column transpose, involution,
+  normalized direction, raw-pool order, and fresh clue variables.
+- **Result:** all 108 manifest slots (54 pairs) matched across all seven greedy
+  rungs with zero setup, geometry, placed-order, dropped-order, reward,
+  eligibility, normalized-assoc, or raw-pool mismatches. Attempt counts were
+  `20,20,20,20,16,8,4`; 12 setup failures paired symmetrically. Three
+  additional generated square sets checked 28 slots spanning setup failure,
+  dropped words, and all-fit behavior, also with zero mismatches.
+- **Implication/verdict:** direct attempts can fall exactly 108 -> 54 (50%) if
+  the product searches `topleft_across`/`topright` only and inserts freshly
+  rebuilt transpose partners into the omitted historical slots. Dropped terms
+  must retain original terms/order and each rebuilt `pw/8` must receive a fresh
+  non-aliased clue variable. **Gate A-G2 product experiment in.**
+
+### A-G2 — derive greedy transpose partners — KEPT
+- **Change/soundness:** integration commit `7a14082` directly searches the TLA
+  and TR seed blocks under the shared memo reset, rebuilds literal square-grid
+  TLD/BL transposes with fresh clue variables and copied original dropped
+  terms, and concatenates the four blocks in historical TLA/TLD/TR/BL order.
+  Failed source setup omits both symmetric entries; strict eligibility remains
+  after construction.
+- **Identity:** the independent four-corner observer matched all 108 manifest
+  slots and 28 generated slots against synthesized pools with zero mismatches.
+  Ordered raw pools, ties, dropped order, rewards, selected layouts, normalized
+  assocs, candidate counts/distances, and CLI bytes are unchanged; greedy
+  identity remains `ffc32b71cae9dfa55d532f000e639cf1a4c0feb272a1926c35d0dac7440f1c29`.
+- **Result:** direct attempts halve exactly by rung:
+  `20->10,20->10,20->10,20->10,16->8,8->4,4->2`. Sweep inferences improve
+  44.05%, 35.45%, 44.06%, 44.15%, 44.82%, 46.83%, and 47.55%, with zero
+  construction/postprocess or strict regressions. Dense serialized wall ratios
+  are 0.5436 and 0.5500 (paired p10-p90 0.5308-0.5583 and 0.5355-0.5666),
+  approximately 1.84x and 1.82x.
+- **Verification/adoption:** composed `make test` passed 418 assertions and all
+  goldens/CLI contracts; direct-vs-derived and greedy identity pass. Branch
+  verification covered all 15 strict identities and every strict core+heavy
+  inference gate exactly. `bench-greedy-promote --heavy` persisted/read back
+  all seven wins and appended history. **KEEP.**

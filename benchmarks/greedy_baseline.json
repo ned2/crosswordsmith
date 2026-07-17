@@ -8,8 +8,8 @@
   "tool":"crosswordsmith-arrange-greedy-bench",
   "workloads": {
     "benchmark_08_candidates": {
-      "command_rss_med_kib":11974,
-      "command_wall_med_ms":70.0,
+      "command_rss_med_kib":11952,
+      "command_wall_med_ms":60.0,
       "construction": {
 	"corner":"topleft_across",
 	"expected": {"dropped":0,"outcome":"completed","placed":8},
@@ -23,13 +23,13 @@
       "iterations":20,
       "mode": {"drop":"strict","k":5,"kind":"candidates"},
       "postprocess_inf":5974,
-      "sweep_inf":293482,
+      "sweep_inf":164166,
       "tier":"core",
       "warmup":3,
       "words":8
     },
     "bundled_11_best_effort": {
-      "command_rss_med_kib":11470,
+      "command_rss_med_kib":11444,
       "command_wall_med_ms":60.0,
       "construction": {
 	"corner":"topleft_across",
@@ -44,14 +44,14 @@
       "iterations":20,
       "mode": {"kind":"best_effort"},
       "postprocess_inf":29,
-      "sweep_inf":15550,
+      "sweep_inf":10037,
       "tier":"core",
       "warmup":3,
       "words":6
     },
     "bundled_17_candidates": {
-      "command_rss_med_kib":11936,
-      "command_wall_med_ms":70.0,
+      "command_rss_med_kib":11932,
+      "command_wall_med_ms":60.0,
       "construction": {
 	"corner":"topleft_across",
 	"expected": {"dropped":0,"outcome":"completed","placed":6},
@@ -65,14 +65,14 @@
       "iterations":20,
       "mode": {"drop":"strict","k":3,"kind":"candidates"},
       "postprocess_inf":6910,
-      "sweep_inf":227945,
+      "sweep_inf":127545,
       "tier":"core",
       "warmup":3,
       "words":6
     },
     "ladder_15x15_32w_best_effort": {
-      "command_rss_med_kib":12952,
-      "command_wall_med_ms":160.0,
+      "command_rss_med_kib":13196,
+      "command_wall_med_ms":110.0,
       "construction": {
 	"corner":"topleft_across",
 	"expected": {"dropped":4,"outcome":"completed","placed":28},
@@ -86,14 +86,14 @@
       "iterations":7,
       "mode": {"kind":"best_effort"},
       "postprocess_inf":233,
-      "sweep_inf":2335326,
+      "sweep_inf":1241744,
       "tier":"heavy",
       "warmup":2,
       "words":32
     },
     "ladder_21x21_80w_best_effort": {
-      "command_rss_med_kib":19852,
-      "command_wall_med_ms":490.0,
+      "command_rss_med_kib":19448,
+      "command_wall_med_ms":280.0,
       "construction": {
 	"corner":"topleft_across",
 	"expected": {"dropped":71,"outcome":"completed","placed":9},
@@ -107,14 +107,14 @@
       "iterations":5,
       "mode": {"kind":"best_effort"},
       "postprocess_inf":593,
-      "sweep_inf":9362822,
+      "sweep_inf":4910962,
       "tier":"heavy",
       "warmup":2,
       "words":80
     },
     "real_13x13_12w_best_effort": {
-      "command_rss_med_kib":11742,
-      "command_wall_med_ms":80.0,
+      "command_rss_med_kib":12172,
+      "command_wall_med_ms":70.0,
       "construction": {
 	"corner":"topleft_across",
 	"expected": {"dropped":4,"outcome":"completed","placed":8},
@@ -128,14 +128,14 @@
       "iterations":10,
       "mode": {"kind":"best_effort"},
       "postprocess_inf":90,
-      "sweep_inf":642508,
+      "sweep_inf":358826,
       "tier":"core",
       "warmup":2,
       "words":12
     },
     "real_15x15_18w_best_effort": {
-      "command_rss_med_kib":12206,
-      "command_wall_med_ms":100.0,
+      "command_rss_med_kib":12442,
+      "command_wall_med_ms":80.0,
       "construction": {
 	"corner":"topleft_across",
 	"expected": {"dropped":3,"outcome":"completed","placed":15},
@@ -149,7 +149,7 @@
       "iterations":10,
       "mode": {"kind":"best_effort"},
       "postprocess_inf":130,
-      "sweep_inf":1136472,
+      "sweep_inf":627096,
       "tier":"core",
       "warmup":2,
       "words":18
