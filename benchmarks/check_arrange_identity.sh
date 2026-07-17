@@ -41,7 +41,11 @@ if [ -f "$manifest" ]; then
     done <"$manifest"
 fi
 
-tmp_manifest="$(mktemp)"
+if [ "$record" -eq 1 ]; then
+    tmp_manifest="$(mktemp "${manifest}.tmp.XXXXXX")"
+else
+    tmp_manifest="$(mktemp)"
+fi
 out="$(mktemp)"
 trap 'rm -f "$tmp_manifest" "$out"' EXIT
 status=0
@@ -73,8 +77,8 @@ while IFS=$'\t' read -r fixture tier; do
 done <<<"$rungs"
 
 if [ "$record" -eq 1 ]; then
-    if [ "$status" -eq 0 ] && [ "${#seen[@]}" -eq "${#known[@]}" ]; then
-        mv "$tmp_manifest" "$manifest"
+    if [ "$status" -eq 0 ] && [ "${#seen[@]}" -eq "${#known[@]}" ] \
+       && mv "$tmp_manifest" "$manifest"; then
         echo "IDENTITY: recorded ${#seen[@]} complete rung digest(s) -> $manifest"
         exit 0
     fi

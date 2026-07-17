@@ -6,7 +6,7 @@
 :- use_module(library(json)).
 :- use_module(library(readutil)).
 :- use_module(library(time), [call_with_time_limit/2]).
-:- use_module(library(process), [process_wait/2]).
+:- use_module(library(process), [process_create/3, process_wait/2]).
 :- use_module(library(apply), [exclude/3]).
 :- use_module('../benchmarks/check_baseline.pl', []).
 :- use_module('../benchmarks/check_fill_baseline.pl', []).
@@ -173,6 +173,27 @@ test(checkers_reject_history_runner_arguments,
                     _Stdout, _Stderr, Status),
     assertion(Status == exit(2)).
 
+test(identity_scripts_reject_unknown_options,
+     [forall(identity_script(Script))]) :-
+    capture_process(path(bash), [Script, '--definitely-invalid'], capture,
+                    _Stdout, _Stderr, Status),
+    assertion(Status == exit(2)).
+
+test(fill_identity_partial_record_leaves_manifest_unchanged) :-
+    setup_call_cleanup(
+        make_fill_identity_fixture(ManifestPath, WorkloadsPath, CliPath, Original),
+        ( format(atom(ManifestEnv), 'FILL_IDENTITY_MANIFEST=~w', [ManifestPath]),
+          format(atom(WorkloadsEnv), 'FILL_IDENTITY_WORKLOADS=~w', [WorkloadsPath]),
+          format(atom(CliEnv), 'FILL_IDENTITY_CLI=~w', [CliPath]),
+          capture_process(path(env),
+                          [ManifestEnv, WorkloadsEnv, CliEnv,
+                           'benchmarks/check_fill_identity.sh', '--record'],
+                          capture, _Stdout, _Stderr, Status),
+          assertion(Status == exit(1)),
+          read_file_to_string(ManifestPath, Written, []),
+          assertion(Written == Original) ),
+        maplist(delete_if_exists, [ManifestPath, WorkloadsPath, CliPath])).
+
 :- end_tests(arrange_benchmark_promotion).
 
 baseline_doc(Pairs0, _{host:"test-host", swi_prolog:"10.1.10",
@@ -273,3 +294,32 @@ invalid_runner_args(['--fixture', 'definitely-no-such-workload']).
 checker_script('benchmarks/check_baseline.pl').
 checker_script('benchmarks/check_fill_baseline.pl').
 checker_script('benchmarks/check_greedy_baseline.pl').
+
+identity_script('benchmarks/check_arrange_identity.sh').
+identity_script('benchmarks/check_fill_identity.sh').
+identity_script('benchmarks/check_fill_identity_artifact.sh').
+identity_script('benchmarks/check_greedy_identity.sh').
+
+make_fill_identity_fixture(ManifestPath, WorkloadsPath, CliPath, Original) :-
+    Original = "original\tmanifest\n",
+    tmp_file_stream(text, ManifestPath, ManifestStream),
+    format(ManifestStream, '~s', [Original]),
+    close(ManifestStream),
+    tmp_file_stream(text, WorkloadsPath, WorkloadsStream),
+    format(WorkloadsStream,
+           "fill_workload(ok,'ok-grid',dict,none,1,0,filled,core,1).~n", []),
+    format(WorkloadsStream,
+           "fill_workload(fail,'fail-grid',dict,none,1,0,filled,core,1).~n", []),
+    close(WorkloadsStream),
+    tmp_file_stream(text, CliPath, CliStream),
+    format(CliStream, "#!/usr/bin/env bash~n", []),
+    format(CliStream, "for arg in \"$@\"; do~n", []),
+    format(CliStream, "    [ \"$arg\" = fail-grid ] && exit 1~n", []),
+    format(CliStream, "done~n", []),
+    format(CliStream, "printf 'ok\\n'~n", []),
+    close(CliStream),
+    process_create(path(chmod), ['u+x', CliPath], [process(PID)]),
+    process_wait(PID, exit(0)).
+
+delete_if_exists(Path) :-
+    ( exists_file(Path) -> delete_file(Path) ; true ).

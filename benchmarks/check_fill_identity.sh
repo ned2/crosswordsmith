@@ -27,15 +27,21 @@
 # (all rungs top out at ~34.9M search inferences); a non-zero CLI exit here is a
 # real failure, reported per rung.
 
-set -u
+set -uo pipefail
 cd "$(dirname "$0")/.." || exit 2          # repo (worktree) root
 
-MANIFEST="benchmarks/fill_identity.sha256"
-WORKLOADS="benchmarks/fill_workloads.pl"
-CLI="./crosswordsmith"
+# Overrides let the safety test exercise recording without touching committed data.
+MANIFEST="${FILL_IDENTITY_MANIFEST:-benchmarks/fill_identity.sha256}"
+WORKLOADS="${FILL_IDENTITY_WORKLOADS:-benchmarks/fill_workloads.pl}"
+CLI="${FILL_IDENTITY_CLI:-./crosswordsmith}"
 
 RECORD=0
-[ "${1:-}" = "--record" ] && RECORD=1
+for arg in "$@"; do
+    case "$arg" in
+        --record) RECORD=1 ;;
+        *) echo "check_fill_identity: unknown option $arg" >&2; exit 2 ;;
+    esac
+done
 
 # Enumerate rungs as "rungid<TAB>grid<TAB>dict<TAB>seeds" (seeds = the atom `none`
 # or a fragment path) straight from the manifest of record. </dev/null so a load
@@ -49,18 +55,26 @@ if [ -z "$rungs" ]; then
 fi
 
 status=0
-tmp_manifest="$(mktemp)"
+if [ "$RECORD" -eq 1 ]; then
+    tmp_manifest="$(mktemp "${MANIFEST}.tmp.XXXXXX")"
+else
+    tmp_manifest="$(mktemp)"
+fi
 seen="$(mktemp)"
-trap 'rm -f "$tmp_manifest" "$seen"' EXIT
+out="$(mktemp)"
+trap 'rm -f "$tmp_manifest" "$seen" "$out"' EXIT
+known_count=0
+seen_count=0
 
 while IFS=$'\t' read -r id grid dict seeds; do
     [ -z "$id" ] && continue
+    known_count=$((known_count + 1))
     args=(fill --grid "$grid" --dict "$dict")
     [ "$seeds" != none ] && args+=(--seeds "$seeds")
-    out="$(mktemp)"
     if "$CLI" "${args[@]}" >"$out" 2>/dev/null; then
         digest="$(sha256sum "$out" | cut -d' ' -f1)"
         printf '%s\t%s\n' "$id" "$digest" >>"$tmp_manifest"
+        seen_count=$((seen_count + 1))
         if [ "$RECORD" -eq 0 ]; then
             expected="$(awk -F'\t' -v r="$id" '$1==r{print $2}' "$MANIFEST" 2>/dev/null)"
             printf '%s\n' "$id" >>"$seen"
@@ -75,13 +89,17 @@ while IFS=$'\t' read -r id grid dict seeds; do
     else
         echo "identity ($id): CLI FAILED (fill did not exit 0)"; status=1
     fi
-    rm -f "$out"
 done <<<"$rungs"
 
 if [ "$RECORD" -eq 1 ]; then
-    sort "$tmp_manifest" >"$MANIFEST"
-    echo "recorded $(wc -l <"$MANIFEST") rung digest(s) -> $MANIFEST"
-    exit 0
+    if [ "$status" -eq 0 ] && [ "$seen_count" -eq "$known_count" ] \
+       && sort -o "$tmp_manifest" "$tmp_manifest" \
+       && mv "$tmp_manifest" "$MANIFEST"; then
+        echo "recorded $seen_count complete rung digest(s) -> $MANIFEST"
+        exit 0
+    fi
+    echo "IDENTITY: record FAILED; $MANIFEST was not changed"
+    exit 1
 fi
 
 # A manifest rung that this pass never measured is a silent drop - fail it (the

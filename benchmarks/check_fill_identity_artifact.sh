@@ -33,6 +33,11 @@ MANIFEST="benchmarks/fill_identity.sha256"
 WORKLOADS="benchmarks/fill_workloads.pl"
 CLI="./crosswordsmith"
 
+if [ "$#" -ne 0 ]; then
+    echo "check_fill_identity_artifact: unknown option $1" >&2
+    exit 2
+fi
+
 rungs="$(swipl -q -l "$WORKLOADS" \
   -g 'forall(fill_workload(Id,G,D,S,_,_,_,_,_), format("~w\t~w\t~w\t~w~n",[Id,G,D,S])), halt' \
   -g 'halt(1)' </dev/null 2>/dev/null)"
