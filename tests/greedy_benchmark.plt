@@ -3,6 +3,7 @@
 :- use_module(library(plunit)).
 :- use_module(library(process)).
 :- use_module('../benchmarks/greedy_subjects.pl').
+:- use_module('../benchmarks/probe_arrange/g2_transpose.pl').
 
 :- begin_tests(greedy_benchmark).
 
@@ -104,6 +105,34 @@ test(direct_attempt_slots_and_strict_omission) :-
     greedy_subjects:identity_raw_pool(
         Words, 11, candidates(strict, 3), RawPool),
     assertion(RawPool == []).
+
+test(g2_transpose_is_involution_with_fresh_clue_vars) :-
+    Placed = [pw('CAT',[c,a,t],[1,2,3],across,3,1,3,SourceNum)],
+    g2_transpose_probe:transpose_placed(Placed, 7, Once),
+    g2_transpose_probe:transpose_placed(Once, 7, Twice),
+    Once = [pw('CAT',[c,a,t],[1,8,15],down,3,1,15,OnceNum)],
+    Twice = [pw('CAT',[c,a,t],[1,2,3],across,3,1,3,TwiceNum)],
+    assertion(var(SourceNum)), assertion(var(OnceNum)), assertion(var(TwiceNum)),
+    assertion(SourceNum \== OnceNum), assertion(SourceNum \== TwiceNum),
+    assertion(OnceNum \== TwiceNum).
+
+test(g2_additional_samples_cover_required_behaviors) :-
+    findall(Row,
+            ( g2_transpose_probe:additional_sample(Id, Words, Size, Command, Behavior),
+              crosswordsmith_arrange:seed_candidates(Words, Seeds),
+              length(Seeds, SeedCount), ExpectedSlots is 4 * SeedCount,
+              g2_transpose_probe:probe_case(
+                  Id, Words, Size, Command, ExpectedSlots, Row0),
+              put_dict(behavior, Row0, Behavior, Row) ),
+            Rows),
+    assertion(length(Rows, 3)),
+    assertion(forall(member(R, Rows), get_dict(gate, R, pass))),
+    once((member(Setup, Rows), Setup.behavior == setup_failure)),
+    assertion(Setup.setup_failures > 0),
+    once((member(Dropped, Rows), Dropped.behavior == dropped_word)),
+    assertion(Dropped.completed_with_drops > 0),
+    once((member(AllFit, Rows), AllFit.behavior == all_fit)),
+    assertion(AllFit.all_fit =:= AllFit.completed).
 
 attempt_slot(Attempt, Corner-SeedAnswer) :-
     get_dict(corner, Attempt, Corner),
