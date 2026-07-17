@@ -175,32 +175,33 @@ counter_add(I, Add, Counter) :-
     nb_setarg(I, Counter, N).
 
 counter_dict(C, _{generated_crossing_descriptors:Generated,
-                  candidates_reaching_legality:Probes,
                   legality_probes:Probes,
                   legality_successes:Successes,
                   legality_rejects:Rejects,
                   rejected_percentage:RejectedPct,
                   scored_candidates:Scored,
                   score_cell_visits:Visits,
-                  avoidable_score_cell_visits:AvoidableVisits,
+                  rejected_score_cell_visits_avoided:AvoidedVisits,
                   start_lt_one:Underflows,
                   greedy_steps:Steps,
                   completed_constructions:Completed}) :-
     arg(1, C, Generated), arg(2, C, Probes), arg(3, C, Successes),
     arg(4, C, Rejects), arg(5, C, Scored), arg(6, C, Visits),
-    arg(7, C, AvoidableVisits), arg(8, C, Underflows),
+    arg(7, C, AvoidedVisits), arg(8, C, Underflows),
     arg(9, C, Steps), arg(10, C, Completed),
     ( Probes =:= 0 -> RejectedPct = 0.0
     ; RejectedPct is 100.0 * Rejects / Probes
     ).
 
-% Counter semantics: generated increments for every descriptor yielded by
-% find_intersecting_word/6; scored after placement_key/8 succeeds; score-cell
-% visits counts both full word walks performed by placement_key (crossing count
-% and bbox extension). Legality is called only after scoring, preserving the
-% current order. Avoidable visits is the same exact 2*WLen charge restricted to
-% legality rejects. A greedy step is one realized non-seed winner; completed is
-% one construction whose seed setup and loop complete.
+% Counter semantics mirror the legality-first product order. Generated and
+% legality probes increment for every descriptor yielded by
+% find_intersecting_word/6. Scored increments only after legality succeeds and
+% placement_key/8 completes; score-cell visits charges its two full word walks.
+% Rejected score-cell visits avoided charges the same 2*WLen only when the old
+% score-first path would have completed the score (Start >= 1); underflows were
+% already rejected by crossing_count/7 before a cell walk and charge zero. A
+% greedy step is one realized non-seed winner; completed is one construction
+% whose seed setup and loop complete.
 semantic_counters(Words, GridLen, Command, Counters) :-
     crosswordsmith_core:reset_search_memos,
     new_counter(C),
@@ -299,14 +300,14 @@ replay_word_best(Entry, Placed, GridLen, Grid, BBox, Counter, Score, Best) :-
                   Letters, WLen, Placed, GridLen, Start, Dir),
               counter_inc(1, Counter),
               count_underflow(Start, Counter),
+              counter_inc(2, Counter),
+              counted_legality(
+                  Letters, Start, Dir, GridLen, Grid, WLen, Counter),
               crosswordsmith_arrange:placement_key(
                   Letters, Start, Dir, WLen, GridLen, LGrid, BBox, Key),
               counter_inc(5, Counter),
               Visits is 2 * WLen,
-              counter_add(6, Visits, Counter),
-              counter_inc(2, Counter),
-              counted_legality(
-                  Letters, Start, Dir, GridLen, Grid, Visits, Counter) ),
+              counter_add(6, Visits, Counter) ),
             Keyed),
     Keyed = [K0|Ks],
     foldl(crosswordsmith_arrange:max_key_first, Ks, K0,
@@ -316,13 +317,20 @@ replay_word_best(Entry, Placed, GridLen, Grid, BBox, Counter, Score, Best) :-
 count_underflow(Start, Counter) :-
     ( Start < 1 -> counter_inc(8, Counter) ; true ).
 
-counted_legality(Letters, Start, Dir, GridLen, Grid, Visits, Counter) :-
+counted_legality(Letters, Start, Dir, GridLen, Grid, WLen, Counter) :-
     (   crosswordsmith_core:check_word_fits(
             Letters, Start, Dir, GridLen, Grid)
     ->  counter_inc(3, Counter)
     ;   counter_inc(4, Counter),
-        counter_add(7, Visits, Counter),
+        count_rejected_score_work(Start, WLen, Counter),
         fail
+    ).
+
+count_rejected_score_work(Start, WLen, Counter) :-
+    (   Start >= 1
+    ->  Visits is 2 * WLen,
+        counter_add(7, Visits, Counter)
+    ;   true
     ).
 
 % ---------------------------------------------------------------------------

@@ -1339,12 +1339,11 @@ best_move([C|Cs], _Placed, GridLen, Grid, move(Answer, PW, G1)) :-
 % winner - is unchanged, while nothing grid-sized is copied. The winner's
 % assign_word runs once, in best_move above.
 %
-% Order matters: placement_key MUST run BEFORE check_word_fits. Not for grid
-% state (unlike assign_word, the probe never binds a cell), but because
-% find_intersecting_word/6 can hand us an off-grid Start < 1 on which a raw
-% arg/3 read would THROW; both placement_key (crossing_count's Start >= 1
-% guard) and check_word_fits reject it by failure, and keeping the scorer
-% first preserves the old generator's exact evaluation order.
+% Check legality before scoring: most crossing descriptors are rejected, so
+% computing their full density key is wasted work. check_word_fits/5 rejects
+% Start < 1 before any arg/3 read and binds no grid cell; placement_key/8 is
+% likewise pure. The surviving keyed descriptor stream and first-tie-wins
+% order are therefore unchanged.
 word_best_placement(Entry, Placed, GridLen, Grid, BBox, Score, Best) :-
     word_letters(Entry, Letters, WLen),
     Entry = [Answer|_],
@@ -1353,8 +1352,8 @@ word_best_placement(Entry, Placed, GridLen, Grid, BBox, Score, Best) :-
     Grid = gs(LGrid, _BGrid),
     findall(Key-(Start-Dir),
             ( find_intersecting_word(Letters, WLen, Placed, GridLen, Start, Dir),
-              placement_key(Letters, Start, Dir, WLen, GridLen, LGrid, BBox, Key),
-              check_word_fits(Letters, Start, Dir, GridLen, Grid) ),
+              check_word_fits(Letters, Start, Dir, GridLen, Grid),
+              placement_key(Letters, Start, Dir, WLen, GridLen, LGrid, BBox, Key) ),
             Keyed),
     Keyed = [K0|Ks],
     foldl(max_key_first, Ks, K0, Score-(BestStart-BestDir)),
@@ -1375,12 +1374,9 @@ placement_key(Letters, Start, Dir, WLen, GridLen, Grid, BBox, Key) :-
 crossing_weight(10000).
 
 crossing_count(Letters, Start, Dir, GridLen, Grid, Count) :-
-    % Reject an off-grid (underflow) start before indexing the grid: since
-    % word_best_placement now scores BEFORE assign_word, find_intersecting_word/6
-    % can hand us a Start < 1 that assign_word would go on to reject. With the
-    % var-cell grid, arg/3 THROWS on a negative index (the old get_assoc/3 failed
-    % silently), so fail here instead - the candidate is dropped either way. With
-    % Start >= 1 and a fitted run, every cell index stays >= 1 (greedy-path only).
+    % Keep the scorer safe as a standalone pure predicate even though the greedy
+    % path now legality-filters underflow starts before calling it. With Start >=
+    % 1 and a fitted run, every cell index stays >= 1 (greedy-path only).
     Start >= 1,
     cc_(Letters, Start, Dir, GridLen, Grid, 0, Count).
 cc_([], _, _, _, _, A, A).

@@ -27,17 +27,18 @@ test(semantic_counter_partitions) :-
     load_clues('fixtures/benchmark_08_words.pl', Words),
     greedy_subjects:semantic_counters(
         Words, 13, candidates(strict, 5), Counters),
-    assertion(Counters.candidates_reaching_legality =:=
-              Counters.scored_candidates),
+    assertion(Counters.generated_crossing_descriptors =:=
+              Counters.legality_probes),
     assertion(Counters.legality_successes + Counters.legality_rejects =:=
-              Counters.candidates_reaching_legality),
-    assertion(Counters.generated_crossing_descriptors >=
-              Counters.scored_candidates),
-    assertion(Counters.score_cell_visits >=
-              Counters.avoidable_score_cell_visits),
-    assertion(Counters.start_lt_one =:=
-              Counters.generated_crossing_descriptors -
-              Counters.scored_candidates).
+              Counters.legality_probes),
+    assertion(Counters.legality_successes =:= Counters.scored_candidates),
+    assertion(Counters.start_lt_one =< Counters.legality_rejects),
+    assertion(Counters.generated_crossing_descriptors =:= 2119),
+    assertion(Counters.legality_rejects =:= 1771),
+    assertion(Counters.scored_candidates =:= 348),
+    assertion(Counters.score_cell_visits =:= 9048),
+    assertion(Counters.rejected_score_cell_visits_avoided =:= 7280),
+    assertion(Counters.start_lt_one =:= 1491).
 
 test(candidate_phases_match_product) :-
     load_clues('fixtures/benchmark_08_words.pl', Words),
