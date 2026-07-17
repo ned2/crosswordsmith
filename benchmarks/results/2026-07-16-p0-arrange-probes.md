@@ -142,7 +142,7 @@ and outer interruption does not erase the configured cutoff. This correction
 changes row shape only; authority/replay measurements and frozen artifacts are
 unchanged.
 
-Representative shape correction:
+Representative shape correction (before, then after):
 
 ```json
 {"limit_kind":"inferences","cutoff":"ok","outcome":"placed"}

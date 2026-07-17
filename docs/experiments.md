@@ -1866,3 +1866,78 @@ p1-backtrack-instrumentation.patch).
   remains 50. No envelope completion plus three ladder losses makes C1
   **LOST**. Approximate clustering would invalidate whole-class refutation
   and was not attempted. DP-6 pins stand; no Track D dossier input.
+
+### Arrange P0 — strict/greedy ratchets and probe substrate — INFRASTRUCTURE, PASS
+- **Scope:** composed P0.1-P0.4 on `campaign/arrange-p0-integration` from
+  `aa4d3c8`, with strict identity/promotion, a separate four-layer greedy
+  benchmark, counter-free product authority, exact-replay instrumentation,
+  fixed cliff fixtures, and the attempt JSONL schema. Product search code and
+  existing goldens are unchanged.
+- **Strict gate:** core and heavy inference ratchets reproduced exactly. All 15
+  fresh-process identity rows passed twice; the 500M latency incumbent retained
+  reward 768 and digest
+  `90289af7db529b0132bae8bb910a18e90daa6f7b1c19de7cb97508883a56c81b`.
+  Promotion read-back tests cover retained heavy rows, new rungs, and
+  latency-only rows; integration also makes baseline replacement atomic.
+- **Greedy gate:** two independent heavy runs reproduced all 21 construction,
+  sweep, and postprocess inference cells at +0.00%. The ordered raw-pool and
+  selected-output identity passed twice with digest
+  `ffc32b71cae9dfa55d532f000e639cf1a4c0feb272a1926c35d0dac7440f1c29`.
+- **Probe gate:** authority matches direct product at tiny and 500M budgets;
+  easy, hard, seeded, and second-representative twins match outcome, reward,
+  layout signature, and lean/full decisions. On the serialized adjudication
+  rerun, lean wall overhead was +1.36% and -4.11% (inferences +3.65% and
+  +1.38%), below the 15% steering ceiling. Full wall overhead was +124.2% and
+  +104.2% (inferences +132.61% and +22.50%), so full remains sampled-only.
+- **Frozen inputs/schema:** all 12 requested-count cliff fixtures and all 64
+  SplitMix64 seeds regenerated identically twice. Python and product seed
+  streams agree; all 10 schema tests pass, including mixed-rig rejection and
+  configured-cutoff/termination separation.
+- **Verification/verdict:** composed `make test` passed 411 plunit assertions,
+  every golden comparison, and all CLI contracts. Strict documentation says
+  two non-transpose representatives under one shared operation budget; greedy
+  remains four-corner. **Phase 0 PASS; A-G1 may begin.** Detailed probe evidence:
+  `benchmarks/results/2026-07-16-p0-arrange-probes.md`.
+
+### A-G1 premise — legality before score — MEASURED, PRODUCT EXPERIMENT GATED IN
+- **Method/soundness:** benchmark-only exact replay at base `3ce0b8d`, probe
+  commit `ea65c1a`. Product and replay matched setup outcomes, layouts, rewards,
+  and dropped order for every corner x seed attempt on all seven greedy rungs
+  before and after counter instrumentation.
+- **Result:** legality rejected 51,802/55,080 scored candidates (94.05%) on
+  15x15/32w and 273,312/280,386 (97.48%) on 21x21/80w. Legality-first would
+  avoid exactly 388,884/412,496 (94.28%) and 2,000,112/2,050,244 (97.55%)
+  current score-cell visits. Both targets clear the pre-registered 25% gate.
+- **Correction:** `find_intersecting_word/6` produced 6,621 and 25,601
+  `Start < 1` descriptors on the dense targets, but `check_word_fits/5` guards
+  `Start >= 1` before any `arg/3`; the product comment claiming score-first is
+  needed for safety is stale. Legality-first preserves surviving candidate
+  order and first-tie-wins because both operations are pure.
+- **Verification/verdict:** full greedy identity remained
+  `ffc32b71cae9dfa55d532f000e639cf1a4c0feb272a1926c35d0dac7440f1c29` and
+  focused tests passed 7/7. **Gate A-G1 into a separate product experiment;**
+  no product, baseline, identity, ratchet, or golden changed.
+
+### A-G1 — legality before score — KEPT
+- **Change/soundness:** integration commit `ef2e0b0` moves pure
+  `check_word_fits/5` before `placement_key/8` in the greedy candidate
+  generator. Legality guards `Start >= 1` before any grid read and binds no
+  cell; scoring is likewise pure. All seven exact replays preserve setup
+  outcomes, placed terms, rewards, dropped order, raw pools, selected layouts,
+  first-tie-wins, and CLI bytes.
+- **Inference result:** construction/sweep changed by -25.81%/-23.18%
+  (bundled17), -1.04%/-0.47% (bundled11), -17.07%/-17.76% (benchmark08),
+  -47.15%/-48.53% (real13), -54.99%/-59.26% (real15), -60.06%/-61.88%
+  (15x15/32w), and -51.87%/-67.65% (21x21/80w). Postprocess was exactly
+  unchanged on every rung: 13 gated wins and zero regressions.
+- **Mechanism/wall:** scored candidates fell 55,080 -> 3,278 and
+  280,386 -> 7,074 on the dense targets, eliminating 388,884 and 2,000,112
+  score-cell visits. Two warmup plus 21 serialized baseline/candidate pairs
+  gave sweep-wall median ratios 0.401 (p10-p90 0.380-0.417) and 0.344
+  (0.338-0.353), or 59.95% and 65.59% median improvements.
+- **Verification/adoption:** composed `make test` passed 412 assertions and all
+  goldens/CLI contracts. Strict identity and all strict core+heavy ratchets
+  stayed exact; greedy identity remained
+  `ffc32b71cae9dfa55d532f000e639cf1a4c0feb272a1926c35d0dac7440f1c29`.
+  `bench-greedy-promote --heavy` persisted and read back all seven improved
+  rows and appended history. **KEEP; A-G2 now starts from this ratcheted base.**
