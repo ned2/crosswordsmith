@@ -2191,3 +2191,23 @@ p1-backtrack-instrumentation.patch).
   requires a new product decision that explicitly accepts an opt-in mode whose
   first successful layout and reward may differ; P-R0 is evidence for that
   future decision, not unfinished engineering.
+
+### Historical probe provenance correction — 2026-07-18
+
+- **P1:** the recoverable driver is
+  `22e8c21:benchmarks/probe_backtrack.pl`; the tracked raw result is
+  `benchmarks/results/2026-07-04-p1-retreat-wipeout-tables.txt`, not the old
+  scratch path. Product instrumentation remains preserved in
+  `docs/experiments/p1-backtrack-instrumentation.patch`.
+- **P-F1:** original object `0329b2f` is unavailable. The measurement base is
+  `a178923`; the verbatim probe snapshot is `22e8c21`; the report is
+  `benchmarks/results/2026-07-05-p-f1-attribution.md` (`93972d1`).
+- **F-H2 gate:** original object `62dc2b4` is unavailable. The measurement base
+  is `397615d`; the probe snapshot is `22e8c21`; the report is
+  `benchmarks/results/2026-07-05-f-h2-gate-probe.md` (`ed5d556`).
+- **F-H2 Phase A/B:** base `7181337`, initial patch `a2248bd`, optional-mask
+  follow-up `0aa13ca`, accepted merge `2cb7c0f`; result report
+  `benchmarks/results/2026-07-05-f-h2-bitset-count.md`.
+- Exact disposable-worktree patch recipes are maintained in
+  `docs/research/benchmark-probe-historical-reconstruction.md`. The retired
+  source need not remain live beside the current MAC/dom-wdeg engine.

@@ -1,9 +1,9 @@
 # Candidate plan: benchmark and probe tooling review
 
-Status: IN PROGRESS (2026-07-17). Phases 0 and 1 are complete; Phase 2 has not
-started. This is a review and cleanup plan, not an authorization to delete every
-item listed below. Each candidate must pass its own reachability, evidence, and
-replacement-coverage gate before removal.
+Status: IN PROGRESS (2026-07-18). Phases 0 and 1 are complete; Phase 2 is in
+progress. This is a review and cleanup plan, not an authorization to delete
+every item listed below. Each candidate must pass its own reachability, evidence,
+and replacement-coverage gate before removal.
 
 ## 1. Goal
 
@@ -96,9 +96,9 @@ versioned result log, not live museum code.
 Apply that policy as follows:
 
 - Keep dated Markdown reports under `benchmarks/results/`.
-- Before deleting a file named by a report, make the report identify the
-  historical commit that contains the runnable source if it does not already do
-  so.
+- Before deleting a file named by a report, make the report or the living
+  historical-reconstruction index identify the commit containing runnable source.
+  Keep corrections out of immutable dated evidence.
 - For a runner locked to a base commit that predates the runner itself, record
   the exact reconstruction recipe: checkout the measurement base, apply the
   runner source commit as a patch without advancing `HEAD`, then invoke the
@@ -141,6 +141,11 @@ No-file-left-unclassified is the review-completeness gate.
 ### V1. Explicitly dead artifacts
 
 Initial disposition: REMOVE.
+
+Status: COMPLETE (2026-07-18). All four gates were confirmed. P1 provenance was
+repaired in the append-only experiment ledger and the historical reconstruction
+index; the G2 test oracle remains for Phase 3, independent of its two deleted
+launchers. Deleted source: 339 lines.
 
 | Candidate | Evidence | Gate before deletion |
 |---|---|---|
