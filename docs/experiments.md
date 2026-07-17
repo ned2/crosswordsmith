@@ -2091,3 +2091,33 @@ p1-backtrack-instrumentation.patch).
   row and appended history. **KEEP; A-C2 is the next transparent strict
   candidate.** Detailed evidence:
   `benchmarks/results/2026-07-17-a-d2-newest-source-delta.md`.
+
+### A-C2 — bounded global negative-state cache — REJECTED; AVENUE CLOSED
+- **Variants/soundness:** exact-key Variant 1 is preserved at candidate commit
+  `5429a49` with report `a9bf9e3` on `experiment/a-c2`; the one permitted lazy
+  representation refinement is preserved at candidate `b0fd3c6` with report
+  `7c0dba5` on `experiment/a-c2-lazy-key`. Both cache only default unseeded
+  strict direct search, use per-corner request-local `nb_set` state, skip the
+  corner-sensitive root, and insert exact absolute states only after normal
+  exhaustive failure. Seeded search bypasses caching to preserve PRNG draws.
+  Fingerprints are index-only and every prune verifies the full ground key.
+- **Mechanism/equivalence:** focused locks cover placement-order canonicality,
+  forced collisions, multiple exact keys per fingerprint, lookup non-insertion,
+  exception and real inference-cutoff bypass, committed/exhaustive success,
+  fresh lifetime, seeded stream identity, and both-corner full-tree counts. The
+  lazy variant made 659/781 hard lookups, 316/347 exact prunes, and retained
+  310/399 entries. It reduced exact key builds only `659 -> 626` and
+  `781 -> 746`: most misses later proved dead and still required insertion keys.
+- **Result:** Variant 1 cut 15x15/34w and 36w by 73.80% and 79.83%, but six
+  strict rows increased by 0.48%-3.70%. Lazy keys retained 74.17% and 80.09%
+  hard wins and improved five of those six regressions, but still increased
+  09x09/08w +1.28%, 15x15/28w +0.61%, 21x21/25w +1.23%, 21x21/80w +0.15%,
+  21x21/82w +0.20%, and real15 +3.44%. Zero-dead controls built no exact keys
+  yet still lost to fingerprint and state-threading admission cost.
+- **Verification/verdict:** both variants passed focused equivalence tests,
+  full native tests and unchanged goldens, all 15 strict identities, greedy
+  identity, and every greedy metric. Their strict ratchets failed the registered
+  zero-increase bar, so dedicated RSS/WASM were correctly skipped. **REJECT and
+  close global exact negative-state caching;** do not add a size/depth switch,
+  approximate key, floor, or third representation. Revisit only with new
+  external evidence for a zero-tax lookup seam.

@@ -1,8 +1,8 @@
 # Plan: the next `arrange` performance campaign
 
 Status: IN PROGRESS (2026-07-17). A-G1, A-G2, A-D1, and A-D2 are accepted and
-ratcheted; bounded global negative-state caching (A-C2) is the next transparent
-strict candidate. Track R remains behind its explicit product-policy checkpoint.
+ratcheted; A-C1 and A-C2 are measured closed. Track R remains behind its explicit
+product-policy checkpoint; bounded topology prototype A-T0 is next.
 
 ## Execution update (2026-07-17)
 
@@ -16,7 +16,9 @@ still behind the explicit product-policy checkpoint. A-D1 then improved all 14
 strict rungs by 0.94%-5.63%. A-D2 followed at `9d7055a`, preserving every
 strict and greedy identity while improving all 14 strict rungs by 5.51%-62.63%.
 Its paired dense wall result was null, so only the deterministic inference win
-is claimed. The strict baseline and history are promoted; A-C2 is next.
+is claimed. A-C2 then preserved exact identity and cut its two nominated hard
+rungs by 74%-80%, but two exact-key representations both regressed six strict
+rungs by up to 3.70%; the global-cache avenue is closed. A-T0 is next.
 
 The authoritative record is `docs/experiments.md`, with detailed evidence in
 `benchmarks/results/2026-07-17-a-g1-legality-before-score-premise.md`,
@@ -476,7 +478,7 @@ Global state caching is a separate experiment admitted only if P-C0 shows
 substantial non-parent transpositions and a bounded useful working set below the
 campaign's memory ceiling.
 
-### A-C2: bounded global negative-state cache
+### A-C2: bounded global negative-state cache — rejected and closed
 
 P-C0 admitted this replacement for A-C1 after exact-key observation found
 proved-dead revisits at 87%-89% of recursive entries on both hard controls, but
@@ -492,6 +494,13 @@ light-rung inference regressions, a material hard-rung reduction, no more than
 32 MiB additional peak RSS, request-local bounded lifetime, and the WASM battery.
 If exact key construction costs more than the one-node revisits save, close the
 avenue without adding key shortcuts or a small-rung exception.
+
+That stop condition fired. The eager exact-key variant cut the two hard targets
+by 73.80%/79.83% but regressed six strict rows by up to 3.70%. The one allowed
+lazy-key refinement retained 74.17%/80.09% hard wins but still regressed six
+rows by up to 3.44%; even zero-dead controls lost to fingerprint and state
+threading. No cache code was accepted. Revisit only with a new measured premise
+for a lookup seam that imposes no per-node admission tax.
 
 Memory gate for any cache/support table: no more than 32 MiB additional peak RSS
 on the measured native probes without an explicit browser-memory review, and no

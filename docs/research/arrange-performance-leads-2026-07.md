@@ -1,7 +1,7 @@
 # Research: next performance leads for `arrange` (2026-07)
 
 Status: literature reconnaissance complete; Phase 0, A-G1/A-G2, and A-D1/A-D2
-accepted; Phase 2 probes adjudicated; bounded global A-C2 next.
+accepted; A-C1/A-C2 closed; output-changing A-R1 parked; bounded A-T0 next.
 
 ## Execution update (2026-07-17)
 
@@ -19,7 +19,9 @@ count-assoc rebuilds with stable IDs and direct trailed buckets, improving all
 14 strict rungs by 0.94%-5.63%. A-D2 then added proof-preserving newest-source
 deltas and improved all 14 current strict rungs by 5.51%-62.63%, with strict,
 greedy, and WASM identity exact. Its paired dense wall result was null. Bounded
-global A-C2 is the next transparent candidate; parent-local A-C1 remains closed.
+global A-C2 then cut its hard targets by 74%-80% but two exact representations
+both regressed six strict rows by up to 3.70%. A-C1 and A-C2 are now closed;
+bounded topology-first A-T0 is next.
 
 The authoritative record is `docs/experiments.md`, with detailed evidence in
 `benchmarks/results/2026-07-17-a-g1-legality-before-score-premise.md`,
@@ -289,6 +291,14 @@ normal-failure-only insertion, full-key verification after fingerprint lookup,
 zero light-rung regressions, and a 32 MiB additional-RSS ceiling. The observed
 87%-89% hard-state revisit rate is promising, but each revisit was a one-node
 wipeout, so key construction cost is the central kill test.
+
+A-C2 confirmed the asymmetry. Eager exact keys improved its two hard targets by
+73.80%/79.83% but increased six strict rows by up to 3.70%. One lazy-key
+refinement deferred canonicalization on fingerprint misses and retained
+74.17%/80.09% hard wins, yet six rows still increased by up to 3.44%; zero-dead
+controls still paid enough fingerprint/state-threading cost to lose. Both
+variants preserved exact identities. The global-cache seam is closed unless a
+new measurement establishes a lookup path with no per-node admission tax.
 
 ## Thread 5: alternative models
 
