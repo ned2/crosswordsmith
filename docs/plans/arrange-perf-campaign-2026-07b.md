@@ -17,7 +17,9 @@ completed from shared base `1bccf47`: P-D0 nominates A-D1 and proof-preserving
 A-D2 while killing geometry dedup; P-C0 kills parent-local A-C1 but admits a
 bounded global dead-state-cache candidate (A-C2); P-R0 gates Track R with the
 policy tournament still behind its explicit product-policy checkpoint. A-D1 is
-the next serial candidate.
+the next serial candidate. A-D1 subsequently passed and was ratcheted: all 14
+strict inference rungs improved by 0.94%-5.63% with exact identity and WASM
+parity. Proof-preserving A-D2 is now the active serial candidate.
 
 The authoritative record is `docs/experiments.md`, with detailed evidence in
 `benchmarks/results/2026-07-17-a-g1-legality-before-score-premise.md`,

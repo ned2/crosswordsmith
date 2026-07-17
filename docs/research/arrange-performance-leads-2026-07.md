@@ -1,7 +1,7 @@
 # Research: next performance leads for `arrange` (2026-07)
 
 Status: literature reconnaissance complete; Phase 0 and greedy A-G1/A-G2
-accepted; Phase 2 premise probes adjudicated; A-D1 next.
+accepted; Phase 2 premise probes adjudicated; A-D1 accepted; A-D2 next.
 
 ## Execution update (2026-07-17)
 
@@ -15,7 +15,9 @@ A-D2 while rejecting geometry dedup. P-C0 found 87-89% hard-state dead revisits
 but zero parent-local captures, killing A-C1 and admitting a bounded global
 cache candidate. P-R0 placed 60/128 fixed cliff rows and gates Track R; policy
 tuning remains behind the explicit product checkpoint. A-D1 is the active next
-serial experiment.
+serial experiment. A-D1 then replaced strict count-assoc rebuilds with stable
+IDs and direct trailed buckets, improving all 14 strict rungs by 0.94%-5.63%
+with exact identities; proof-preserving A-D2 is now active.
 
 The authoritative record is `docs/experiments.md`, with detailed evidence in
 `benchmarks/results/2026-07-17-a-g1-legality-before-score-premise.md`,

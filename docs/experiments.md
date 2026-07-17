@@ -2039,3 +2039,27 @@ p1-backtrack-instrumentation.patch).
 - **Verdict:** Track R passes its premise gate. A-R1 remains parked at the
   explicit output-changing product-policy checkpoint before any tuning or
   tournament is run.
+
+### A-D1 — stable IDs and direct trailed buckets — KEPT
+- **Change/soundness:** integration commit `6bb50c8` gives strict
+  two-representative MRV stable positional IDs and stores visible capped counts
+  in one guarded fixed-arity term. Letter-sharing IDs receive the unchanged full
+  recount through trail-restored `setarg/3`; non-sharing IDs receive no write
+  and preserve the old stale overestimate. Stable bucket-1/bucket-2 partitions
+  replace positive filtering plus stable `keysort/2`. Other search modes retain
+  the assoc driver.
+- **Equivalence:** an assoc/direct replay matched every visible ID-count
+  snapshot, candidate order, selected ID, placement decision, result, reward,
+  and layout on eight light/dense corner controls. P-D0 remains exact, a small
+  full tree counted `3 == 3`, all 15 strict identities match, and greedy identity
+  remains unchanged.
+- **Result:** duplicate core+heavy runs and the composed promote run produced 14
+  wins and zero regressions, ranging from -0.94% to -5.63%. Representative rows
+  are 15x15/32w `929,466 -> 900,159` (-3.15%) and 21x21/80w
+  `4,246,246 -> 4,049,012` (-4.64%). Paired wall ratios were 0.9335 and 0.9198;
+  every greedy metric stayed +0.00%.
+- **Verification/adoption:** composed `make test` passed 435 assertions and all
+  goldens/CLI contracts. `make test-wasm` passed value parity, type lock,
+  headless SDK, worker errors, and spare policies. `bench-arrange-promote
+  BENCH_ARGS=--heavy` persisted/read back all rows and appended history.
+  **KEEP; proof-preserving A-D2 may now proceed separately.**
