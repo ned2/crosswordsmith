@@ -2063,3 +2063,31 @@ p1-backtrack-instrumentation.patch).
   headless SDK, worker errors, and spare policies. `bench-arrange-promote
   BENCH_ARGS=--heavy` persisted/read back all rows and appended history.
   **KEEP; proof-preserving A-D2 may now proceed separately.**
+
+### A-D2 — proof-preserving newest-source delta — KEPT
+- **Change/soundness:** integration commit `9d7055a` adds a parallel local,
+  ID-indexed trailed residue term to A-D1's strict direct state. Previous bucket
+  0 scans only the newest source; previous bucket 1 combines newest-source
+  proofs with its one fully revalidated old proof; previous bucket 2 always uses
+  the unchanged full recount. Proof source/order/multiplicity, stale
+  non-sharing buckets, stable ties, seed stream, memo lifecycle, corners, and
+  shared budget remain exact. Geometry dedup and bucket-2 lowering were not
+  attempted.
+- **Differential:** all 6,478 P-D0 refreshes matched unchanged `mrv_count/8`
+  and a full proof recount. Full/delta count, selection, decision, result,
+  reward, and layout traces match on eight controls plus both-corner seed-42
+  paths. Classification reproduces P-D0 exactly: 75.61% light and 47.90% dense,
+  with candidate checks `2,191 -> 954` and `144,647 -> 67,572`.
+- **Result:** duplicate full core+heavy runs and the composed promotion produced
+  14 wins and zero regressions, from -5.51% to -62.63%. Representative rows are
+  15x15/32w `900,159 -> 627,744` (-30.26%) and 21x21/80w
+  `4,049,012 -> 3,107,968` (-23.24%). All 15 strict identities are exact. Paired
+  dense wall ratios were null at 1.0013 and 1.0024, so no wall win is claimed;
+  every greedy metric stayed +0.00%.
+- **Verification/adoption:** composed `make test` passed 453 assertions and all
+  goldens/CLI contracts. Focused residue locks, small exhaustive counts, seeded
+  traces, strict/greedy identities, full greedy metrics, and `make test-wasm`
+  passed. `bench-arrange-promote BENCH_ARGS=--heavy` persisted/read back every
+  row and appended history. **KEEP; A-C2 is the next transparent strict
+  candidate.** Detailed evidence:
+  `benchmarks/results/2026-07-17-a-d2-newest-source-delta.md`.

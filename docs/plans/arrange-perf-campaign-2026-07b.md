@@ -1,31 +1,30 @@
 # Plan: the next `arrange` performance campaign
 
-Status: IN PROGRESS (2026-07-17). The adversarial review's amendments are
-folded in below: counter-free cutoff authority, a finite paired restart design
-with CPU caps, pinned greedy construction subjects, exact raw-pool transpose
-semantics, direct-bucket correctness locks, serial wall/profile adjudication,
-and explicit topology limits.
+Status: IN PROGRESS (2026-07-17). A-G1, A-G2, A-D1, and A-D2 are accepted and
+ratcheted; bounded global negative-state caching (A-C2) is the next transparent
+strict candidate. Track R remains behind its explicit product-policy checkpoint.
 
 ## Execution update (2026-07-17)
 
 Phase 0 passed. A-G1 legality-before-score and A-G2 transpose-partner synthesis
-were accepted and ratcheted; the accepted product/ratchet base is `4771b97`.
-Cumulatively, dense sweep inferences changed by 15x15/32w
-`6,126,445 -> 1,241,744` (-79.74%) and 21x21/80w
-`28,942,375 -> 4,910,962` (-83.03%). The Phase 2 P-D0/P-C0/P-R0 wave then
-completed from shared base `1bccf47`: P-D0 nominates A-D1 and proof-preserving
-A-D2 while killing geometry dedup; P-C0 kills parent-local A-C1 but admits a
-bounded global dead-state-cache candidate (A-C2); P-R0 gates Track R with the
-policy tournament still behind its explicit product-policy checkpoint. A-D1 is
-the next serial candidate. A-D1 subsequently passed and was ratcheted: all 14
-strict inference rungs improved by 0.94%-5.63% with exact identity and WASM
-parity. Proof-preserving A-D2 is now the active serial candidate.
+were accepted and ratcheted, cumulatively reducing dense greedy sweep
+inferences by 79.74% on 15x15/32w and 83.03% on 21x21/80w. The Phase 2
+P-D0/P-C0/P-R0 wave completed from shared base `1bccf47`: P-D0 nominated A-D1
+and proof-preserving A-D2 while killing geometry dedup; P-C0 killed parent-local
+A-C1 but admitted bounded global A-C2; P-R0 gated Track R with its tournament
+still behind the explicit product-policy checkpoint. A-D1 then improved all 14
+strict rungs by 0.94%-5.63%. A-D2 followed at `9d7055a`, preserving every
+strict and greedy identity while improving all 14 strict rungs by 5.51%-62.63%.
+Its paired dense wall result was null, so only the deterministic inference win
+is claimed. The strict baseline and history are promoted; A-C2 is next.
 
 The authoritative record is `docs/experiments.md`, with detailed evidence in
 `benchmarks/results/2026-07-17-a-g1-legality-before-score-premise.md`,
 `benchmarks/results/2026-07-17-a-g2-transpose-premise.md`, and
 `benchmarks/results/2026-07-17-a-g2-transpose-product.md`, plus the P-D0, P-C0,
-and P-R0 reports under `benchmarks/results/2026-07-17-p-*.md`.
+and P-R0 reports under `benchmarks/results/2026-07-17-p-*.md`. Strict product
+evidence is in `benchmarks/results/2026-07-17-a-d1-direct-buckets.md` and
+`benchmarks/results/2026-07-17-a-d2-newest-source-delta.md`.
 
 This campaign investigates the leads in
 `docs/research/arrange-performance-leads-2026-07.md` using the measured,
@@ -441,7 +440,7 @@ under 500M. Perturbation-arm complementarity is not claimed by this probe.
 
 Run one product candidate at a time against the current ratcheted baseline.
 
-### A-D1: stable IDs and direct trailed buckets
+### A-D1: stable IDs and direct trailed buckets — accepted
 
 Replace per-node count-assoc rebuild/sort work with stable integer word IDs, a
 fixed-arity backtrackable bucket term, and stable 0/1/2 partitions. Preserve the
@@ -456,7 +455,7 @@ backtrack restoration, proof multiplicity, and exact full-tree solution counts.
 Then require complete ladder identity. Stable IDs/direct storage are a
 hypothesis, not presumed semantics preservation.
 
-### A-D2: residue plus newest-source delta
+### A-D2: residue plus newest-source delta — accepted
 
 Only if P-D0 and A-D1 pass. Use an old residue plus explicit search against the
 newly placed word to classify safe bucket transitions; fall back to the current
@@ -467,7 +466,7 @@ Expected result and exact classification surface come from P-D0, not from the
 literature. One focused follow-up is allowed if the mechanism is sound and a
 single measured tax blocks the ratchet; otherwise close the avenue.
 
-### A-C1: parent-local failed-child dedup
+### A-C1: parent-local failed-child dedup — closed by P-C0
 
 Only if P-C0 nominates it. Record a child decision only after its subtree
 exhausts normally; skip the same failed child when another crossing proof
@@ -476,6 +475,23 @@ generates it under the same parent. Never cache budget-interrupted branches.
 Global state caching is a separate experiment admitted only if P-C0 shows
 substantial non-parent transpositions and a bounded useful working set below the
 campaign's memory ceiling.
+
+### A-C2: bounded global negative-state cache
+
+P-C0 admitted this replacement for A-C1 after exact-key observation found
+proved-dead revisits at 87%-89% of recursive entries on both hard controls, but
+each repeated subtree was only a one-node wipeout. Cache only states proved dead
+by normal exhaustive failure; never cache budget interruption, exceptions, or
+an unfinished branch. A fingerprint may select a bucket, but every pruning hit
+must verify the exact absolute canonical key: grid size, remaining stable IDs,
+and sorted `(ID,Start,Dir)` placements. Translation normalization is forbidden.
+
+Judge the mechanism first on exact hit/miss/prune counters and the two hard
+controls. Product acceptance requires all strict and greedy identities, zero
+light-rung inference regressions, a material hard-rung reduction, no more than
+32 MiB additional peak RSS, request-local bounded lifetime, and the WASM battery.
+If exact key construction costs more than the one-node revisits save, close the
+avenue without adding key shortcuts or a small-rung exception.
 
 Memory gate for any cache/support table: no more than 32 MiB additional peak RSS
 on the measured native probes without an explicit browser-memory review, and no
@@ -630,6 +646,7 @@ probe/a-r0-*
 experiment/a-d1-*
 experiment/a-d2-*
 experiment/a-c1-*
+experiment/a-c2-*
 experiment/a-r1-*
 experiment/a-t0-*
 ```

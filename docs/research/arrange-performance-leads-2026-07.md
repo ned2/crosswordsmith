@@ -1,7 +1,7 @@
 # Research: next performance leads for `arrange` (2026-07)
 
-Status: literature reconnaissance complete; Phase 0 and greedy A-G1/A-G2
-accepted; Phase 2 premise probes adjudicated; A-D1 accepted; A-D2 next.
+Status: literature reconnaissance complete; Phase 0, A-G1/A-G2, and A-D1/A-D2
+accepted; Phase 2 probes adjudicated; bounded global A-C2 next.
 
 ## Execution update (2026-07-17)
 
@@ -14,10 +14,12 @@ light and 47.90% of dense recounts exactly, nominating A-D1 and proof-preserving
 A-D2 while rejecting geometry dedup. P-C0 found 87-89% hard-state dead revisits
 but zero parent-local captures, killing A-C1 and admitting a bounded global
 cache candidate. P-R0 placed 60/128 fixed cliff rows and gates Track R; policy
-tuning remains behind the explicit product checkpoint. A-D1 is the active next
-serial experiment. A-D1 then replaced strict count-assoc rebuilds with stable
-IDs and direct trailed buckets, improving all 14 strict rungs by 0.94%-5.63%
-with exact identities; proof-preserving A-D2 is now active.
+tuning remains behind the explicit product checkpoint. A-D1 replaced strict
+count-assoc rebuilds with stable IDs and direct trailed buckets, improving all
+14 strict rungs by 0.94%-5.63%. A-D2 then added proof-preserving newest-source
+deltas and improved all 14 current strict rungs by 5.51%-62.63%, with strict,
+greedy, and WASM identity exact. Its paired dense wall result was null. Bounded
+global A-C2 is the next transparent candidate; parent-local A-C1 remains closed.
 
 The authoritative record is `docs/experiments.md`, with detailed evidence in
 `benchmarks/results/2026-07-17-a-g1-legality-before-score-premise.md`,
@@ -237,6 +239,13 @@ This differs from E-H10: it explicitly examines the only new crossing source
 instead of incorrectly assuming the support set only shrinks. Stop if it cannot
 classify a substantial fraction of recounts without increasing light-rung work.
 
+The accepted implementation retains one exact source proof only for bucket 1,
+scans the newest source for previous buckets 0/1, fully revalidates the old proof
+when needed, and always fully recounts previous bucket 2. It reproduced every
+P-D0 classification and matched all 6,478 observed full recounts. All 14 strict
+rungs improved by 5.51%-62.63%; paired dense wall remained neutral, so the
+accepted claim is deterministic inference reduction rather than wall speed.
+
 ## Thread 4: duplicate states and nogoods
 
 Equivalent partial layouts are reachable because different legal placement
@@ -273,6 +282,13 @@ is the best caching candidate if A-C0 confirms the expected duplication shape.
 Global negative-state caching would key the sorted placed assignments plus the
 remaining-word set and grid size. Translation normalization is unsound on a
 finite canvas, and letter-grid-only keys omit boundary and orientation state.
+
+P-C0 found zero parent-local captures and closed A-C1. It separately admitted
+A-C2, one bounded global negative-state-cache candidate: exact absolute keys,
+normal-failure-only insertion, full-key verification after fingerprint lookup,
+zero light-rung regressions, and a 32 MiB additional-RSS ceiling. The observed
+87%-89% hard-state revisit rate is promising, but each revisit was a one-node
+wipeout, so key construction cost is the central kill test.
 
 ## Thread 5: alternative models
 
