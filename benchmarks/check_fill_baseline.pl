@@ -51,9 +51,9 @@
 :- set_prolog_flag(verbose, silent).
 :- use_module(library(lists)).
 :- use_module(library(apply)).
-:- use_module(library(process)).
 :- use_module(library(readutil)).
 :- use_module(library(json)).
+:- use_module('bench_process.pl', [capture_process/6]).
 
 % directory_file_path/3 is autoload-only (library(filesex)); explicit so this
 % root also runs under autoload(false) (P11/C5, matching load.pl).
@@ -122,11 +122,7 @@ load_baseline(Path, Baseline) :-
 run_product_bench(BenchDir, Extra, Doc) :-
     directory_file_path(BenchDir, 'run_fill.pl', RunFill),
     append(['-q', RunFill, '--', '--format', json], Extra, Args),
-    process_create(path(swipl), Args,
-                   [ stdout(pipe(Out)), stderr(std), process(PID) ]),
-    read_string(Out, _, JsonText),
-    close(Out),
-    process_wait(PID, Status),
+    capture_process(path(swipl), Args, inherit, JsonText, _Stderr, Status),
     ( Status == exit(0) -> true ; throw(error(fill_bench_run_failed(Status), _)) ),
     atom_json_dict(JsonText, Doc, [default_tag(json)]).
 
@@ -358,10 +354,7 @@ current_host(Host) :-
 current_host(unknown).
 
 uname_nm(Raw) :-
-    process_create(path(uname), ['-nm'],
-                   [ stdout(pipe(Out)), stderr(null), process(PID) ]),
-    read_string(Out, _, Raw), close(Out),
-    process_wait(PID, _).
+    capture_process(path(uname), ['-nm'], null, Raw, _Stderr, _Status).
 
 % --- HISTORY (append-only trend ledger) --------------------------------------
 % One JSON object per line in benchmarks/fill_history.jsonl. search_inf and
@@ -477,8 +470,7 @@ git_dirty(Dirty) :-
     -> Dirty = true ; Dirty = false ).
 
 run_capture(Spec, Args, Out) :-
-    process_create(Spec, Args, [stdout(pipe(S)), stderr(null), process(PID)]),
-    read_string(S, _, Out), close(S), process_wait(PID, _).
+    capture_process(Spec, Args, null, Out, _Stderr, _Status).
 
 :- multifile prolog:error_message//1.
 prolog:error_message(fill_baseline_missing(Path)) -->

@@ -8,8 +8,8 @@
 :- use_module(library(filesex), [directory_file_path/3]).
 :- use_module(library(json)).
 :- use_module(library(lists)).
-:- use_module(library(process)).
 :- use_module(library(readutil)).
+:- use_module('bench_process.pl', [capture_process/6]).
 
 :- prolog_load_context(directory, D), assertz(bench_dir(D)).
 :- dynamic bench_dir/1.
@@ -53,9 +53,7 @@ load_json(Path, Dict) :-
 run_bench(BenchDir, Extra, Doc) :-
     directory_file_path(BenchDir, 'run_arrange_greedy.pl', Runner),
     append(['-q',Runner,'--','--format',json], Extra, Args),
-    process_create(path(swipl),Args,
-                   [stdout(pipe(Out)),stderr(std),process(PID)]),
-    read_string(Out,_,Text), close(Out), process_wait(PID,Status),
+    capture_process(path(swipl),Args,inherit,Text,_Stderr,Status),
     ( Status == exit(0) -> atom_json_dict(Text,Doc,[default_tag(json)])
     ; throw(error(greedy_bench_failed(Status),_)) ).
 
@@ -168,8 +166,8 @@ verify_readback(ReadBack,Doc) :-
     length(Found,Expected).
 
 current_host(Host) :-
-    process_create(path(uname),['-nm'],[stdout(pipe(S)),process(P)]),
-    read_string(S,_,Raw),close(S),process_wait(P,_),normalize_space(atom(Host),Raw).
+    capture_process(path(uname),['-nm'],null,Raw,_Stderr,_Status),
+    normalize_space(atom(Host),Raw).
 
 history_path(BenchDir,Path) :- directory_file_path(BenchDir,'greedy_history.jsonl',Path).
 
@@ -196,14 +194,13 @@ append_history(BenchDir,Doc,Extra) :-
     format("history appended: ~w~n",[Path]).
 
 git_commit(Commit) :-
-    process_create(path(git),['rev-parse','--short','HEAD'],
-                   [stdout(pipe(S)),stderr(null),process(P)]),
-    read_string(S,_,Raw),close(S),process_wait(P,_),normalize_space(atom(Commit),Raw).
+    capture_process(path(git),['rev-parse','--short','HEAD'],null,
+                    Raw,_Stderr,_Status),
+    normalize_space(atom(Commit),Raw).
 
 git_dirty(Dirty) :-
-    process_create(path(git),['status','--porcelain','--untracked-files=no'],
-                   [stdout(pipe(S)),stderr(null),process(P)]),
-    read_string(S,_,Raw),close(S),process_wait(P,_),
+    capture_process(path(git),['status','--porcelain','--untracked-files=no'],null,
+                    Raw,_Stderr,_Status),
     normalize_space(string(Text),Raw),
     ( Text == "" -> Dirty=false ; Dirty=true ).
 

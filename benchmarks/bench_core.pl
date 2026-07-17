@@ -14,8 +14,8 @@
 
 :- use_module(library(lists)).
 :- use_module(library(apply)).
-:- use_module(library(process)).
 :- use_module(library(readutil)).
+:- use_module('bench_process.pl', [capture_process/6]).
 % call_time/2 (inproc_sampler's measurement wrapper) is autoload-only
 % (library(statistics)); explicit so the bench roots also run under
 % autoload(false) (P11/C5).
@@ -85,9 +85,7 @@ process_sampler(Exe, Argv, Wall, Rss, Exit) :-
 
 run_under_time(Exe, Argv, TimeFile, Wall, Rss, Exit) :-
     append(['-o', TimeFile, '-f', '%e %M', Exe], Argv, TimeArgv),
-    process_create('/usr/bin/time', TimeArgv,
-                   [ stdout(null), stderr(null), process(PID) ]),
-    process_wait(PID, Status),
+    capture_process('/usr/bin/time', TimeArgv, null, _Stdout, _Stderr, Status),
     ( Status = exit(Exit) -> true ; Exit = -1 ),
     read_time_file(TimeFile, Wall, Rss).
 

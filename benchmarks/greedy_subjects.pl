@@ -18,9 +18,8 @@
 :- use_module(library(sha), [sha_hash/3, hash_atom/2]).
 :- use_module(library(lists), [member/2, selectchk/3]).
 :- use_module(library(pairs), [pairs_values/2]).
-:- use_module(library(process), [process_create/3, process_wait/2]).
-
 :- use_module('bench_core.pl').
+:- use_module('bench_process.pl', [capture_process/6]).
 
 load_words(File, Words) :-
     load_clues(File, Words).
@@ -466,11 +465,7 @@ assoc_pair_signature(Answer-(Row-Col-Dir),
 
 cli_identity(Exe, File, GridLen, Framing, Command, Sig) :-
     command_args(File, GridLen, Framing, Command, '/dev/stdout', Args),
-    process_create(Exe, Args,
-                   [stdout(pipe(Out)), stderr(pipe(Err)), process(PID)]),
-    read_string(Out, _, Stdout), close(Out),
-    read_string(Err, _, Stderr), close(Err),
-    process_wait(PID, Status),
+    capture_process(Exe, Args, capture, Stdout, Stderr, Status),
     ( Status = exit(Exit) -> true ; Exit = -1 ),
     sha256(Stdout, OutSha), sha256(Stderr, ErrSha),
     Sig = _{exit:Exit,stdout_sha256:OutSha,stderr_sha256:ErrSha}.

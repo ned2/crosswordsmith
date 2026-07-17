@@ -5,8 +5,11 @@
 :- use_module(library(plunit)).
 :- use_module(library(json)).
 :- use_module(library(readutil)).
+:- use_module(library(time), [call_with_time_limit/2]).
+:- use_module(library(process), [process_wait/2]).
 :- use_module(library(apply), [exclude/3]).
 :- use_module('../benchmarks/check_baseline.pl', []).
+:- use_module('../benchmarks/bench_process.pl', [capture_process/6]).
 :- use_module('bench_core_caller.pl', []).
 
 :- begin_tests(arrange_benchmark_promotion).
@@ -67,6 +70,33 @@ test(meta_closures_resolve_in_caller_module) :-
     assertion(number(Sample.wall)),
     assertion(number(Sample.cpu)),
     assertion(integer(Sample.inferences)).
+
+test(dual_capture_drains_large_stderr_before_stdout_close) :-
+    Goal = 'forall(between(1,1048576,_),put_char(user_error,x)),format("done"),close(user_output)',
+    call_with_time_limit(
+        10,
+        capture_process(path(swipl), ['-q', '-g', Goal, '-t', halt], capture,
+                        Stdout, Stderr, Status)),
+    assertion(Status == exit(0)),
+    assertion(Stdout == "done"),
+    string_length(Stderr, StderrBytes),
+    assertion(StderrBytes =:= 1048576).
+
+test(process_cleanup_waits_after_goal_exception) :-
+    tmp_file_stream(text, Path, Out),
+    setup_call_cleanup(
+        true,
+        catch(setup_call_cleanup(
+                  bench_process:start_child(
+                      path(swipl), ['-q', '-g', true, '-t', halt], Out, null,
+                      Child),
+                  throw(capture_test_exception),
+                  bench_process:reap_child(Child)),
+              capture_test_exception, true),
+        ( close(Out), delete_file(Path) )),
+    Child = child(PID, pending),
+    catch(process_wait(PID, _), ReapedError, true),
+    assertion(nonvar(ReapedError)).
 
 :- end_tests(arrange_benchmark_promotion).
 
