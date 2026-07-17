@@ -105,7 +105,7 @@ def load_jsonl(stream) -> list[dict]:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("file", nargs="-", default=["-"])
+    parser.add_argument("file", nargs="*", default=["-"])
     parser.add_argument("--group-by", default="fixture,corner,arm")
     args = parser.parse_args()
     rows = []

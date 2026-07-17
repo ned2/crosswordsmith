@@ -2,6 +2,7 @@
 import json
 import pathlib
 import subprocess
+import tempfile
 import unittest
 
 from benchmarks.probe_arrange.schema import guard_groups, validate
@@ -157,6 +158,18 @@ class SchemaTests(unittest.TestCase):
     def test_mixed_rig_rejected(self):
         with self.assertRaisesRegex(ValueError, "mixed-rig"):
             guard_groups([row(), row("instrumented")], ["fixture", "corner", "arm"])
+
+    def test_schema_cli_accepts_jsonl_file(self):
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as stream:
+            json.dump(row(), stream)
+            stream.write("\n")
+            stream.flush()
+            result = subprocess.run(
+                ["python3", str(ROOT / "benchmarks" / "probe_arrange" / "schema.py"),
+                 stream.name],
+                cwd=ROOT, text=True, capture_output=True,
+            )
+        self.assertEqual(result.returncode, 0, result.stderr)
 
 
 if __name__ == "__main__":
