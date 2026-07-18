@@ -154,6 +154,17 @@ test(dual_capture_drains_large_stderr_before_stdout_close) :-
     string_length(Stderr, StderrBytes),
     assertion(StderrBytes =:= 1048576).
 
+test(process_capture_modes_are_deterministic,
+     [forall(member(Mode, [capture, inherit, null]))]) :-
+    capture_process(path(swipl),
+                    ['-q', '-g', 'format(ok)', '-t', halt], Mode,
+                    Stdout, Stderr, Status),
+    deterministic(Det),
+    assertion(Det == true),
+    assertion(Status == exit(0)),
+    assertion(Stdout == "ok"),
+    assertion(Stderr == "").
+
 test(process_cleanup_waits_after_goal_exception) :-
     tmp_file_stream(text, Path, Out),
     setup_call_cleanup(

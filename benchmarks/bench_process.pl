@@ -6,10 +6,12 @@
 
 %!  capture_process(+Exe, +Argv, +StderrMode, -Stdout, -Stderr, -Status) is det.
 %
-%   Run Exe with Argv and return its output and exit Status. StderrMode is one
-%   of `capture`, `inherit`, or `null`. File-backed capture avoids bounded-pipe
-%   deadlocks while setup_call_cleanup/3 guarantees stream closure, PID reaping,
-%   and temporary-file removal on success, failure, or exception.
+%   Run Exe with Argv and return its text output and process Status. StderrMode
+%   is one of `capture`, `inherit`, or `null`; Stderr is empty unless capture is
+%   selected. Standard input is inherited. Nonzero status is returned rather
+%   than thrown. File-backed capture avoids bounded-pipe deadlocks while
+%   setup_call_cleanup/3 closes streams, reaps the requested PID, and removes
+%   temporary files. This predicate does not impose a timeout or kill a child.
 capture_process(Exe, Argv, StderrMode, Stdout, Stderr, Status) :-
     must_be(oneof([capture, inherit, null]), StderrMode),
     setup_call_cleanup(

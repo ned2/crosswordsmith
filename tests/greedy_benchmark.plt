@@ -1,16 +1,16 @@
 % Focused subprocess test for the greedy ratchet's atomic promote/read-back path.
 
 :- use_module(library(plunit)).
-:- use_module(library(process)).
+:- use_module('../benchmarks/bench_process.pl', [capture_process/6]).
 :- use_module('../benchmarks/greedy_subjects.pl').
 
 :- begin_tests(greedy_benchmark).
 
 test(record_readback_and_retention) :-
-    process_create(path(swipl),
-                   ['-q','benchmarks/check_greedy_baseline.pl','--self-test'],
-                   [stdout(null),stderr(std),process(PID)]),
-    process_wait(PID,exit(0)).
+    capture_process(path(swipl),
+                    ['-q', 'benchmarks/check_greedy_baseline.pl', '--self-test'],
+                    inherit, _Stdout, _Stderr, Status),
+    assertion(Status == exit(0)).
 
 test(candidate_phases_match_product) :-
     load_clues('fixtures/benchmark_08_words.pl', Words),
