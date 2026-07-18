@@ -98,3 +98,48 @@ At `a2248bd`, build fresh schema-v2 artifacts at the probe's historical
 `*_v1.idx`/`*_v2.idx` names. For the `0aa13ca` follow-up, pass `--masks` when
 building the mask-bearing Phase B artifacts; default artifacts intentionally
 omit masks.
+
+## Fill-quality campaigns
+
+The complete pre-cleanup narrative and tables remain in the last source-bearing
+README snapshot:
+
+```sh
+git show 0e7d124:benchmarks/fill_quality/README.md
+```
+
+### FS-3(b) / FS-4 frontier
+
+- Driver: commit `23e3772`, path `benchmarks/fill_quality/matrix.sh`.
+- Durable decision summary: `docs/design-spec.md` DP-6.
+
+```sh
+git show 23e3772:benchmarks/fill_quality/matrix.sh
+```
+
+### DP-7 MAC / dom-wdeg adoption
+
+- Final probe: commit `4653996`, path
+  `benchmarks/fill_quality/probe_mac.pl`.
+- Durable adoption record: `docs/plans/fill-mac-dwd-implementation.md`.
+
+```sh
+git show 4653996:benchmarks/fill_quality/probe_mac.pl
+```
+
+### B0 shipped-MAC instrumentation
+
+- Initial rig: commit `42c7eac`.
+- Corrected budget-boundary rig: commit `9a88f36`, paths
+  `benchmarks/fill_quality/probe_mac_b0.pl` and
+  `benchmarks/fill_quality/run_b0_instrument.sh`.
+- Result: `benchmarks/results/2026-07-16-fill-b0-mac-instrumentation.md`.
+
+```sh
+git show 9a88f36:benchmarks/fill_quality/probe_mac_b0.pl
+git show 9a88f36:benchmarks/fill_quality/run_b0_instrument.sh
+```
+
+Later B1/B2/B3/C1 variants were never merged into the main source tree. Their
+probe commits and verdicts remain in `docs/experiments.md` and
+`docs/research/fill-perf-program-closeout-2026-07.md`.

@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
-"""Score-quality comparison for a filled crossword grid.
+"""Independent score-quality comparison for filled crossword grids.
 
-Prototype fill-quality benchmark: crosswordsmith `fill` (scoreless MRV) vs
-ingrid_core (scored CSP), both filling the SAME grid from the SAME word list
-(Spread the Wordlist). Every placed entry is scored *post hoc* against STW, so
-the quality delta is visible even though crosswordsmith emits no scores itself.
+The optional comparison driver runs crosswordsmith and ingrid_core on the same
+grid and Spread the Wordlist dictionary. Every placed entry is scored post hoc,
+independently of crosswordsmith's quality sidecar.
 
 Metrics per fill: n entries, mean score, min score, #entries scored <50
 ("below clean"), #entries absent from STW (junk / score 0).
 
 Usage:
-    python3 score_fill.py stw_scored.txt open4 open5 mini7 mini9
+    python3 score_fill.py stw_scored.txt open4 open5 mini7 mini9 amer11
 Expects, per grid <g>: <g>.json (mask), cs_<g>.json (crosswordsmith full-dict
 fill), cs50_<g>.json (crosswordsmith score>=50 prefiltered dict fill),
 ingrid_<g>.txt (ingrid_core min-score 50 fill). Missing variants are skipped.
@@ -21,29 +20,35 @@ from pathlib import Path
 
 
 def fold(word):
-    """Engine-parity key: uppercase, keep A-Z only (digits/punct squeezed).
+    """Benchmark key: uppercase, keep A-Z only (digits/punct squeezed).
 
-    crosswordsmith normalizes every dict word this way at load (README --dict),
-    so post-hoc scoring must key the same way or entries like CWL's MP3J;100
-    (played by the engine as MPJ) would look absent. STW ships pre-normalized,
-    so this is a no-op for it (6 digit-bearing score-20 entries aside).
+    The reference STW snapshot and measured CWL inputs are ASCII. Squeezing is
+    still needed for entries like CWL's MP3J;100, which the engine plays as MPJ.
+    The engine's product loader has broader Unicode folding; this scorer is
+    deliberately scoped to the benchmark's pre-normalized ASCII dictionaries.
     """
     return ''.join(c for c in word.upper() if 'A' <= c <= 'Z')
 
 
 def load_scores(path):
     scores = {}
-    for line in Path(path).read_text().splitlines():
+    for line_number, line in enumerate(Path(path).read_text().splitlines(), start=1):
         if ';' in line:
             word, raw = line.rsplit(';', 1)
             try:
                 score = int(raw)
             except ValueError:
                 continue
-            key = fold(word)
-            if key:
-                # duplicate folded keys keep the max, matching the engine
-                scores[key] = max(score, scores.get(key, score))
+        else:
+            word, score = line, 1
+        if not word.isascii():
+            raise ValueError(
+                f"{path}:{line_number}: post-hoc scorer supports ASCII words only"
+            )
+        key = fold(word)
+        if key:
+            # duplicate folded keys keep the max, matching the engine
+            scores[key] = max(score, scores.get(key, score))
     return scores
 
 
@@ -104,6 +109,17 @@ def stats(words, scores):
     }
 
 
+def report_agrees(report_path, s):
+    """Return whether one engine sidecar agrees with post-hoc stats."""
+    rep = json.loads(Path(report_path).read_text())
+    return (rep.get('threshold') == 50
+            and rep.get('n') == s['n']
+            and rep.get('min') == s['min']
+            and rep.get('belowThreshold') == s['below50']
+            and isinstance(rep.get('mean'), (int, float))
+            and abs(rep['mean'] - s['mean']) < 0.15)
+
+
 def check_report(grid, s):
     """Cross-check the engine's --report-json against these post-hoc stats.
 
@@ -118,14 +134,14 @@ def check_report(grid, s):
     rp = Path(f"cs_minscore_{grid}.report.json")
     if not rp.exists():
         return None
-    rep = json.loads(rp.read_text())
-    return (rep['n'] == s['n'] and rep['min'] == s['min']
-            and rep['belowThreshold'] == s['below50']
-            and abs(rep['mean'] - s['mean']) < 0.15)
+    return report_agrees(rp, s)
 
 
 def main():
-    scores = load_scores(sys.argv[1])
+    try:
+        scores = load_scores(sys.argv[1])
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
     grids = sys.argv[2:]
     hdr = f"{'grid':7} {'tool':31} {'n':>3} {'mean':>5} {'min':>4} {'<50':>4} {'junk':>4}"
     print(hdr)
@@ -153,11 +169,14 @@ def main():
                 elif agree is False:
                     note = '  report-json DISAGREES'
                     disagreements += 1
+                else:
+                    note = '  report-json MISSING'
+                    disagreements += 1
             print(f"{g:7} {label:31} {s['n']:>3} {s['mean']:>5} "
                   f"{s['min']:>4} {s['below50']:>4} {s['junk']:>4}{note}")
         print()
     if disagreements:
-        print(f"FAIL: {disagreements} --report-json disagreement(s) with post-hoc scoring")
+        print(f"FAIL: {disagreements} --report-json failure(s) against post-hoc scoring")
         sys.exit(1)
 
 

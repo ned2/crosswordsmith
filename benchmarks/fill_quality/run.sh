@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Prototype fill-quality benchmark driver: crosswordsmith `fill` (scoreless MRV)
-# vs ingrid_core (scored CSP) on identical grids + the same word list.
+# Optional fill-quality comparison: crosswordsmith vs ingrid_core on identical
+# grids and the same scored dictionary. This reports comparisons; the permanent
+# AC-FILL-12 gate is `make bench-fill-quality-check`.
 #
-# NOT part of `make bench` — it needs two external, non-bundled dependencies:
+# NOT part of `make test` — it needs two external, non-bundled dependencies:
 #   1. ingrid_core   (`cargo install ingrid_core`; needs a Rust toolchain)
 #   2. Spread the Wordlist scored list, as $STW (word;score, one per line).
 #      Download from https://www.spreadthewordlist.com/ (CC BY-NC-SA 4.0).
@@ -15,6 +16,8 @@ ROOT="$(cd "$HERE/../.." && pwd)"
 CS="$ROOT/crosswordsmith"
 WORK="${1:-$HERE/work}"
 : "${STW:?set STW to the Spread-the-Wordlist word;score file}"
+[[ -r "$STW" ]] || { echo "STW is not readable: $STW"; exit 1; }
+STW="$(realpath "$STW")"
 command -v ingrid_core >/dev/null || { echo "ingrid_core not on PATH (cargo install ingrid_core)"; exit 1; }
 
 mkdir -p "$WORK"; cd "$WORK"
@@ -22,10 +25,12 @@ cut -d';' -f1 "$STW" > stw_plain.txt                 # scoreless dict for crossw
 awk -F';' '$2>=50{print $1}' "$STW" > stw_ge50.txt   # score>=50 prefiltered dict
 python3 "$HERE/gen_grids.py" .
 
-for g in open4 open5 mini7 mini9; do
-  # NOTE: a non-zero exit here can be budget exhaustion OR a hard error (e.g.
-  # a >0.5M-word list blows SWI's default 1GB stack at index build — CWL did,
-  # 2026-07-15). Rerun without the stderr redirect to tell them apart.
+grids=(open4 open5 mini7 mini9 amer11)
+for g in "${grids[@]}"; do
+  rm -f "cs_$g.json" "cs50_$g.json" "cs_minscore_$g.json" \
+      "cs_minscore_$g.report.json" "ingrid_$g.txt"
+  # A non-zero exit can be budget exhaustion, a capacity report, or bad input.
+  # Rerun without the stderr redirect to distinguish them.
   "$CS" fill --grid "$g.json" --dict stw_plain.txt --out "cs_$g.json"  >/dev/null 2>&1 || echo "cs full  $g: no fill (budget or dict-load error)"
   "$CS" fill --grid "$g.json" --dict stw_ge50.txt  --out "cs50_$g.json" >/dev/null 2>&1 || echo "cs >=50  $g: no fill (budget or dict-load error)"
   # Native scored fill (§8.4a): STW ingested directly as word;score, hard
@@ -39,5 +44,4 @@ for g in open4 open5 mini7 mini9; do
   ingrid_core --wordlist "$STW" --min-score 50 "$g.txt" > "ingrid_$g.txt" 2>/dev/null   || echo "ingrid   $g: no fill"
 done
 
-cp "$HERE/score_fill.py" .
-python3 score_fill.py "$STW" open4 open5 mini7 mini9
+python3 "$HERE/score_fill.py" "$STW" "${grids[@]}"

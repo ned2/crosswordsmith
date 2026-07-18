@@ -6,11 +6,12 @@ closing commit). All four stages complete; the C3 findings below amended
 the locked spec (§8.4c points 4–6, AC-FILL-13) — read them before touching
 the pick policy or load ordering.**
 Spec: design-spec **§8.4c [LOCKED — DP-8]** (plus the §8.4b seed-semantics
-amendment). Evidence base: the DP-7 MAC-probe campaign in
+amendment). Evidence base: the DP-7 MAC-probe campaign summarized in
 [`../../benchmarks/fill_quality/README.md`](../../benchmarks/fill_quality/README.md)
-(dom/wdeg + determinism follow-ups, 2026-07-16); reference implementation of
-the recipe: [`probe_mac.pl`](../../benchmarks/fill_quality/probe_mac.pl)
-(`probe_mac_dwd/7` — greedy mode is the default-path blueprint).
+(dom/wdeg + determinism follow-ups, 2026-07-16). The historical
+`probe_mac_dwd/7` reference implementation (greedy mode is the default-path
+blueprint) is recoverable at commit `4653996` via
+[`../research/benchmark-probe-historical-reconstruction.md`](../research/benchmark-probe-historical-reconstruction.md).
 
 ## What changes and what must not
 

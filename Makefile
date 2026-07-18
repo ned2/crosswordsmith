@@ -281,7 +281,7 @@ bench-wasm-payload-check:
 #   make bench-fill
 #   make bench-fill BENCH_ARGS=--heavy
 #   make bench-fill BENCH_FORMAT=csv BENCH_ARGS="--fixture g11"
-.PHONY: bench-fill bench-fill-check bench-fill-exact bench-fill-record bench-fill-log bench-fill-history bench-fill-verify bench-fill-promote
+.PHONY: bench-fill bench-fill-check bench-fill-exact bench-fill-record bench-fill-log bench-fill-history bench-fill-verify bench-fill-promote bench-fill-quality-test bench-fill-quality-check
 bench-fill:
 	swipl -q benchmarks/run_fill.pl -- --format $(BENCH_FORMAT) $(BENCH_ARGS)
 
@@ -332,3 +332,13 @@ bench-fill-log:
 # Render the recorded fill history as a per-rung trend (reads the ledger only).
 bench-fill-history:
 	swipl -q benchmarks/check_fill_baseline.pl --history
+
+# Python-only checks for the retained independent quality scorer and gate.
+bench-fill-quality-test:
+	python3 -m unittest discover -s benchmarks/fill_quality -p 'test_*.py'
+
+# AC-FILL-12 external-dictionary gate. This is intentionally not part of
+# `make test`: Spread the Wordlist is CC BY-NC-SA and is never bundled.
+#   make bench-fill-quality-check STW=/path/to/spread-the-wordlist.txt
+bench-fill-quality-check: bench-fill-quality-test
+	python3 benchmarks/fill_quality/check_ac_fill_12.py --dict "$(STW)"

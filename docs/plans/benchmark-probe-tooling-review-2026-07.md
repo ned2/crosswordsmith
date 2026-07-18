@@ -184,6 +184,14 @@ Deletion gate:
 
 Initial disposition: SPLIT PERMANENT CHECK FROM HISTORICAL CAMPAIGNS.
 
+Status: COMPLETE (2026-07-18). `make bench-fill-quality-check STW=...` now
+runs the two AC-FILL-12 authority rows on the default deterministic path,
+enforces the recorded 45.0/38.7 mean floors, and cross-checks both sidecars
+with the independent scorer. It passed against the recorded 315,905-line STW
+snapshot. The four completed campaign rigs were then removed (1,320 lines),
+their recovery commits were indexed, and the README was reduced to permanent
+operations plus evidence links.
+
 Retain the independent scorer and comparison driver. They are not, by
 themselves, the complete AC-FILL-12 standing gate: `run.sh` covers only the easy
 quality grids and treats failed fills as reportable output, while the contract in
@@ -200,7 +208,7 @@ quality-gate command that:
 - clearly reports its external STW dependency and is run whenever that dependency
   is available.
 
-Review for removal after that gap is closed:
+Removed after that gap closed:
 
 - `fill_quality/probe_mac.pl`, a 705-line file that labels itself
   "NOT SHIPPABLE ENGINEERING" and predates the accepted product engine;
@@ -209,9 +217,9 @@ Review for removal after that gap is closed:
 - `fill_quality/matrix.sh`, the completed FS-3(b)/FS-4 frontier tool unless a
   current product decision still uses it.
 
-Before deletion, split the 533-line `fill_quality/README.md` into a short living
-operational guide and dated evidence references. Update plans that link directly
-to `probe_mac.pl` to identify its historical commit instead.
+The former 533-line `fill_quality/README.md` is now a short living operational
+guide with dated evidence and reconstruction references. Plans no longer link
+directly to the retired `probe_mac.pl` source.
 
 Preserve scorer independence: do not replace `score_fill.py` with engine-side
 score reporting. Make `grids/amer11.json` the single source of truth rather than
