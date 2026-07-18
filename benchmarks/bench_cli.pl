@@ -1,11 +1,36 @@
 :- module(bench_cli,
-           [ validate_runner_options/5,
+           [ parse_runner_options/5,
              require_selected/3,
+             workload_selected/4,
+             apply_override/3,
              checker_mode/3,
              exact_runner_args/2
-          ]).
+           ]).
 
 :- use_module(library(apply), [exclude/3]).
+:- use_module(library(error), [must_be/2]).
+:- use_module(library(lists), [member/2, memberchk/2]).
+:- use_module(library(optparse), [opt_parse/4]).
+
+%!  parse_runner_options(+Tool, +Spec:list, +Argv:list, -Options:list,
+%!                       -Common:dict) is det.
+%
+%   Parse a runner's domain-owned option Spec and extract its common options.
+%   Spec must define help, format, fixture, heavy, iterations, and warmup.
+%   Unknown options and invalid common values throw before measurement.
+parse_runner_options(Tool, Spec, Argv, Options, Common) :-
+    opt_parse(Spec, Argv, Options, Positional),
+    memberchk(help(Help), Options),
+    memberchk(format(Format), Options),
+    memberchk(fixture(Filter), Options),
+    memberchk(heavy(Heavy), Options),
+    memberchk(iterations(Iterations), Options),
+    memberchk(warmup(Warmup), Options),
+    validate_runner_options(Tool, Positional, Format, Iterations, Warmup),
+    Common = runner_options{
+        help:Help, format:Format, fixture:Filter, heavy:Heavy,
+        iterations:Iterations, warmup:Warmup
+    }.
 
 %!  validate_runner_options(+Tool, +Positional, +Format, +Iterations, +Warmup) is det.
 %
@@ -23,13 +48,36 @@ valid_override(Tool, Key, Value, Min) :-
     ( integer(Value), Value >= Min -> true
     ; throw(error(bench_bad_count(Tool, Key, Value, Min), _)) ).
 
-%!  require_selected(+Tool, +ExplicitFilter, +Selected) is det.
+%!  require_selected(+Tool, +Filter, +Selected:list) is det.
 %
-%   Reject an explicit filter that selects no workload.
-require_selected(_Tool, '', _Selected) :- !.
+%   Reject any runner selection with no workload, including a malformed
+%   manifest whose default core selection is empty.
 require_selected(Tool, Filter, Selected) :-
+    must_be(list, Selected),
     ( Selected = [_|_] -> true
     ; throw(error(bench_empty_selection(Tool, Filter), _)) ).
+
+%!  workload_selected(+Filter:atom, +Heavy:boolean, +Id:atom, +Tier:atom) is semidet.
+%
+%   Apply the common runner selection policy. An explicit substring filter
+%   selects matching IDs from any tier; otherwise core is selected by default
+%   and heavy is added only when Heavy is true. At most one proof is produced
+%   even when Filter occurs repeatedly in Id.
+workload_selected(Filter, _Heavy, Id, _Tier) :-
+    Filter \== '',
+    !,
+    once(sub_atom(Id, _, _, _, Filter)).
+workload_selected('', _Heavy, _Id, core) :-
+    !.
+workload_selected('', true, _Id, heavy).
+
+%!  apply_override(+Override:integer, +Default:integer, -Value:integer) is det.
+%
+%   Resolve the runners' -1 sentinel to the manifest Default; any validated
+%   explicit override replaces it.
+apply_override(-1, Default, Default) :-
+    !.
+apply_override(Override, _Default, Override).
 
 %!  checker_mode(+Argv, -Mode, -RunnerArgs) is det.
 %

@@ -48,6 +48,7 @@
 :- use_module('bench_cli.pl', [checker_mode/3, exact_runner_args/2]).
 :- use_module('bench_exact.pl',
               [exact_version/4, exact_metric/4, exact_presence/5]).
+:- use_module('bench_paths.pl', [benchmark_path/2]).
 :- use_module('bench_store.pl',
               [ read_json_dict/2,
                 build_recorded_baseline/5,
@@ -58,40 +59,32 @@
                 current_host/1
               ]).
 
-% directory_file_path/3 is autoload-only (library(filesex)); explicit so this
-% root also runs under autoload(false) (P11/C5, matching load.pl).
-:- use_module(library(filesex), [directory_file_path/3]).
-
-:- dynamic bench_dir/1.
-:- prolog_load_context(directory, D), asserta(bench_dir(D)).
-
 :- initialization(main, main).
 
 main :-
     current_prolog_flag(argv, Argv0),
     catch(checker_mode(Argv0, Mode, Extra),
           E, (print_message(error, E), halt(2))),
-    bench_dir(BenchDir),
-    ( Mode == history -> show_history(BenchDir), halt(0) ; true ),
-    directory_file_path(BenchDir, 'baseline.json', BaselinePath),
-    history_path(BenchDir, HistoryPath),
+    ( Mode == history -> show_history, halt(0) ; true ),
+    benchmark_path('baseline.json', BaselinePath),
+    history_path(HistoryPath),
     load_baseline(BaselinePath, Baseline),
     run_note(Extra, Note),
     ( Mode == record
     ->  format("crosswordsmith arrange - RECORD baseline~s~n~n", [Note]),
-        run_product_bench(BenchDir, Extra, Doc),
+        run_product_bench(Extra, Doc),
         do_record(BaselinePath, Baseline, Doc),
-        append_history(BenchDir, Doc, Extra),
+        append_history(Doc, Extra),
         halt(0)
     ; Mode == log
     ->  format("crosswordsmith arrange - LOG run to history~s~n~n", [Note]),
-        run_product_bench(BenchDir, Extra, Doc),
+        run_product_bench(Extra, Doc),
         do_check(Baseline, Doc, _Fails, _Wins),
-        append_history(BenchDir, Doc, Extra),
+        append_history(Doc, Extra),
         halt(0)
     ; Mode == promote
     ->  format("crosswordsmith arrange - PROMOTE (check, then ratchet this run)~s~n~n", [Note]),
-        run_product_bench(BenchDir, Extra, Doc),
+        run_product_bench(Extra, Doc),
         promote_doc(BaselinePath, HistoryPath, Baseline, Doc, Extra, Fails, Wins),
         report_result(Fails, Wins),
         ( Fails =:= 0
@@ -103,12 +96,12 @@ main :-
     ->  catch(exact_runner_args(Extra, ExactArgs),
               E, (print_message(error, E), halt(2))),
         format("crosswordsmith arrange - exact inference check (+heavy tail)~n~n"),
-        run_product_bench(BenchDir, ExactArgs, Doc),
+        run_product_bench(ExactArgs, Doc),
         do_exact_check(Baseline, Doc, Fails),
         report_exact_result(Fails),
         ( Fails =:= 0 -> halt(0) ; halt(1) )
     ;   format("crosswordsmith arrange - performance ratchet~s~n~n", [Note]),
-        run_product_bench(BenchDir, Extra, Doc),
+        run_product_bench(Extra, Doc),
         do_check(Baseline, Doc, Fails, Wins),
         report_result(Fails, Wins),
         ( Fails =:= 0 -> halt(0) ; halt(1) ) ).
@@ -124,8 +117,8 @@ load_baseline(Path, Baseline) :-
 
 % Spawn run_arrange.pl, capture its JSON stdout, parse it. Extra args (e.g. --heavy)
 % pass through. stderr flows to ours; we gate on the child exit code.
-run_product_bench(BenchDir, Extra, Doc) :-
-    directory_file_path(BenchDir, 'run_arrange.pl', RunArrange),
+run_product_bench(Extra, Doc) :-
+    benchmark_path('run_arrange.pl', RunArrange),
     append(['-q', RunArrange, '--', '--format', json], Extra, Args),
     capture_process(path(swipl), Args, inherit, JsonText, _Stderr, Status),
     ( Status == exit(0) -> true ; throw(error(bench_run_failed(Status), _)) ),
@@ -421,11 +414,11 @@ same_text(A, B) :- text_to_string(A, S), text_to_string(B, S).
 % informational. Each entry is stamped with the git commit + local timestamp so a
 % row can be attributed to the change that produced it.
 
-history_path(BenchDir, Path) :-
-    directory_file_path(BenchDir, 'history.jsonl', Path).
+history_path(Path) :-
+    benchmark_path('history.jsonl', Path).
 
-append_history(BenchDir, Doc, Extra) :-
-    history_path(BenchDir, Path),
+append_history(Doc, Extra) :-
+    history_path(Path),
     append_history_to(Path, Doc, Extra).
 
 append_history_to(Path, Doc, Extra) :-
@@ -439,8 +432,8 @@ append_history_to(Path, Doc, Extra) :-
             RungPairs),
     append_history(Path, Doc, Extra, RungPairs).
 
-show_history(BenchDir) :-
-    history_path(BenchDir, Path),
+show_history :-
+    history_path(Path),
     read_history(Path, Entries),
     ( Entries == []
     ->  format("no benchmark history yet.~n"),

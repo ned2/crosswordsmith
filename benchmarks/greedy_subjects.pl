@@ -2,25 +2,22 @@
 % the greedy arrange benchmark. Product code is never instrumented.
 
 :- module(greedy_subjects,
-          [ load_words/2,
-            construction_sampler/6,
-            sweep_sampler/4,
+           [ construction_sampler/6,
+             sweep_sampler/4,
              build_raw_pool/4,
              postprocess_sampler/6,
              command_sampler/7,
-             identity_row/10
+             identity_row/11
            ]).
 
 :- use_module(library(apply), [maplist/3]).
 :- use_module(library(assoc), [assoc_to_list/2]).
 :- use_module(library(sha), [sha_hash/3, hash_atom/2]).
-:- use_module(library(lists), [member/2]).
+:- use_module(library(lists), [append/2, member/2, nth0/3]).
 :- use_module(library(pairs), [pairs_values/2]).
 :- use_module('bench_core.pl').
+:- use_module('bench_fixture.pl', [load_arrange_fixture/2]).
 :- use_module('bench_process.pl', [capture_process/6]).
-
-load_words(File, Words) :-
-    load_clues(File, Words).
 
 entry_answer([Answer|_], Answer).
 
@@ -147,9 +144,14 @@ mode_args(best_effort, ['--best-effort']).
 % Semantic identity document.
 % ---------------------------------------------------------------------------
 
-identity_row(Id, File, GridLen, Framing, Command, SeedAnswer, Corner,
+%!  identity_row(+Id, +Fixture, +File, +GridLen, +Framing, +Command,
+%!               +SeedAnswer, +Corner, +Expected, +Exe, -Row) is det.
+%
+%   Build one semantic identity row. Fixture is the stable repository-relative
+%   label recorded in the document; File is its absolute operational path.
+identity_row(Id, Fixture, File, GridLen, Framing, Command, SeedAnswer, Corner,
              Expected, Exe, Row) :-
-    load_words(File, Words),
+    load_arrange_fixture(File, Words),
     format(user_error, "heartbeat: identity ~w direct-attempts~n", [Id]),
     direct_attempts(Words, GridLen, Command, Attempts),
     format(user_error, "heartbeat: identity ~w raw-pool~n", [Id]),
@@ -163,7 +165,7 @@ identity_row(Id, File, GridLen, Framing, Command, SeedAnswer, Corner,
     expected_json(Expected, ExpectedJson),
     command_json(Command, CommandJson),
     length(SelectedSigs, CandidateCount),
-    Row = _{rung:Id, fixture:File, size:GridLen, framing:Framing,
+    Row = _{rung:Id, fixture:Fixture, size:GridLen, framing:Framing,
             mode:CommandJson, construction:_{seed_answer:SeedAnswer,
                 corner:Corner, expected:ExpectedJson},
             direct_attempts:Attempts, raw_pool:Raw, selected:SelectedSigs,
@@ -230,6 +232,7 @@ identity_raw_entry(best_effort,
     placed_signature(Placed, PlacedSig).
 
 selected_layouts(Words, GridLen, candidates(Drop, K), Layouts) :-
+    !,
     crosswordsmith_arrange:arrange_candidates(
         Words, GridLen, Drop, K, Layouts, _).
 selected_layouts(Words, GridLen, best_effort, [Layout]) :-

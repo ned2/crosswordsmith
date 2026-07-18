@@ -8,7 +8,6 @@
 
 :- set_prolog_flag(verbose, silent).
 :- use_module(library(apply), [foldl/4]).
-:- use_module(library(filesex), [directory_file_path/3]).
 :- use_module(library(json)).
 :- use_module(library(lists)).
 :- use_module(library(pairs), [pairs_keys/2]).
@@ -16,6 +15,7 @@
 :- use_module('bench_cli.pl', [checker_mode/3, exact_runner_args/2]).
 :- use_module('bench_exact.pl',
               [exact_version/4, exact_metric/4, exact_presence/5]).
+:- use_module('bench_paths.pl', [benchmark_path/2]).
 :- use_module('bench_store.pl',
               [ read_json_dict/2,
                 build_recorded_baseline/5,
@@ -25,8 +25,6 @@
                 render_history/3
               ]).
 
-:- prolog_load_context(directory, D), assertz(bench_dir(D)).
-:- dynamic bench_dir/1.
 :- initialization(main, main).
 
 main :-
@@ -34,28 +32,27 @@ main :-
     ( Argv0 == ['--self-test'] -> self_test, halt(0) ; true ),
     catch(checker_mode(Argv0, Mode, Extra),
           E, (print_message(error, E), halt(2))),
-    bench_dir(BenchDir),
-    ( Mode == history -> show_history(BenchDir), halt(0) ; true ),
-    directory_file_path(BenchDir, 'greedy_baseline.json', Path),
+    ( Mode == history -> show_history, halt(0) ; true ),
+    benchmark_path('greedy_baseline.json', Path),
     load_json(Path, Baseline),
     ( Mode == exact
     -> catch(exact_runner_args(Extra, ExactArgs),
              E, (print_message(error, E), halt(2))),
-       run_bench(BenchDir, ExactArgs, Doc),
+       run_bench(ExactArgs, Doc),
        do_exact_check(Baseline, Doc, Fails),
        report_exact_result(Fails), halt_if(Fails)
-    ;  run_bench(BenchDir, Extra, Doc),
+    ;  run_bench(Extra, Doc),
        do_check(Baseline, Doc, Fails, Wins),
        ( Mode == check
        -> report(Fails,Wins), halt_if(Fails)
        ; Mode == log
-       -> append_history(BenchDir,Doc,Extra), halt(0)
+       -> append_history(Doc,Extra), halt(0)
        ; Mode == record
-       -> record_checked(Path,Baseline,Doc), append_history(BenchDir,Doc,Extra), halt(0)
+       -> record_checked(Path,Baseline,Doc), append_history(Doc,Extra), halt(0)
        ; Mode == promote
        -> report(Fails,Wins),
           ( Fails =:= 0
-          -> record_checked(Path,Baseline,Doc), append_history(BenchDir,Doc,Extra), halt(0)
+          -> record_checked(Path,Baseline,Doc), append_history(Doc,Extra), halt(0)
           ;  format("promote: regressions present; baseline unchanged~n"), halt(1) )
        )
     ).
@@ -66,8 +63,8 @@ halt_if(_) :- halt(1).
 load_json(Path, Dict) :-
     read_json_dict(Path, Dict).
 
-run_bench(BenchDir, Extra, Doc) :-
-    directory_file_path(BenchDir, 'run_arrange_greedy.pl', Runner),
+run_bench(Extra, Doc) :-
+    benchmark_path('run_arrange_greedy.pl', Runner),
     append(['-q',Runner,'--','--format',json], Extra, Args),
     capture_process(path(swipl),Args,inherit,Text,_Stderr,Status),
     ( Status == exit(0) -> atom_json_dict(Text,Doc,[default_tag(json)])
@@ -221,10 +218,11 @@ verify_readback(Doc, ReadBack) :-
     findall(R,(member(R,Rows),baseline_spec(WL,R.rung,_)),Found),
     length(Found,Expected).
 
-history_path(BenchDir,Path) :- directory_file_path(BenchDir,'greedy_history.jsonl',Path).
+history_path(Path) :-
+    benchmark_path('greedy_history.jsonl', Path).
 
-append_history(BenchDir,Doc,Extra) :-
-    history_path(BenchDir,Path), get_dict(results,Doc,Rows),
+append_history(Doc,Extra) :-
+    history_path(Path), get_dict(results,Doc,Rows),
     findall(K-Cell,
             ( member(R,Rows), text_to_atom(R.rung,K), M=R.metrics,
               Cell=_{construction_inf:M.construction_inf_med,
@@ -235,8 +233,8 @@ append_history(BenchDir,Doc,Extra) :-
             Pairs),
     append_history(Path, Doc, Extra, Pairs).
 
-show_history(BenchDir) :-
-    history_path(BenchDir,Path),
+show_history :-
+    history_path(Path),
     read_history(Path, Entries),
     ( Entries == []
     -> format("no greedy benchmark history yet.~n")

@@ -35,42 +35,24 @@
 % compile-expands the lambda — harness metadata only, outside every sampler
 % (the bench-fill-check ratchet locks the measured counts bit-identical).
 :- use_module(library(yall)).
-
-% directory_file_path/3 is autoload-only (library(filesex)); explicit so this
-% root also loads under autoload(false) (P11/C5, matching load.pl).
-:- use_module(library(filesex), [directory_file_path/3]).
-
-:- dynamic repo_root/1.
-
-:- prolog_load_context(directory, BenchDir),
-   absolute_file_name('..', RepoRoot,
-                      [ relative_to(BenchDir), file_type(directory), access(read) ]),
-   asserta(repo_root(RepoRoot)),
-   directory_file_path(RepoRoot, 'load.pl', Load),
-   consult(Load),
-   directory_file_path(BenchDir, 'bench_core.pl', BenchCore),
-   use_module(BenchCore),
-   directory_file_path(BenchDir, 'bench_cli.pl', BenchCli),
-   use_module(BenchCli),
-   directory_file_path(BenchDir, 'fill_subjects.pl', Subjects),
-   use_module(Subjects),
-   directory_file_path(BenchDir, 'fill_workloads.pl', Workloads),
-   consult(Workloads).
+:- use_module('bench_paths.pl', [repo_path/2]).
+:- repo_path('load.pl', Load), consult(Load).
+:- use_module('bench_core.pl').
+:- use_module('bench_cli.pl').
+:- use_module('bench_report.pl', [benchmark_report/3, swi_version/1]).
+:- use_module('fill_subjects.pl').
+:- consult('fill_workloads.pl').
 
 :- initialization(main, main).
 
 main :-
     current_prolog_flag(argv, Argv),
     opts_spec(Spec),
-    catch(opt_parse(Spec, Argv, Opts, Pos), E, (print_message(error, E), halt(2))),
-    memberchk(format(Fmt), Opts),
-    memberchk(fixture(Filter), Opts),
-    memberchk(heavy(Heavy), Opts),
-    memberchk(iterations(ItOv), Opts),
-    memberchk(warmup(WuOv), Opts),
-    catch(validate_runner_options(fill, Pos, Fmt, ItOv, WuOv),
+    catch(parse_runner_options(fill, Spec, Argv, _Opts, Common),
           E, (print_message(error, E), halt(2))),
-    ( memberchk(help(true), Opts) -> usage, halt(0) ; true ),
+    Common = runner_options{format:Fmt, fixture:Filter, heavy:Heavy,
+                            iterations:ItOv, warmup:WuOv, help:Help},
+    ( Help == true -> usage, halt(0) ; true ),
     selected_workloads(Filter, Heavy, Workloads),
     catch(require_selected(fill, Filter, Workloads),
           E, (print_message(error, E), halt(2))),
@@ -110,22 +92,11 @@ usage :-
     opt_help(Spec, Help),
     format(user_output, "Usage: swipl -q benchmarks/run_fill.pl -- [options]~n~n~w", [Help]).
 
-% An explicit --fixture filter selects across ANY tier; otherwise core always
-% runs and heavy only under --heavy.
-workload_selected(Filter, _Heavy, Id, _Tier) :-
-    Filter \== '', !,
-    sub_atom(Id, _, _, _, Filter).
-workload_selected('', _Heavy, _Id, core) :- !.
-workload_selected('', true,   _Id, heavy).
-
-apply_override(-1, Default, Default) :- !.
-apply_override(Override, _, Override).
-
 % --- one rung: measure all four buckets, derive the breakdown ----------------
 run_workload(Id, GridRel, DictRel, SeedsRel, Iters, Warmup, Expected, Budget, Row) :-
-    repo_file(GridRel, GridFile),
-    repo_file(DictRel, DictFile),
-    ( SeedsRel == none -> SeedsFile = none ; repo_file(SeedsRel, SeedsFile) ),
+    repo_path(GridRel, GridFile),
+    repo_path(DictRel, DictFile),
+    ( SeedsRel == none -> SeedsFile = none ; repo_path(SeedsRel, SeedsFile) ),
     crosswordsmith_exe(Exe),
     % pre-load the dict ONCE so the search layer isolates search cost; also grab
     % the grid size + dict word count for the row metadata.
@@ -179,12 +150,7 @@ dict_word_count(DictByLen, N) :-
     foldl([B, A0, A1]>>(length(B, L), A1 is A0 + L), Buckets, 0, N).
 
 crosswordsmith_exe(Exe) :-
-    repo_root(Root),
-    directory_file_path(Root, crosswordsmith, Exe).
-
-repo_file(Rel, File) :-
-    repo_root(Root),
-    directory_file_path(Root, Rel, File).
+    repo_path(crosswordsmith, Exe).
 
 % --- output formats ----------------------------------------------------------
 emit(text, Rows) :- !,
@@ -197,10 +163,9 @@ emit(csv, Rows) :- !,
     format("rung,size,words,seeds,dict,load_inf,grid_inf,search_inf_min,search_inf_med,cmd_wall_med_ms,cmd_rss_med_kib,load_share_pct,grid_share_pct,search_share_pct,rest_share_pct~n"),
     forall(member(R, Rows), print_csv_row(R)).
 emit(json, Rows) :- !,
-    swi_version(Ver),
-    Doc = _{ tool: 'crosswordsmith-fill-bench', swi_prolog: Ver,
-             metric_note: 'search_inf/load_inf gated; wall/rss machine-dependent; rss is whole-process footprint',
-             results: Rows },
+    benchmark_report('crosswordsmith-fill-bench', Rows, Doc0),
+    Doc = Doc0.put(metric_note,
+        'search_inf/load_inf gated; wall/rss machine-dependent; rss is whole-process footprint'),
     json_write_dict(user_output, Doc, [width(80)]), nl.
 emit(Other, _) :-
     format(user_error, "run_fill: unknown --format ~w (use text|csv|json)~n", [Other]),
@@ -211,10 +176,6 @@ metadata_lines :-
     format("# tool: crosswordsmith-fill-bench~n"),
     format("# swi_prolog: ~w~n", [Ver]),
     format("# metric_note: search_inf/load_inf gated; wall/rss machine-dependent~n").
-
-swi_version(Ver) :-
-    current_prolog_flag(version_data, V),
-    ( V = swi(Ma, Mi, Pa, _) -> format(atom(Ver), '~d.~d.~d', [Ma, Mi, Pa]) ; Ver = V ).
 
 print_text_row(R) :-
     format("~w~t~16|~t~d~6+~t~d~9+~t~D~13+~t~D~13+~t~D~13+~t~1f~11+~t~1f%~9+~n",

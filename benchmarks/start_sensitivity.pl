@@ -18,21 +18,10 @@
 % call_time/2 is autoload-only (library(statistics)); explicit so this root
 % also runs under autoload(false) (P11/C5).
 :- use_module(library(statistics), [call_time/2]).
-
-% directory_file_path/3 is autoload-only (library(filesex)); explicit so this
-% root also loads under autoload(false) (P11/C5, matching load.pl).
-:- use_module(library(filesex), [directory_file_path/3]).
-
-:- dynamic repo_root/1.
-
-:- prolog_load_context(directory, BenchDir),
-   absolute_file_name('..', RepoRoot,
-                      [ relative_to(BenchDir), file_type(directory), access(read) ]),
-   asserta(repo_root(RepoRoot)),
-   directory_file_path(RepoRoot, 'load.pl', Load),
-   consult(Load),
-   directory_file_path(RepoRoot, 'benchmarks/fixtures.pl', Manifest),
-   consult(Manifest).
+:- use_module('bench_paths.pl', [repo_path/2]).
+:- repo_path('load.pl', Load), consult(Load).
+:- use_module('bench_fixture.pl', [load_arrange_fixture/2]).
+:- consult('fixtures.pl').
 
 :- initialization(main, main).
 
@@ -49,8 +38,8 @@ main :-
           run_cell(Strategy, Rel, Grid, Start)))).
 
 run_cell(Strategy, Rel, Grid, Start) :-
-    repo_file(Rel, File),
-    read_clues(File, Words),
+    repo_path(Rel, File),
+    load_arrange_fixture(File, Words),
     file_base_name(Rel, Name),
     cell_limit_seconds(Limit),
     ( catch( call_with_time_limit(Limit,
@@ -65,21 +54,3 @@ run_cell(Strategy, Rel, Grid, Start) :-
 once_solve(Strategy, Grid, Words, Start) :-
     find_crossword(Strategy, Grid, Words, Start, _, _),
     !.
-
-repo_file(Rel, File) :-
-    repo_root(Root),
-    directory_file_path(Root, Rel, File).
-
-% A fixture with no clues/1 term (typo, truncation, wrong path) must be a hard
-% error: silently unifying Words=[] makes an empty puzzle "solve" trivially and
-% records a bogus measured cell, corrupting the batch docs/experiments.md reads.
-read_clues(File, Words) :-
-    read_file_to_terms(File, Terms, []),
-    (   memberchk(clues(Words0), Terms)
-    ->  Words = Words0
-    ;   throw(error(fixture_missing_clues(File), _))
-    ).
-
-:- multifile prolog:error_message//1.
-prolog:error_message(fixture_missing_clues(Fixture)) -->
-    [ 'benchmark fixture ~q does not define clues/1'-[Fixture] ].

@@ -12,7 +12,17 @@
 :- use_module('../benchmarks/check_fill_baseline.pl', []).
 :- use_module('../benchmarks/bench_process.pl', [capture_process/6]).
 :- use_module('../benchmarks/bench_cli.pl',
-              [checker_mode/3, exact_runner_args/2]).
+              [ apply_override/3,
+                checker_mode/3,
+                exact_runner_args/2,
+                parse_runner_options/5,
+                require_selected/3,
+                workload_selected/4
+              ]).
+:- use_module('../benchmarks/bench_fixture.pl', [load_arrange_fixture/2]).
+:- use_module('../benchmarks/bench_paths.pl', [benchmark_path/2, repo_path/2]).
+:- use_module('../benchmarks/bench_report.pl',
+              [benchmark_report/3, swi_version/1]).
 :- use_module('../benchmarks/bench_exact.pl', [exact_metric/4]).
 :- use_module('../benchmarks/bench_store.pl',
               [append_history/4, read_history/2, read_json_dict/2,
@@ -138,6 +148,90 @@ test(exact_mode_forces_full_ladder) :-
 test(exact_mode_rejects_partial_selection,
      [throws(error(bench_exact_args(['--fixture', core]), _))]) :-
     exact_runner_args(['--fixture', core], _).
+
+test(workload_filter_is_semidet_with_repeated_substrings) :-
+    workload_selected(a, false, banana, core),
+    deterministic(Det),
+    assertion(Det == true),
+    findall(selected, workload_selected(a, false, banana, core), Selected),
+    assertion(Selected == [selected]).
+
+test(workload_tier_defaults_match_existing_runner_policy) :-
+    workload_selected('', false, core_rung, core),
+    \+ workload_selected('', false, heavy_rung, heavy),
+    workload_selected('', true, heavy_rung, heavy),
+    deterministic(Det),
+    assertion(Det == true).
+
+test(default_empty_selection_is_rejected,
+     [throws(error(bench_empty_selection(arrange, ''), _))]) :-
+    require_selected(arrange, '', []).
+
+test(nonempty_selection_is_deterministic) :-
+    require_selected(arrange, '', [workload]),
+    deterministic(Det),
+    assertion(Det == true).
+
+test(common_runner_options_are_parsed_once) :-
+    common_runner_spec(Spec),
+    parse_runner_options(test, Spec,
+                         ['--fixture', banana, '--heavy',
+                          '--iterations', '3', '--warmup', '1'],
+                         Options, Common),
+    deterministic(Det),
+    assertion(Det == true),
+    assertion(memberchk(heavy(true), Options)),
+    assertion(Common == runner_options{
+        help:false, format:text, fixture:banana, heavy:true,
+        iterations:3, warmup:1
+    }).
+
+test(runner_override_uses_manifest_or_explicit_value) :-
+    apply_override(-1, 7, 7),
+    apply_override(3, 7, 3),
+    deterministic(Det),
+    assertion(Det == true).
+
+test(shared_paths_resolve_module_and_repository_files) :-
+    benchmark_path('bench_cli.pl', BenchCli),
+    deterministic(BenchmarkPathDet),
+    assertion(BenchmarkPathDet == true),
+    once(source_file(bench_cli:checker_mode(_, _, _), BenchCliSource)),
+    assertion(BenchCli == BenchCliSource),
+    repo_path('README.md', Readme),
+    deterministic(RepoPathDet),
+    assertion(RepoPathDet == true),
+    assertion(exists_file(Readme)).
+
+test(arrange_fixture_loader_matches_existing_fixture_terms) :-
+    repo_path('fixtures/benchmark_08_words.pl', File),
+    load_arrange_fixture(File, Words),
+    deterministic(Det),
+    assertion(Det == true),
+    read_file_to_terms(File, Terms, []),
+    memberchk(clues(Expected), Terms),
+    assertion(Words == Expected).
+
+test(arrange_fixture_loader_rejects_missing_clues,
+     [throws(error(bench_fixture_missing_clues(_), _))]) :-
+    with_temp_text("not_clues([]).\n", Path,
+                   load_arrange_fixture(Path, _)).
+
+test(arrange_fixture_loader_rejects_empty_clues,
+     [throws(error(bench_fixture_empty_clues(_), _))]) :-
+    with_temp_text("clues([]).\n", Path,
+                   load_arrange_fixture(Path, _)).
+
+test(benchmark_report_has_shared_envelope) :-
+    Rows = [_{rung:one}],
+    benchmark_report('crosswordsmith-test-bench', Rows, Doc),
+    deterministic(ReportDet),
+    assertion(ReportDet == true),
+    swi_version(Version),
+    deterministic(VersionDet),
+    assertion(VersionDet == true),
+    assertion(Doc =@= _{tool:'crosswordsmith-test-bench',
+                        swi_prolog:Version, results:Rows}).
 
 test(fill_exact_mode_checks_load_inferences) :-
     fill_baseline_doc(['core'-fill_spec(core, 100, 200, 300)], Baseline),
@@ -475,6 +569,15 @@ invalid_runner_args(['--format', bogus]).
 invalid_runner_args(['--iterations', '0']).
 invalid_runner_args(['--warmup', '-2']).
 invalid_runner_args(['--fixture', 'definitely-no-such-workload']).
+
+common_runner_spec([
+    [opt(help), type(boolean), default(false), longflags([help])],
+    [opt(format), type(atom), default(text), longflags([format])],
+    [opt(fixture), type(atom), default(''), longflags([fixture])],
+    [opt(heavy), type(boolean), default(false), longflags([heavy])],
+    [opt(iterations), type(integer), default(-1), longflags([iterations])],
+    [opt(warmup), type(integer), default(-1), longflags([warmup])]
+]).
 
 checker_script('benchmarks/check_baseline.pl').
 checker_script('benchmarks/check_fill_baseline.pl').

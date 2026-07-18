@@ -20,23 +20,12 @@
 :- use_module(library(apply)).
 :- use_module(library(statistics)).
 :- use_module(library(time)).        % call_with_time_limit/2 (per-cell guard)
-
-% directory_file_path/3 is autoload-only (library(filesex)); explicit so this
-% root also loads under autoload(false) (P11/C5, matching load.pl).
-:- use_module(library(filesex), [directory_file_path/3]).
-
-:- dynamic repo_root/1.
-
-:- prolog_load_context(directory, BenchDir),
-   absolute_file_name('..', RepoRoot,
-                      [ relative_to(BenchDir), file_type(directory), access(read) ]),
-   asserta(repo_root(RepoRoot)),
-   directory_file_path(RepoRoot, 'load.pl', Load),
-   consult(Load),
-   directory_file_path(RepoRoot, 'benchmarks/fixtures.pl', Manifest),
-   consult(Manifest),
-   directory_file_path(BenchDir, 'bench_core.pl', BenchCore),
-   use_module(BenchCore).       % measure/3, inproc_sampler/2 (shared with run_arrange)
+:- use_module('bench_paths.pl', [repo_path/2]).
+:- repo_path('load.pl', Load), consult(Load).
+:- use_module('bench_core.pl').
+:- use_module('bench_fixture.pl', [load_arrange_fixture/2]).
+:- use_module('bench_report.pl', [swi_version/1]).
+:- consult('fixtures.pl').
 
 :- initialization(main, main).
 
@@ -58,8 +47,7 @@ chosen_strategies(Argv, Argv) :-
     forall(member(S, Argv), require_strategy(S)).
 
 emit_metadata(Strategies) :-
-    current_prolog_flag(version_data, V),
-    ( V = swi(Ma, Mi, Pa, _) -> format(atom(Ver), '~d.~d.~d', [Ma, Mi, Pa]) ; Ver = V ),
+    swi_version(Ver),
     format("# tool: crosswordsmith-matrix~n", []),
     format("# swi_prolog: ~w~n", [Ver]),
     format("# strategies: ~w~n", [Strategies]),
@@ -72,8 +60,8 @@ emit_metadata(Strategies) :-
 cell_limit_seconds(60).
 
 run_cell(Strategy, Rel, Grid, Start, Iters, Warmup) :-
-    repo_file(Rel, File),
-    read_clues(File, Words),
+    repo_path(Rel, File),
+    load_arrange_fixture(File, Words),
     file_base_name(Rel, Name),
     cell_limit_seconds(Limit),
     solve_status(Strategy, Words, Grid, Start, Limit, Status),
@@ -113,21 +101,3 @@ solve_status(Strategy, Words, Grid, Start, Limit, Status) :-
 solve_once(Strategy, Words, Grid, Start) :-
     find_crossword(Strategy, Grid, Words, Start, _Grid, _Placed),
     !.
-
-repo_file(Rel, File) :-
-    repo_root(Root),
-    directory_file_path(Root, Rel, File).
-
-% A fixture with no clues/1 term (typo, truncation, wrong path) must be a hard
-% error: silently unifying Words=[] makes an empty puzzle "solve" trivially and
-% records a bogus measured cell, corrupting the batch docs/experiments.md reads.
-read_clues(File, Words) :-
-    read_file_to_terms(File, Terms, []),
-    (   memberchk(clues(Words0), Terms)
-    ->  Words = Words0
-    ;   throw(error(fixture_missing_clues(File), _))
-    ).
-
-:- multifile prolog:error_message//1.
-prolog:error_message(fixture_missing_clues(Fixture)) -->
-    [ 'benchmark fixture ~q does not define clues/1'-[Fixture] ].

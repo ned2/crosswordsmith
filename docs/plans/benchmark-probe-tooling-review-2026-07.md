@@ -478,6 +478,14 @@ fixture helper.
 
 ### S4. Identity manifest lifecycle
 
+Decision: RETAIN SEPARATE (2026-07-18). Strict, fill, and greedy have different
+payload shapes, selection/completeness rules, and manifest formats. A narrower
+fill raw/artifact consolidation spike removed only nine script lines before the
+additional checks needed to preserve record safety; review found false-green
+partial-enumeration and digest-failure paths in that form. The spike was
+discarded rather than replacing the current explicit scripts with a larger or
+less safe abstraction.
+
 Share complete-record, stale/missing-ID checks, digest comparison, and atomic
 replacement only if the resulting helper is smaller and clearer than the three
 scripts. Keep separate payload producers and formats:
@@ -574,6 +582,16 @@ Exit gate: normal tests no longer import a campaign search twin; strict and
 greedy identities and all gated inference counts are unchanged.
 
 ### Phase 4: refactor permanent shared mechanics
+
+Status: COMPLETE (2026-07-18). Process lifecycle lives in `bench_process.pl`,
+ratchet storage/history in `bench_store.pl`, and runner setup is split narrowly
+across `bench_cli.pl`, `bench_paths.pl`, `bench_fixture.pl`, and
+`bench_report.pl`. All shared exports have PlDoc and verified determinism, and
+each has multiple retained callers. The native suite, strict/fill/greedy exact
+inference ladders, all identity modes, strategy matrix, start-sensitivity, and
+autoload-disabled undefined-predicate checks passed. No baseline, history,
+identity manifest, golden, or dated result report changed. S4 remained separate
+under its explicit net-simplification stop condition.
 
 - Extract process lifecycle first.
 - Extract ratchet storage/history second.
