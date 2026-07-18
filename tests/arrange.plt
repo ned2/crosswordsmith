@@ -532,6 +532,56 @@ test(seed_candidates_longest_first) :-
     Seeds = [[S1|_], [S2|_], [S3|_]],
     S1 == 'AAAA', S2 == 'CCC', S3 == 'BB'.
 
+% A-G2 product invariants. The constructor searches one representative per
+% transpose pair but preserves the historical four visible corner blocks.
+test(g2_product_transpose_geometry_and_fresh_clue_vars) :-
+    Placed = [pw('CAT',[c,a,t],[1,2,3],across,3,1,3,SourceNum1),
+              pw('CAR',[c,a,r],[1,8,15],down,3,1,15,SourceNum2)],
+    crosswordsmith_arrange:transpose_placed(Placed, 7, Once),
+    crosswordsmith_arrange:transpose_placed(Once, 7, Twice),
+    Once = [pw('CAT',[c,a,t],[1,8,15],down,3,1,15,OnceNum1),
+            pw('CAR',[c,a,r],[1,2,3],across,3,1,3,OnceNum2)],
+    Twice = [pw('CAT',[c,a,t],[1,2,3],across,3,1,3,TwiceNum1),
+             pw('CAR',[c,a,r],[1,8,15],down,3,1,15,TwiceNum2)],
+    term_variables([SourceNum1,SourceNum2,OnceNum1,OnceNum2,
+                    TwiceNum1,TwiceNum2], ClueVars),
+    assertion(length(ClueVars, 6)).
+
+test(g2_product_preserves_four_corner_block_order) :-
+    Words = [['CAT', _{sample:only}]],
+    crosswordsmith_arrange:greedy_constructions(Words, 7, Constructions),
+    maplist(construction_seed_start_dir, Constructions, StartsDirs),
+    assertion(StartsDirs == [1-across,1-down,7-down,43-across]).
+
+test(g2_product_omits_symmetric_setup_failures) :-
+    Words = [['ABCDE', _{sample:long}],
+             ['AXE', _{sample:short_a}],
+             ['BEE', _{sample:short_b}]],
+    crosswordsmith_arrange:greedy_constructions(Words, 3, Constructions),
+    assertion(length(Constructions, 8)),
+    maplist(construction_seed_start_dir, Constructions, StartsDirs),
+    assertion(StartsDirs == [1-across,1-across,1-down,1-down,
+                             3-down,3-down,7-across,7-across]).
+
+test(g2_product_preserves_dropped_terms_order_and_fresh_copies) :-
+    Words = [['CAT',meta(CatTag)],['CAR',meta(CarTag)],['DOG',meta(DogTag)]],
+    crosswordsmith_arrange:greedy_constructions(Words, 7, Constructions),
+    Constructions = [gc(_,DroppedSource),gc(_,_)|_],
+    nth0(3, Constructions, gc(_,DroppedPartner)),
+    assertion(DroppedSource =@= [['DOG',meta(_)] ]),
+    assertion(DroppedPartner =@= [['DOG',meta(_)] ]),
+    DroppedSource = [['DOG',meta(SourceTag)]],
+    DroppedPartner = [['DOG',meta(PartnerTag)]],
+    assertion(SourceTag \== PartnerTag),
+    assertion(SourceTag \== DogTag),
+    assertion(PartnerTag \== DogTag),
+    assertion(var(CatTag)), assertion(var(CarTag)).
+
+construction_seed_start_dir(gc(Placed, _Dropped), Start-Dir) :-
+    last(Placed, PW),
+    pw_start(PW, Start),
+    pw_dir(PW, Dir).
+
 % --- --seed: opt-in pseudo-random search perturbation -----------------------
 % Design contract: a fully deterministic default path alongside a reproducible
 % seeded path, with the seed NEVER on the deterministic flow. set_search_seed/1
