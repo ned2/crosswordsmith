@@ -42,13 +42,21 @@
 :- set_prolog_flag(verbose, silent).
 :- use_module(library(lists)).
 :- use_module(library(apply)).
-:- use_module(library(readutil)).
 :- use_module(library(json)).
 :- use_module(library(pairs), [pairs_keys/2]).
 :- use_module('bench_process.pl', [capture_process/6]).
 :- use_module('bench_cli.pl', [checker_mode/3, exact_runner_args/2]).
 :- use_module('bench_exact.pl',
               [exact_version/4, exact_metric/4, exact_presence/5]).
+:- use_module('bench_store.pl',
+              [ read_json_dict/2,
+                build_recorded_baseline/5,
+                replace_json_dict/4,
+                append_history/4,
+                read_history/2,
+                render_history/3,
+                current_host/1
+              ]).
 
 % directory_file_path/3 is autoload-only (library(filesex)); explicit so this
 % root also runs under autoload(false) (P11/C5, matching load.pl).
@@ -112,9 +120,7 @@ run_note(_, "").
 
 load_baseline(Path, Baseline) :-
     ( exists_file(Path) -> true ; throw(error(baseline_missing(Path), _)) ),
-    setup_call_cleanup(open(Path, read, S),
-                       json_read_dict(S, Baseline, [default_tag(json)]),
-                       close(S)).
+    read_json_dict(Path, Baseline).
 
 % Spawn run_arrange.pl, capture its JSON stdout, parse it. Extra args (e.g. --heavy)
 % pass through. stderr flows to ours; we gate on the child exit code.
@@ -292,15 +298,7 @@ do_record(BaselinePath, Baseline, Doc) :-
 
 write_record(BaselinePath, Baseline, Doc) :-
     build_recorded_baseline(Baseline, Doc, Recorded),
-    atom_concat(BaselinePath, '.tmp', TempPath),
-    setup_call_cleanup(
-        true,
-        ( setup_call_cleanup(open(TempPath, write, S),
-                             json_write_dict(S, Recorded, [width(90)]),
-                             close(S)),
-          verify_recorded_file(TempPath, Doc),
-          rename_file(TempPath, BaselinePath) ),
-        ( exists_file(TempPath) -> delete_file(TempPath) ; true )),
+    replace_json_dict(BaselinePath, Recorded, 90, verify_recorded_doc(Doc)),
     get_dict(results, Doc, Results),
     get_dict(workloads, Baseline, WL0),
     format("baseline updated and read-back verified: ~w~n~n", [BaselinePath]),
@@ -308,20 +306,19 @@ write_record(BaselinePath, Baseline, Doc) :-
     unmeasured_note(WL0, Results).
 
 build_recorded_baseline(Baseline, Doc, Recorded) :-
-    get_dict(results, Doc, Results),
-    get_dict(swi_prolog, Doc, RunSwi),
-    current_host(RunHost),
-    get_dict(workloads, Baseline, WL0),
-    dict_pairs(WL0, Tag, Pairs0),
-    maplist(record_pair(Results), Pairs0, Pairs1),
-    new_rung_pairs(WL0, Results, NewPairs),
-    append(Pairs1, NewPairs, Pairs2),
-    dict_pairs(WL1, Tag, Pairs2),
-    Recorded = Baseline.put(_{host: RunHost, swi_prolog: RunSwi, workloads: WL1}).
+    build_recorded_baseline(Baseline, Doc, record_key, record_spec, Recorded).
 
-verify_recorded_file(BaselinePath, Doc) :-
+record_key(Row, Row.fixture).
+
+record_spec(Row, existing(Old), Spec) :-
+    Spec = Old.put(_{ search_inf:      Row.search_inf_med,
+                      cmd_wall_med_ms: Row.cmd_wall_med_ms,
+                      cmd_rss_med_kib: Row.cmd_rss_med_kib }).
+record_spec(Row, new, Spec) :-
+    new_rung_spec(Row, Spec).
+
+verify_recorded_doc(Doc, Written) :-
     get_dict(results, Doc, Results),
-    load_baseline(BaselinePath, Written),
     verify_recorded_results(Written, Results).
 
 % A success banner is not evidence that persistence worked. Read the file back
@@ -345,25 +342,9 @@ verify_recorded_value(Fixture, Key, Spec, Expected) :-
     ;   throw(error(record_readback_mismatch(Fixture, Key, Expected), _))
     ).
 
-record_pair(Results, K-V0, K-V1) :-
-    ( result_for(Results, K, Row)
-    ->  V1 = V0.put(_{ search_inf:      Row.search_inf_med,
-                       cmd_wall_med_ms:  Row.cmd_wall_med_ms,
-                       cmd_rss_med_kib:  Row.cmd_rss_med_kib })
-    ;   V1 = V0 ).
-
 % A measured rung with no baseline entry joins the baseline as a COMPLETE spec
 % (the first --record after a rung is added to workloads.pl). The spec metadata
 % (tier/warmup/budget/words) comes from the run_arrange result row.
-new_rung_pairs(WL0, Results, Pairs) :-
-    findall(K-Spec,
-            ( member(Row, Results),
-              get_dict(fixture, Row, F),
-              \+ find_baseline(WL0, F, _),
-              text_to_string(F, FS), atom_string(K, FS),
-              new_rung_spec(Row, Spec) ),
-            Pairs).
-
 new_rung_spec(Row, _{ search_inf:      Row.search_inf_med,
                       cmd_wall_med_ms: Row.cmd_wall_med_ms,
                       cmd_rss_med_kib: Row.cmd_rss_med_kib,
@@ -434,16 +415,6 @@ signed(X, S) :- ( X >= 0 -> format(atom(S), "+~2f", [X]) ; format(atom(S), "~2f"
 
 same_text(A, B) :- text_to_string(A, S), text_to_string(B, S).
 
-% Host only tags wall/rss comparability (never the gate), so a missing/odd uname
-% degrades to 'unknown' rather than aborting the whole check.
-current_host(Host) :-
-    catch(uname_nm(Raw), _, fail),
-    normalize_space(atom(Host), Raw), Host \== '', !.
-current_host(unknown).
-
-uname_nm(Raw) :-
-    capture_process(path(uname), ['-nm'], null, Raw, _Stderr, _Status).
-
 % --- HISTORY (append-only trend ledger) --------------------------------------
 % One JSON object per line in benchmarks/history.jsonl. search_inf is the portable,
 % comparable-over-time number; wall/rss ride along for same-host trend but stay
@@ -459,112 +430,22 @@ append_history(BenchDir, Doc, Extra) :-
 
 append_history_to(Path, Doc, Extra) :-
     get_dict(results, Doc, Results),
-    get_dict(swi_prolog, Doc, Swi),
-    current_host(Host),
-    git_commit(Commit),
-    git_dirty(Dirty),
-    get_time(EpochF), EpochI is round(EpochF),
-    format_time(atom(Date), '%Y-%m-%dT%H:%M:%S', EpochF),
-    ( memberchk('--heavy', Extra) -> Tiers = 'core+heavy' ; Tiers = core ),
     findall(F-Cell,
             ( member(Row, Results),
               get_dict(fixture, Row, F0), atom_string(F, F0),
               Cell = _{ inf:     Row.search_inf_med,
                         wall_ms: Row.cmd_wall_med_ms,
-                        rss_kib: Row.cmd_rss_med_kib } ),
+                         rss_kib: Row.cmd_rss_med_kib } ),
             RungPairs),
-    dict_pairs(Rungs, rungs, RungPairs),
-    Entry = _{ epoch:EpochI, date:Date, commit:Commit, dirty:Dirty,
-               host:Host, swi:Swi, tiers:Tiers, rungs:Rungs },
-    with_output_to(string(Raw), json_write_dict(current_output, Entry, [width(0)])),
-    normalize_space(string(Line), Raw),
-    setup_call_cleanup(open(Path, append, S),
-                       ( write(S, Line), nl(S) ),
-                       close(S)),
-    ( Dirty == true -> DMark = ' +dirty' ; DMark = '' ),
-    format("~nlogged to ~w  (commit ~w~w, ~w)~n", [Path, Commit, DMark, Tiers]).
+    append_history(Path, Doc, Extra, RungPairs).
 
 show_history(BenchDir) :-
     history_path(BenchDir, Path),
-    ( exists_file(Path)
-    ->  read_history(Path, Entries)
-    ;   Entries = [] ),
+    read_history(Path, Entries),
     ( Entries == []
     ->  format("no benchmark history yet.~n"),
         format("record one with:  make bench-record   (or  make bench-log)~n")
-    ;   render_history(Entries) ).
-
-read_history(Path, Entries) :-
-    read_file_to_string(Path, Str, []),
-    split_string(Str, "\n", "", Lines0),
-    exclude([L]>>(normalize_space(string(""), L)), Lines0, Lines),
-    findall(E, ( member(L, Lines), parse_history_line(L, E) ), Entries).
-
-parse_history_line(Line, Entry) :-
-    catch(atom_json_dict(Line, Entry, [default_tag(json)]), _, fail).
-
-render_history(Entries) :-
-    length(Entries, N),
-    format("benchmark history  (~d run(s), most recent last)~n~n", [N]),
-    forall(nth1(I, Entries, E), print_entry_meta(I, E)),
-    all_rung_keys(Entries, Keys),
-    format("~nsearch_inf per rung  (vs prev = last step, vs first = cumulative):~n~n"),
-    format("~w~t~30|~t~w~16+~t~w~12+~t~w~12+~t~w~7+~n",
-           ['rung', 'latest', 'vs prev', 'vs first', 'runs']),
-    forall(member(K, Keys), print_rung_trend(K, Entries)).
-
-print_entry_meta(I, E) :-
-    get_dict(date, E, Date), get_dict(commit, E, Commit),
-    get_dict(tiers, E, Tiers), get_dict(host, E, Host),
-    ( get_dict(dirty, E, true) -> DMark = '+dirty' ; DMark = '' ),
-    format("  [~d] ~w  ~w~w  ~w  ~w~n", [I, Date, Commit, DMark, Tiers, Host]).
-
-all_rung_keys(Entries, Keys) :-
-    findall(K,
-            ( member(E, Entries), get_dict(rungs, E, R),
-              dict_pairs(R, _, Ps), member(K-_, Ps) ),
-            Ks),
-    sort(Ks, Keys).
-
-% Trajectory for one rung across the runs that measured it: latest absolute value,
-% step delta (vs the previous such run) and cumulative delta (vs the first).
-print_rung_trend(K, Entries) :-
-    rung_series(K, Entries, Series),
-    ( Series == [] -> true
-    ;   last(Series, Latest),
-        Series = [First|_],
-        ( append(_, [Prev, Latest], Series) -> true ; Prev = Latest ),
-        length(Series, Cnt),
-        pct_str(Latest, Prev, DPrev),
-        pct_str(Latest, First, DFirst),
-        format("~w~t~30|~t~D~16+~t~w~12+~t~w~12+~t~d~7+~n",
-               [K, Latest, DPrev, DFirst, Cnt]) ).
-
-rung_series(K, Entries, Series) :-
-    findall(V,
-            ( member(E, Entries), get_dict(rungs, E, R),
-              get_dict(K, R, Cell), get_dict(inf, Cell, V) ),
-            Series).
-
-pct_str(_New, Old, 'n/a')  :- Old =:= 0, !.
-pct_str(New, Old, Str) :- P is (New - Old) / Old * 100.0, signed(P, S), atom_concat(S, '%', Str).
-
-% git provenance for a history entry. Both degrade gracefully outside a checkout.
-git_commit(Commit) :-
-    ( catch(run_capture(path(git), ['rev-parse', '--short', 'HEAD'], Raw), _, fail),
-      normalize_space(atom(C), Raw), C \== ''
-    -> Commit = C ; Commit = unknown ).
-
-% dirty := any tracked modification (untracked files, e.g. scratch renders, are
-% ignored so they don't perpetually flag the tree).
-git_dirty(Dirty) :-
-    ( catch(run_capture(path(git),
-              ['status', '--porcelain', '--untracked-files=no'], Raw), _, fail),
-      normalize_space(string(T), Raw), T \== ""
-    -> Dirty = true ; Dirty = false ).
-
-run_capture(Spec, Args, Out) :-
-    capture_process(Spec, Args, null, Out, _Stderr, _Status).
+    ;   render_history('benchmark', [metric(search_inf, inf)], Entries) ).
 
 :- multifile prolog:error_message//1.
 prolog:error_message(baseline_missing(Path)) -->

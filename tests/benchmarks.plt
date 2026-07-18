@@ -14,7 +14,11 @@
 :- use_module('../benchmarks/bench_cli.pl',
               [checker_mode/3, exact_runner_args/2]).
 :- use_module('../benchmarks/bench_exact.pl', [exact_metric/4]).
+:- use_module('../benchmarks/bench_store.pl',
+              [append_history/4, read_history/2, read_json_dict/2,
+               render_history/3]).
 :- use_module('bench_core_caller.pl', []).
+:- use_module('bench_store_caller.pl', []).
 
 :- begin_tests(arrange_benchmark_promotion).
 
@@ -181,6 +185,92 @@ test(process_cleanup_waits_after_goal_exception) :-
     catch(process_wait(PID, _), ReapedError, true),
     assertion(nonvar(ReapedError)).
 
+test(store_callbacks_resolve_and_retain_unmeasured_rows) :-
+    Baseline = _{host:"old", swi_prolog:"10.1.10",
+                 workloads:_{kept:_{value:7}, old:_{value:1, tier:"core"}}},
+    Run = _{swi_prolog:"10.1.10",
+            results:[_{id:"old", value:2, tier:"core"},
+                     _{id:"new", value:3, tier:"heavy"}]},
+    bench_store_test_caller:build_recorded(Baseline, Run, Recorded),
+    deterministic(Det),
+    assertion(Det == true),
+    assertion(Recorded.workloads.kept.value =:= 7),
+    assertion(Recorded.workloads.old.value =:= 2),
+    assertion(Recorded.workloads.new.value =:= 3),
+    assertion(Recorded.workloads.new.tier == "heavy").
+
+test(store_rejects_duplicate_measured_keys,
+     [throws(error(bench_record_duplicate_key(same), _))]) :-
+    Baseline = _{host:"old", swi_prolog:"10.1.10", workloads:_{}},
+    Run = _{swi_prolog:"10.1.10",
+            results:[_{id:"same", value:1, tier:"core"},
+                     _{id:"same", value:2, tier:"core"}]},
+    bench_store_test_caller:build_recorded(Baseline, Run, _).
+
+test(store_failed_verification_preserves_live_file) :-
+    with_temp_json(_{value:"original"}, Path,
+        ( catch(bench_store_test_caller:replace_rejected(
+                    Path, _{value:"replacement"}),
+                error(bench_record_verification_failed(Path), _), true),
+          read_json_dict(Path, Written),
+          get_dict(value, Written, Value),
+          assertion(Value == "original"),
+          atom_concat(Path, '.tmp', TempPath),
+          assertion(\+ exists_file(TempPath)) )).
+
+test(store_jsonl_preserves_string_whitespace) :-
+    with_temp_text("", Path,
+        ( with_output_to(string(_),
+              append_history(Path, _{swi_prolog:"10.1.10"}, [],
+                             [row-_{inf:1, note:"a  b"}])),
+          read_history(Path, Entries),
+          deterministic(Det),
+          assertion(Det == true),
+          Entries = [Entry],
+          get_dict(rungs, Entry, Rungs),
+          get_dict(row, Rungs, Cell),
+          get_dict(note, Cell, Note),
+          assertion(Note == "a  b") )).
+
+test(store_jsonl_repairs_missing_final_newline) :-
+    with_temp_text("{\"commit\":\"old\",\"date\":\"d\",\"dirty\":false,\"host\":\"h\",\"rungs\":{\"old\":{\"inf\":1}},\"swi\":\"10.1.10\",\"tiers\":\"core\"}", Path,
+        ( with_output_to(string(_),
+              append_history(Path, _{swi_prolog:"10.1.10"}, [],
+                             [new-_{inf:2}])),
+          read_history(Path, Entries),
+          assertion(length(Entries, 2)) )).
+
+test(store_jsonl_rejects_empty_rungs,
+     [throws(error(bench_history_bad_rungs, _))]) :-
+    with_temp_text("", Path,
+        append_history(Path, _{swi_prolog:"10.1.10"}, [], [])).
+
+test(store_history_reports_malformed_line_number) :-
+    with_temp_text("{\"commit\":\"old\",\"date\":\"d\",\"dirty\":false,\"host\":\"h\",\"rungs\":{\"row\":{\"inf\":1}},\"swi\":\"10.1.10\",\"tiers\":\"core\"}\nnot-json\n", Path,
+        ( catch(read_history(Path, _), Error, true),
+          assertion(nonvar(Error)),
+          assertion(Error = error(bench_history_line(Path, 2, _), _)) )).
+
+test(store_history_reports_bad_envelope_line_number) :-
+    with_temp_text("{\"rungs\":{}}\n", Path,
+        ( catch(read_history(Path, _), Error, true),
+          assertion(nonvar(Error)),
+          assertion(Error = error(bench_history_line(Path, 1, _), _)) )).
+
+test(store_history_renderer_emits_each_metric) :-
+    Entries = [_{date:"2026-07-18T00:00:00", commit:"abc1234",
+                 dirty:false, host:"host", swi:"10.1.10", tiers:core,
+                 rungs:_{row:_{inf:10, load_inf:20}}}],
+    with_output_to(string(Text),
+                   render_history('test benchmark',
+                                  [metric(search_inf, inf),
+                                   metric(load_inf, load_inf)], Entries)),
+    deterministic(Det),
+    assertion(Det == true),
+    assertion(sub_string(Text, _, _, _, "test benchmark history")),
+    assertion(sub_string(Text, _, _, _, "search_inf per rung")),
+    assertion(sub_string(Text, _, _, _, "load_inf per rung")).
+
 test(fill_core_record_retains_heavy_and_verifies_readback) :-
     fill_baseline_doc(['core'-fill_spec(core, 100, 200, 300),
                        'heavy'-fill_spec(heavy, 500, 600, 700)], Baseline),
@@ -253,6 +343,13 @@ test(checkers_reject_history_runner_arguments,
                     ['-q', Script, '--history', '--heavy'], capture,
                     _Stdout, _Stderr, Status),
     assertion(Status == exit(2)).
+
+test(checker_history_commands_render,
+     [forall(checker_script(Script))]) :-
+    capture_process(path(swipl), ['-q', Script, '--history'], capture,
+                    Stdout, _Stderr, Status),
+    assertion(Status == exit(0)),
+    assertion(Stdout \== "").
 
 test(identity_scripts_reject_unknown_options,
      [forall(identity_script(Script))]) :-
@@ -411,3 +508,15 @@ make_fill_identity_fixture(ManifestPath, WorkloadsPath, CliPath, Original) :-
 
 delete_if_exists(Path) :-
     ( exists_file(Path) -> delete_file(Path) ; true ).
+
+with_temp_json(Dict, Path, Goal) :-
+    tmp_file_stream(text, Path, Stream),
+    json_write_dict(Stream, Dict),
+    close(Stream),
+    setup_call_cleanup(true, Goal, delete_if_exists(Path)).
+
+with_temp_text(Text, Path, Goal) :-
+    tmp_file_stream(text, Path, Stream),
+    format(Stream, '~s', [Text]),
+    close(Stream),
+    setup_call_cleanup(true, Goal, delete_if_exists(Path)).
