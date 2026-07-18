@@ -53,8 +53,7 @@
             strategies/1,
             default_strategy/1,
             require_strategy/1,
-            % placed-word record (pw/8) accessors (pw_end/2 stays internal:
-            % no consumer outside this module reads the End field)
+            % placed-word record (pw/8) accessors
             pw_answer/2,
             pw_letters/2,
             pw_cells/2,
@@ -774,31 +773,8 @@ select_direct(Words, [P|Ps],
 
 % At the first interior node every remaining argument is fresh and receives a
 % full count. Thereafter only letter-sharing IDs are overwritten; all other
-% arguments retain the old assoc path's visible stale overestimate.
-refresh_direct_counts([], _, _, _, _, _, _, _).
-refresh_direct_counts([wid(ID, Entry)|Words], Buckets, LastLetters,
-                      PlacedWords, GridLen, Start, Dir, GIn) :-
-    arg(ID, Buckets, Previous),
-    (   var(Previous)
-    ->  direct_recount(ID, Entry, Buckets, PlacedWords,
-                       GridLen, Start, Dir, GIn)
-    ;   entry_letters(Entry, ELetters),
-        (   shares_letter(ELetters, LastLetters)
-        ->  direct_recount(ID, Entry, Buckets, PlacedWords,
-                           GridLen, Start, Dir, GIn)
-        ;   true
-        )
-    ),
-    refresh_direct_counts(Words, Buckets, LastLetters, PlacedWords,
-                          GridLen, Start, Dir, GIn).
-
-direct_recount(ID, Entry, Buckets, PlacedWords, GridLen, Start, Dir, GIn) :-
-    mrv_count(2, PlacedWords, GridLen, Start, Dir, GIn, Entry, Count),
-    setarg(ID, Buckets, Count).
-
-% A-D2's product refresh. The old refresh_direct_counts/8 above deliberately
-% remains the unchanged full-recount A-D1 reference used by differential probes.
-% Counts and sole-proof residues are parallel ID-indexed trailed terms.
+% arguments retain the old assoc path's visible stale overestimate. Counts and
+% sole-proof residues are parallel ID-indexed trailed terms.
 refresh_delta_counts([], _, _, _, _, _, _, _, _).
 refresh_delta_counts([wid(ID, Entry)|Words], Buckets, Residues, LastLetters,
                      PlacedWords, GridLen, Start, Dir, GIn) :-
@@ -1788,7 +1764,6 @@ cell_coord(GridLen, Cell, [Row, Col]) :-
 %!  pw_dir(+PW, -Dir:oneof([across,down])) is det.
 %!  pw_len(+PW, -Len:integer) is det.
 %!  pw_start(+PW, -Start:integer) is det.
-%!  pw_end(+PW, -End:integer) is det.
 %!  pw_num(+PW, -Num:integer) is det.
 %
 %   Field accessors for the placed-word record. A placed word is a
@@ -1807,7 +1782,6 @@ pw_cells(  pw(_,_,C,_,_,_,_,_), C).
 pw_dir(    pw(_,_,_,D,_,_,_,_), D).
 pw_len(    pw(_,_,_,_,L,_,_,_), L).
 pw_start(  pw(_,_,_,_,_,S,_,_), S).
-pw_end(    pw(_,_,_,_,_,_,E,_), E).
 pw_num(    pw(_,_,_,_,_,_,_,N), N).
 
 

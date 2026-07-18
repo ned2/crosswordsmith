@@ -556,16 +556,17 @@ The Python conversion companion under `xword/` has its own suite, not run by
 and `make xword-parity` byte-diffs the engine's ipuz/exolve exports against
 xword's over one layout (best-effort parity — see `docs/xword-spec.md` §14).
 
-There are two benchmarks, answering different questions. Both share the
-measurement core in `benchmarks/bench_core.pl` (warmup, iterate, summarize;
-one median definition). All numbers are machine-specific and reporting-only;
-compare on **inferences**, which are deterministic and portable, not on wall time.
+The permanent measurement tooling covers strict arrange, greedy arrange, fill,
+strategy research, and fill quality. The three product runners share
+`benchmarks/bench_core.pl` (warmup, iterate, summarize; one median definition).
+Wall time and RSS are machine-specific and reporting-only; inference counts are
+deterministic across machines under the pinned SWI-Prolog version.
 
-**Product benchmark** — how long `arrange` takes a user, for the workloads in
-`benchmarks/workloads.pl`: a synthetic mesh **cost ladder** (the hill-climbing
-instrument, 9×9/15×15/21×21) plus **real-word realism anchors** at the blocked
-daily sizes 13/15 (`fixtures/real_*`, ENABLE dictionary words planted on a legal
-witness layout by `benchmarks/gen_real_fixture.py`):
+**Strict arrange benchmark** — how long `arrange --strict` takes a user, for the
+workloads in `benchmarks/workloads.pl`: a synthetic mesh **cost ladder** (the
+hill-climbing instrument, 9×9/15×15/21×21) plus **real-word realism anchors** at
+the blocked daily sizes 13/15 (`fixtures/real_*`, ENABLE dictionary words planted
+on a legal witness layout by `benchmarks/gen_real_fixture.py`):
 
     $ make bench
 
@@ -599,6 +600,38 @@ identity, and ratchet in one fail-fast flow. `make bench-arrange-promote` checks
 and records one measurement (rather than rerunning an accepted result), then
 read-verifies every persisted measured rung; add `BENCH_ARGS=--heavy` to either
 target for the complete core+heavy selection.
+
+For a pure refactor, `make bench-exact` requires every core and heavy gated
+inference count to equal the same-SWI baseline exactly; both increases and
+decreases fail.
+
+**Greedy arrange benchmark** — the permanent best-effort/candidates workloads in
+`benchmarks/greedy_workloads.pl`. It reports construction, sweep, postprocess,
+and command layers; the three inference layers gate independently, with sweep
+as the primary metric. Its semantic identity covers the complete raw pool and
+selected output.
+
+    $ make bench-greedy
+    $ make bench-greedy BENCH_ARGS=--heavy
+    $ make bench-greedy-verify BENCH_ARGS=--heavy
+    $ make bench-greedy-exact
+
+**Fill benchmark** — the permanent grid/dictionary workloads in
+`benchmarks/fill_workloads.pl`. It separates end-to-end command, dictionary
+load, grid derivation, and search. `search_inf` and `load_inf` are both ratchet
+metrics; grid inferences, wall time, and RSS are informational.
+
+    $ make bench-fill
+    $ make bench-fill BENCH_ARGS=--heavy
+    $ make bench-fill-verify BENCH_ARGS=--heavy
+    $ make bench-fill-exact
+
+The independent fill-quality checks are separate from the performance ladder.
+Their no-data unit layer is `make bench-fill-quality-test`; the standing hard-row
+AC-FILL-12 gate needs the exact external STW snapshot documented in
+[`benchmarks/fill_quality/`](benchmarks/fill_quality/README.md):
+
+    $ make bench-fill-quality-check STW=/path/to/spread-the-wordlist.txt
 
 **Strategy matrix** — algorithm research (comparing the solver strategies, not a
 shipped path). One CSV row per (strategy, fixture) over `benchmarks/fixtures.pl`,

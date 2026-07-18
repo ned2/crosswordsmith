@@ -6,8 +6,8 @@
 %
 %   command   - end-to-end `crosswordsmith fill ...` process latency (SWI startup
 %               + load.pl + dict load + slot derivation + search + emit).
-%   dict_load - the in-process load_dict/3 alone. load_inf (inferences) is the
-%               deterministic, REPORTED metric (not gated - Phase 3 owns it).
+%   dict_load - the in-process load_dict/3 alone. load_inf (inferences) is a
+%               deterministic GATED metric.
 %   grid      - the in-process fill_grid/4 slot derivation alone (its own bucket).
 %   search    - the in-process budget-explicit fill_attempt/8 (FRESH slots per
 %               sample, pre-loaded dict). search_inf is the GATED metric of record.
@@ -199,7 +199,7 @@ emit(csv, Rows) :- !,
 emit(json, Rows) :- !,
     swi_version(Ver),
     Doc = _{ tool: 'crosswordsmith-fill-bench', swi_prolog: Ver,
-             metric_note: 'search_inf gated; load_inf reported (Phase 3); wall/rss machine-dependent; rss is whole-process footprint',
+             metric_note: 'search_inf/load_inf gated; wall/rss machine-dependent; rss is whole-process footprint',
              results: Rows },
     json_write_dict(user_output, Doc, [width(80)]), nl.
 emit(Other, _) :-
@@ -210,7 +210,7 @@ metadata_lines :-
     swi_version(Ver),
     format("# tool: crosswordsmith-fill-bench~n"),
     format("# swi_prolog: ~w~n", [Ver]),
-    format("# metric_note: search_inf gated; load_inf reported; wall/rss machine-dependent~n").
+    format("# metric_note: search_inf/load_inf gated; wall/rss machine-dependent~n").
 
 swi_version(Ver) :-
     current_prolog_flag(version_data, V),

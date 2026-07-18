@@ -23,7 +23,6 @@ run_suite :-
     consult('tests/browser.plt'),
     consult('tests/benchmarks.plt'),
     consult('tests/greedy_benchmark.plt'),
-    consult('tests/probe_arrange.plt'),
     % summary(S) gives us the counts AND stops run_tests/2 from failing on
     % its own, so we control the exit code explicitly from the dict. Note:
     % run_tests/2 and the summary/1 option are undocumented in the SWI 10.0.2

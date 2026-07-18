@@ -9,7 +9,7 @@
 %                latency a user feels. process layer; asserts exit vs Expected.
 %   - dict_load: the in-process load_dict/3 alone (the every-invocation startup
 %                tax: read + normalize + positional index over all lengths).
-%                load_inf (inferences) is deterministic and REPORTED (not gated).
+%                load_inf (inferences) is deterministic and GATED.
 %   - grid     : the in-process fill_grid/4 alone (mask -> shared-cell-variable
 %                slots). Its own bucket, never silently folded into "rest".
 %   - search   : the in-process budget-explicit fill_attempt/8 with a PRE-LOADED

@@ -2,7 +2,7 @@
 
 SHELL := /bin/bash
 
-.PHONY: test test-wasm test-xword xword-parity unit golden update-golden fuzz bench bench-check bench-exact bench-record bench-log bench-history bench-matrix bench-arrange-verify bench-arrange-promote bench-greedy bench-greedy-check bench-greedy-exact bench-greedy-record bench-greedy-log bench-greedy-history bench-greedy-identity bench-greedy-verify bench-greedy-promote probe-arrange-fixtures probe-arrange-seeds probe-arrange-schema-test probe-arrange-d0-test probe-arrange-check
+.PHONY: test test-wasm test-xword xword-parity unit golden update-golden fuzz bench bench-check bench-exact bench-record bench-log bench-history bench-matrix bench-arrange-verify bench-arrange-promote bench-greedy bench-greedy-check bench-greedy-exact bench-greedy-record bench-greedy-log bench-greedy-history bench-greedy-identity bench-greedy-verify bench-greedy-promote
 
 BENCH_FORMAT ?= text
 BENCH_ARGS ?=
@@ -136,9 +136,10 @@ update-golden:
 bench:
 	swipl -q benchmarks/run_arrange.pl -- --format $(BENCH_FORMAT) $(BENCH_ARGS)
 
-# Performance ratchet: run the 15x15 ladder and diff each rung's search-inference
-# count against benchmarks/baseline.json. A DROP is a win; a RISE past the
-# baseline's tolerance is a regression (nonzero exit). Deterministic + machine-
+# Performance ratchet: run the 9x9/13x13/15x15/21x21 strict workload set and
+# diff each rung's search-inference count against benchmarks/baseline.json. A
+# DROP is a win; a RISE past the baseline's tolerance is a regression (nonzero
+# exit). Deterministic + machine-
 # independent, so it hill-climbs the arrange algorithm (a -X% here predicts ~X%
 # under WASM). wall/rss are reported but never gated. Core rungs only by default;
 # add the hard tail with BENCH_ARGS=--heavy. NOT on the `make test` path.
@@ -234,22 +235,6 @@ BENCH_STRATEGIES ?=
 bench-matrix:
 	swipl -q benchmarks/run_matrix.pl -- $(BENCH_STRATEGIES)
 
-# Campaign-only P0.3/P0.4 checks. These never record baselines, regenerate
-# goldens, or add cliff fixtures to workloads.pl.
-probe-arrange-fixtures:
-	python3 benchmarks/probe_arrange/check_fixtures.py
-
-probe-arrange-seeds:
-	python3 benchmarks/probe_arrange/check_seeds.py
-
-probe-arrange-schema-test:
-	python3 -m unittest benchmarks/probe_arrange/test_schema.py
-
-probe-arrange-d0-test:
-	swipl -q benchmarks/probe_arrange/test_d0_support.pl
-
-probe-arrange-check: probe-arrange-fixtures probe-arrange-seeds probe-arrange-schema-test probe-arrange-d0-test
-
 # --- browser payload/startup bench (payload plan Phase 0) ---------------------
 # Payload/request/startup benchmark for the browser bundle
 # (docs/plans/wasm-payload-performance.md §4): artifact raw/gzip/brotli sizes,
@@ -272,7 +257,7 @@ bench-wasm-payload-record:
 bench-wasm-payload-check:
 	node wasm/test/payload_bench.mjs --check
 
-# --- fill product bench + ratchet (campaign/fill Phase 0) ---------------------
+# --- fill product bench + ratchet ---------------------------------------------
 # Product benchmark for `fill`: four attribution buckets per ladder rung -
 # command (end-to-end CLI), dict_load (load_dict/3), grid (fill_grid/4), and
 # search (fill_attempt/8, FRESH slots per sample) - over the rungs in
@@ -285,10 +270,9 @@ bench-wasm-payload-check:
 bench-fill:
 	swipl -q benchmarks/run_fill.pl -- --format $(BENCH_FORMAT) $(BENCH_ARGS)
 
-# Fill performance ratchet: diff each rung's search_inf against
-# benchmarks/fill_baseline.json. search_inf GATES (a rise past tolerance fails,
-# exit 1); load_inf is REPORTED but informational until Phase 3 decides
-# otherwise. NOT on the `make test` path.
+# Fill performance ratchet: diff each rung's search_inf and load_inf against
+# benchmarks/fill_baseline.json. Either metric rising past tolerance fails with
+# exit 1. NOT on the `make test` path.
 #   make bench-fill-check
 #   make bench-fill-check BENCH_ARGS=--heavy
 bench-fill-check:

@@ -91,31 +91,31 @@ Key corrected premises are now durable:
 - Large deterministic inference reductions do not imply a wall win when term
   and native work trade off. A-D2 is the measured example.
 
-## Reproduction artifacts
+## Permanent verification and historical reconstruction
 
 ```sh
-swipl -q benchmarks/probe_arrange/test_closeout_direct.pl
-swipl -q benchmarks/probe_arrange/run_closeout_direct.pl
-python3 benchmarks/probe_arrange/run_closeout_authority.py
 make test
-benchmarks/check_arrange_identity.sh --heavy
-make bench-check BENCH_ARGS=--heavy        # run twice for close-out
+make bench-arrange-verify BENCH_ARGS=--heavy
+make bench-exact
 make bench-greedy-identity
 make bench-greedy-check BENCH_ARGS=--heavy
+make bench-greedy-exact
 make test-wasm
 git diff --check
 ```
 
+The closeout and mechanism commands were campaign-only and are retired. Exact
+source snapshots and disposable-checkout recipes are indexed in
+`docs/research/benchmark-probe-historical-reconstruction.md`.
+
 Primary artifacts:
 
 - `benchmarks/results/2026-07-17-arrange-campaign-closeout.md`
-- `benchmarks/probe_arrange/closeout_direct.pl`
-- `benchmarks/probe_arrange/run_closeout_direct.pl`
-- `benchmarks/probe_arrange/run_closeout_authority.py`
-- `benchmarks/probe_arrange/test_closeout_direct.pl`
 - accepted/rejected 2026-07-17 reports under `benchmarks/results/`
+- `benchmarks/results/2026-07-17-p-r0-pilot.jsonl`
 - `benchmarks/baseline.json`, `benchmarks/greedy_baseline.json`, and their
   histories
+- `docs/research/benchmark-probe-historical-reconstruction.md`
 
 ## Track R closure
 

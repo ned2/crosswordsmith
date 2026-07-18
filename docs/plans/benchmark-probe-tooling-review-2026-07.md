@@ -1,7 +1,7 @@
 # Candidate plan: benchmark and probe tooling review
 
-Status: IN PROGRESS (2026-07-18). Phases 0 and 1 are complete; Phase 2 is in
-progress. This is a review and cleanup plan, not an authorization to delete
+Status: IN PROGRESS (2026-07-18). Phases 0 through 3 are complete; Phase 4 is
+next. This is a review and cleanup plan, not an authorization to delete
 every item listed below. Each candidate must pass its own reachability, evidence,
 and replacement-coverage gate before removal.
 
@@ -230,10 +230,18 @@ manually synchronizing an embedded copy in `gen_grids.py`.
 Initial disposition: EXTRACT PERMANENT INVARIANTS, THEN REMOVE IN DEPENDENCY
 ORDER.
 
-The `probe_arrange/README.md` explicitly calls the directory campaign-only. The
-campaign is closed, and its mechanism evidence is preserved in dated reports.
-The directory nevertheless remains coupled to the normal test suite through
-`tests/probe_arrange.plt` and `tests/greedy_benchmark.plt`.
+Status: COMPLETE (2026-07-18). Four focused A-G2 product assertions moved to
+`tests/arrange.plt`; the permanent assoc/full-tree and A-D2 assertions remain in
+`tests/core.plt`. All 41 files under `benchmarks/probe_arrange/` and the 224-line
+campaign test suite were removed after their assertion dispositions and source
+reconstruction points were recorded. The 131-row P-R0 JSONL remains for
+independent reanalysis; its generated fixtures and seed manifest remain exactly
+recoverable from `fbea282`. The probe-only A-D1 recount and unused placed-word
+accessor were also removed after repo-wide caller checks.
+
+The removed `probe_arrange/README.md` explicitly called the directory
+campaign-only. The campaign is closed, and its mechanism evidence is preserved
+in dated reports and the historical reconstruction index.
 
 Candidate groups:
 
@@ -292,18 +300,28 @@ recorded generator hashes.
 
 Initial disposition: REFACTOR.
 
-`greedy_subjects.pl:152-329` and `run_arrange_greedy.pl:87-99` run the accepted
-A-G1 semantic-counter replay on every permanent greedy benchmark. The ratchet
-gates construction, sweep, and postprocess inferences; the campaign counters are
-informational. Retain raw-pool and selected-output identity, but remove the
-A-G1-only counter pass and hard-coded mechanism counts after confirming they are
-not needed to distinguish product output.
+Status: COMPLETE (2026-07-18). The semantic-counter replay, replay twin, and
+hard-coded mechanism assertions were removed. Permanent raw-pool/selected-output
+identity, current phase assertions, and all greedy inference ratchets remain.
+
+Before cleanup, `greedy_subjects.pl:152-329` and
+`run_arrange_greedy.pl:87-99` ran the accepted A-G1 semantic-counter replay on
+every permanent greedy benchmark. The ratchet gated construction, sweep, and
+postprocess inferences; the campaign counters were informational. The migration
+retained raw-pool and selected-output identity while removing the A-G1-only
+counter pass and hard-coded mechanism counts.
 
 ### V6. Campaign-only commands and stale instructions
 
-Remove Make targets at `Makefile:229-243` when their probe dependencies are
-gone. Replace `probe_arrange/README.md` with no active source-side archive; dated
-reports and living benchmark docs should identify permanent commands.
+Status: COMPLETE (2026-07-18). Campaign-only Make targets and test imports were
+removed. Living documentation now names the strict, greedy, fill, strategy, and
+quality commands; stale strict-ladder, fill-gate, fixture-selection, and analyzer
+examples were corrected without changing dated reports.
+
+The cleanup requirement was to remove the Make targets at `Makefile:229-243`
+with their probe dependencies and leave no active source-side archive in place
+of `probe_arrange/README.md`; dated reports and living benchmark docs instead
+identify historical recovery points and permanent commands.
 
 Correct stale living text found during the audit:
 
@@ -538,6 +556,11 @@ AC-FILL-12 quality gate remain discoverable; no living doc instructs users to ru
 removed code.
 
 ### Phase 3: dissolve arrange campaign dependencies
+
+Status: COMPLETE (2026-07-18). The V4-V6 migrations and removals passed the
+native suite, strict/greedy full-ladder identity, exact same-SWI inference gates,
+and strategy matrix. No baseline, history, identity manifest, golden, or dated
+result report changed.
 
 - Migrate permanent A-D2 and A-G2 invariants to owning product tests.
 - Remove A-G1-only counters from routine greedy measurements while retaining

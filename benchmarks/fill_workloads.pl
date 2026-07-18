@@ -1,36 +1,26 @@
 % benchmarks/fill_workloads.pl - the PRODUCT / performance-tracking manifest for `fill`.
 %
-% A "cost ladder" of dictionary-fill instances whose SEARCH cost (inferences)
-% climbs from ~0.5M to ~35M across a range of grid sizes, dictionary sizes, and
-% a seeded rung. This is the fill product bench's single source of truth
-% (run_fill.pl reads only this file), deliberately separate from the arrange
+% A fixed set of dictionary-fill instances covering grid sizes, dictionary
+% sizes, and a seeded rung. This is the fill product bench's single source of
+% truth (run_fill.pl reads only this file), deliberately separate from the arrange
 % manifest (benchmarks/workloads.pl) so the two ratchets never cross.
 %
-% WHY A LADDER: fill search cost (inferences) is deterministic and machine-
-% INDEPENDENT - the SAME count native or under WASM, only the wall-per-inference
-% constant changes. benchmarks/fill_baseline.json records each rung and
-% `make bench-fill-check` reports the per-rung delta (ratchet: search_inf
-% regressions fail, improvements are wins).
+% WHY A FIXED SET: fill search and dictionary-load costs (inferences) are
+% deterministic and machine-INDEPENDENT - the SAME counts native or under WASM,
+% only the wall-per-inference constant changes. benchmarks/fill_baseline.json
+% records both metrics and `make bench-fill-check` reports each per-rung delta
+% (regressions fail, improvements are wins).
 %
-% WHY THESE RUNGS (the completing-regime finding, Phase 0):
-%   fill is search-tree-bound and heavy-tailed. EMPIRICALLY (triage,
-%   benchmarks/results/2026-07-05-fill-phase0.md) the completable-fast regime is
-%   NARROW: it wants SHORT words (len<=5 -> thousands of candidates per slot) in
-%   the ABUNDANT-dictionary regime (a big dict, so the first greedy MRV path
-%   succeeds with shallow backtracking). The curated UK blocked grids
-%   (grids/blocked_13a|13b|15a) and open word-squares >=6x6 do NOT complete
-%   within 2e9 against ENABLE - they contain full-length lights (len 13-15) whose
-%   few candidates over-constrain the interlock (an ENVELOPE finding, recorded).
-%   So every rung here is a short-word grid (max light length 5, generated to
-%   PASS stockgrid_validate) or a small open square, against a dictionary large
-%   enough to complete DETERMINISTICALLY with ample headroom under the 2e9 bench
-%   budget. Budget-saturating / not_proven / knife-edge combos are excluded.
+% WHY THESE RUNGS: every row completes deterministically under the current MAC,
+% dom/wdeg, and restart engine with ample headroom under the benchmark's 2e9
+% budget. The set keeps short-word grid-size coverage, two byte-frozen dictionary
+% scales, one seeded row, and the historical core/heavy selection stable.
+% Budget-saturating, not_proven, and knife-edge combinations remain excluded.
 %
 % Each rung was chosen by its MEASURED search cost (a low-budget triage probe
 % found the completing regime; each promoted rung was confirmed at full budget).
-% Rungs near a feasibility phase-transition (e.g. sq04 against the 50k subset)
-% sit comfortably below saturation but are noted - the dictionaries are
-% BYTE-FROZEN, so the counts are exactly reproducible.
+% The dictionaries are byte-frozen, so the counts are exactly reproducible under
+% the pinned SWI-Prolog version.
 %
 % fill_workload(RungId, GridFile, DictFile, Seeds, Iterations, Warmup, Expected, Tier, Budget)
 %   RungId     - unique rung key (baseline key; grids/dicts are reused across rungs)
@@ -62,8 +52,9 @@
 %                largest; see the results doc.
 %   Expected   - the asserted Outcome (all rungs here: filled) / exit (0)
 %   Tier       - core | heavy
-%       core : sub-~4M-inference search; run by default (make bench-fill / -check).
-%       heavy: the 10-35M tail; opt in with --heavy. Still deterministic + ratcheted.
+%       core : routine rows; run by default (make bench-fill / -check).
+%       heavy: additional dictionary/grid coverage; opt in with --heavy. Still
+%              deterministic and ratcheted.
 %   Budget     - per-operation inference budget for the SEARCH layer
 %                (fill_attempt/8), raised above fill's shipped 8e8 default so a
 %                completing rung runs to TRUE completion (a deterministic,
@@ -73,16 +64,16 @@
 % already warmed the process before any warmup-lean rung is measured.
 
 % -- core: fast completers, run by default ------------------------------------
-fill_workload(sq04_full,     'fixtures/fill_grid_04a.json', 'fixtures/dict/enable1.txt',   none, 3, 1, filled, core, 2_000_000_000). % 4x4 square, ~0.53M
-fill_workload(g11_full,      'fixtures/fill_grid_11a.json', 'fixtures/dict/enable1.txt',   none, 3, 1, filled, core, 2_000_000_000). % 11x11, ~0.67M
-fill_workload(g11_full_seed, 'fixtures/fill_grid_11a.json', 'fixtures/dict/enable1.txt',   'fixtures/fill_seed_11a.json', 3, 1, filled, core, 2_000_000_000). % 11x11, 3 seed pins, ~0.70M
-fill_workload(sq05_full,     'fixtures/fill_grid_05a.json', 'fixtures/dict/enable1.txt',   none, 3, 1, filled, core, 2_000_000_000). % 5x5 square, ~1.46M
-fill_workload(g17_full,      'fixtures/fill_grid_17a.json', 'fixtures/dict/enable1.txt',   none, 3, 1, filled, core, 2_000_000_000). % 17x17, ~2.53M
-fill_workload(g21_full,      'fixtures/fill_grid_21a.json', 'fixtures/dict/enable1.txt',   none, 3, 1, filled, core, 2_000_000_000). % 21x21, 154 slots, ~3.31M
-fill_workload(g13_full,      'fixtures/fill_grid_13a.json', 'fixtures/dict/enable1.txt',   none, 3, 1, filled, core, 2_000_000_000). % 13x13, ~3.76M
+fill_workload(sq04_full,     'fixtures/fill_grid_04a.json', 'fixtures/dict/enable1.txt',   none, 3, 1, filled, core, 2_000_000_000). % 4x4 square, ~3.30M
+fill_workload(g11_full,      'fixtures/fill_grid_11a.json', 'fixtures/dict/enable1.txt',   none, 3, 1, filled, core, 2_000_000_000). % 11x11, ~3.46M
+fill_workload(g11_full_seed, 'fixtures/fill_grid_11a.json', 'fixtures/dict/enable1.txt',   'fixtures/fill_seed_11a.json', 3, 1, filled, core, 2_000_000_000). % 11x11, 3 seed pins, ~3.41M
+fill_workload(sq05_full,     'fixtures/fill_grid_05a.json', 'fixtures/dict/enable1.txt',   none, 3, 1, filled, core, 2_000_000_000). % 5x5 square, ~3.38M
+fill_workload(g17_full,      'fixtures/fill_grid_17a.json', 'fixtures/dict/enable1.txt',   none, 3, 1, filled, core, 2_000_000_000). % 17x17, ~3.77M
+fill_workload(g21_full,      'fixtures/fill_grid_21a.json', 'fixtures/dict/enable1.txt',   none, 3, 1, filled, core, 2_000_000_000). % 21x21, 154 slots, ~7.54M
+fill_workload(g13_full,      'fixtures/fill_grid_13a.json', 'fixtures/dict/enable1.txt',   none, 3, 1, filled, core, 2_000_000_000). % 13x13, ~3.61M
 
-% -- heavy: the mid/high tail; opt in with --heavy ----------------------------
-fill_workload(sq04_50k,      'fixtures/fill_grid_04a.json', 'fixtures/dict/enable_50k.txt', none, 3, 1, filled, heavy, 2_000_000_000). % 4x4 x 50k (near-phase), ~7.74M
-fill_workload(g15_full,      'fixtures/fill_grid_15a.json', 'fixtures/dict/enable1.txt',   none, 2, 1, filled, heavy, 2_000_000_000). % 15x15, ~10.73M
-fill_workload(g17_50k,       'fixtures/fill_grid_17a.json', 'fixtures/dict/enable_50k.txt', none, 2, 1, filled, heavy, 2_000_000_000). % 17x17 x 50k, ~19.64M
-fill_workload(g09_full,      'fixtures/fill_grid_09a.json', 'fixtures/dict/enable1.txt',   none, 2, 1, filled, heavy, 2_000_000_000). % 9x9, ~34.88M (top rung)
+% -- heavy: additional coverage; opt in with --heavy --------------------------
+fill_workload(sq04_50k,      'fixtures/fill_grid_04a.json', 'fixtures/dict/enable_50k.txt', none, 3, 1, filled, heavy, 2_000_000_000). % 4x4 x 50k, ~1.15M
+fill_workload(g15_full,      'fixtures/fill_grid_15a.json', 'fixtures/dict/enable1.txt',   none, 2, 1, filled, heavy, 2_000_000_000). % 15x15, ~3.70M
+fill_workload(g17_50k,       'fixtures/fill_grid_17a.json', 'fixtures/dict/enable_50k.txt', none, 2, 1, filled, heavy, 2_000_000_000). % 17x17 x 50k, ~9.76M
+fill_workload(g09_full,      'fixtures/fill_grid_09a.json', 'fixtures/dict/enable1.txt',   none, 2, 1, filled, heavy, 2_000_000_000). % 9x9, ~3.69M

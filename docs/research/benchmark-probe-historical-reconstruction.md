@@ -19,7 +19,64 @@ The source-preservation commit contains the complete 183-line driver:
 git show 22e8c21:benchmarks/probe_backtrack.pl
 ```
 
-## A-G2 transpose probes
+## Arrange performance campaign
+
+The accepted/rejected mechanism reports are under `benchmarks/results/` and the
+durable outcome summary is
+`docs/research/arrange-performance-campaign-2026-07b-summary.md`. The complete
+integrated probe tree, its 12 generated cliff fixtures, and its 64-seed manifest
+remain available at the last source-bearing snapshot:
+
+```sh
+git worktree add /tmp/crosswordsmith-arrange-probes --detach fbea282
+```
+
+The campaign-era reconstruction points are:
+
+| group | measurement base | source / accepted snapshot |
+|---|---|---|
+| Phase-0 authority and twin | `aa4d3c8` | integrated probe snapshot `3ce0b8d` |
+| P-D0 support delta | `1bccf47` | probe `d99ea4f`; integrated `9ee66ed` |
+| P-C0 duplicate work | `1bccf47` | probe `4e4ee15`; integrated `55a0fde` |
+| P-R0 fixed-instance pilot | `1bccf47` | runner/analysis patch `b0d53e7` |
+| A-G1 premise / product | `3ce0b8d` | `ea65c1a` / `802a1ea`; integrated `88074b2` / `ef2e0b0` |
+| A-G2 premise / product | `c584962` / `d7b5dfb` | `7d82081` / `c03624a`; accepted `7a14082` |
+| A-D1 direct buckets | `362b399` | probe `b3e965e`; accepted `6bb50c8` |
+| A-D2 newest-source delta | `83b7d89` | probe `c8ff053`; accepted `9d7055a` |
+| Closeout | `5dcf975` | measurement code `c65df0a`; report `76e956b` |
+
+The A-G1 semantic-counter twin survived beyond the campaign in
+`benchmarks/greedy_subjects.pl`; its final source-bearing snapshot is `2a8108a`.
+
+### P-R0 base-locked runner
+
+`run_pr0.py` deliberately requires branch `probe/a-r0` with HEAD exactly at
+`1bccf47917fea074a404bf467e51865ce988b8b8`. Its measured source was a working
+patch over that base, later captured by `b0d53e7`. Reconstruct it in a disposable
+clone without advancing HEAD:
+
+```sh
+git clone . /tmp/crosswordsmith-p-r0
+git -C /tmp/crosswordsmith-p-r0 switch -C probe/a-r0 1bccf47
+git diff --binary 1bccf47 b0d53e7 -- \
+  benchmarks/probe_arrange/run_pr0.py \
+  benchmarks/probe_arrange/analyze_pr0.py \
+  benchmarks/probe_arrange/schema.py \
+  benchmarks/probe_arrange/test_schema.py |
+  git -C /tmp/crosswordsmith-p-r0 apply
+git -C /tmp/crosswordsmith-p-r0 status --short
+python3 /tmp/crosswordsmith-p-r0/benchmarks/probe_arrange/run_pr0.py
+python3 /tmp/crosswordsmith-p-r0/benchmarks/probe_arrange/analyze_pr0.py \
+  /tmp/crosswordsmith-p-r0/benchmarks/results/2026-07-17-p-r0-pilot.jsonl
+```
+
+The 131-row raw result
+`benchmarks/results/2026-07-17-p-r0-pilot.jsonl` remains tracked for independent
+cutoff-curve, paired-corner, reward, layout, and timing reanalysis. The generated
+cliff fixtures and seed manifest do not: their parameters, hashes, and master
+seed are recorded in the P-R0 report, and their exact bytes remain in `fbea282`.
+
+### A-G2 transpose probes
 
 - Premise report:
   `benchmarks/results/2026-07-17-a-g2-transpose-premise.md`.
@@ -29,9 +86,11 @@ git show 22e8c21:benchmarks/probe_backtrack.pl
   `benchmarks/results/2026-07-17-a-g2-transpose-product.md`.
 - Paired-wall launcher: commit `7a14082`, path
   `benchmarks/run_arrange_g2_wall.pl`.
+- Four-corner oracle: commit `7d82081`, path
+  `benchmarks/probe_arrange/g2_transpose.pl`.
 
-The separate oracle `benchmarks/probe_arrange/g2_transpose.pl` remains live
-until its focused product tests migrate in Phase 3.
+The oracle's permanent geometry, fresh-variable, block-order, setup-failure,
+and dropped-term invariants now live in `tests/arrange.plt`.
 
 ## P-F1 attribution
 
