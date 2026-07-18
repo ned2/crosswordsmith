@@ -1,7 +1,7 @@
 #!/usr/bin/env swipl
 % benchmarks/check_greedy_baseline.pl - independent greedy inference ratchet.
 % Construction, sweep, and postprocess inferences gate at 0.5%; sweep is the
-% primary metric. Command wall/RSS and semantic counters are informational.
+% primary metric. Command wall/RSS are informational.
 % --exact requires same-SWI equality over every core and heavy gated metric.
 
 :- set_prolog_flag(verbose, silent).
@@ -192,7 +192,7 @@ build_recorded(Baseline,Doc,Recorded) :-
     foldl(record_row,Rows,WL0,WL),
     current_host(Host),
     Recorded=Baseline.put(_{host:Host,swi_prolog:Doc.swi_prolog,workloads:WL,
-        generated_note:'construction/sweep/postprocess inferences gate independently at 0.5%; sweep is primary. Wall/RSS and semantic counters are informational. Regenerate with make bench-greedy-record BENCH_ARGS=--heavy.'}).
+        generated_note:'construction/sweep/postprocess inferences gate independently at 0.5%; sweep is primary. Wall/RSS are informational. Regenerate with make bench-greedy-record BENCH_ARGS=--heavy.'}).
 
 record_row(Row,WL0,WL) :-
     text_to_atom(Row.rung,Key), M=Row.metrics,
@@ -201,9 +201,9 @@ record_row(Row,WL0,WL) :-
            command_wall_med_ms:M.command_wall_med_ms,
            command_rss_med_kib:M.command_rss_med_kib,
            tier:Row.tier,fixture:Row.fixture,grid:Row.size,framing:Row.framing,
-           mode:Row.mode,construction:Row.construction,words:Row.words,
-           iterations:Row.iterations,warmup:Row.warmup,
-           info_only:["command_wall_med_ms","command_rss_med_kib","semantic_counters"]},
+            mode:Row.mode,construction:Row.construction,words:Row.words,
+            iterations:Row.iterations,warmup:Row.warmup,
+            info_only:["command_wall_med_ms","command_rss_med_kib"]},
     put_dict(Key,WL0,Spec,WL).
 
 text_to_atom(Text,Atom) :- text_to_string(Text,S), atom_string(Atom,S).

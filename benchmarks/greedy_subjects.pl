@@ -1,31 +1,26 @@
-% benchmarks/greedy_subjects.pl - product samplers and exact-replay observation
-% twin for the greedy arrange benchmark. Product code is never instrumented.
+% benchmarks/greedy_subjects.pl - product samplers and semantic identity for
+% the greedy arrange benchmark. Product code is never instrumented.
 
 :- module(greedy_subjects,
           [ load_words/2,
             construction_sampler/6,
             sweep_sampler/4,
-            build_raw_pool/4,
-            postprocess_sampler/6,
-            command_sampler/7,
-            semantic_counters/4,
-            replay_equivalent/4,
-            identity_row/10
-          ]).
+             build_raw_pool/4,
+             postprocess_sampler/6,
+             command_sampler/7,
+             identity_row/10
+           ]).
 
-:- use_module(library(apply), [foldl/4, maplist/3]).
+:- use_module(library(apply), [maplist/3]).
 :- use_module(library(assoc), [assoc_to_list/2]).
 :- use_module(library(sha), [sha_hash/3, hash_atom/2]).
-:- use_module(library(lists), [member/2, selectchk/3]).
+:- use_module(library(lists), [member/2]).
 :- use_module(library(pairs), [pairs_values/2]).
 :- use_module('bench_core.pl').
 :- use_module('bench_process.pl', [capture_process/6]).
 
 load_words(File, Words) :-
     load_clues(File, Words).
-
-command_k(candidates(_, K), K).
-command_k(best_effort, 1).
 
 entry_answer([Answer|_], Answer).
 
@@ -147,184 +142,6 @@ framing_args(max_size, N, ['--max-size', A]) :- atom_number(A, N).
 mode_args(candidates(strict, K), ['--strict', '--candidates', A]) :-
     atom_number(A, K).
 mode_args(best_effort, ['--best-effort']).
-
-% ---------------------------------------------------------------------------
-% Benchmark-only exact replay twin and semantic counters.
-% ---------------------------------------------------------------------------
-
-new_counter(counter(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)).
-
-counter_inc(I, Counter) :-
-    arg(I, Counter, N0),
-    N is N0 + 1,
-    nb_setarg(I, Counter, N).
-
-counter_add(I, Add, Counter) :-
-    arg(I, Counter, N0),
-    N is N0 + Add,
-    nb_setarg(I, Counter, N).
-
-counter_dict(C, _{generated_crossing_descriptors:Generated,
-                  legality_probes:Probes,
-                  legality_successes:Successes,
-                  legality_rejects:Rejects,
-                  rejected_percentage:RejectedPct,
-                  scored_candidates:Scored,
-                  score_cell_visits:Visits,
-                   rejected_score_cell_visits_avoided:AvoidedVisits,
-                   start_lt_one:Underflows,
-                   greedy_steps:Steps,
-                   completed_constructions:Completed,
-                   direct_attempted_constructions:Attempted}) :-
-    arg(1, C, Generated), arg(2, C, Probes), arg(3, C, Successes),
-    arg(4, C, Rejects), arg(5, C, Scored), arg(6, C, Visits),
-    arg(7, C, AvoidedVisits), arg(8, C, Underflows),
-    arg(9, C, Steps), arg(10, C, Completed), arg(11, C, Attempted),
-    ( Probes =:= 0 -> RejectedPct = 0.0
-    ; RejectedPct is 100.0 * Rejects / Probes
-    ).
-
-% Counter semantics mirror the legality-first product order. Generated and
-% legality probes increment for every descriptor yielded by
-% find_intersecting_word/6. Scored increments only after legality succeeds and
-% placement_key/8 completes; score-cell visits charges its two full word walks.
-% Rejected score-cell visits avoided charges the same 2*WLen only when the old
-% score-first path would have completed the score (Start >= 1); underflows were
-% already rejected by crossing_count/7 before a cell walk and charge zero. A
-% greedy step is one realized non-seed winner; completed is one construction
-% whose seed setup and loop complete.
-semantic_counters(Words, GridLen, Command, Counters) :-
-    crosswordsmith_core:reset_search_memos,
-    new_counter(C),
-    crosswordsmith_arrange:seed_candidates(Words, Seeds),
-    Locs = [topleft_across, topright],
-    forall((member(Loc, Locs), member(Seed, Seeds)),
-           ( counter_inc(11, C),
-             replay_pair_checked(Words, GridLen, Loc, Seed, C) )),
-    % Command is intentionally accepted to pin the same manifest subject. The
-    % semantic sweep observes every product direct construction, including setup
-    % failures, before strict eligibility filtering. The independent identity
-    % observer below deliberately remains a four-corner direct replay.
-    nonvar(Command),
-    counter_dict(C, Counters).
-
-replay_equivalent(Words, GridLen, Corner, SeedAnswer) :-
-    entry_by_answer(Words, SeedAnswer, Seed),
-    crosswordsmith_core:reset_search_memos,
-    construction_result(product, Words, GridLen, Corner, Seed, Product),
-    crosswordsmith_core:reset_search_memos,
-    new_counter(C),
-    construction_result(replay(C), Words, GridLen, Corner, Seed, Replay),
-    equivalent_result(Product, Replay).
-
-replay_pair_checked(Words, GridLen, Corner, Seed, Counter) :-
-    construction_result(product, Words, GridLen, Corner, Seed, Product),
-    construction_result(replay(Counter), Words, GridLen, Corner, Seed, Replay),
-    ( equivalent_result(Product, Replay) -> true
-    ; Seed = [Answer|_],
-      throw(error(greedy_replay_diverged(Answer, Corner, Product, Replay), _))
-    ).
-
-construction_result(product, Words, GridLen, Corner, Seed, Result) :-
-    ( crosswordsmith_arrange:greedy_construct(
-          Words, GridLen, Corner, Seed, Placed, Dropped)
-    -> Result = ok(Placed, Dropped)
-    ;  Result = setup_failed
-    ).
-construction_result(replay(C), Words, GridLen, Corner, Seed, Result) :-
-    ( replay_construct(Words, GridLen, Corner, Seed, C, Placed, Dropped)
-    -> Result = ok(Placed, Dropped)
-    ;  Result = setup_failed
-    ).
-
-equivalent_result(setup_failed, setup_failed).
-equivalent_result(ok(P1, D1), ok(P2, D2)) :-
-    P1 =@= P2,
-    maplist(entry_answer, D1, A1),
-    maplist(entry_answer, D2, A2),
-    A1 == A2,
-    crosswordsmith_arrange:arrange_weights(WC, WT),
-    crosswordsmith_arrange:layout_reward(WC, WT, P1, R1),
-    crosswordsmith_arrange:layout_reward(WC, WT, P2, R2),
-    R1 =:= R2.
-
-replay_construct(Words, GridLen, Corner, Seed, Counter, Placed, Dropped) :-
-    crosswordsmith_core:init_gs(GridLen, G0),
-    crosswordsmith_core:start_loc(Corner, GridLen, Start, Dir),
-    crosswordsmith_core:remove_x(Seed, Words, Rest),
-    crosswordsmith_arrange:seed_word(Seed, Start, Dir, GridLen, G0, SeedPW, G1),
-    replay_loop(Rest, [SeedPW], GridLen, G1, Counter, Placed, Dropped),
-    counter_inc(10, Counter).
-
-replay_loop(Remaining, Placed, GridLen, Grid, Counter, Final, Dropped) :-
-    replay_next_move(Remaining, Placed, GridLen, Grid, Counter, Move),
-    replay_apply_move(Move, Remaining, Placed, GridLen, Counter, Final, Dropped).
-
-replay_apply_move(none, Remaining, Placed, _GridLen, _Counter, Placed, Remaining).
-replay_apply_move(move(Answer, NewPW, NewGrid), Remaining, Placed, GridLen,
-                  Counter, Final, Dropped) :-
-    selectchk([Answer|_], Remaining, Remaining1),
-    counter_inc(9, Counter),
-    replay_loop(Remaining1, [NewPW|Placed], GridLen, NewGrid,
-                Counter, Final, Dropped).
-
-replay_next_move(Remaining, Placed, GridLen, Grid, Counter, Move) :-
-    crosswordsmith_metrics:placed_bbox(Placed, GridLen, BBox, _),
-    findall(Score-Best,
-            ( member(Entry, Remaining),
-              replay_word_best(Entry, Placed, GridLen, Grid, BBox,
-                               Counter, Score, Best) ),
-            Candidates),
-    replay_best_move(Candidates, GridLen, Grid, Move).
-
-replay_best_move([], _GridLen, _Grid, none).
-replay_best_move([C|Cs], GridLen, Grid, move(Answer, PW, G1)) :-
-    foldl(crosswordsmith_arrange:max_key_first, Cs, C,
-          _-best(Answer, Letters, WLen, Start, Dir)),
-    crosswordsmith_core:assign_word(
-        Answer, Letters, WLen, Start, Dir, GridLen, Grid, PW, G1).
-
-replay_word_best(Entry, Placed, GridLen, Grid, BBox, Counter, Score, Best) :-
-    crosswordsmith_metrics:word_letters(Entry, Letters, WLen),
-    Entry = [Answer|_],
-    Grid = gs(LGrid, _),
-    findall(Key-(Start-Dir),
-            ( crosswordsmith_core:find_intersecting_word(
-                  Letters, WLen, Placed, GridLen, Start, Dir),
-              counter_inc(1, Counter),
-              count_underflow(Start, Counter),
-              counter_inc(2, Counter),
-              counted_legality(
-                  Letters, Start, Dir, GridLen, Grid, WLen, Counter),
-              crosswordsmith_arrange:placement_key(
-                  Letters, Start, Dir, WLen, GridLen, LGrid, BBox, Key),
-              counter_inc(5, Counter),
-              Visits is 2 * WLen,
-              counter_add(6, Visits, Counter) ),
-            Keyed),
-    Keyed = [K0|Ks],
-    foldl(crosswordsmith_arrange:max_key_first, Ks, K0,
-          Score-(BestStart-BestDir)),
-    Best = best(Answer, Letters, WLen, BestStart, BestDir).
-
-count_underflow(Start, Counter) :-
-    ( Start < 1 -> counter_inc(8, Counter) ; true ).
-
-counted_legality(Letters, Start, Dir, GridLen, Grid, WLen, Counter) :-
-    (   crosswordsmith_core:check_word_fits(
-            Letters, Start, Dir, GridLen, Grid)
-    ->  counter_inc(3, Counter)
-    ;   counter_inc(4, Counter),
-        count_rejected_score_work(Start, WLen, Counter),
-        fail
-    ).
-
-count_rejected_score_work(Start, WLen, Counter) :-
-    (   Start >= 1
-    ->  Visits is 2 * WLen,
-        counter_add(7, Visits, Counter)
-    ;   true
-    ).
 
 % ---------------------------------------------------------------------------
 % Semantic identity document.
@@ -485,5 +302,3 @@ prolog:error_message(greedy_construction_outcome(Expected, Got)) -->
     [ 'greedy benchmark construction expected ~q, got ~q'-[Expected, Got] ].
 prolog:error_message(greedy_command_exit(Expected, Got)) -->
     [ 'greedy benchmark command expected exit ~w, got ~w'-[Expected, Got] ].
-prolog:error_message(greedy_replay_diverged(Answer, Corner, _, _)) -->
-    [ 'greedy benchmark replay diverged for seed ~q at ~w'-[Answer, Corner] ].

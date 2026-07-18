@@ -191,10 +191,10 @@ bench-log:
 bench-history:
 	swipl -q benchmarks/check_baseline.pl --history
 
-# Independent greedy best-effort/candidates substrate. Construction, full
-# four-corner seed sweep, postprocess, and command layers are separate; sweep
-# inferences are primary. This ratchet never reads or writes baseline.json or
-# history.jsonl.
+# Independent greedy best-effort/candidates substrate. Construction, the two
+# directly searched blocks plus transpose partners, postprocess, and command
+# layers are separate; sweep inferences are primary. This ratchet never reads or
+# writes baseline.json or history.jsonl.
 bench-greedy:
 	swipl -q benchmarks/run_arrange_greedy.pl -- --format $(BENCH_FORMAT) $(BENCH_ARGS)
 

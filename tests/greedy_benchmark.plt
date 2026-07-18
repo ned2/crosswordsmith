@@ -12,36 +12,6 @@ test(record_readback_and_retention) :-
                    [stdout(null),stderr(std),process(PID)]),
     process_wait(PID,exit(0)).
 
-test(replay_equivalence_easy) :-
-    load_clues('fixtures/benchmark_08_words.pl', Words),
-    greedy_subjects:replay_equivalent(
-        Words, 13, topleft_across, 'AOBSCFDMJJJJV').
-
-% The far-corner EDDE construction places 78/80 words, exercising the dense
-% scorer/legality loop rather than only the easy top-left 9/80 construction.
-test(replay_equivalence_heavy) :-
-    load_clues('fixtures/ladder_21x21_80w.pl', Words),
-    greedy_subjects:replay_equivalent(Words, 21, topright, 'EDDE').
-
-test(semantic_counter_partitions) :-
-    load_clues('fixtures/benchmark_08_words.pl', Words),
-    greedy_subjects:semantic_counters(
-        Words, 13, candidates(strict, 5), Counters),
-    assertion(Counters.generated_crossing_descriptors =:=
-              Counters.legality_probes),
-    assertion(Counters.legality_successes + Counters.legality_rejects =:=
-              Counters.legality_probes),
-    assertion(Counters.legality_successes =:= Counters.scored_candidates),
-    assertion(Counters.start_lt_one =< Counters.legality_rejects),
-    assertion(Counters.generated_crossing_descriptors =:= 1308),
-    assertion(Counters.legality_rejects =:= 1134),
-    assertion(Counters.scored_candidates =:= 174),
-    assertion(Counters.score_cell_visits =:= 4524),
-    assertion(Counters.rejected_score_cell_visits_avoided =:= 3640),
-    assertion(Counters.start_lt_one =:= 994),
-    assertion(Counters.direct_attempted_constructions =:= 10),
-    assertion(Counters.completed_constructions =:= 10).
-
 test(candidate_phases_match_product) :-
     load_clues('fixtures/benchmark_08_words.pl', Words),
     greedy_subjects:build_raw_pool(Words, 13, candidates(strict, 5), Raw),

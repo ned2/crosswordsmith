@@ -88,8 +88,6 @@ run_spec(ItOverride, WOverride,
     layer_measure(Id, command,
                   greedy_subjects:command_sampler(
                       Exe,File,Size,Framing,Command,0), Opts, Cmd),
-    format(user_error, "heartbeat: ~w semantic replay/counters~n", [Id]),
-    greedy_subjects:semantic_counters(Words, Size, Command, Counters),
     expected_json(Expected, ExpectedJson), command_json(Command, CommandJson),
     metrics_fields(Construction, construction, CF),
     metrics_fields(Sweep, sweep, SF),
@@ -100,7 +98,7 @@ run_spec(ItOverride, WOverride,
     Row = _{rung:Id,fixture:Fixture,size:Size,framing:Framing,mode:CommandJson,
             construction:_{seed_answer:Seed,corner:Corner,expected:ExpectedJson},
             words:Total,iterations:Iterations,warmup:Warmup,tier:Tier,
-            metrics:Metrics,semantic_counters:Counters}.
+            metrics:Metrics}.
 
 % One explicit first sample characterizes cold-vs-warm behavior. bench_core then
 % performs the manifest warmup and measured repetitions. Heartbeats are outside
