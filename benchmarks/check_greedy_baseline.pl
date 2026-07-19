@@ -8,13 +8,24 @@
 
 :- set_prolog_flag(verbose, silent).
 :- use_module(library(apply), [foldl/4]).
-:- use_module(library(json)).
-:- use_module(library(lists)).
+:- use_module(library(json), [atom_json_dict/3]).
+:- use_module(library(lists), [append/3, member/2]).
 :- use_module(library(pairs), [pairs_keys/2]).
 :- use_module('bench_process.pl', [capture_process/6]).
-:- use_module('bench_cli.pl', [checker_mode/3, exact_runner_args/2]).
+:- use_module('bench_cli.pl',
+              [ checker_mode/3,
+                exact_runner_args/2,
+                require_persistence_args/1,
+                require_unique_ids/2
+              ]).
 :- use_module('bench_exact.pl',
-              [exact_version/4, exact_metric/4, exact_presence/5]).
+              [ exact_version/4,
+                 require_same_version/2,
+                 require_complete_migration/4,
+                 require_protocol_value/4,
+                 exact_metric/4,
+                exact_presence/5
+              ]).
 :- use_module('bench_paths.pl', [benchmark_path/2]).
 :- use_module('bench_store.pl',
               [ read_json_dict/2,
@@ -33,6 +44,11 @@ main :-
     catch(checker_mode(Argv0, Mode, Extra),
           E, (print_message(error, E), halt(2))),
     ( Mode == history -> show_history, halt(0) ; true ),
+    ( member(Mode, [record, promote, log])
+    -> catch(require_persistence_args(Extra),
+             E, (print_message(error, E), halt(2)))
+    ; true
+    ),
     benchmark_path('greedy_baseline.json', Path),
     load_json(Path, Baseline),
     ( Mode == exact
@@ -48,9 +64,11 @@ main :-
        ; Mode == log
        -> append_history(Doc,Extra), halt(0)
        ; Mode == record
-       -> record_checked(Path,Baseline,Doc), append_history(Doc,Extra), halt(0)
+       -> require_record_version(Baseline, Doc),
+           record_checked(Path,Baseline,Doc), append_history(Doc,Extra), halt(0)
        ; Mode == promote
-       -> report(Fails,Wins),
+       -> require_promotion_version(Baseline, Doc),
+          report(Fails,Wins),
           ( Fails =:= 0
           -> record_checked(Path,Baseline,Doc), append_history(Doc,Extra), halt(0)
           ;  format("promote: regressions present; baseline unchanged~n"), halt(1) )
@@ -71,6 +89,7 @@ run_bench(Extra, Doc) :-
     ; throw(error(greedy_bench_failed(Status),_)) ).
 
 do_check(Baseline, Doc, Fails, Wins) :-
+    require_record_protocol(Baseline, Doc),
     get_dict(workloads,Baseline,WL), get_dict(results,Doc,Rows),
     get_dict(regression_tolerance_pct,Baseline,Tol),
     get_dict(swi_prolog,Baseline,BaseSwi), get_dict(swi_prolog,Doc,RunSwi),
@@ -80,6 +99,7 @@ do_check(Baseline, Doc, Fails, Wins) :-
     report_unmeasured(WL,Rows).
 
 do_exact_check(Baseline, Doc, Fails) :-
+    require_record_protocol(Baseline, Doc),
     get_dict(swi_prolog, Baseline, BaseSwi),
     get_dict(swi_prolog, Doc, RunSwi),
     exact_version(BaseSwi, RunSwi, VersionStatus, VersionFails),
@@ -152,16 +172,58 @@ check_metric(WL,Rung,Key,Measured,Tol,VMatch,F0-W0,F-W) :-
 delta(0,_M,0.0) :- !.
 delta(Base,M,Pct) :- Pct is (M-Base)/Base*100.0.
 
-classify(P,T,_V,win) :- P =< -T, !.
-classify(P,T,_V,ok) :- P =< T, !.
-classify(_P,_T,true,regression) :- !.
-classify(_P,_T,false,regression_warn).
-counts(win,0,1). counts(ok,0,0). counts(regression,1,0). counts(regression_warn,0,0).
+classify(_P,_T,false,version_warn) :- !.
+classify(P,T,true,win) :- P =< -T, !.
+classify(P,T,true,ok) :- P =< T, !.
+classify(_P,_T,true,regression).
+counts(win,0,1). counts(ok,0,0). counts(regression,1,0). counts(version_warn,0,0).
+
+require_promotion_version(Baseline, Doc) :-
+    get_dict(swi_prolog, Baseline, Reference),
+    get_dict(swi_prolog, Doc, Measured),
+    require_same_version(Reference, Measured).
+
+require_record_version(Baseline, Doc) :-
+    get_dict(swi_prolog, Baseline, ReferenceVersion),
+    get_dict(swi_prolog, Doc, MeasuredVersion),
+    get_dict(workloads, Baseline, Workloads),
+    dict_pairs(Workloads, _, ReferencePairs),
+    pairs_keys(ReferencePairs, ReferenceIds),
+    get_dict(results, Doc, Results),
+    findall(Id, (member(Row, Results), get_dict(rung, Row, Id)), MeasuredIds),
+    require_complete_migration(ReferenceVersion, MeasuredVersion,
+                               ReferenceIds, MeasuredIds),
+    require_record_protocol(Baseline, Doc).
+
+require_record_protocol(Baseline, Doc) :-
+    get_dict(workloads, Baseline, Workloads),
+    get_dict(results, Doc, Results),
+    findall(Rung, (member(Row, Results), get_dict(rung, Row, Rung)), Rungs),
+    require_unique_ids(greedy, Rungs),
+    forall(member(Row, Results),
+           require_greedy_protocol(Workloads, Row)).
+
+require_greedy_protocol(Workloads, Row) :-
+    get_dict(rung, Row, Rung),
+    ( baseline_spec(Workloads, Rung, Spec)
+    -> require_protocol_value(Rung, fixture, Spec.fixture, Row.fixture),
+       require_protocol_value(Rung, grid, Spec.grid, Row.size),
+       require_protocol_value(Rung, framing, Spec.framing, Row.framing),
+       require_protocol_value(Rung, mode, Spec.mode, Row.mode),
+       require_protocol_value(Rung, construction,
+                              Spec.construction, Row.construction),
+       require_protocol_value(Rung, words, Spec.words, Row.words),
+       require_protocol_value(Rung, tier, Spec.tier, Row.tier),
+       require_protocol_value(Rung, iterations,
+                              Spec.iterations, Row.iterations),
+       require_protocol_value(Rung, warmup, Spec.warmup, Row.warmup)
+    ; true
+    ).
 
 report(F,W) :-
     ( F > 0 -> format("~nRESULT: FAIL (~d regressions, ~d wins)~n",[F,W])
     ; W > 0 -> format("~nRESULT: PASS (~d wins, 0 regressions)~n",[W])
-    ; format("~nRESULT: PASS (all deterministic metrics +0.00%)~n") ).
+    ; format("~nRESULT: PASS (0 regressions, 0 wins)~n") ).
 
 report_unmeasured(WL,Rows) :-
     dict_pairs(WL,_,Pairs),
@@ -209,14 +271,42 @@ text_to_atom(Text,Atom) :- text_to_string(Text,S), atom_string(Atom,S).
 
 verify_readback(Doc, ReadBack) :-
     get_dict(workloads,ReadBack,WL), get_dict(results,Doc,Rows),
-    forall(member(Row,Rows),
-           ( baseline_spec(WL,Row.rung,Spec),
-             Spec.construction_inf =:= Row.metrics.construction_inf_med,
-             Spec.sweep_inf =:= Row.metrics.sweep_inf_med,
-             Spec.postprocess_inf =:= Row.metrics.postprocess_inf_med )),
+    forall(member(Row,Rows), verify_readback_row(WL, Row)),
     length(Rows,Expected),
     findall(R,(member(R,Rows),baseline_spec(WL,R.rung,_)),Found),
     length(Found,Expected).
+
+verify_readback_row(Workloads, Row) :-
+    Rung = Row.rung,
+    ( baseline_spec(Workloads, Rung, Spec)
+    -> Metrics = Row.metrics,
+       verify_readback_value(Rung, construction_inf, Spec,
+                             Metrics.construction_inf_med),
+       verify_readback_value(Rung, sweep_inf, Spec, Metrics.sweep_inf_med),
+       verify_readback_value(Rung, postprocess_inf, Spec,
+                             Metrics.postprocess_inf_med),
+       verify_readback_value(Rung, command_wall_med_ms, Spec,
+                             Metrics.command_wall_med_ms),
+       verify_readback_value(Rung, command_rss_med_kib, Spec,
+                             Metrics.command_rss_med_kib),
+       verify_readback_value(Rung, tier, Spec, Row.tier),
+       verify_readback_value(Rung, fixture, Spec, Row.fixture),
+       verify_readback_value(Rung, grid, Spec, Row.size),
+       verify_readback_value(Rung, framing, Spec, Row.framing),
+       verify_readback_value(Rung, mode, Spec, Row.mode),
+       verify_readback_value(Rung, construction, Spec, Row.construction),
+       verify_readback_value(Rung, words, Spec, Row.words),
+       verify_readback_value(Rung, iterations, Spec, Row.iterations),
+       verify_readback_value(Rung, warmup, Spec, Row.warmup)
+    ; throw(error(greedy_record_readback_missing(Rung), _))
+    ).
+
+verify_readback_value(Rung, Key, Spec, Expected) :-
+    ( get_dict(Key, Spec, Actual),
+      catch(require_protocol_value(Rung, Key, Expected, Actual), _, fail)
+    -> true
+    ; throw(error(greedy_record_readback_mismatch(Rung, Key, Expected), _))
+    ).
 
 history_path(Path) :-
     benchmark_path('greedy_history.jsonl', Path).

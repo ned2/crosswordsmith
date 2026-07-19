@@ -15,11 +15,10 @@
 % masquerade as a fast run.
 
 :- module(bench_subjects,
-          [ size_flag/4,
-            arrange_command_sampler/6,
+          [ arrange_command_sampler/6,
             arrange_search_sampler/5 ]).
 
-:- use_module(library(lists)).
+:- use_module('bench_core.pl', [inproc_sampler/2, process_sampler/5]).
 
 % The engine seam this harness measures. Exported by arrange.pl for exactly
 % this consumer (C25 export promotion, 2026-07-06); loaded here through the
@@ -33,12 +32,15 @@
 size_flag(size,     N, '--size',     A) :- atom_number(A, N).
 size_flag(max_size, N, '--max-size', A) :- atom_number(A, N).
 
+%!  arrange_command_sampler(+Exe, +File:atom, +Size:integer, +Mode:atom,
+%!                           +Expected:atom, -Sample:dict) is semidet.
+%
 % COMMAND layer sampler. process_sampler returns the raw exit code; we assert it
 % against Expected here (not inside bench_core) and record only wall+rss.
 % rss (peak RSS, KiB) is a whole-process footprint, not a search-memory metric.
 arrange_command_sampler(Exe, File, Size, Mode, Expected, _{wall:Wall, rss:Rss}) :-
     size_flag(Mode, Size, Flag, Val),
-    bench_core:process_sampler(Exe,
+    process_sampler(Exe,
         ['arrange', '--input', File, Flag, Val, '--out', '/dev/null'],
         Wall, Rss, Exit),
     expected_exit(Expected, Exit).
@@ -48,6 +50,9 @@ expected_exit(infeasible, 1) :- !.
 expected_exit(Expected, Got) :-
     throw(error(bench_command_exit(expected(Expected), exit(Got)), _)).
 
+%!  arrange_search_sampler(+Words:list, +GridLen:integer, +Budget:integer,
+%!                          +Expected:atom, -Sample:dict) is det.
+%
 % SEARCH layer sampler. Uses the budget-EXPLICIT arrange_best_layout/6 (arrange.pl)
 % so the bench can raise the inference budget above the shipped 500M default: a
 % pathological workload that would otherwise SATURATE the budget (its count pinned
@@ -65,7 +70,7 @@ expected_exit(Expected, Got) :-
 % Expected per iteration (plan m2) then DROP it - the sample carries only the
 % numeric wall/cpu/inferences that measure/3 summarizes.
 arrange_search_sampler(Words, GridLen, Budget, Expected, Sample) :-
-    bench_core:inproc_sampler(
+    inproc_sampler(
         arrange_best_layout(Words, GridLen, Budget, _, _, Outcome),
         Sample),
     ( outcome_ok(Expected, Outcome) -> true

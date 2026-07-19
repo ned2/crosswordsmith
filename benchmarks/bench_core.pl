@@ -12,16 +12,17 @@
 :- meta_predicate measure(1, +, -).
 :- meta_predicate inproc_sampler(0, -).
 
-:- use_module(library(lists)).
-:- use_module(library(apply)).
-:- use_module(library(readutil)).
+:- use_module(library(apply), [exclude/3, foldl/4, maplist/2]).
+:- use_module(library(lists), [append/3, member/2, nth0/3, sum_list/2]).
+:- use_module(library(readutil), [read_file_to_string/3]).
 :- use_module('bench_process.pl', [capture_process/6]).
 % call_time/2 (inproc_sampler's measurement wrapper) is autoload-only
 % (library(statistics)); explicit so the bench roots also run under
 % autoload(false) (P11/C5).
 :- use_module(library(statistics), [call_time/2]).
 
-% measure(+Sampler, +Opts, -Summary)
+%!  measure(:Sampler, +Opts:dict, -Summary:dict) is det.
+%
 %   Sampler : called as call(Sampler, Sample); Sample is a dict metric->number.
 %             Non-numeric keys (e.g. an outcome tag the caller attaches) are
 %             carried in the sample but IGNORED by the stats here.
@@ -55,8 +56,10 @@ measured_sample(Sampler, Sample) :-
     ( call(Sampler, Sample) -> true
     ; throw(error(bench_sampler_failed(Sampler), _)) ).
 
-% In-process Prolog goal - the search layer. call_time/2 (built-in) returns
-% time{cpu,inferences,wall}; inferences is the deterministic metric of record.
+%!  inproc_sampler(:Goal, -Sample:dict) is det.
+%
+% In-process Prolog goal - the search layer. call_time/2 returns
+% time{cpu,inferences,wall}; inferences is the SWI-version-locked metric of record.
 % The Goal MUST be deterministic (the CALLER pins the first solution with its own
 % cut - solve_once/4 cuts, arrange_best_layout/5 is single-valued). We do NOT wrap
 % in once/1: that would add one inference per call, breaking byte-for-byte
@@ -65,7 +68,9 @@ inproc_sampler(Goal, _{wall:W, cpu:C, inferences:I}) :-
     call_time(Goal, T),
     W = T.wall, C = T.cpu, I = T.inferences.
 
-% process_sampler(+Exe, +Argv, -WallSeconds, -MaxRssKiB, -ExitCode)
+%!  process_sampler(+Exe, +Argv:list, -WallSeconds:number,
+%!                  -MaxRssKiB:number, -ExitCode:integer) is det.
+%
 %   The COMMAND layer: run `Exe Argv...` as a fresh child under
 %   `/usr/bin/time -f "%e %M"`, capturing end-to-end wall (%e, seconds) and peak
 %   resident set (%M, KiB). This is the honest top-level latency a user feels -

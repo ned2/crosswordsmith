@@ -3,17 +3,27 @@
 
 :- set_prolog_flag(verbose, silent).
 :- use_module(library(apply), [maplist/3]).
-:- use_module(library(json)).
+:- use_module(library(json), [json_write_dict/3]).
 :- use_module(library(lists), [member/2, memberchk/2]).
-:- use_module(library(optparse)).
+:- use_module(library(optparse), [opt_help/2]).
 :- use_module('bench_paths.pl', [repo_path/2]).
 :- repo_path('load.pl', Load), consult(Load).
-:- use_module('bench_core.pl').
-:- use_module('bench_cli.pl').
+:- use_module('bench_core.pl', [measure/3]).
+:- use_module('bench_cli.pl',
+              [ apply_override/3,
+                parse_runner_options/5,
+                require_unique_ids/2,
+                require_selected/3,
+                workload_selected/4
+              ]).
 :- use_module('bench_fixture.pl', [load_arrange_fixture/2]).
 :- use_module('bench_report.pl', [benchmark_report/3]).
-:- use_module('greedy_subjects.pl').
+:- use_module('greedy_subjects.pl', []).
 :- consult('greedy_workloads.pl').
+
+:- meta_predicate
+    layer_measure(+, +, 1, +, -),
+    heartbeat_sampler(+, +, +, 1, -).
 
 :- initialization(main, main).
 
@@ -29,6 +39,9 @@ main :-
     ( Help == true -> usage, halt(0) ; true ),
     selected_specs(Filter, Heavy, Specs),
     catch(require_selected(greedy, Filter, Specs),
+          E, (print_message(error, E), halt(2))),
+    findall(Id, member(spec(Id, _, _, _, _, _, _, _, _, _, _), Specs), Ids),
+    catch(require_unique_ids(greedy, Ids),
           E, (print_message(error, E), halt(2))),
     ( Identity == true
     -> identity_document(Specs, Doc), json_write_dict(current_output, Doc, [width(0)]), nl
@@ -95,12 +108,14 @@ run_spec(ItOverride, WOverride,
 layer_measure(Id, Layer, Sampler, Opts, Result) :-
     format(user_error, "heartbeat: ~w ~w cold sample~n", [Id, Layer]),
     call(Sampler, Cold),
-    flag(greedy_trial, _, 0),
-    measure(heartbeat_sampler(Id, Layer, Sampler), Opts, Summary),
+    Counter = counter(0),
+    measure(heartbeat_sampler(Id, Layer, Counter, Sampler), Opts, Summary),
     Result = result(Cold, Summary).
 
-heartbeat_sampler(Id, Layer, Sampler, Sample) :-
-    flag(greedy_trial, N, N+1),
+heartbeat_sampler(Id, Layer, Counter, Sampler, Sample) :-
+    arg(1, Counter, N),
+    Next is N + 1,
+    nb_setarg(1, Counter, Next),
     format(user_error, "heartbeat: ~w ~w trial ~d~n", [Id, Layer, N]),
     call(Sampler, Sample).
 

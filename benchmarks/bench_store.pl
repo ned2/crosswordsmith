@@ -8,12 +8,13 @@
             current_host/1
           ]).
 
-:- use_module(library(apply), [foldl/4]).
+:- use_module(library(apply), [foldl/4, maplist/3]).
 :- use_module(library(error), [must_be/2]).
 :- use_module(library(json), [json_read_dict/3, json_write_dict/3]).
 :- use_module(library(lists),
               [ append/3,
                 last/2,
+                list_to_set/2,
                 member/2,
                 memberchk/2,
                 nth1/3,
@@ -214,18 +215,44 @@ render_history(Title, Metrics, Entries) :-
     length(Entries, Count),
     format("~w history  (~d run(s), most recent last)~n~n", [Title, Count]),
     forall(nth1(Index, Entries, Entry), print_entry_meta(Index, Entry)),
-    all_rung_keys(Entries, Keys),
-    forall(member(metric(Label, CellKey), Metrics),
-           render_metric(Label, CellKey, Keys, Entries)).
+    history_versions(Entries, Versions),
+    forall(member(Version, Versions),
+           render_version_history(Version, Metrics, Entries)).
 
 print_entry_meta(Index, Entry) :-
     get_dict(date, Entry, Date),
     get_dict(commit, Entry, Commit),
     get_dict(tiers, Entry, Tiers),
     get_dict(host, Entry, Host),
+    entry_version(Entry, Version),
     ( get_dict(dirty, Entry, true) -> DirtyMark = '+dirty' ; DirtyMark = '' ),
-    format("  [~d] ~w  ~w~w  ~w  ~w~n",
-           [Index, Date, Commit, DirtyMark, Tiers, Host]).
+    format("  [~d] ~w  ~w~w  ~w  ~w  SWI ~w~n",
+           [Index, Date, Commit, DirtyMark, Tiers, Host, Version]).
+
+history_versions(Entries, Versions) :-
+    maplist(entry_version, Entries, Versions0),
+    list_to_set(Versions0, Versions).
+
+entry_version(Entry, Version) :-
+    ( get_dict(swi, Entry, Version0) -> text_to_string(Version0, Version)
+    ; Version = "unknown"
+    ).
+
+render_version_history(Version, Metrics, Entries) :-
+    include_version(Entries, Version, VersionEntries),
+    format("~nSWI-Prolog ~w trend:~n", [Version]),
+    all_rung_keys(VersionEntries, Keys),
+    forall(member(metric(Label, CellKey), Metrics),
+           render_metric(Label, CellKey, Keys, VersionEntries)).
+
+include_version([], _, []).
+include_version([Entry|Entries], Version, Selected) :-
+    entry_version(Entry, EntryVersion),
+    ( EntryVersion == Version
+    -> Selected = [Entry|Rest]
+    ; Selected = Rest
+    ),
+    include_version(Entries, Version, Rest).
 
 all_rung_keys(Entries, Keys) :-
     findall(Key,

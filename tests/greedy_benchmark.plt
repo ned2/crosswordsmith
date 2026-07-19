@@ -12,6 +12,44 @@ test(record_readback_and_retention) :-
                     inherit, _Stdout, _Stderr, Status),
     assertion(Status == exit(0)).
 
+test(exported_samplers_are_deterministic) :-
+    load_clues('fixtures/benchmark_08_words.pl', Words),
+    Command = candidates(strict, 5),
+    greedy_subjects:construction_sampler(
+        Words, 13, 'AOBSCFDMJJJJV', topleft_across, completed(8, 0),
+        _Construction),
+    deterministic(ConstructionDet),
+    assertion(ConstructionDet == true),
+    greedy_subjects:sweep_sampler(Words, 13, Command, _Sweep),
+    deterministic(SweepDet),
+    assertion(SweepDet == true),
+    greedy_subjects:build_raw_pool(Words, 13, Command, Raw),
+    deterministic(PoolDet),
+    assertion(PoolDet == true),
+    greedy_subjects:postprocess_sampler(Raw, 13, 8, Command, 5, _Postprocess),
+    deterministic(PostprocessDet),
+    assertion(PostprocessDet == true),
+    greedy_subjects:command_sampler(
+        '/bin/true', ignored, 13, size, Command, 0, _Command),
+    deterministic(CommandDet),
+    assertion(CommandDet == true).
+
+test(exported_samplers_reject_invalid_inputs,
+     [forall(greedy_invalid_sampler(Goal, ExpectedError))]) :-
+    catch((call(Goal), Result = succeeded), Error, Result = threw(Error)),
+    assertion(Result = threw(Caught)),
+    assertion(Caught = ExpectedError).
+
+test(identity_row_is_deterministic_without_selected_layouts) :-
+    greedy_subjects:identity_row(
+        no_layout, 'fixtures/bundled_17_clues.pl',
+        'fixtures/bundled_17_clues.pl', 11, size, candidates(strict, 3),
+        'OMEGA POINT', topleft_across, completed(1, 5), './crosswordsmith', Row),
+    deterministic(Det),
+    assertion(Det == true),
+    assertion(Row.selected == []),
+    assertion(Row.candidate_count =:= 0).
+
 test(candidate_phases_match_product) :-
     load_clues('fixtures/benchmark_08_words.pl', Words),
     greedy_subjects:build_raw_pool(Words, 13, candidates(strict, 5), Raw),
@@ -80,5 +118,38 @@ test(direct_attempt_slots_and_strict_omission) :-
 attempt_slot(Attempt, Corner-SeedAnswer) :-
     get_dict(corner, Attempt, Corner),
     get_dict(seed_answer, Attempt, SeedAnswer).
+
+greedy_invalid_sampler(Goal, ExpectedError) :-
+    load_clues('fixtures/benchmark_08_words.pl', Words),
+    greedy_invalid_sampler_case(Words, Goal, ExpectedError).
+
+greedy_invalid_sampler_case(
+    Words,
+    greedy_subjects:construction_sampler(
+        Words, 13, 'MISSING', topleft_across, completed(8, 0), _),
+    error(greedy_seed_answer_missing('MISSING'), _)).
+greedy_invalid_sampler_case(
+    Words,
+    greedy_subjects:sweep_sampler(Words, 13, unsupported, _),
+    error(greedy_benchmark_command(unsupported), _)).
+greedy_invalid_sampler_case(
+    Words,
+    greedy_subjects:build_raw_pool(Words, 13, unsupported, _),
+    error(greedy_benchmark_command(unsupported), _)).
+greedy_invalid_sampler_case(
+    _Words,
+    greedy_subjects:postprocess_sampler([], 13, 8, best_effort, 1, _),
+    error(greedy_empty_raw_pool, _)).
+greedy_invalid_sampler_case(
+    _Words,
+    greedy_subjects:command_sampler(
+        '/bin/true', ignored, 13, unsupported, best_effort, 0, _),
+    error(greedy_benchmark_framing(unsupported), _)).
+greedy_invalid_sampler_case(
+    _Words,
+    greedy_subjects:identity_row(
+        id, fixture, ignored, 13, size, unsupported, seed, corner,
+        setup_failed, '/bin/true', _),
+    error(greedy_benchmark_command(unsupported), _)).
 
 :- end_tests(greedy_benchmark).

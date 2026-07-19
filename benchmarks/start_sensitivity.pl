@@ -4,8 +4,8 @@
 % The regular matrix (run_matrix.pl) pins each fixture to its manifest start
 % position. This sweeps EVERY named start position (start_locs/1) for a small
 % set of strategies, to show how solvability and cost vary with where the first
-% word is seeded. One measured solve per cell (inferences are deterministic;
-% wall is not reported) with a 30 s per-cell timeout, so an unsolvable/hard cell
+% word is seeded. One measured solve per cell (compare inferences within one SWI
+% version; wall is not reported) with a 30 s per-cell timeout, so a hard cell
 % records `no` or `timeout` instead of hanging.
 %
 % Usage:  swipl -q benchmarks/start_sensitivity.pl
@@ -13,8 +13,8 @@
 % See docs/experiments.md ("Suite property: start-position bias").
 
 :- set_prolog_flag(verbose, silent).
-:- use_module(library(time)).
-:- use_module(library(lists)).
+:- use_module(library(lists), [member/2]).
+:- use_module(library(time), [call_with_time_limit/2]).
 % call_time/2 is autoload-only (library(statistics)); explicit so this root
 % also runs under autoload(false) (P11/C5).
 :- use_module(library(statistics), [call_time/2]).

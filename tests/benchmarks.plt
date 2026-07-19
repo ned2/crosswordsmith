@@ -10,20 +10,24 @@
 :- use_module(library(apply), [exclude/3]).
 :- use_module('../benchmarks/check_baseline.pl', []).
 :- use_module('../benchmarks/check_fill_baseline.pl', []).
+:- use_module('../benchmarks/check_greedy_baseline.pl', []).
 :- use_module('../benchmarks/bench_process.pl', [capture_process/6]).
 :- use_module('../benchmarks/bench_cli.pl',
               [ apply_override/3,
-                checker_mode/3,
-                exact_runner_args/2,
-                parse_runner_options/5,
-                require_selected/3,
-                workload_selected/4
+                 checker_mode/3,
+                 exact_runner_args/2,
+                 parse_runner_options/5,
+                 require_persistence_args/1,
+                 require_selected/3,
+                 workload_selected/4
               ]).
 :- use_module('../benchmarks/bench_fixture.pl', [load_arrange_fixture/2]).
 :- use_module('../benchmarks/bench_paths.pl', [benchmark_path/2, repo_path/2]).
 :- use_module('../benchmarks/bench_report.pl',
               [benchmark_report/3, swi_version/1]).
-:- use_module('../benchmarks/bench_exact.pl', [exact_metric/4]).
+:- use_module('../benchmarks/subjects.pl', []).
+:- use_module('../benchmarks/fill_subjects.pl', []).
+:- use_module('../benchmarks/bench_exact.pl', [exact_metric/4, exact_presence/5]).
 :- use_module('../benchmarks/bench_store.pl',
               [append_history/4, read_history/2, read_json_dict/2,
                render_history/3]).
@@ -83,8 +87,12 @@ test(regression_rejected_without_writes) :-
 
 test(meta_closures_resolve_in_caller_module) :-
     bench_core_test_caller:measure_local(Summary),
+    deterministic(MeasureDet),
+    assertion(MeasureDet == true),
     assertion(Summary.stats.value.median =:= 7),
     bench_core_test_caller:inproc_local(Sample),
+    deterministic(InprocDet),
+    assertion(InprocDet == true),
     assertion(number(Sample.wall)),
     assertion(number(Sample.cpu)),
     assertion(integer(Sample.inferences)).
@@ -97,6 +105,45 @@ test(sample_schema_rejects_added_numeric_metric,
      [throws(error(bench_sample_schema_mismatch([wall], [rss,wall]), _))]) :-
     bench_core:summarize_samples([_{tag:ok, wall:1},
                                   _{rss:2, tag:ok, wall:3}], _).
+
+test(subject_modules_resolve_standalone_dependencies,
+     [forall(standalone_subject_goal(Goal))]) :-
+    capture_process(path(swipl), ['-q', '-g', Goal, '-t', halt], capture,
+                    _Stdout, _Stderr, Status),
+    assertion(Status == exit(0)).
+
+test(subject_sampler_exports_are_deterministic) :-
+    bench_subjects:arrange_command_sampler(
+        '/bin/true', ignored, 3, size, placed, _ArrangeCommand),
+    deterministic(ArrangeCommandDet),
+    assertion(ArrangeCommandDet == true),
+    load_clues('fixtures/benchmark_08_words.pl', ArrangeWords),
+    bench_subjects:arrange_search_sampler(
+        ArrangeWords, 13, 2_000_000_000, placed, _ArrangeSearch),
+    deterministic(ArrangeSearchDet),
+    assertion(ArrangeSearchDet == true),
+    fill_subjects:fill_command_sampler(
+        '/bin/true', ignored_grid, ignored_dict, none, filled, _FillCommand),
+    deterministic(FillCommandDet),
+    assertion(FillCommandDet == true),
+    fill_subjects:fill_load_sampler(
+        'fixtures/wordlist_sample.txt', _FillLoad),
+    deterministic(FillLoadDet),
+    assertion(FillLoadDet == true),
+    fill_subjects:fill_grid_sampler('fixtures/fill_grid_3.json', _FillGrid),
+    deterministic(FillGridDet),
+    assertion(FillGridDet == true),
+    crosswordsmith_fill:load_dict(
+        'fixtures/wordlist_sample.txt', DictByLen, Index),
+    fill_subjects:fill_search_sampler(
+        'fixtures/fill_grid_3.json', none, DictByLen, Index,
+        800_000_000-filled, _FillSearch),
+    deterministic(FillSearchDet),
+    assertion(FillSearchDet == true).
+
+test(arrange_command_sampler_is_semidet_for_invalid_mode, [fail]) :-
+    bench_subjects:arrange_command_sampler(
+        '/bin/true', ignored, 3, unsupported, placed, _).
 
 test(exact_mode_rejects_one_inference_increase) :-
     exact_arrange_fails(101, "10.1.10", Fails),
@@ -112,17 +159,22 @@ test(exact_mode_accepts_identical_inferences) :-
     exact_arrange_fails(100, "10.1.10", Fails),
     assertion(Fails =:= 0).
 
-test(exact_mode_uses_reference_gate) :-
+test(exact_presence_rejects_duplicate_measured_ids,
+     [throws(error(bench_exact_duplicate_ids(["same","same"]), _))]) :-
+    exact_presence([same], [same, "same"], _Missing, _Unexpected, _Fails).
+
+test(exact_mode_rejects_measured_gate_drift,
+     [throws(error(
+         bench_record_protocol_mismatch('core.pl', gate, inf, latency), _))]) :-
     baseline_doc(['core.pl'-spec(core, inf, 100)], Baseline),
     result_row('core.pl', core, latency, 101, Row),
     with_output_to(string(_),
                    check_arrange_baseline:do_exact_check(
-                       Baseline, _{swi_prolog:"10.1.10", results:[Row]}, Fails)),
-    assertion(Fails =:= 1).
+                       Baseline, _{swi_prolog:"10.1.10", results:[Row]}, _)).
 
 test(exact_mode_skips_reference_latency_metric) :-
     baseline_doc(['latency.pl'-spec(heavy, latency, 100)], Baseline),
-    result_row('latency.pl', heavy, inf, 101, Row),
+    result_row('latency.pl', heavy, latency, 101, Row),
     with_output_to(string(_),
                    check_arrange_baseline:do_exact_check(
                        Baseline, _{swi_prolog:"10.1.10", results:[Row]}, Fails)),
@@ -131,6 +183,49 @@ test(exact_mode_skips_reference_latency_metric) :-
 test(exact_mode_requires_same_swi) :-
     exact_arrange_fails(100, "99.0.0", Fails),
     assertion(Fails =:= 1).
+
+test(cross_version_decreases_are_informational,
+     [forall(cross_version_classifier(Goal, Kind))]) :-
+    call(Goal),
+    assertion(Kind == version_warn).
+
+test(promotions_reject_different_swi,
+     [forall(promotion_version_goal(Goal))]) :-
+    catch((call(Goal), Result = succeeded), Error, Result = threw(Error)),
+    assertion(Result = threw(Caught)),
+    assertion(Caught = error(bench_swi_version_mismatch("10.1.10", "10.2.0"), _)).
+
+test(cross_version_records_require_complete_rows,
+     [forall(record_version_goal(incomplete, Goal))]) :-
+    catch((call(Goal), Result = succeeded), Error, Result = threw(Error)),
+    assertion(Result = threw(Caught)),
+    assertion(Caught = error(bench_version_migration_incomplete(["heavy"], []), _)).
+
+test(cross_version_records_accept_complete_rows,
+      [forall(record_version_goal(complete, Goal))]) :-
+    call(Goal),
+    deterministic(Det),
+    assertion(Det == true).
+
+test(records_reject_measurement_protocol_changes,
+     [forall(record_protocol_mismatch_goal(Goal))]) :-
+    catch((call(Goal), Result = succeeded), Error, Result = threw(Error)),
+    assertion(Result = threw(Caught)),
+    assertion(Caught = error(
+        bench_record_protocol_mismatch(_, warmup, 0, 1), _)).
+
+test(comparisons_reject_measurement_protocol_changes,
+     [forall(comparison_protocol_mismatch_goal(Goal))]) :-
+    catch((call(Goal), Result = succeeded), Error, Result = threw(Error)),
+    assertion(Result = threw(Caught)),
+    assertion(Caught = error(
+        bench_record_protocol_mismatch(_, warmup, 0, 1), _)).
+
+test(normal_checks_reject_duplicate_measured_ids,
+     [forall(duplicate_check_goal(Tool, Goal))]) :-
+    catch((call(Goal), Result = succeeded), Error, Result = threw(Error)),
+    assertion(Result = threw(Caught)),
+    assertion(Caught = error(bench_duplicate_ids(Tool, ["core","core"]), _)).
 
 test(exact_mode_requires_every_core_and_heavy_row) :-
     baseline_doc(['core.pl'-spec(core, inf, 100),
@@ -148,6 +243,14 @@ test(exact_mode_forces_full_ladder) :-
 test(exact_mode_rejects_partial_selection,
      [throws(error(bench_exact_args(['--fixture', core]), _))]) :-
     exact_runner_args(['--fixture', core], _).
+
+test(persistence_rejects_sampling_overrides,
+     [forall(member(Args,
+                    [['--warmup', '0'], ['--iterations', '1'],
+                     ['--warmup=0'], ['--iterations=1']]))]) :-
+    catch((require_persistence_args(Args), Result = succeeded),
+          Error, Result = threw(Error)),
+    assertion(Result = threw(error(bench_persistence_sampling_override(_), _))).
 
 test(workload_filter_is_semidet_with_repeated_substrings) :-
     workload_selected(a, false, banana, core),
@@ -365,6 +468,20 @@ test(store_history_renderer_emits_each_metric) :-
     assertion(sub_string(Text, _, _, _, "search_inf per rung")),
     assertion(sub_string(Text, _, _, _, "load_inf per rung")).
 
+test(store_history_partitions_swi_versions) :-
+    Entries = [_{date:"2026-07-18T00:00:00", commit:"old",
+                  dirty:false, host:"host", swi:"10.1.10", tiers:core,
+                  rungs:_{row:_{inf:10}}},
+               _{date:"2026-07-19T00:00:00", commit:"new",
+                  dirty:false, host:"host", swi:"10.2.0", tiers:core,
+                  rungs:_{row:_{inf:20}}}],
+    with_output_to(string(Text),
+                   render_history('test benchmark',
+                                  [metric(search_inf, inf)], Entries)),
+    assertion(sub_string(Text, _, _, _, "SWI-Prolog 10.1.10 trend")),
+    assertion(sub_string(Text, _, _, _, "SWI-Prolog 10.2.0 trend")),
+    assertion(\+ sub_string(Text, _, _, _, "+100.00%")).
+
 test(fill_core_record_retains_heavy_and_verifies_readback) :-
     fill_baseline_doc(['core'-fill_spec(core, 100, 200, 300),
                        'heavy'-fill_spec(heavy, 500, 600, 700)], Baseline),
@@ -438,6 +555,16 @@ test(checkers_reject_history_runner_arguments,
                     _Stdout, _Stderr, Status),
     assertion(Status == exit(2)).
 
+test(checkers_reject_persistence_sampling_overrides_before_measurement,
+     [forall(checker_script(Script))]) :-
+    capture_process(path(swipl),
+                    ['-q', Script, '--record', '--warmup', '0',
+                     '--fixture', 'definitely-no-such-workload'], capture,
+                    _Stdout, Stderr, Status),
+    assertion(Status == exit(2)),
+    assertion(sub_string(Stderr, _, _, _,
+                         "persistence requires manifest sampling")).
+
 test(checker_history_commands_render,
      [forall(checker_script(Script))]) :-
     capture_process(path(swipl), ['-q', Script, '--history'], capture,
@@ -466,6 +593,191 @@ test(fill_identity_partial_record_leaves_manifest_unchanged) :-
           assertion(Written == Original) ),
         maplist(delete_if_exists, [ManifestPath, WorkloadsPath, CliPath])).
 
+test(fill_identity_partial_enumeration_leaves_manifest_unchanged) :-
+    setup_call_cleanup(
+        make_partial_fill_identity_fixture(
+            ManifestPath, WorkloadsPath, CliPath, Original),
+        ( format(atom(ManifestEnv), 'FILL_IDENTITY_MANIFEST=~w', [ManifestPath]),
+          format(atom(WorkloadsEnv), 'FILL_IDENTITY_WORKLOADS=~w', [WorkloadsPath]),
+          format(atom(CliEnv), 'FILL_IDENTITY_CLI=~w', [CliPath]),
+          capture_process(path(env),
+                          [ManifestEnv, WorkloadsEnv, CliEnv,
+                           'benchmarks/check_fill_identity.sh', '--record'],
+                          capture, _Stdout, _Stderr, Status),
+          assertion(Status == exit(2)),
+          read_file_to_string(ManifestPath, Written, []),
+          assertion(Written == Original) ),
+        maplist(delete_if_exists, [ManifestPath, WorkloadsPath, CliPath])).
+
+test(arrange_identity_partial_enumeration_leaves_manifest_unchanged) :-
+    setup_call_cleanup(
+        make_partial_arrange_identity_fixture(
+            ManifestPath, WorkloadsPath, RunnerPath, Original),
+        ( format(atom(ManifestEnv), 'ARRANGE_IDENTITY_MANIFEST=~w', [ManifestPath]),
+          format(atom(WorkloadsEnv), 'ARRANGE_IDENTITY_WORKLOADS=~w', [WorkloadsPath]),
+          format(atom(RunnerEnv), 'ARRANGE_IDENTITY_RUNNER=~w', [RunnerPath]),
+          capture_process(path(env),
+                          [ManifestEnv, WorkloadsEnv, RunnerEnv,
+                           'benchmarks/check_arrange_identity.sh',
+                           '--record', '--heavy'],
+                          capture, _Stdout, _Stderr, Status),
+          assertion(Status == exit(2)),
+          read_file_to_string(ManifestPath, Written, []),
+          assertion(Written == Original) ),
+        maplist(delete_if_exists,
+                [ManifestPath, WorkloadsPath, RunnerPath])).
+
+test(fill_identity_duplicate_ids_leave_manifest_unchanged) :-
+    setup_call_cleanup(
+        make_duplicate_fill_identity_fixture(
+            ManifestPath, WorkloadsPath, CliPath, Original),
+        ( format(atom(ManifestEnv), 'FILL_IDENTITY_MANIFEST=~w', [ManifestPath]),
+          format(atom(WorkloadsEnv), 'FILL_IDENTITY_WORKLOADS=~w', [WorkloadsPath]),
+          format(atom(CliEnv), 'FILL_IDENTITY_CLI=~w', [CliPath]),
+          capture_process(path(env),
+                          [ManifestEnv, WorkloadsEnv, CliEnv,
+                           'benchmarks/check_fill_identity.sh', '--record'],
+                          capture, _Stdout, _Stderr, Status),
+          assertion(Status == exit(1)),
+          read_file_to_string(ManifestPath, Written, []),
+          assertion(Written == Original) ),
+        maplist(delete_if_exists, [ManifestPath, WorkloadsPath, CliPath])).
+
+test(arrange_identity_duplicate_ids_leave_manifest_unchanged) :-
+    setup_call_cleanup(
+        make_duplicate_arrange_identity_fixture(
+            ManifestPath, WorkloadsPath, RunnerPath, Original),
+        ( format(atom(ManifestEnv), 'ARRANGE_IDENTITY_MANIFEST=~w', [ManifestPath]),
+          format(atom(WorkloadsEnv), 'ARRANGE_IDENTITY_WORKLOADS=~w', [WorkloadsPath]),
+          format(atom(RunnerEnv), 'ARRANGE_IDENTITY_RUNNER=~w', [RunnerPath]),
+          capture_process(path(env),
+                          [ManifestEnv, WorkloadsEnv, RunnerEnv,
+                           'benchmarks/check_arrange_identity.sh',
+                           '--record', '--heavy'],
+                          capture, _Stdout, _Stderr, Status),
+          assertion(Status == exit(1)),
+          read_file_to_string(ManifestPath, Written, []),
+          assertion(Written == Original) ),
+        maplist(delete_if_exists,
+                [ManifestPath, WorkloadsPath, RunnerPath])).
+
+test(arrange_identity_rejects_duplicate_manifest_entries) :-
+    setup_call_cleanup(
+        make_single_arrange_identity_fixture(
+            ManifestPath, WorkloadsPath, RunnerPath, _Original),
+        ( write_duplicate_manifest(ManifestPath, 'dup.pl'),
+          format(atom(ManifestEnv), 'ARRANGE_IDENTITY_MANIFEST=~w', [ManifestPath]),
+          format(atom(WorkloadsEnv), 'ARRANGE_IDENTITY_WORKLOADS=~w', [WorkloadsPath]),
+          format(atom(RunnerEnv), 'ARRANGE_IDENTITY_RUNNER=~w', [RunnerPath]),
+          capture_process(path(env),
+                          [ManifestEnv, WorkloadsEnv, RunnerEnv,
+                           'benchmarks/check_arrange_identity.sh'],
+                          capture, _Stdout, _Stderr, Status),
+          assertion(Status == exit(2)) ),
+        maplist(delete_if_exists,
+                [ManifestPath, WorkloadsPath, RunnerPath])).
+
+test(fill_identity_scripts_reject_duplicate_manifest_entries,
+     [forall(member(Script,
+                    ['benchmarks/check_fill_identity.sh',
+                     'benchmarks/check_fill_identity_artifact.sh']))]) :-
+    setup_call_cleanup(
+        make_single_fill_identity_fixture(
+            ManifestPath, WorkloadsPath, CliPath, _Original),
+        ( write_duplicate_manifest(ManifestPath, ok),
+          format(atom(ManifestEnv), 'FILL_IDENTITY_MANIFEST=~w', [ManifestPath]),
+          format(atom(WorkloadsEnv), 'FILL_IDENTITY_WORKLOADS=~w', [WorkloadsPath]),
+          format(atom(CliEnv), 'FILL_IDENTITY_CLI=~w', [CliPath]),
+          capture_process(path(env),
+                          [ManifestEnv, WorkloadsEnv, CliEnv, Script],
+                          capture, _Stdout, _Stderr, Status),
+          assertion(Status == exit(2)) ),
+        maplist(delete_if_exists, [ManifestPath, WorkloadsPath, CliPath])).
+
+test(fill_identity_write_failure_leaves_manifest_unchanged) :-
+    setup_call_cleanup(
+        make_single_fill_identity_fixture(
+            ManifestPath, WorkloadsPath, CliPath, Original),
+        setup_call_cleanup(
+            make_bash_override(printf_failure, BashEnvPath),
+            ( format(atom(ManifestEnv), 'FILL_IDENTITY_MANIFEST=~w', [ManifestPath]),
+              format(atom(WorkloadsEnv), 'FILL_IDENTITY_WORKLOADS=~w', [WorkloadsPath]),
+              format(atom(CliEnv), 'FILL_IDENTITY_CLI=~w', [CliPath]),
+              format(atom(BashEnv), 'BASH_ENV=~w', [BashEnvPath]),
+              capture_process(path(env),
+                              [BashEnv, ManifestEnv, WorkloadsEnv, CliEnv,
+                               'benchmarks/check_fill_identity.sh', '--record'],
+                              capture, _Stdout, _Stderr, Status),
+              assertion(Status == exit(1)),
+              read_file_to_string(ManifestPath, Written, []),
+              assertion(Written == Original) ),
+            delete_if_exists(BashEnvPath)),
+        maplist(delete_if_exists, [ManifestPath, WorkloadsPath, CliPath])).
+
+test(arrange_identity_write_failure_leaves_manifest_unchanged) :-
+    setup_call_cleanup(
+        make_single_arrange_identity_fixture(
+            ManifestPath, WorkloadsPath, RunnerPath, Original),
+        setup_call_cleanup(
+            make_bash_override(printf_failure, BashEnvPath),
+            ( format(atom(ManifestEnv), 'ARRANGE_IDENTITY_MANIFEST=~w', [ManifestPath]),
+              format(atom(WorkloadsEnv), 'ARRANGE_IDENTITY_WORKLOADS=~w', [WorkloadsPath]),
+              format(atom(RunnerEnv), 'ARRANGE_IDENTITY_RUNNER=~w', [RunnerPath]),
+              format(atom(BashEnv), 'BASH_ENV=~w', [BashEnvPath]),
+              capture_process(path(env),
+                              [BashEnv, ManifestEnv, WorkloadsEnv, RunnerEnv,
+                               'benchmarks/check_arrange_identity.sh',
+                               '--record', '--heavy'],
+                              capture, _Stdout, _Stderr, Status),
+              assertion(Status == exit(1)),
+              read_file_to_string(ManifestPath, Written, []),
+              assertion(Written == Original) ),
+            delete_if_exists(BashEnvPath)),
+        maplist(delete_if_exists,
+                [ManifestPath, WorkloadsPath, RunnerPath])).
+
+test(arrange_identity_hash_failure_leaves_manifest_unchanged) :-
+    setup_call_cleanup(
+        make_single_arrange_identity_fixture(
+            ManifestPath, WorkloadsPath, RunnerPath, Original),
+        setup_call_cleanup(
+            make_bash_override(sha256_failure, BashEnvPath),
+            ( format(atom(ManifestEnv), 'ARRANGE_IDENTITY_MANIFEST=~w', [ManifestPath]),
+              format(atom(WorkloadsEnv), 'ARRANGE_IDENTITY_WORKLOADS=~w', [WorkloadsPath]),
+              format(atom(RunnerEnv), 'ARRANGE_IDENTITY_RUNNER=~w', [RunnerPath]),
+              format(atom(BashEnv), 'BASH_ENV=~w', [BashEnvPath]),
+              capture_process(path(env),
+                              [BashEnv, ManifestEnv, WorkloadsEnv, RunnerEnv,
+                               'benchmarks/check_arrange_identity.sh',
+                               '--record', '--heavy'],
+                              capture, _Stdout, _Stderr, Status),
+              assertion(Status == exit(1)),
+              read_file_to_string(ManifestPath, Written, []),
+              assertion(Written == Original) ),
+            delete_if_exists(BashEnvPath)),
+        maplist(delete_if_exists,
+                [ManifestPath, WorkloadsPath, RunnerPath])).
+
+test(fill_artifact_identity_scratch_failure_is_closed) :-
+    setup_call_cleanup(
+        make_single_fill_identity_fixture(
+            ManifestPath, WorkloadsPath, CliPath, Original),
+        setup_call_cleanup(
+            make_bash_override(mktemp_failure, BashEnvPath),
+            ( format(atom(ManifestEnv), 'FILL_IDENTITY_MANIFEST=~w', [ManifestPath]),
+              format(atom(WorkloadsEnv), 'FILL_IDENTITY_WORKLOADS=~w', [WorkloadsPath]),
+              format(atom(CliEnv), 'FILL_IDENTITY_CLI=~w', [CliPath]),
+              format(atom(BashEnv), 'BASH_ENV=~w', [BashEnvPath]),
+              capture_process(path(env),
+                              [BashEnv, ManifestEnv, WorkloadsEnv, CliEnv,
+                               'benchmarks/check_fill_identity_artifact.sh'],
+                              capture, _Stdout, _Stderr, Status),
+              assertion(Status == exit(2)),
+              read_file_to_string(ManifestPath, Written, []),
+              assertion(Written == Original) ),
+            delete_if_exists(BashEnvPath)),
+        maplist(delete_if_exists, [ManifestPath, WorkloadsPath, CliPath])).
+
 :- end_tests(arrange_benchmark_promotion).
 
 baseline_doc(Pairs0, _{host:"test-host", swi_prolog:"10.1.10",
@@ -475,14 +787,16 @@ baseline_doc(Pairs0, _{host:"test-host", swi_prolog:"10.1.10",
 
 baseline_pair(Name-spec(Tier, Gate, Inf), Name-Spec) :-
     Spec = _{search_inf:Inf, cmd_wall_med_ms:10.0, cmd_rss_med_kib:12000,
-             tier:Tier, gate:Gate, grid:15, words:10, iterations:1,
-             warmup:0, budget:2000000000,
+              tier:Tier, gate:Gate, mode:size, expected:placed,
+              grid:17, words:16, iterations:1,
+              warmup:0, budget:500000000,
              info_only:["cmd_wall_med_ms", "cmd_rss_med_kib"]}.
 
 result_row(Fixture, Tier, Gate, Inf,
            _{fixture:Fixture, search_inf_med:Inf, cmd_wall_med_ms:12.5,
-             cmd_rss_med_kib:12345, tier:Tier, gate:Gate, size:17, words:16,
-             iterations:1, warmup:0, budget:500000000}).
+              cmd_rss_med_kib:12345, tier:Tier, gate:Gate, mode:size,
+              expected:placed, size:17, words:16,
+              iterations:1, warmup:0, budget:500000000}).
 
 run_temp_promotion(Baseline, Rows, Written, HistoryLines, Fails) :-
     with_temp_files(Baseline, BaselinePath, HistoryPath,
@@ -525,7 +839,7 @@ fill_baseline_doc(Pairs0, _{host:"test-host", swi_prolog:"10.1.10",
 fill_baseline_pair(Name-fill_spec(Tier, Search, Load, Grid), Name-Spec) :-
     Spec = _{search_inf:Search, load_inf:Load, grid_inf:Grid,
              cmd_wall_med_ms:10.0, cmd_rss_med_kib:12000,
-             grid_file:"grids/original.json", dict_file:"dicts/original.txt",
+              grid_file:"grids/test.json", dict_file:"dicts/test.txt",
              seeds:"none", grid:15, words:10, tier:Tier,
              iterations:1, warmup:0, budget:800000000,
              info_only:["grid_inf", "cmd_wall_med_ms", "cmd_rss_med_kib"]}.
@@ -557,8 +871,137 @@ exact_arrange_fails(Measured, Swi, Fails) :-
     baseline_doc(['core.pl'-spec(core, inf, 100)], Baseline),
     result_row('core.pl', core, inf, Measured, Row),
     with_output_to(string(_),
-                   check_arrange_baseline:do_exact_check(
-                       Baseline, _{swi_prolog:Swi, results:[Row]}, Fails)).
+                    check_arrange_baseline:do_exact_check(
+                        Baseline, _{swi_prolog:Swi, results:[Row]}, Fails)).
+
+cross_version_classifier(
+    check_arrange_baseline:classify(-10.0, 0.5, false, Kind), Kind).
+cross_version_classifier(
+    check_fill_baseline:classify(-10.0, 0.5, false, Kind), Kind).
+cross_version_classifier(
+    check_greedy_baseline:classify(-10.0, 0.5, false, Kind), Kind).
+
+promotion_version_goal(
+    check_arrange_baseline:require_promotion_version(
+        _{swi_prolog:"10.1.10"}, _{swi_prolog:"10.2.0"})).
+promotion_version_goal(
+    check_fill_baseline:require_promotion_version(
+        _{swi_prolog:"10.1.10"}, _{swi_prolog:"10.2.0"})).
+promotion_version_goal(
+    check_greedy_baseline:require_promotion_version(
+        _{swi_prolog:"10.1.10"}, _{swi_prolog:"10.2.0"})).
+
+record_version_goal(Completeness,
+                    check_arrange_baseline:require_record_version(Baseline, Doc)) :-
+    arrange_migration_fixture(Completeness, Baseline, Doc).
+record_version_goal(Completeness,
+                    check_fill_baseline:require_record_version(Baseline, Doc)) :-
+    fill_migration_fixture(Completeness, Baseline, Doc).
+record_version_goal(Completeness,
+                    check_greedy_baseline:require_record_version(Baseline, Doc)) :-
+    greedy_migration_fixture(Completeness, Baseline, Doc).
+
+record_protocol_mismatch_goal(
+        check_arrange_baseline:require_record_version(Baseline, Changed)) :-
+    arrange_migration_fixture(complete, Baseline, Doc),
+    protocol_changed_doc(Doc, Changed).
+record_protocol_mismatch_goal(
+        check_fill_baseline:require_record_version(Baseline, Changed)) :-
+    fill_migration_fixture(complete, Baseline, Doc),
+    protocol_changed_doc(Doc, Changed).
+record_protocol_mismatch_goal(
+        check_greedy_baseline:require_record_version(Baseline, Changed)) :-
+    greedy_migration_fixture(complete, Baseline, Doc),
+    protocol_changed_doc(Doc, Changed).
+
+comparison_protocol_mismatch_goal(
+        check_arrange_baseline:do_check(Baseline, Changed, _, _)) :-
+    arrange_migration_fixture(complete, Baseline, Doc),
+    protocol_changed_doc(Doc, Changed).
+comparison_protocol_mismatch_goal(
+        check_arrange_baseline:do_exact_check(Baseline, Changed, _)) :-
+    arrange_migration_fixture(complete, Baseline, Doc),
+    protocol_changed_doc(Doc, Changed).
+comparison_protocol_mismatch_goal(
+        check_fill_baseline:do_check(Baseline, Changed, _, _)) :-
+    fill_migration_fixture(complete, Baseline, Doc),
+    protocol_changed_doc(Doc, Changed).
+comparison_protocol_mismatch_goal(
+        check_fill_baseline:do_exact_check(Baseline, Changed, _)) :-
+    fill_migration_fixture(complete, Baseline, Doc),
+    protocol_changed_doc(Doc, Changed).
+comparison_protocol_mismatch_goal(
+        check_greedy_baseline:do_check(Baseline, Changed, _, _)) :-
+    greedy_migration_fixture(complete, Baseline, Doc),
+    protocol_changed_doc(Doc, Changed).
+comparison_protocol_mismatch_goal(
+        check_greedy_baseline:do_exact_check(Baseline, Changed, _)) :-
+    greedy_migration_fixture(complete, Baseline, Doc),
+    protocol_changed_doc(Doc, Changed).
+
+duplicate_check_goal(arrange,
+        check_arrange_baseline:do_check(Baseline, DuplicateDoc, _, _)) :-
+    arrange_migration_fixture(complete, Baseline, Doc),
+    duplicate_first_row(Doc, DuplicateDoc).
+duplicate_check_goal(fill,
+        check_fill_baseline:do_check(Baseline, DuplicateDoc, _, _)) :-
+    fill_migration_fixture(complete, Baseline, Doc),
+    duplicate_first_row(Doc, DuplicateDoc).
+duplicate_check_goal(greedy,
+        check_greedy_baseline:do_check(Baseline, DuplicateDoc, _, _)) :-
+    greedy_migration_fixture(complete, Baseline, Doc),
+    duplicate_first_row(Doc, DuplicateDoc).
+
+duplicate_first_row(Doc, DuplicateDoc) :-
+    Doc.results = [First|_],
+    DuplicateDoc = Doc.put(_{swi_prolog:"10.1.10", results:[First, First]}).
+
+protocol_changed_doc(Doc, Changed) :-
+    Doc.results = [First|Rest],
+    ChangedFirst = First.put(warmup, 1),
+    Changed = Doc.put(_{swi_prolog:"10.1.10",
+                        results:[ChangedFirst|Rest]}).
+
+arrange_migration_fixture(Completeness, Baseline, Doc) :-
+    baseline_doc(['core'-spec(core, inf, 100),
+                  'heavy'-spec(heavy, inf, 200)], Baseline),
+    result_row(core, core, inf, 100, Core),
+    result_row(heavy, heavy, inf, 200, Heavy),
+    migration_rows(Completeness, Core, Heavy, Rows),
+    Doc = _{swi_prolog:"10.2.0", results:Rows}.
+
+fill_migration_fixture(Completeness, Baseline, Doc) :-
+    fill_baseline_doc([core-fill_spec(core, 100, 200, 300),
+                       heavy-fill_spec(heavy, 400, 500, 600)], Baseline),
+    fill_result_row(core, core, 100, 200, 300, Core),
+    fill_result_row(heavy, heavy, 400, 500, 600, Heavy),
+    migration_rows(Completeness, Core, Heavy, Rows),
+    Doc = _{swi_prolog:"10.2.0", results:Rows}.
+
+greedy_migration_fixture(Completeness, Baseline, Doc) :-
+    greedy_result_row(core, core, Core),
+    greedy_result_row(heavy, heavy, Heavy),
+    check_greedy_baseline:record_spec(Core, new, CoreSpec),
+    check_greedy_baseline:record_spec(Heavy, new, HeavySpec),
+    Baseline = _{swi_prolog:"10.1.10",
+                 workloads:_{core:CoreSpec, heavy:HeavySpec}},
+    migration_rows(Completeness, Core, Heavy, Rows),
+    Doc = _{swi_prolog:"10.2.0", results:Rows}.
+
+greedy_result_row(Rung, Tier,
+                  _{rung:Rung, fixture:"fixtures/test.pl", size:15,
+                    framing:"size", mode:_{kind:"best_effort"},
+                    construction:_{seed_answer:"SEED", corner:"topleft_across",
+                                   expected:_{outcome:"completed", placed:1,
+                                              dropped:0}},
+                    words:1, iterations:1, warmup:0, tier:Tier,
+                    metrics:_{construction_inf_med:1, sweep_inf_med:2,
+                              postprocess_inf_med:3,
+                              command_wall_med_ms:4.0,
+                              command_rss_med_kib:5}}).
+
+migration_rows(complete, Core, Heavy, [Core, Heavy]).
+migration_rows(incomplete, Core, _Heavy, [Core]).
 
 runner_script('benchmarks/run_arrange.pl').
 runner_script('benchmarks/run_fill.pl').
@@ -578,6 +1021,11 @@ common_runner_spec([
     [opt(iterations), type(integer), default(-1), longflags([iterations])],
     [opt(warmup), type(integer), default(-1), longflags([warmup])]
 ]).
+
+standalone_subject_goal(
+    "consult('load.pl'),use_module('benchmarks/subjects.pl'),bench_subjects:arrange_command_sampler('/bin/true',ignored,3,size,placed,S),is_dict(S)").
+standalone_subject_goal(
+    "consult('load.pl'),use_module('benchmarks/fill_subjects.pl'),fill_subjects:fill_command_sampler('/bin/true',grid,dict,none,filled,S),is_dict(S)").
 
 checker_script('benchmarks/check_baseline.pl').
 checker_script('benchmarks/check_fill_baseline.pl').
@@ -607,6 +1055,125 @@ make_fill_identity_fixture(ManifestPath, WorkloadsPath, CliPath, Original) :-
     format(CliStream, "printf 'ok\\n'~n", []),
     close(CliStream),
     process_create(path(chmod), ['u+x', CliPath], [process(PID)]),
+    process_wait(PID, exit(0)).
+
+make_partial_fill_identity_fixture(ManifestPath, WorkloadsPath, CliPath,
+                                   Original) :-
+    Original = "original\tmanifest\n",
+    tmp_file_stream(text, ManifestPath, ManifestStream),
+    format(ManifestStream, '~s', [Original]),
+    close(ManifestStream),
+    tmp_file_stream(text, WorkloadsPath, WorkloadsStream),
+    format(WorkloadsStream,
+           "fill_workload(ok,'ok-grid',dict,none,1,0,filled,core,1).~n", []),
+    format(WorkloadsStream,
+           "fill_workload(_,_,_,_,_,_,_,_,_) :- throw(partial_enumeration).~n", []),
+    close(WorkloadsStream),
+    tmp_file_stream(text, CliPath, CliStream),
+    format(CliStream, "#!/usr/bin/env bash~nprintf 'ok\\n'~n", []),
+    close(CliStream),
+    make_executable(CliPath).
+
+make_partial_arrange_identity_fixture(ManifestPath, WorkloadsPath, RunnerPath,
+                                      Original) :-
+    Original = "original\tmanifest\n",
+    tmp_file_stream(text, ManifestPath, ManifestStream),
+    format(ManifestStream, '~s', [Original]),
+    close(ManifestStream),
+    tmp_file_stream(text, WorkloadsPath, WorkloadsStream),
+    format(WorkloadsStream,
+           "arrange_workload('fixtures/ok.pl',3,size,1,0,placed,core,inf,100,1).~n", []),
+    format(WorkloadsStream,
+           "arrange_workload(_,_,_,_,_,_,_,_,_,_) :- throw(partial_enumeration).~n", []),
+    close(WorkloadsStream),
+    tmp_file_stream(text, RunnerPath, RunnerStream),
+    format(RunnerStream, ":- initialization(main, main).~n", []),
+    format(RunnerStream, "main :- format(ok).~n", []),
+    close(RunnerStream).
+
+make_single_fill_identity_fixture(ManifestPath, WorkloadsPath, CliPath,
+                                  Original) :-
+    Original = "original\tmanifest\n",
+    tmp_file_stream(text, ManifestPath, ManifestStream),
+    format(ManifestStream, '~s', [Original]),
+    close(ManifestStream),
+    tmp_file_stream(text, WorkloadsPath, WorkloadsStream),
+    format(WorkloadsStream,
+           "fill_workload(ok,'ok-grid',dict,none,1,0,filled,core,1).~n", []),
+    close(WorkloadsStream),
+    tmp_file_stream(text, CliPath, CliStream),
+    format(CliStream, "#!/usr/bin/env bash~nprintf 'ok\\n'~n", []),
+    close(CliStream),
+    make_executable(CliPath).
+
+make_duplicate_fill_identity_fixture(ManifestPath, WorkloadsPath, CliPath,
+                                     Original) :-
+    make_single_fill_identity_fixture(
+        ManifestPath, WorkloadsPath, CliPath, Original),
+    setup_call_cleanup(
+        open(WorkloadsPath, append, Stream),
+        format(Stream,
+               "fill_workload(ok,'other-grid',dict,none,1,0,filled,core,1).~n",
+               []),
+        close(Stream)).
+
+make_single_arrange_identity_fixture(ManifestPath, WorkloadsPath, RunnerPath,
+                                     Original) :-
+    Original = "original\tmanifest\n",
+    tmp_file_stream(text, ManifestPath, ManifestStream),
+    format(ManifestStream, '~s', [Original]),
+    close(ManifestStream),
+    tmp_file_stream(text, WorkloadsPath, WorkloadsStream),
+    format(WorkloadsStream,
+           "arrange_workload('one/dup.pl',3,size,1,0,placed,core,inf,100,1).~n",
+           []),
+    close(WorkloadsStream),
+    tmp_file_stream(text, RunnerPath, RunnerStream),
+    format(RunnerStream, ":- initialization(main, main).~n", []),
+    format(RunnerStream, "main :- format(ok).~n", []),
+    close(RunnerStream).
+
+make_duplicate_arrange_identity_fixture(ManifestPath, WorkloadsPath,
+                                        RunnerPath, Original) :-
+    make_single_arrange_identity_fixture(
+        ManifestPath, WorkloadsPath, RunnerPath, Original),
+    setup_call_cleanup(
+        open(WorkloadsPath, append, Stream),
+        format(Stream,
+               "arrange_workload('two/dup.pl',3,size,1,0,placed,heavy,inf,100,1).~n",
+               []),
+        close(Stream)).
+
+make_bash_override(printf_failure, Path) :-
+    tmp_file_stream(text, Path, Stream),
+    format(Stream, "printf() {~n", []),
+    format(Stream, "    if [ \"$1\" = '%s\\t%s\\n' ]; then return 1; fi~n", []),
+    format(Stream, "    builtin printf \"$@\"~n", []),
+    format(Stream, "}~n", []),
+    close(Stream).
+make_bash_override(mktemp_failure, Path) :-
+    tmp_file_stream(text, Path, Stream),
+    format(Stream, "mktemp() { return 1; }~n", []),
+    close(Stream).
+make_bash_override(sha256_failure, Path) :-
+    tmp_file_stream(text, Path, Stream),
+    format(Stream, "sha256sum() {~n", []),
+    format(Stream, "    builtin printf '0000000000000000000000000000000000000000000000000000000000000000  %s\\n' \"$1\"~n", []),
+    format(Stream, "    return 1~n", []),
+    format(Stream, "}~n", []),
+    close(Stream).
+
+write_duplicate_manifest(Path, Id) :-
+    setup_call_cleanup(
+        open(Path, write, Stream),
+        ( format(Stream,
+                 '~w\t0000000000000000000000000000000000000000000000000000000000000000~n',
+                 [Id]),
+          format(Stream, '~w\t', [Id]) ),
+        close(Stream)).
+
+make_executable(Path) :-
+    process_create(path(chmod), ['u+x', Path], [process(PID)]),
     process_wait(PID, exit(0)).
 
 delete_if_exists(Path) :-

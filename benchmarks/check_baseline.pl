@@ -9,11 +9,10 @@
 %   * a RISE past regression_tolerance_pct is a REGRESSION -> the check fails (exit 1);
 %   * anything within +/-tolerance is unchanged.
 %
-% search inferences are deterministic and machine-independent (the SAME count native
-% or under WASM), so the delta is a real algorithm signal, not machine noise. wall
-% and rss are printed as informational deltas but NEVER fail the check. If the
-% running SWI-Prolog differs from the baseline's, a regression is downgraded to a
-% WARN (the version, not the code, moved the count) - regenerate the baseline.
+% Search-inference deltas are regression signals only when the running SWI-Prolog
+% matches the baseline's version. Wall and RSS are informational and never fail
+% the check. With a different SWI version, every delta is informational and
+% promotion is refused; use explicit record mode for a deliberate migration.
 %
 % Modes:
 %   swipl -q benchmarks/check_baseline.pl            % CHECK: diff + PASS/FAIL (exit 0/1)
@@ -40,14 +39,25 @@
 :- module(check_arrange_baseline, []).
 
 :- set_prolog_flag(verbose, silent).
-:- use_module(library(lists)).
-:- use_module(library(apply)).
-:- use_module(library(json)).
+:- use_module(library(apply), [foldl/4]).
+:- use_module(library(json), [atom_json_dict/3]).
+:- use_module(library(lists), [append/3, member/2, memberchk/2]).
 :- use_module(library(pairs), [pairs_keys/2]).
 :- use_module('bench_process.pl', [capture_process/6]).
-:- use_module('bench_cli.pl', [checker_mode/3, exact_runner_args/2]).
+:- use_module('bench_cli.pl',
+              [ checker_mode/3,
+                exact_runner_args/2,
+                require_persistence_args/1,
+                require_unique_ids/2
+              ]).
 :- use_module('bench_exact.pl',
-              [exact_version/4, exact_metric/4, exact_presence/5]).
+              [ exact_version/4,
+                 require_same_version/2,
+                 require_complete_migration/4,
+                 require_protocol_value/4,
+                 exact_metric/4,
+                exact_presence/5
+              ]).
 :- use_module('bench_paths.pl', [benchmark_path/2]).
 :- use_module('bench_store.pl',
               [ read_json_dict/2,
@@ -72,18 +82,22 @@ main :-
     run_note(Extra, Note),
     ( Mode == record
     ->  format("crosswordsmith arrange - RECORD baseline~s~n~n", [Note]),
+        require_persistence_args(Extra),
         run_product_bench(Extra, Doc),
+        require_record_version(Baseline, Doc),
         do_record(BaselinePath, Baseline, Doc),
         append_history(Doc, Extra),
         halt(0)
     ; Mode == log
     ->  format("crosswordsmith arrange - LOG run to history~s~n~n", [Note]),
+        require_persistence_args(Extra),
         run_product_bench(Extra, Doc),
         do_check(Baseline, Doc, _Fails, _Wins),
         append_history(Doc, Extra),
         halt(0)
     ; Mode == promote
     ->  format("crosswordsmith arrange - PROMOTE (check, then ratchet this run)~s~n~n", [Note]),
+        require_persistence_args(Extra),
         run_product_bench(Extra, Doc),
         promote_doc(BaselinePath, HistoryPath, Baseline, Doc, Extra, Fails, Wins),
         report_result(Fails, Wins),
@@ -127,6 +141,7 @@ run_product_bench(Extra, Doc) :-
 % --- CHECK -------------------------------------------------------------------
 
 do_check(Baseline, Doc, Fails, Wins) :-
+    require_record_protocol(Baseline, Doc),
     get_dict(results, Doc, Results),
     get_dict(swi_prolog, Doc, RunSwi),
     baseline_meta(Baseline, BaseHost, BaseSwi, Tol),
@@ -142,6 +157,7 @@ do_check(Baseline, Doc, Fails, Wins) :-
     info_section(WL, Results, HMatch).
 
 do_exact_check(Baseline, Doc, Fails) :-
+    require_record_protocol(Baseline, Doc),
     get_dict(swi_prolog, Baseline, BaseSwi),
     get_dict(swi_prolog, Doc, RunSwi),
     exact_version(BaseSwi, RunSwi, VersionStatus, VersionFails),
@@ -223,24 +239,23 @@ row_latency_gated(Row) :-
     get_dict(gate, Row, Gate),
     same_text(Gate, latency).
 
-% win: dropped past tolerance. ok: within +/-tolerance. regression: rose past it
-% (a hard fail when the SWI version matches; a WARN when it differs - version, not
-% code, likely moved the count).
-classify(Delta, Tol, _, win)  :- Delta =< -Tol, !.
-classify(Delta, Tol, _, ok)   :- Delta =<  Tol, !.
-classify(_, _, true,  regression) :- !.
-classify(_, _, false, regression_warn).
+% Cross-version deltas are informational. On the reference version, a drop past
+% tolerance is a win and a rise is a regression.
+classify(_, _, false, version_warn) :- !.
+classify(Delta, Tol, true, win)  :- Delta =< -Tol, !.
+classify(Delta, Tol, true, ok)   :- Delta =<  Tol, !.
+classify(_, _, true, regression).
 
 kind_counts(win,             0, 1).
 kind_counts(ok,              0, 0).
 kind_counts(regression,      1, 0).
-kind_counts(regression_warn, 0, 0).
+kind_counts(version_warn,    0, 0).
 kind_counts(latency_info,    0, 0).
 
 kind_label(win,             'WIN (improvement)').
 kind_label(ok,              'ok').
 kind_label(regression,      'REGRESSION').
-kind_label(regression_warn, 'regress? (swi-ver)').
+kind_label(version_warn,    'WARN (different SWI; informational)').
 kind_label(latency_info,    'info (latency-only)').
 
 % A rung in the baseline that this run did not measure (e.g. heavy rungs on a
@@ -279,11 +294,56 @@ metric_delta(Spec, Row, Key, Str) :-
 % exact same Doc is recorded and logged; no second benchmark run can drift from
 % the accepted measurement.
 promote_doc(BaselinePath, HistoryPath, Baseline, Doc, Extra, Fails, Wins) :-
+    require_promotion_version(Baseline, Doc),
     do_check(Baseline, Doc, Fails, Wins),
     (   Fails =:= 0
     ->  write_record(BaselinePath, Baseline, Doc),
         append_history_to(HistoryPath, Doc, Extra)
     ;   true
+    ).
+
+require_promotion_version(Baseline, Doc) :-
+    get_dict(swi_prolog, Baseline, Reference),
+    get_dict(swi_prolog, Doc, Measured),
+    require_same_version(Reference, Measured).
+
+require_record_version(Baseline, Doc) :-
+    get_dict(swi_prolog, Baseline, ReferenceVersion),
+    get_dict(swi_prolog, Doc, MeasuredVersion),
+    get_dict(workloads, Baseline, Workloads),
+    dict_pairs(Workloads, _, ReferencePairs),
+    pairs_keys(ReferencePairs, ReferenceIds),
+    get_dict(results, Doc, Results),
+    findall(Id, (member(Row, Results), get_dict(fixture, Row, Id)), MeasuredIds),
+    require_complete_migration(ReferenceVersion, MeasuredVersion,
+                               ReferenceIds, MeasuredIds),
+    require_record_protocol(Baseline, Doc).
+
+require_record_protocol(Baseline, Doc) :-
+    get_dict(workloads, Baseline, Workloads),
+    get_dict(results, Doc, Results),
+    findall(Fixture,
+            ( member(Row, Results), get_dict(fixture, Row, Fixture) ),
+            Fixtures),
+    require_unique_ids(arrange, Fixtures),
+    forall(member(Row, Results),
+           require_arrange_protocol(Workloads, Row)).
+
+require_arrange_protocol(Workloads, Row) :-
+    get_dict(fixture, Row, Fixture),
+    ( find_baseline(Workloads, Fixture, Spec)
+    -> require_protocol_value(Fixture, grid, Spec.grid, Row.size),
+       require_protocol_value(Fixture, words, Spec.words, Row.words),
+       require_protocol_value(Fixture, tier, Spec.tier, Row.tier),
+       require_protocol_value(Fixture, gate, Spec.get(gate, inf), Row.gate),
+       require_protocol_value(Fixture, mode, Spec.get(mode, size), Row.mode),
+       require_protocol_value(Fixture, expected,
+                              Spec.get(expected, placed), Row.expected),
+       require_protocol_value(Fixture, iterations,
+                              Spec.iterations, Row.iterations),
+       require_protocol_value(Fixture, warmup, Spec.warmup, Row.warmup),
+       require_protocol_value(Fixture, budget, Spec.budget, Row.budget)
+    ; true
     ).
 
 do_record(BaselinePath, Baseline, Doc) :-
@@ -306,7 +366,16 @@ record_key(Row, Row.fixture).
 record_spec(Row, existing(Old), Spec) :-
     Spec = Old.put(_{ search_inf:      Row.search_inf_med,
                       cmd_wall_med_ms: Row.cmd_wall_med_ms,
-                      cmd_rss_med_kib: Row.cmd_rss_med_kib }).
+                      cmd_rss_med_kib: Row.cmd_rss_med_kib,
+                      grid:            Row.size,
+                      words:           Row.words,
+                      tier:            Row.tier,
+                      gate:            Row.gate,
+                      mode:            Row.mode,
+                      expected:        Row.expected,
+                      iterations:      Row.iterations,
+                      warmup:          Row.warmup,
+                      budget:          Row.budget }).
 record_spec(Row, new, Spec) :-
     new_rung_spec(Row, Spec).
 
@@ -325,12 +394,22 @@ verify_recorded_row(Workloads, Row) :-
     (   find_baseline(Workloads, Fixture, Spec)
     ->  verify_recorded_value(Fixture, search_inf, Spec, Row.search_inf_med),
         verify_recorded_value(Fixture, cmd_wall_med_ms, Spec, Row.cmd_wall_med_ms),
-        verify_recorded_value(Fixture, cmd_rss_med_kib, Spec, Row.cmd_rss_med_kib)
+        verify_recorded_value(Fixture, cmd_rss_med_kib, Spec, Row.cmd_rss_med_kib),
+        verify_recorded_value(Fixture, grid, Spec, Row.size),
+        verify_recorded_value(Fixture, words, Spec, Row.words),
+        verify_recorded_value(Fixture, tier, Spec, Row.tier),
+        verify_recorded_value(Fixture, gate, Spec, Row.gate),
+        verify_recorded_value(Fixture, mode, Spec, Row.mode),
+        verify_recorded_value(Fixture, expected, Spec, Row.expected),
+        verify_recorded_value(Fixture, iterations, Spec, Row.iterations),
+        verify_recorded_value(Fixture, warmup, Spec, Row.warmup),
+        verify_recorded_value(Fixture, budget, Spec, Row.budget)
     ;   throw(error(record_readback_missing(Fixture), _))
     ).
 
 verify_recorded_value(Fixture, Key, Spec, Expected) :-
-    (   get_dict(Key, Spec, Actual), Actual =:= Expected
+    (   get_dict(Key, Spec, Actual),
+        catch(require_protocol_value(Fixture, Key, Expected, Actual), _, fail)
     ->  true
     ;   throw(error(record_readback_mismatch(Fixture, Key, Expected), _))
     ).
@@ -344,9 +423,11 @@ new_rung_spec(Row, _{ search_inf:      Row.search_inf_med,
                       info_only:       ["cmd_wall_med_ms", "cmd_rss_med_kib"],
                       grid:            Row.size,
                       words:           Row.words,
-                      tier:            Row.tier,
-                      gate:            Row.get(gate, "inf"),
-                      iterations:      Row.iterations,
+                       tier:            Row.tier,
+                       gate:            Row.get(gate, "inf"),
+                       mode:            Row.mode,
+                       expected:        Row.expected,
+                       iterations:      Row.iterations,
                       warmup:          Row.warmup,
                       budget:          Row.budget }).
 
@@ -377,17 +458,17 @@ report_result(Fails, Wins) :-
     ;   Wins > 0
     ->  format("~nRESULT: PASS  (~d improvement(s), 0 regressions)~n", [Wins]),
         format("Lock the win(s) in with `make bench-record`.~n")
-    ;   format("~nRESULT: PASS  (no change; 0 regressions)~n") ).
+    ;   format("~nRESULT: PASS  (0 regressions, 0 wins)~n") ).
 
 % --- env banner --------------------------------------------------------------
 
 print_env(BaseHost, RunHost, HMatch, BaseSwi, RunSwi, VMatch, Tol) :-
     ( HMatch == true
     ->  HostNote = 'same host -> wall/rss deltas meaningful'
-    ;   HostNote = 'DIFFERENT host -> wall/rss NOT comparable (search_inf still portable)' ),
+    ;   HostNote = 'DIFFERENT host -> wall/rss NOT comparable (same-SWI search_inf still gates)' ),
     ( VMatch == true
     ->  VerNote = 'same swi  -> regressions gate'
-    ;   VerNote = 'DIFFERENT swi -> regressions downgraded to WARN (regenerate baseline)' ),
+    ;   VerNote = 'DIFFERENT swi -> inference deltas informational; promote refused' ),
     format("baseline:  host ~w,  swi ~w~n", [BaseHost, BaseSwi]),
     format("this run:  host ~w,  swi ~w~n", [RunHost, RunSwi]),
     format("  ~w~n", [HostNote]),
@@ -409,8 +490,8 @@ signed(X, S) :- ( X >= 0 -> format(atom(S), "+~2f", [X]) ; format(atom(S), "~2f"
 same_text(A, B) :- text_to_string(A, S), text_to_string(B, S).
 
 % --- HISTORY (append-only trend ledger) --------------------------------------
-% One JSON object per line in benchmarks/history.jsonl. search_inf is the portable,
-% comparable-over-time number; wall/rss ride along for same-host trend but stay
+% One JSON object per line in benchmarks/history.jsonl. search_inf is comparable
+% within an SWI version; wall/rss ride along for same-host trend but stay
 % informational. Each entry is stamped with the git commit + local timestamp so a
 % row can be attributed to the change that produced it.
 

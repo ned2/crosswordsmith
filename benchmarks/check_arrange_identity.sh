@@ -7,9 +7,9 @@
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 2
 
-manifest="benchmarks/arrange_identity.sha256"
-workloads="benchmarks/workloads.pl"
-runner="benchmarks/run_arrange_identity.pl"
+manifest="${ARRANGE_IDENTITY_MANIFEST:-benchmarks/arrange_identity.sha256}"
+workloads="${ARRANGE_IDENTITY_WORKLOADS:-benchmarks/workloads.pl}"
+runner="${ARRANGE_IDENTITY_RUNNER:-benchmarks/run_arrange_identity.pl}"
 heavy=0
 record=0
 
@@ -25,46 +25,80 @@ if [ "$record" -eq 1 ] && [ "$heavy" -ne 1 ]; then
     exit 2
 fi
 
-rungs="$(swipl -q -l "$workloads" \
+if ! rungs="$(swipl -q -l "$workloads" \
     -g 'forall(arrange_workload(F,_,_,_,_,_,T,_,_,_), format("~w\t~w~n",[F,T])), halt' \
-    -g 'halt(1)' </dev/null 2>/dev/null)"
+    -g 'halt(1)' </dev/null 2>/dev/null)"; then
+    echo "check_arrange_identity: failed to enumerate workloads" >&2
+    exit 2
+fi
 if [ -z "$rungs" ]; then
     echo "check_arrange_identity: could not enumerate workloads" >&2
     exit 2
 fi
 
 declare -A expected seen known
-if [ -f "$manifest" ]; then
-    while IFS=$'\t' read -r id digest; do
+if [ "$record" -eq 0 ] && [ -f "$manifest" ]; then
+    while IFS=$'\t' read -r id digest extra || [ -n "$id$digest$extra" ]; do
         [ -z "$id" ] && continue
+        if [ -n "${expected[$id]+present}" ]; then
+            echo "check_arrange_identity: duplicate manifest id $id" >&2
+            exit 2
+        fi
+        if [[ ! "$digest" =~ ^[0-9a-f]{64}$ ]] || [ -n "$extra" ]; then
+            echo "check_arrange_identity: malformed manifest entry $id" >&2
+            exit 2
+        fi
         expected["$id"]="$digest"
     done <"$manifest"
 fi
 
 if [ "$record" -eq 1 ]; then
-    tmp_manifest="$(mktemp "${manifest}.tmp.XXXXXX")"
+    if ! tmp_manifest="$(mktemp "${manifest}.tmp.XXXXXX")"; then
+        echo "check_arrange_identity: could not allocate manifest temporary" >&2
+        exit 2
+    fi
 else
-    tmp_manifest="$(mktemp)"
+    if ! tmp_manifest="$(mktemp)"; then
+        echo "check_arrange_identity: could not allocate digest temporary" >&2
+        exit 2
+    fi
 fi
-out="$(mktemp)"
+if ! out="$(mktemp)"; then
+    echo "check_arrange_identity: could not allocate output temporary" >&2
+    rm -f "$tmp_manifest"
+    exit 2
+fi
 trap 'rm -f "$tmp_manifest" "$out"' EXIT
 status=0
 
 while IFS=$'\t' read -r fixture tier; do
     [ -z "$fixture" ] && continue
     id="${fixture##*/}"
+    if [ -n "${known[$id]:-}" ]; then
+        echo "identity ($id): DUPLICATE WORKLOAD ID"; status=1
+        continue
+    fi
     known["$id"]=1
     if [ "$tier" = heavy ] && [ "$heavy" -ne 1 ]; then
         continue
     fi
     echo "identity ($id): START ($tier)"
     if swipl -q "$runner" -- "$fixture" >"$out"; then
-        read -r digest _ < <(sha256sum "$out")
-        printf '%s\t%s\n' "$id" "$digest" >>"$tmp_manifest"
+        hash_output=''
+        if ! hash_output="$(sha256sum "$out")" \
+           || ! read -r digest _ <<<"$hash_output" \
+           || [[ ! "$digest" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "identity ($id): SHA-256 FAILED"; status=1
+            continue
+        fi
+        if ! printf '%s\t%s\n' "$id" "$digest" >>"$tmp_manifest"; then
+            echo "identity ($id): MANIFEST TEMPORARY WRITE FAILED"; status=1
+            continue
+        fi
         seen["$id"]=1
         if [ "$record" -eq 1 ]; then
             echo "identity ($id): RECORDED $digest"
-        elif [ -z "${expected[$id]:-}" ]; then
+        elif [ -z "${expected[$id]+present}" ]; then
             echo "identity ($id): NO BASELINE"; status=1
         elif [ "${expected[$id]}" = "$digest" ]; then
             echo "identity ($id): OK $digest"
@@ -87,12 +121,12 @@ if [ "$record" -eq 1 ]; then
 fi
 
 for id in "${!known[@]}"; do
-    if [ -z "${expected[$id]:-}" ]; then
+    if [ -z "${expected[$id]+present}" ]; then
         echo "identity ($id): WORKLOAD ABSENT FROM MANIFEST"; status=1
     fi
 done
 for id in "${!expected[@]}"; do
-    if [ -z "${known[$id]:-}" ]; then
+    if [ -z "${known[$id]+present}" ]; then
         echo "identity ($id): MANIFEST ENTRY ABSENT FROM WORKLOADS"; status=1
     fi
 done

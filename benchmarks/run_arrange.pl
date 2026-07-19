@@ -10,28 +10,35 @@
 %   search   - the in-process budget-explicit arrange_best_layout/6 search alone.
 %   rest     - command - search: the fixed CLI-wrapper overhead, clamped at 0.
 %
-% Wall/rss are machine-dependent; SEARCH INFERENCES are the portable, deterministic
-% metric - compare those across runs and machines. rss is whole-process peak RSS
+% Wall/rss are machine-dependent. SEARCH INFERENCES are compared only against a
+% baseline recorded by the same SWI-Prolog version. rss is whole-process peak RSS
 % (a footprint, not a search-memory metric).
 %
 % Usage:
 %   swipl -q benchmarks/run_arrange.pl                       % all workloads, text
 %   swipl -q benchmarks/run_arrange.pl -- --format csv
-%   swipl -q benchmarks/run_arrange.pl -- --fixture bundled  % one workload
+%   swipl -q benchmarks/run_arrange.pl -- --fixture real     % matching workloads
 %   swipl -q benchmarks/run_arrange.pl -- --iterations 5 --warmup 1
 
 :- set_prolog_flag(verbose, silent).
-:- use_module(library(lists)).
-:- use_module(library(apply)).
-:- use_module(library(optparse)).
-:- use_module(library(json)).
+:- use_module(library(apply), [maplist/3]).
+:- use_module(library(json), [json_write_dict/3]).
+:- use_module(library(lists), [member/2]).
+:- use_module(library(optparse), [opt_help/2]).
 :- use_module('bench_paths.pl', [repo_path/2]).
 :- repo_path('load.pl', Load), consult(Load).
-:- use_module('bench_core.pl').
-:- use_module('bench_cli.pl').
+:- use_module('bench_core.pl', [measure/3]).
+:- use_module('bench_cli.pl',
+              [ apply_override/3,
+                parse_runner_options/5,
+                require_unique_ids/2,
+                require_selected/3,
+                workload_selected/4
+              ]).
 :- use_module('bench_fixture.pl', [load_arrange_fixture/2]).
 :- use_module('bench_report.pl', [benchmark_report/3, swi_version/1]).
-:- use_module('subjects.pl').
+:- use_module('subjects.pl',
+              [arrange_command_sampler/6, arrange_search_sampler/5]).
 :- consult('workloads.pl').
 
 :- initialization(main, main).
@@ -46,6 +53,12 @@ main :-
     ( Help == true -> usage, halt(0) ; true ),
     selected_workloads(Filter, Heavy, Workloads),
     catch(require_selected(arrange, Filter, Workloads),
+          E, (print_message(error, E), halt(2))),
+    findall(Id,
+            ( member(workload(F, _, _, _, _, _, _, _, _, _), Workloads),
+              file_base_name(F, Id) ),
+            Ids),
+    catch(require_unique_ids(arrange, Ids),
           E, (print_message(error, E), halt(2))),
     maplist(run_selected_workload(ItOv, WuOv), Workloads, Rows),
     emit(Fmt, Rows).
@@ -134,7 +147,7 @@ emit(csv, Rows) :- !,
 emit(json, Rows) :- !,
     benchmark_report('crosswordsmith-arrange-bench', Rows, Doc0),
     Doc = Doc0.put(metric_note,
-        'wall/rss machine-dependent; search inferences are the portable metric; rss is whole-process footprint'),
+        'search inferences are same-SWI regression signals; wall/rss are machine-dependent; rss is whole-process footprint'),
     json_write_dict(user_output, Doc, [width(80)]), nl.
 emit(Other, _) :-
     format(user_error, "run_arrange: unknown --format ~w (use text|csv|json)~n", [Other]),
@@ -144,7 +157,7 @@ metadata_lines :-
     swi_version(Ver),
     format("# tool: crosswordsmith-arrange-bench~n"),
     format("# swi_prolog: ~w~n", [Ver]),
-    format("# metric_note: wall/rss machine-dependent; search inferences are the portable metric; rss is whole-process footprint~n").
+    format("# metric_note: search inferences are same-SWI regression signals; wall/rss are machine-dependent; rss is whole-process footprint~n").
 
 print_text_row(R) :-
     RssMB is R.cmd_rss_med_kib / 1024.0,

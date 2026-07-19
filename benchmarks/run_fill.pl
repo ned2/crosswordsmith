@@ -13,9 +13,9 @@
 %               sample, pre-loaded dict). search_inf is the GATED metric of record.
 %   rest      - command - (dict_load + grid + search) walls, clamped at 0.
 %
-% Wall/rss are machine-dependent; SEARCH/LOAD INFERENCES are the portable,
-% deterministic metrics - compare those across runs and machines. rss is
-% whole-process peak RSS (a footprint, not a search-memory metric).
+% Wall/rss are machine-dependent. SEARCH/LOAD INFERENCES are compared only
+% against baselines recorded by the same SWI-Prolog version. rss is whole-process
+% peak RSS (a footprint, not a search-memory metric).
 %
 % Usage:
 %   swipl -q benchmarks/run_fill.pl                          % core rungs, text
@@ -25,22 +25,28 @@
 %   swipl -q benchmarks/run_fill.pl -- --iterations 3 --warmup 1
 
 :- set_prolog_flag(verbose, silent).
-:- use_module(library(lists)).
-:- use_module(library(apply)).
-:- use_module(library(optparse)).
-:- use_module(library(json)).
-:- use_module(library(assoc)).
-% yall: dict_word_count's metadata fold uses a lambda; explicit import so this
-% root also runs under autoload(false) (P11/C5). NB importing yall also
-% compile-expands the lambda — harness metadata only, outside every sampler
-% (the bench-fill-check ratchet locks the measured counts bit-identical).
-:- use_module(library(yall)).
+:- use_module(library(apply), [foldl/4, maplist/3]).
+:- use_module(library(assoc), [assoc_to_values/2]).
+:- use_module(library(json), [json_write_dict/3]).
+:- use_module(library(lists), [member/2]).
+:- use_module(library(optparse), [opt_help/2]).
 :- use_module('bench_paths.pl', [repo_path/2]).
 :- repo_path('load.pl', Load), consult(Load).
-:- use_module('bench_core.pl').
-:- use_module('bench_cli.pl').
+:- use_module('bench_core.pl', [measure/3]).
+:- use_module('bench_cli.pl',
+              [ apply_override/3,
+                parse_runner_options/5,
+                require_unique_ids/2,
+                require_selected/3,
+                workload_selected/4
+              ]).
 :- use_module('bench_report.pl', [benchmark_report/3, swi_version/1]).
-:- use_module('fill_subjects.pl').
+:- use_module('fill_subjects.pl',
+              [ fill_command_sampler/6,
+                fill_load_sampler/2,
+                fill_grid_sampler/2,
+                fill_search_sampler/6
+              ]).
 :- consult('fill_workloads.pl').
 
 :- initialization(main, main).
@@ -55,6 +61,11 @@ main :-
     ( Help == true -> usage, halt(0) ; true ),
     selected_workloads(Filter, Heavy, Workloads),
     catch(require_selected(fill, Filter, Workloads),
+          E, (print_message(error, E), halt(2))),
+    findall(Id,
+            member(workload(Id, _, _, _, _, _, _, _, _), Workloads),
+            Ids),
+    catch(require_unique_ids(fill, Ids),
           E, (print_message(error, E), halt(2))),
     maplist(run_selected_workload(ItOv, WuOv), Workloads, Rows),
     emit(Fmt, Rows).
@@ -147,7 +158,11 @@ seeds_label(Path, Base) :- file_base_name(Path, Base).
 
 dict_word_count(DictByLen, N) :-
     assoc_to_values(DictByLen, Buckets),
-    foldl([B, A0, A1]>>(length(B, L), A1 is A0 + L), Buckets, 0, N).
+    foldl(add_bucket_length, Buckets, 0, N).
+
+add_bucket_length(Bucket, N0, N) :-
+    length(Bucket, Length),
+    N is N0 + Length.
 
 crosswordsmith_exe(Exe) :-
     repo_path(crosswordsmith, Exe).
@@ -165,7 +180,7 @@ emit(csv, Rows) :- !,
 emit(json, Rows) :- !,
     benchmark_report('crosswordsmith-fill-bench', Rows, Doc0),
     Doc = Doc0.put(metric_note,
-        'search_inf/load_inf gated; wall/rss machine-dependent; rss is whole-process footprint'),
+        'search_inf/load_inf are same-SWI gated metrics; wall/rss machine-dependent; rss is whole-process footprint'),
     json_write_dict(user_output, Doc, [width(80)]), nl.
 emit(Other, _) :-
     format(user_error, "run_fill: unknown --format ~w (use text|csv|json)~n", [Other]),
@@ -175,7 +190,7 @@ metadata_lines :-
     swi_version(Ver),
     format("# tool: crosswordsmith-fill-bench~n"),
     format("# swi_prolog: ~w~n", [Ver]),
-    format("# metric_note: search_inf/load_inf gated; wall/rss machine-dependent~n").
+    format("# metric_note: search_inf/load_inf are same-SWI gated metrics; wall/rss machine-dependent~n").
 
 print_text_row(R) :-
     format("~w~t~16|~t~d~6+~t~d~9+~t~D~13+~t~D~13+~t~D~13+~t~1f~11+~t~1f%~9+~n",

@@ -12,17 +12,15 @@
 %   swipl -q benchmarks/run_matrix.pl                 % all strategies
 %   swipl -q benchmarks/run_matrix.pl -- baseline mrv_capped
 %
-% Wall time is machine-dependent; treat INFERENCES as the primary, portable
-% metric when comparing across runs or machines.
+% Wall time is machine-dependent; compare INFERENCES only across runs using the
+% same SWI-Prolog version.
 
 :- set_prolog_flag(verbose, silent).
-:- use_module(library(lists)).
-:- use_module(library(apply)).
-:- use_module(library(statistics)).
-:- use_module(library(time)).        % call_with_time_limit/2 (per-cell guard)
+:- use_module(library(lists), [member/2]).
+:- use_module(library(time), [call_with_time_limit/2]).
 :- use_module('bench_paths.pl', [repo_path/2]).
 :- repo_path('load.pl', Load), consult(Load).
-:- use_module('bench_core.pl').
+:- use_module('bench_core.pl', [inproc_sampler/2, measure/3]).
 :- use_module('bench_fixture.pl', [load_arrange_fixture/2]).
 :- use_module('bench_report.pl', [swi_version/1]).
 :- consult('fixtures.pl').
@@ -51,7 +49,7 @@ emit_metadata(Strategies) :-
     format("# tool: crosswordsmith-matrix~n", []),
     format("# swi_prolog: ~w~n", [Ver]),
     format("# strategies: ~w~n", [Strategies]),
-    format("# metric_note: wall time is machine-dependent; inferences are the portable metric~n", []).
+    format("# metric_note: inferences are same-SWI regression signals; wall time is machine-dependent~n", []).
 
 % Per-cell wall-clock guard. A strategy that cannot solve a fixture within this
 % many seconds is recorded as `timeout` rather than hanging the whole matrix

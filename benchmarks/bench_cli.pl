@@ -2,12 +2,14 @@
            [ parse_runner_options/5,
              require_selected/3,
              workload_selected/4,
-             apply_override/3,
-             checker_mode/3,
-             exact_runner_args/2
+              apply_override/3,
+              checker_mode/3,
+              exact_runner_args/2,
+              require_persistence_args/1,
+              require_unique_ids/2
            ]).
 
-:- use_module(library(apply), [exclude/3]).
+:- use_module(library(apply), [exclude/3, maplist/3]).
 :- use_module(library(error), [must_be/2]).
 :- use_module(library(lists), [member/2, memberchk/2]).
 :- use_module(library(optparse), [opt_parse/4]).
@@ -112,6 +114,40 @@ exact_runner_args(RunnerArgs, ['--heavy']) :-
     ( OtherArgs == [] -> true
     ; throw(error(bench_exact_args(OtherArgs), _)) ).
 
+%!  require_persistence_args(+RunnerArgs:list) is det.
+%
+%   Reject warmup and iteration overrides before a checker records a baseline or
+%   history row. Selection flags remain valid, but persisted measurements must
+%   use the workload manifest's sampling protocol, including for first-seen rows.
+require_persistence_args(RunnerArgs) :-
+    ( member(Arg, RunnerArgs), sampling_override_arg(Arg)
+    -> throw(error(bench_persistence_sampling_override(Arg), _))
+    ; true
+    ).
+
+%!  require_unique_ids(+Tool:atom, +Ids:list) is det.
+%
+%   Reject duplicate selected or measured row IDs, accepting atom/string spelling
+%   differences. Duplicate rows make both comparison totals and persistence
+%   provenance ambiguous.
+require_unique_ids(Tool, Ids) :-
+    maplist(text_to_string, Ids, Strings),
+    sort(Strings, Unique),
+    length(Strings, Count),
+    length(Unique, UniqueCount),
+    ( Count =:= UniqueCount
+    -> true
+    ; throw(error(bench_duplicate_ids(Tool, Strings), _))
+    ).
+
+sampling_override_arg('--iterations').
+sampling_override_arg('--warmup').
+sampling_override_arg(Arg) :-
+    atom(Arg),
+    ( sub_atom(Arg, 0, _, _, '--iterations=')
+    ; sub_atom(Arg, 0, _, _, '--warmup=')
+    ).
+
 :- multifile prolog:error_message//1.
 prolog:error_message(bench_positional_args(Tool, Args)) -->
     [ '~w benchmark does not accept positional arguments: ~q'-[Tool, Args] ].
@@ -127,3 +163,7 @@ prolog:error_message(bench_history_args(Args)) -->
     [ 'benchmark history mode accepts no additional arguments: ~q'-[Args] ].
 prolog:error_message(bench_exact_args(Args)) -->
     [ 'benchmark exact mode accepts no selection or sampling overrides: ~q'-[Args] ].
+prolog:error_message(bench_persistence_sampling_override(Arg)) -->
+    [ 'benchmark persistence requires manifest sampling; remove ~w'-[Arg] ].
+prolog:error_message(bench_duplicate_ids(Tool, Ids)) -->
+    [ '~w benchmark contains duplicate row IDs: ~q'-[Tool, Ids] ].

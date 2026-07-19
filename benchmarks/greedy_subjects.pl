@@ -15,7 +15,7 @@
 :- use_module(library(sha), [sha_hash/3, hash_atom/2]).
 :- use_module(library(lists), [append/2, member/2, nth0/3]).
 :- use_module(library(pairs), [pairs_values/2]).
-:- use_module('bench_core.pl').
+:- use_module('bench_core.pl', [inproc_sampler/2, process_sampler/5]).
 :- use_module('bench_fixture.pl', [load_arrange_fixture/2]).
 :- use_module('bench_process.pl', [capture_process/6]).
 
@@ -27,9 +27,15 @@ entry_by_answer(Words, Answer, Entry) :-
     A == Answer,
     !.
 
+%!  construction_sampler(+Words:list, +GridLen:integer, +SeedAnswer:atom,
+%!                        +Corner:atom, +Expected, -Sample:dict) is det.
+%
 % One pinned construction. The reset is part of the top-level operation and
 % occurs exactly once; greedy_construct/6 itself deliberately does not reset.
+% SeedAnswer must name an entry in Words, and Corner/Expected must come from the
+% workload manifest.
 construction_sampler(Words, GridLen, SeedAnswer, Corner, Expected, Sample) :-
+    require_seed_answer(Words, SeedAnswer),
     inproc_sampler(
         greedy_subjects:construction_operation(
             Words, GridLen, SeedAnswer, Corner, Expected, _Outcome),
@@ -47,18 +53,26 @@ construction_operation(Words, GridLen, SeedAnswer, Corner, Expected, Outcome) :-
     ; throw(error(greedy_construction_outcome(Expected, Outcome), _))
     ).
 
+%!  sweep_sampler(+Words:list, +GridLen:integer, +Command,
+%!                -Sample:dict) is det.
+%
 % Primary gated subject: the product's two directly searched blocks plus their
 % derived visible partners. No semantic counter executes here. The single reset
 % is outside the construction helper, so both direct blocks share product memos
-% exactly as arrange_candidate_pool/4 does.
+% exactly as arrange_candidate_pool/4 does. Command is candidates(strict,K),
+% with positive K, or best_effort.
 sweep_sampler(Words, GridLen, Command, Sample) :-
+    require_command(Command),
     inproc_sampler(greedy_subjects:sweep_operation(Words, GridLen, Command, _), Sample).
 
 sweep_operation(Words, GridLen, Command, Raw) :-
     crosswordsmith_core:reset_search_memos,
     raw_pool_no_reset(Command, Words, GridLen, Raw).
 
+%!  build_raw_pool(+Words:list, +GridLen:integer, +Command, -Raw:list) is det.
+%
 build_raw_pool(Words, GridLen, Command, Raw) :-
+    require_command(Command),
     crosswordsmith_core:reset_search_memos,
     raw_pool_no_reset(Command, Words, GridLen, Raw).
 
@@ -92,7 +106,14 @@ raw_pool_no_reset(best_effort, Words, GridLen, Raw) :-
 % Raw is prebuilt by the caller outside call_time/2. Clause dispatch preserves
 % each mode's actual product work rather than charging candidate diversity to
 % best-effort.
+%!  postprocess_sampler(+Raw:list, +GridLen:integer, +Total:integer, +Command,
+%!                      +K:integer, -Sample:dict) is det.
+%
+%   Raw must be the nonempty, mode-compatible pool from build_raw_pool/4, and
+%   Command must satisfy sweep_sampler/4's command contract.
 postprocess_sampler(Raw, GridLen, Total, Command, K, Sample) :-
+    require_command(Command),
+    require_nonempty_raw(Raw),
     inproc_sampler(
         greedy_subjects:postprocess(Command, Raw, GridLen, Total, K, _),
         Sample).
@@ -119,10 +140,16 @@ postprocess(best_effort, Raw, _GridLen, _Total, _K,
          [score(NumPlaced, Reward)-pd(BestPlaced, Dropped)|_]),
     crosswordsmith_core:assign_clue_numbers(BestPlaced, Numbered).
 
+%!  command_sampler(+Exe, +File:atom, +GridLen:integer, +Framing:atom,
+%!                   +Command, +ExpectedExit:integer, -Sample:dict) is det.
+%
+%   Framing is size or max_size; Command satisfies sweep_sampler/4's contract.
 command_sampler(Exe, File, GridLen, Framing, Command, ExpectedExit,
                 _{wall:Wall, rss:Rss}) :-
+    require_framing(Framing),
+    require_command(Command),
     command_args(File, GridLen, Framing, Command, '/dev/null', Args),
-    bench_core:process_sampler(Exe, Args, Wall, Rss, Exit),
+    process_sampler(Exe, Args, Wall, Rss, Exit),
     ( Exit =:= ExpectedExit -> true
     ; throw(error(greedy_command_exit(ExpectedExit, Exit), _))
     ).
@@ -148,10 +175,15 @@ mode_args(best_effort, ['--best-effort']).
 %!               +SeedAnswer, +Corner, +Expected, +Exe, -Row) is det.
 %
 %   Build one semantic identity row. Fixture is the stable repository-relative
-%   label recorded in the document; File is its absolute operational path.
+%   label recorded in the document; File is its absolute operational path. The
+%   framing, command, seed, corner, and expected outcome come from the manifest.
 identity_row(Id, Fixture, File, GridLen, Framing, Command, SeedAnswer, Corner,
              Expected, Exe, Row) :-
+    require_framing(Framing),
+    require_command(Command),
+    require_expected(Expected),
     load_arrange_fixture(File, Words),
+    require_seed_answer(Words, SeedAnswer),
     format(user_error, "heartbeat: identity ~w direct-attempts~n", [Id]),
     direct_attempts(Words, GridLen, Command, Attempts),
     format(user_error, "heartbeat: identity ~w raw-pool~n", [Id]),
@@ -233,11 +265,17 @@ identity_raw_entry(best_effort,
 
 selected_layouts(Words, GridLen, candidates(Drop, K), Layouts) :-
     !,
-    crosswordsmith_arrange:arrange_candidates(
-        Words, GridLen, Drop, K, Layouts, _).
-selected_layouts(Words, GridLen, best_effort, [Layout]) :-
-    crosswordsmith_arrange:arrange_best_effort(
-        Words, GridLen, Layout, _Reward, _NP, _Dropped).
+    ( crosswordsmith_arrange:arrange_candidates(
+          Words, GridLen, Drop, K, Selected, _)
+    -> Layouts = Selected
+    ;  Layouts = []
+    ).
+selected_layouts(Words, GridLen, best_effort, Layouts) :-
+    ( crosswordsmith_arrange:arrange_best_effort(
+          Words, GridLen, Layout, _Reward, _NP, _Dropped)
+    -> Layouts = [Layout]
+    ;  Layouts = []
+    ).
 
 selected_signatures(Words, GridLen, Framing, Layouts, Signatures, Distances) :-
     maplist(selected_signature(Words, GridLen, Framing), Layouts, Signatures),
@@ -299,6 +337,33 @@ expected_json(setup_failed, _{outcome:setup_failed}).
 
 command_json(candidates(strict, K), _{kind:candidates,drop:strict,k:K}).
 command_json(best_effort, _{kind:best_effort}).
+
+require_seed_answer(Words, SeedAnswer) :-
+    ( entry_by_answer(Words, SeedAnswer, _) -> true
+    ; throw(error(greedy_seed_answer_missing(SeedAnswer), _))
+    ).
+
+require_command(candidates(strict, K)) :- integer(K), K >= 1, !.
+require_command(best_effort) :- !.
+require_command(Command) :-
+    throw(error(greedy_benchmark_command(Command), _)).
+
+require_framing(size) :- !.
+require_framing(max_size) :- !.
+require_framing(Framing) :-
+    throw(error(greedy_benchmark_framing(Framing), _)).
+
+require_expected(completed(Placed, Dropped)) :-
+    integer(Placed), Placed >= 0,
+    integer(Dropped), Dropped >= 0,
+    !.
+require_expected(setup_failed) :- !.
+require_expected(Expected) :-
+    throw(error(greedy_benchmark_expected(Expected), _)).
+
+require_nonempty_raw([_|_]) :- !.
+require_nonempty_raw([]) :-
+    throw(error(greedy_empty_raw_pool, _)).
 
 :- multifile prolog:error_message//1.
 prolog:error_message(greedy_construction_outcome(Expected, Got)) -->

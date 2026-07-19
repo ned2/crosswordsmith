@@ -9,7 +9,7 @@
 %                latency a user feels. process layer; asserts exit vs Expected.
 %   - dict_load: the in-process load_dict/3 alone (the every-invocation startup
 %                tax: read + normalize + positional index over all lengths).
-%                load_inf (inferences) is deterministic and GATED.
+%                load_inf is a same-SWI-version GATED inference metric.
 %   - grid     : the in-process fill_grid/4 alone (mask -> shared-cell-variable
 %                slots). Its own bucket, never silently folded into "rest".
 %   - search   : the in-process budget-explicit fill_attempt/8 with a PRE-LOADED
@@ -27,13 +27,13 @@
 
 :- module(fill_subjects,
           [ fill_command_sampler/6,
-            fill_load_sampler/2,
-            fill_grid_sampler/2,
-            fill_search_sampler/6,
-            build_search_slots/3 ]).
+             fill_load_sampler/2,
+             fill_grid_sampler/2,
+             fill_search_sampler/6 ]).
 
-:- use_module(library(lists)).
-:- use_module(library(apply)).
+:- use_module(library(apply), [exclude/3]).
+:- use_module(library(lists), [append/3]).
+:- use_module('bench_core.pl', [inproc_sampler/2, process_sampler/5]).
 
 % The engine seams this harness measures. Exported by fill.pl for exactly
 % this consumer (fill-seam export promotion, 2026-07-06 - the fill analogue
@@ -45,8 +45,11 @@
 % or fill_attempt_masked/9): the counts would silently move.
 :- use_module(crosswordsmith(fill),
               [ load_dict/3, fill_grid/4, fill_attempt/8,
-                apply_seeds/4, seeded_slot/2 ]).
+                 apply_seeds/4, seeded_slot/2 ]).
 
+%!  fill_command_sampler(+Exe, +GridFile:atom, +DictFile:atom, +Seeds,
+%!                        +Expected:atom, -Sample:dict) is det.
+%
 % COMMAND layer. process_sampler returns the raw exit code; we assert it against
 % Expected here (not inside bench_core) and record only wall+rss. rss (peak RSS,
 % KiB) is a whole-process footprint, not a search-memory metric.
@@ -54,7 +57,7 @@ fill_command_sampler(Exe, GridFile, DictFile, Seeds, Expected, _{wall:Wall, rss:
     seed_args(Seeds, SeedArgs),
     append(['fill', '--grid', GridFile, '--dict', DictFile], SeedArgs, A0),
     append(A0, ['--out', '/dev/null'], Argv),
-    bench_core:process_sampler(Exe, Argv, Wall, Rss, Exit),
+    process_sampler(Exe, Argv, Wall, Rss, Exit),
     expected_exit(Expected, Exit).
 
 seed_args(none, []) :- !.
@@ -66,26 +69,33 @@ expected_exit(filled, 0) :- !.
 expected_exit(Expected, Got) :-
     throw(error(bench_fill_exit(expected(Expected), exit(Got)), _)).
 
+%!  fill_load_sampler(+DictFile:atom, -Sample:dict) is det.
+%
 % DICT-LOAD layer. Each sample reloads the whole dictionary (fresh index); the
-% inference count is deterministic (the reported load_inf). We do NOT wrap in
-% once/1 (adds an inference; bench_core's inproc_sampler note).
+% reported load_inf is compared within one SWI version. We do NOT wrap in once/1
+% (adds an inference; bench_core's inproc_sampler note).
 fill_load_sampler(DictFile, Sample) :-
-    bench_core:inproc_sampler(
+    inproc_sampler(
         load_dict(DictFile, _DictByLen, _Index),
         Sample).
 
+%!  fill_grid_sampler(+GridFile:atom, -Sample:dict) is det.
+%
 % GRID layer. Each sample re-derives the slots from the mask (fresh shared cell
-% variables); grid_inf is deterministic.
+% variables); grid_inf is repeatable within the pinned SWI version.
 fill_grid_sampler(GridFile, Sample) :-
-    bench_core:inproc_sampler(
+    inproc_sampler(
         fill_grid(GridFile, _Size, _Slots, _CellVar),
         Sample).
 
+%!  fill_search_sampler(+GridFile:atom, +Seeds, +DictByLen, +Index,
+%!                       +BudgetExpected, -Sample:dict) is det.
+%
 % SEARCH layer. Rebuild FRESH slots (+ seeds) OUTSIDE the timed goal, then time
 % ONLY fill_attempt/8 against the caller's PRE-LOADED dict. Assert the outcome.
 fill_search_sampler(GridFile, Seeds, DictByLen, Index, Budget-Expected, Sample) :-
     build_search_slots(GridFile, Seeds, slots(SearchSlots, AllSlots)),
-    bench_core:inproc_sampler(
+    inproc_sampler(
         fill_attempt(SearchSlots, AllSlots, DictByLen, Index,
                      Budget, Outcome, _Numbered, _InputWords),
         Sample),
