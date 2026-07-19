@@ -36,7 +36,10 @@ Requirements).
 The implementation lives under `prolog/crosswordsmith/`, driven by the
 `crosswordsmith` CLI.
 
-The same engine also runs **client-side in the browser** (SWI-Prolog compiled
+The Python `xword` companion views, converts, renders, describes, and
+semantically compares native/ipuz/Exolve layouts; see
+[`docs/xword-spec.md`](docs/xword-spec.md). The same engine also runs
+**client-side in the browser** (SWI-Prolog compiled
 to WASM, in a Web Worker) behind a typed JS SDK — `arrange`, `lint`, and
 `export` today, value-locked against the CLI's output. See
 [`wasm/README.md`](wasm/README.md). The measured plan to reduce its browser
@@ -553,7 +556,17 @@ The Python conversion companion under `xword/` has its own suite, not run by
 
     $ make test-xword
 
-and `make xword-parity` byte-diffs the engine's ipuz/exolve exports against
+Its read-only analysis verbs accept every supported format:
+
+    $ cd xword
+    $ uv run xword stats --json ../layout.json
+    $ uv run xword diff ../layout.json ../puzzle.ipuz
+
+`diff` exits 0 when semantically equal, 1 after reporting differences, and 2 on
+an operational input/read/parse/write failure. `stats` is descriptive only;
+engine quality policy stays in `crosswordsmith lint`.
+
+`make xword-parity` byte-diffs the engine's ipuz/exolve exports against
 xword's over one layout (best-effort parity — see `docs/xword-spec.md` §14).
 
 The permanent measurement tooling covers strict arrange, greedy arrange, fill,

@@ -1,7 +1,7 @@
 [project]
 name = "xword"
 version = "0.1.0"
-description = "Terminal viewer & format multitool for crossword layouts"
+description = "Viewer, format, rendering, and analysis multitool for crossword layouts"
 requires-python = ">=3.11"
 dependencies = ["cyclopts>=4.20", "rich>=13"]
 

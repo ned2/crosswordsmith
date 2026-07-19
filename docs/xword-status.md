@@ -115,11 +115,22 @@ cairosvg, so the base suite still runs without the extra).
 
 ---
 
-## Later phases (spec §13) — deferred
+## Phase 3A — deterministic analysis (spec §§6.4-6.5) — **done (2026-07-19)**
+
+| # | Component | Spec | Status | Verified by |
+|---|---|---|---|---|
+| 1 | **`stats`** — descriptive blocked-layout metrics; fixed human report + canonical JSON | §6.4, D10-D11 | done | `tests/test_stats.py` |
+| 2 | **`diff`** — two-input normalised structural comparison; human/JSON; result exits 0/1/2 | §6.5, D10/D12 | done | `tests/test_diff.py` |
+| 3 | **CLI conventions** — independent format overrides, one `-` stdin operand, output-before-exit-1 | §8 | done | subprocess cases in both analysis test files |
+
+Implementation plan: [`plans/xword-analysis-verbs.md`](plans/xword-analysis-verbs.md).
+
+---
+
+## Later work / decisions (spec §§13-14)
 
 | Phase | Deliverable | Status |
 |---|---|---|
-| — | ★ **`stats`/`inspect` + `diff` verbs** over the native-JSON hub (read-only, deterministic metrics + cross-format structural diff) | **backlog — needs spec + plan** (2026 research-derived; the differentiated "double down on breadth" first cut — see [`plans/xword-breadth-expansion.md`](plans/xword-breadth-expansion.md)) |
 | — | Print/PDF rendering breadth; `.puz` *read* via a puzpy extra; `.xd` interchange | backlog — needs spec + plan (rendering + the two format gaps that matter; same plan) |
 | 4 | Interactive **Textual** renderer over the same `Board` (S2 confirmed the seam) | deferred |
 | — | **Native-model uplift** (D9) — additive-optional, lossless-only: `title`/`author` **landed** (P1 engine + P2 xword, 2026-07-07); closed-subset cell styling (P3) + `'`/`.` enumeration separators (P4) are the next riders, each with its own go/no-go | in progress (title/author done) |
@@ -173,7 +184,10 @@ cairosvg, so the base suite still runs without the extra).
   byte-for-byte; ipuz probed to 7/697 lines off (SWI's type-dependent
   colon-spacing). **No byte-compatibility claim made either way** — structural
   parity is the guarantee; not chased absent a consuming workflow (§14).
-- **Phase 4 (Textual TUI) is next**; Phase 4 + later: deferred, not yet started.
+- **Phase 3A (`stats` + `diff`) is done (2026-07-19)** under D10-D12 and
+  [`plans/xword-analysis-verbs.md`](plans/xword-analysis-verbs.md): fixed human
+  reports + canonical JSON, cross-format normalisation, and diff-style 0/1/2
+  exits. Full suite: **155 passed, 3 optional raster skips**.
 - **Nothing blocked; the native-model uplift is the one thing in progress**
   (title/author done, styling/enum riders pending). §14 open questions resolved
   so far: Q1 (grid geometry), Q2 (HTML styling), Q3 (SVG glyphs), Q4 (rectangular

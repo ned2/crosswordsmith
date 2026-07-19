@@ -1,9 +1,13 @@
 # xword breadth expansion — proposal
 
-**Status:** proposal, 2026-07-15. Companion to
+**Status:** proposal, 2026-07-15. The `stats` + `diff` first cut was promoted to
+xword-spec D10-D12 and
+[`xword-analysis-verbs.md`](xword-analysis-verbs.md) on 2026-07-19; the remaining
+rendering and format breadth stays proposed. Companion to
 [`docs/research/setter-tool-landscape-2026.md`](../research/setter-tool-landscape-2026.md)
 §B/§F. Grounded in the current `xword/src/xword/` source and
-[`docs/xword-spec.md`](../xword-spec.md). Nothing here is built yet.
+[`docs/xword-spec.md`](../xword-spec.md). This document is the pre-promotion
+roadmap; item status below records what subsequently moved into delivery.
 
 ## The strategic frame (from the landscape research)
 
@@ -24,8 +28,9 @@ never hand-roll a CRC-16 `.puz` writer.
 
 ## What xword already does (so we don't re-propose it)
 
-Three verbs (`cli.py`): `view` (terminal), `convert` (native/ipuz/Exolve any→any,
-D7 fidelity policy), `render` (svg/html/png/pdf off one master SVG). Reads
+Five verbs (`cli.py`): `view` (terminal), `convert` (native/ipuz/Exolve any→any,
+D7 fidelity policy), `render` (svg/html/png/pdf off one master SVG), `stats`
+(descriptive analysis), and `diff` (semantic comparison). Reads
 native/ipuz/Exolve with auto-detection (`detect.py`; binary-magic branch reserved
 but inert). Already covered: clue-list-alongside-grid, solution-vs-blank
 (`--blank`), stdin→stdout piping, `NO_COLOR`/TTY guards, `--out`-on-success,
@@ -35,10 +40,11 @@ metadata round-trip fidelity. **Do not** re-file these as gaps.
 
 Tagged effort × leverage × identity-fit.
 
-1. **`stats` / `inspect` verb** — parse any supported format → deterministic
+1. **`stats` verb** — **built 2026-07-19 (D10-D11).** Parse
+   any supported bar-free format → deterministic
    descriptive metrics (dimensions, block/word counts, checked/unchecked cells,
-   length histogram, enumeration distribution, symmetry, connectivity, solved vs
-   blank). Human table default; `--json` for machines.
+   length histogram, enumeration distribution, symmetry, connectivity, and
+   blank/partial/solved state). Fixed-order human text by default; `--json` for machines.
    *Effort low · leverage high · fit strong.* Reuses `Board`/`derive_words`;
    read-only; amplifies the native-hub differentiator; extends inspection to
    ipuz/Exolve the **engine** can't ingest. Keep it *descriptive* metrics only —
@@ -66,7 +72,8 @@ Tagged effort × leverage × identity-fit.
    convert/render` a natural pipeline. **Prior art to study, not reinvent:**
    Crossword Nexus's `pypuz`/`jscrossword` already parse this format graph.
 
-4. **`diff` verb** — parse two layouts (any formats) → structural diff (grid
+4. **`diff` verb** — **built 2026-07-19 (D10/D12).** Parse
+   two layouts (any formats) → structural diff (grid
    shape, blocks, per-cell letters, numbering, clues, enumerations); human default,
    `--json`, exit non-zero on difference. *Effort medium · leverage medium · fit
    strong.* No surveyed tool offers cross-format semantic diff; serves the
@@ -102,7 +109,7 @@ Tagged effort × leverage × identity-fit.
 
 ## Recommended first cut
 
-`stats`/`inspect` + `diff` (both cheap, deterministic, read-only, hub-amplifying)
-and **print/PDF rendering breadth** — then `.puz` read via a puzpy extra and
+`stats` + `diff` are built. The next proposed cut is
+**print/PDF rendering breadth**, then `.puz` read via a puzpy extra and
 `.xd` I/O for the two format gaps that actually matter. Explicitly *not*
 competing on convert coverage or byte-parity.

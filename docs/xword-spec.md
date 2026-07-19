@@ -1,6 +1,6 @@
 # Spec: `xword` — a terminal viewer & format multitool for crossword layouts
 
-Status: **building** — Phases 0–3 done, see [`xword-status.md`](xword-status.md).
+Status: **building** — Phases 0–3A done, see [`xword-status.md`](xword-status.md).
 This file is the single source of truth; it absorbed the original standalone
 decision record (2026-07-03).
 
@@ -47,7 +47,9 @@ preview "how this looks in print," convert a layout to whatever a downstream
 tool eats, and produce a shareable image — none of which belongs inside a
 deterministic Prolog engine whose job is to *feed* tools, not *be* one.
 
-`xword` is that tool: pipe a layout in, and view it, convert it, or render it.
+`xword` is that tool: pipe a layout in, and view it, convert it, render it,
+inspect its descriptive structure, or compare it semantically with another
+layout.
 
 ## 2. Goals
 
@@ -63,6 +65,10 @@ deterministic Prolog engine whose job is to *feed* tools, not *be* one.
   parser, a new data format one serializer, a new visual target one renderer.
 - **G6.** Open a clean path to an **interactive Textual TUI** as a later
   renderer over the *same* model — no second parse/layout path.
+- **G7.** Report deterministic, descriptive **statistics** over any supported
+  blocked-layout input without duplicating the engine's lint or quality policy.
+- **G8.** Compare two supported inputs by normalised puzzle **semantics**, not
+  source bytes, so format conversions can be checked directly.
 
 ## 3. Non-goals
 
@@ -72,16 +78,20 @@ deterministic Prolog engine whose job is to *feed* tools, not *be* one.
 - Adds **no** dependency to the Prolog core.
 - v1 does not read/write binary/print formats directly (`.puz`, `.jpz`, PDF as
   *input*); those stay a later parser or an offload to kotwords (§9).
+- Does not assign quality scores, lint verdicts, or dictionary-based fill
+  scores. `stats` is descriptive; policy remains in the engine.
 
 ## 4. Decisions taken
 
-- **D1. Three verbs: `view`, `convert`, `render`.** Deliberately avoids the
+- **D1. Five verbs: `view`, `convert`, `render`, `stats`, `diff`.** Deliberately avoids the
   engine's `export` (which means *data* export). `view` presents to the
-  terminal; `render` presents to a visual file; `convert` is data interchange.
+  terminal; `render` presents to a visual file; `convert` is data interchange;
+  `stats` describes one normalised board; `diff` compares two.
   `view` and `render` are the **same operation, different backend** (§5.2).
 - **D2. One `Board` model is the spine.** Every command is
-  `parse → Board → {serialize | present}`. Data plane = `convert`; presentation
-  plane = `view`/`render`/(future Textual). See §5.
+  `parse → Board → {serialize | present | analyse}`. Data plane = `convert`;
+  presentation plane = `view`/`render`/(future Textual); analysis plane =
+  `stats`/`diff`. See §5.
 - **D3. `view` defaults to the *solved* grid**, with `--blank` for the empty
   reader's view. (A setter most often wants to see the fill; the blank preview
   is a toggle, not the default.)
@@ -114,7 +124,7 @@ deterministic Prolog engine whose job is to *feed* tools, not *be* one.
   (crop/flatten with warnings) is **rejected** — it would produce a different
   or invalid puzzle.
 - **D8. CLI built with [`cyclopts`](https://github.com/BrianPugh/cyclopts).**
-  Python-native subcommand dispatch for `view`/`convert`/`render` with typed
+  Python-native subcommand dispatch for all five verbs with typed
   params, enum `--from`/`--to`, and per-verb help. Its idioms and the resulting
   app skeleton (package layout, `xword` console entry point, stdin-as-default,
   exit codes) are pinned down by spike **S1** before Phase 1 (§13,
@@ -135,20 +145,48 @@ deterministic Prolog engine whose job is to *feed* tools, not *be* one.
   and flattening either yields a *different* or *invalid* puzzle (ipuz is the
   rectangular/rebus carrier). **Bars** stay **gated** on
   [`cryptic-layout-spec.md`](cryptic-layout-spec.md) landing.
+- **D10. The analysis surface is exactly `stats` + `diff` (2026-07-19).**
+  There is no `inspect` alias: `stats` accurately names a fixed descriptive
+  report, while `inspect` suggests validation or arbitrary payload display.
+  Both commands are read-only compositions over normalised `Board` values and
+  never call engine quality policy.
+- **D11. `stats` is descriptive, deterministic, and blocked-layout-only
+  (2026-07-19).** It reports dimensions, block/light/fill/checking counts,
+  entry and enumeration histograms, four-neighbour light-cell connectivity,
+  and 180-degree block-pattern symmetry. Word lengths are cell counts, so a
+  rebus occupies one cell. Checked, unchecked, and orphan mean membership in
+  two, one, or zero derived entries. A board carrying bars fails clearly:
+  current entry derivation is block-delimited, and silently reporting barred
+  entry metrics would be false. Bar-aware derivation is separate future scope.
+- **D12. `diff` compares normalised puzzle structure (2026-07-19).** It
+  compares dimensions; block/light topology; letters (including rebus tokens),
+  numbering, circles, bars, prefilled state, and residual cell style; entry
+  geometry, clue, and effective enumeration; and title/author. Entries match by
+  direction + cells, not list position. Missing and empty clues are equivalent,
+  and an absent enumeration means the entry's cell-count enumeration. It
+  excludes display `answer`, arbitrary word `meta`, top-level `diagnostics`,
+  source formatting/order, and advisory source numbering. Exit 0 means equal,
+  1 means differences found, and 2 means an operational failure (input,
+  read/decode, parse, or output write).
 
 ## 5. Architecture
 
 ```
                           ┌── serialize → native / ipuz / exolve   →  convert   (data plane)
-  any input ── parse ───► │ Board │
-  native/ipuz/exolve      └── present ──► terminal (Rich)          →  view      (presentation
+  any input ── parse ───► │ Board │── analyse ────────────────────→  stats     (analysis plane)
+  native/ipuz/exolve      │       │
+                          └── present ──► terminal (Rich)          →  view      (presentation
                                      ├──► svg / html / png / pdf   →  render     plane)
                                      └──► interactive (Textual)    →  (future)
+
+  any input ── parse ───► Board ─┐
+                                  ├── semantic comparison ────────→  diff      (analysis plane)
+  any input ── parse ───► Board ─┘
 ```
 
 ### 5.1 The `Board` model
 
-One normalised structure both planes consume. It is the *union superset* of
+One normalised structure all three planes consume. It is the *union superset* of
 what the supported formats carry, tolerant of missing pieces (a stock-grid
 template has blocks and numbers but no letters or clues).
 
@@ -206,10 +244,14 @@ via `exolve-option: rebus-cells`), so grid rows must be **tokenised**
   the same renderable over the identical `BoardGeom`, so the seam (S7) is only
   interactivity (cursor/highlight = restyling cells in the same geometry) —
   validated low-risk, no separate spike needed.
+- **Analysis plane** — pure `Board → report` (`stats`) and
+  `Board × Board → report` (`diff`) operations. Human output has a fixed plain
+  text order; machine output uses the same canonical JSON helper as the data
+  plane. No terminal width, colour, clock, or source filename enters a report.
 
 ## 6. Commands
 
-Common CLI conventions (§8) apply to all three.
+Common CLI conventions (§8) apply to all five.
 
 ### 6.1 `view` — see it in the terminal
 
@@ -300,6 +342,55 @@ Common CLI conventions (§8) apply to all three.
 - **Binary-to-TTY guard**: `png`/`pdf` refuse to write to a terminal — require
   `--out` or a redirect.
 
+### 6.4 `stats` — descriptive structure
+
+    xword stats layout.json
+    xword stats --from ipuz --json puzzle.ipuz
+
+- Reads one positional file or stdin; `--from` overrides detection. Human
+  fixed-order plain text is the default; `--json` emits sorted, indented UTF-8
+  JSON with one final newline; `--out` follows §8.
+- The JSON object is:
+
+      {
+        "blocks": N,
+        "cells": {"checked": N, "filled": N, "light": N,
+                  "orphan": N, "unchecked": N, "unfilled": N},
+        "connectivity": {"components": N, "connected": true|false},
+        "dimensions": {"height": N, "width": N},
+        "fillState": "blank"|"partial"|"solved",
+        "symmetry": {"deficit": N, "rot180": true|false},
+        "words": {"across": N, "down": N,
+                  "enumerations": [{"count": N, "enumeration": "(N)"}, ...],
+                  "lengths": [{"count": N, "length": N}, ...],
+                  "total": N}
+      }
+
+- Connectivity counts four-neighbour components over all light cells; zero or
+  one component is connected. `fillState` is `blank` when no light is filled,
+  `solved` when every light is filled (and at least one exists), otherwise
+  `partial`. Symmetry deficit counts light cells whose 180-degree partner is a
+  block. Histograms sort lengths numerically and enumerations lexically.
+- A cell with two/one/zero derived entry memberships is checked/unchecked/orphan.
+  The categories are disjoint and sum to light cells. Bars are rejected per D11.
+
+### 6.5 `diff` — semantic comparison
+
+    xword diff layout.json puzzle.ipuz
+    producer | xword diff --from-left native - expected.exolve --json
+
+- Takes two required operands. Each is independently detected or overridden by
+  `--from-left` / `--from-right`; at most one operand may be `-` for stdin.
+- Compares the D12 structural projection, not bytes. The human report is a
+  summary followed by one stable-order `path: left -> right` line per difference.
+  `--json` emits `{"differences":[{"left":...,"path":"...","right":...}],
+  "equal":bool}` through canonical JSON. A missing entry is represented as
+  JSON `null`; entry values are objects, so this is unambiguous.
+- Difference order is dimensions, row-major cells in fixed field order,
+  row-major entries (across before down), then title/author. A difference report
+  is valid output: it is written to stdout/`--out` before exit 1. Operational
+  failure exits 2; read/parse failures occur before `--out` is opened.
+
 ## 7. Format detection
 
 An explicit ladder; `--from` always overrides.
@@ -315,8 +406,13 @@ An explicit ladder; `--from` always overrides.
 ## 8. CLI conventions (all verbs)
 
 - **stdin → stdout** by default; a positional file overrides stdin; `--out
-  FILE` overrides stdout (written only on success — a failed run leaves no
-  partial file, matching the engine).
+  FILE` overrides stdout. Parsing and processing complete before writing starts,
+  so those failures leave the destination untouched; output writes themselves
+  are not transactional and a write failure is reported non-zero. `diff` exit 1
+  is a successful comparison result, so its completed difference report is
+  written before that result exit.
+- `diff` is the two-input exception: it requires two operands, allows one `-`
+  operand to consume stdin, and rejects two `-` operands.
 - **`--from FMT`** overrides detection; **`--to FMT`** selects the target where
   applicable.
 - **TTY / `NO_COLOR`** honoured for `view`; colour off when piped.
@@ -483,6 +579,15 @@ the guaranteed contract is *structural* agreement (§11, §14).
   (S6), so raster bytes are deterministic per-machine but not guaranteed
   cross-machine. A future cross-machine byte-golden would need text-as-`<path>`
   or a bundled/pinned font (§14).
+- **`stats`** — exact metric units cover blank/partial/solved, rebus cell counts,
+  checked/unchecked/orphan partitioning, connectivity, symmetry deficit, and
+  stable histograms. Equivalent native/ipuz/Exolve blocked boards produce the
+  same report; barred boards fail clearly. Human and canonical-JSON output are
+  deterministic.
+- **`diff`** — equivalent cross-format boards compare equal despite byte/order,
+  display-answer, arbitrary metadata, and diagnostics differences. Every D12
+  structural field has a focused difference case; ordering and the 0/1/2 result
+  exits are pinned, including report-before-exit-1 and no output on parse error.
 - Fixtures reuse the engine's (`bundled_17`, a stock-grid mask, an ipuz and an
   Exolve sample). `pytest`.
 
@@ -510,7 +615,7 @@ the guaranteed contract is *structural* agreement (§11, §14).
   editable dev, `uv run xword …`, `uvx --from . xword …` for ephemeral,
   `uv tool install .` / `pipx install .` for a PATH command — all confirmed in
   S1). (The decision-record's single-file PEP 723 idea suits an initial spike
-  only; a three-verb tool with parsers/renderers ships as a package.)
+  only; a five-verb tool with parsers/renderers/analysis ships as a package.)
 
 ## 13. Phasing
 
@@ -520,12 +625,13 @@ the guaranteed contract is *structural* agreement (§11, §14).
 | **1 (MVP)** | `Board` + parsers (native/ipuz/Exolve) + `view` (solved default, `--blank`), grid + clue lists, `--from`, detection, Unix conventions. |
 | **2** | `convert` any→any (D7): structural failures block; metadata drops warn on stderr (`-q`); structural engine cross-check. |
 | **3** | `render` to SVG + HTML; PNG/PDF behind `xword[raster]`. |
+| **3A** | Deterministic analysis: descriptive `stats` + cross-format semantic `diff`. |
 | **4** | Interactive **Textual** renderer over the same `Board`. |
 | **later** | **Native-model uplift** (D9) — additive-optional riders (cell styling P3, enumeration separators P4) after title/author (P1+P2). Best-effort *structural* conversion is **rejected** (D9). Engine byte-parity is best-effort (§14), not a phase deliverable. |
 
 A `STATUS`-style tracker — [`xword-status.md`](xword-status.md) — is the system
-of record for build progress (Phase 0 done; Phase 1 staged). This spec's phasing
-is the plan; the tracker says where we are.
+of record for build progress (Phases 0-3A done as of 2026-07-19). This spec's
+phasing is the plan; the tracker says where we are.
 
 ## 14. Open questions
 

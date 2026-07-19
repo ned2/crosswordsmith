@@ -66,13 +66,24 @@ def parse(text: str) -> Board:
         grid.append(cells)
     validate_grid(grid)
 
+    source_words = obj["words"]
+    if not isinstance(source_words, list):
+        raise XwordError("native: words must be an array")
     words = derive_words(grid)
     by_start = {(w.direction, w.cells[0]): w for w in words}
-    for entry in obj["words"]:
+    for entry in source_words:
         if not isinstance(entry, dict):
             raise XwordError(f"native: bad words[] entry: {entry!r}")
         direction = entry.get("direction")
-        src_cells = [tuple(cell) for cell in entry.get("cells", [])]
+        raw_cells = entry.get("cells", [])
+        if not isinstance(raw_cells, list) or any(
+            not isinstance(cell, list)
+            or len(cell) != 2
+            or not all(isinstance(value, int) for value in cell)
+            for cell in raw_cells
+        ):
+            raise XwordError(f"native: bad words[] entry: {entry!r}")
+        src_cells = [tuple(cell) for cell in raw_cells]
         if not src_cells or direction not in ("across", "down"):
             raise XwordError(f"native: bad words[] entry: {entry!r}")
         word = by_start.get((direction, src_cells[0]))

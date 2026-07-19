@@ -96,6 +96,22 @@ def parse(text: str) -> Board:
         grid.append(cells)
     validate_grid(grid)
 
+    # Canonicalise left/top bar spellings onto the neighbouring cell's
+    # right/below edge. Board stores each interior edge exactly once; ipuz
+    # permits naming that edge from either adjacent cell.
+    for r, row in enumerate(grid):
+        for c, cell in enumerate(row):
+            if cell is None or not cell.style:
+                continue
+            barred = cell.style.get("barred")
+            if not isinstance(barred, str):
+                continue
+            barred = barred.upper()
+            if "L" in barred and c > 0 and grid[r][c - 1] is not None:
+                grid[r][c - 1].bar_right = True
+            if "T" in barred and r > 0 and grid[r - 1][c] is not None:
+                grid[r - 1][c].bar_below = True
+
     if solution is not None:
         for r, row in enumerate(solution):
             if not isinstance(row, list) or len(row) != width:

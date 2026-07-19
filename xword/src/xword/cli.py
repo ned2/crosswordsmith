@@ -19,17 +19,19 @@ from rich.console import Console
 
 from . import XwordError, __version__
 from .convert import convert_text
+from .diff import diff_texts
 from .formats import parse_board
 from .render import raster
 from .render.geometry import board_geometry
 from .render.html import html_document
 from .render.svg import master_svg
 from .render.terminal import print_view
+from .stats import stats_text
 from .util import capture_console, make_view_console
 
 app = App(
     name="xword",
-    help="Terminal viewer & format multitool for crossword layouts.",
+    help="Viewer, format, rendering, and analysis multitool for crossword layouts.",
     version=__version__,
 )
 _stderr = Console(stderr=True)
@@ -58,18 +60,53 @@ def _bare() -> None:
 
 def _read_input(file: Optional[Path]) -> str:
     if file is not None:
-        return file.read_text(encoding="utf-8")
+        try:
+            return file.read_text(encoding="utf-8")
+        except (OSError, UnicodeError) as e:
+            detail = e.strerror if isinstance(e, OSError) else str(e)
+            raise XwordError(f"cannot read {str(file)!r}: {detail or e}") from e
     if sys.stdin.isatty():
         raise XwordError("no input: pass a FILE argument or pipe a layout to stdin")
-    return sys.stdin.read()
+    return _read_stdin()
+
+
+def _read_stdin(*, prefix: str = "") -> str:
+    try:
+        return sys.stdin.read()
+    except (OSError, UnicodeError) as e:
+        detail = e.strerror if isinstance(e, OSError) else str(e)
+        raise XwordError(f"{prefix}cannot read stdin: {detail or e}") from e
 
 
 def _write_text(text: str, out: Optional[Path]) -> None:
     """Write a text artefact to --out (built fully first, so only on success) or stdout."""
-    if out is not None:
-        out.write_text(text, encoding="utf-8")
-    else:
-        sys.stdout.write(text)
+    try:
+        if out is not None:
+            out.write_text(text, encoding="utf-8")
+        else:
+            sys.stdout.write(text)
+    except (OSError, UnicodeError) as e:
+        detail = e.strerror if isinstance(e, OSError) else str(e)
+        target = str(out) if out is not None else "stdout"
+        raise XwordError(f"cannot write {target!r}: {detail or e}") from e
+
+
+def _read_diff_inputs(left: str, right: str) -> tuple[str, str]:
+    if left == "-" and right == "-":
+        raise XwordError("diff: only one operand may be '-' (stdin)")
+
+    def read(operand: str) -> str:
+        if operand == "-":
+            if sys.stdin.isatty():
+                raise XwordError("diff: stdin operand '-' has no piped input")
+            return _read_stdin(prefix="diff: ")
+        try:
+            return Path(operand).read_text(encoding="utf-8")
+        except (OSError, UnicodeError) as e:
+            detail = e.strerror if isinstance(e, OSError) else str(e)
+            raise XwordError(f"diff: cannot read {operand!r}: {detail or e}") from e
+
+    return read(left), read(right)
 
 
 @app.command
@@ -166,6 +203,67 @@ def render(
             out.write_bytes(data)
         else:
             sys.stdout.buffer.write(data)
+
+
+@app.command
+def stats(
+    file: Annotated[
+        Optional[ExistingFile], Parameter(help="Layout file; omit to read stdin.")
+    ] = None,
+    *,
+    from_: Annotated[
+        Optional[DataFormat], Parameter(help="Input format; overrides detection.")
+    ] = None,
+    json_: Annotated[
+        bool, Parameter(name="--json", help="Emit deterministic JSON.")
+    ] = False,
+    out: Annotated[
+        Optional[Path], Parameter(name=("--out", "-o"), help="Write to FILE instead of stdout.")
+    ] = None,
+) -> None:
+    """Report deterministic descriptive layout statistics."""
+    text = _read_input(file)
+    _write_text(stats_text(text, from_.value if from_ else None, json_output=json_), out)
+
+
+@app.command
+def diff(
+    left: Annotated[
+        str, Parameter(help="First layout file, or '-' for stdin.", allow_leading_hyphen=True)
+    ],
+    right: Annotated[
+        str, Parameter(help="Second layout file, or '-' for stdin.", allow_leading_hyphen=True)
+    ],
+    *,
+    from_left: Annotated[
+        Optional[DataFormat], Parameter(name="--from-left", help="First input format override.")
+    ] = None,
+    from_right: Annotated[
+        Optional[DataFormat], Parameter(name="--from-right", help="Second input format override.")
+    ] = None,
+    json_: Annotated[
+        bool, Parameter(name="--json", help="Emit deterministic JSON.")
+    ] = False,
+    out: Annotated[
+        Optional[Path], Parameter(name=("--out", "-o"), help="Write to FILE instead of stdout.")
+    ] = None,
+) -> None:
+    """Compare two layouts by normalised puzzle semantics."""
+    try:
+        left_text, right_text = _read_diff_inputs(left, right)
+        result, different = diff_texts(
+            left_text,
+            right_text,
+            from_left.value if from_left else None,
+            from_right.value if from_right else None,
+            json_output=json_,
+        )
+        _write_text(result, out)
+    except XwordError as e:
+        print(f"xword: error: {e}", file=sys.stderr)
+        raise SystemExit(2) from None
+    if different:
+        raise SystemExit(1)
 
 
 def main() -> None:
