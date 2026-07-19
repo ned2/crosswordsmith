@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Layout-quality analyzer (idea: cryptic-layout-spec.md, phase v1a).
 
-Reads a solved-crossword JSON object (the output of crossword.pl) on stdin and
+Reads canonical layout JSON (the output of `crosswordsmith arrange`) on stdin and
 prints layout-quality metrics as a JSON object on stdout. Measures how far a
 layout sits from the cryptic-lattice ideal (~0.5 checked) and how renderable it
 is (bounding box / aspect). No solver involved — pure post-processing.
@@ -9,7 +9,7 @@ is (bounding box / aspect). No solver involved — pure post-processing.
 A cell is CHECKED iff it carries both an across and a down clue number; UNCH
 (for a word) iff it is in that word only.
 
-Usage:  crossword.pl --input ... GRID START | analyze_layout.py
+Usage:  ./crosswordsmith arrange --size N --input FILE | python3 benchmarks/analyze_layout.py
 """
 import json
 import sys

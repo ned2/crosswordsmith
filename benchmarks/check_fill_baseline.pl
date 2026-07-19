@@ -10,8 +10,8 @@
 %
 %   search_inf - the fill_attempt/8 search-inference count. GATED: a rise past
 %                regression_tolerance_pct (relative, default 0.5%) FAILS the
-%                check (exit 1); a drop past it is a WIN. Deterministic and
-%                machine-independent (same count native or under WASM).
+%                check (exit 1); a drop past it is a WIN when compared under the
+%                baseline's SWI-Prolog version.
 %   load_inf   - the load_dict/3 dictionary-load inference count. GATED since
 %                the F-L1 acceptance (2026-07-05, baseline recorded at 16452de):
 %                Phase 3 took the scheduled promotion decision - load is the
@@ -22,11 +22,13 @@
 %                regressing fails the check independently.
 %
 % wall/rss are printed as informational deltas and never fail the check. If the
-% running SWI-Prolog differs from the baseline's, a search_inf regression is
-% downgraded to a WARN (the version, not the code, moved the count).
+% running SWI-Prolog differs from the baseline's, all inference deltas are
+% informational and promotion is refused.
 %
 % Modes:
 %   swipl -q benchmarks/check_fill_baseline.pl            % CHECK: diff + PASS/FAIL (exit 0/1)
+%   swipl -q benchmarks/check_fill_baseline.pl --exact    % EXACT: same-SWI equality over the
+%                                                         %   complete core + heavy ladder
 %   swipl -q benchmarks/check_fill_baseline.pl --record   % RECORD: ratchet fill_baseline.json,
 %                                                         %   append to fill_history.jsonl
 %   swipl -q benchmarks/check_fill_baseline.pl --log      % LOG: diff + append to history,
@@ -48,60 +50,88 @@
 % FILE BACK and verify every rung is present (the tool's own success message is
 % not evidence; the state is).
 
+:- module(check_fill_baseline, []).
+
 :- set_prolog_flag(verbose, silent).
-:- use_module(library(lists)).
-:- use_module(library(apply)).
-:- use_module(library(process)).
-:- use_module(library(readutil)).
-:- use_module(library(json)).
-
-% directory_file_path/3 is autoload-only (library(filesex)); explicit so this
-% root also runs under autoload(false) (P11/C5, matching load.pl).
-:- use_module(library(filesex), [directory_file_path/3]).
-
-:- dynamic bench_dir/1.
-:- prolog_load_context(directory, D), asserta(bench_dir(D)).
+:- use_module(library(apply), [foldl/4]).
+:- use_module(library(json), [atom_json_dict/3]).
+:- use_module(library(lists), [append/3, member/2, memberchk/2]).
+:- use_module(library(pairs), [pairs_keys/2]).
+:- use_module('bench_process.pl', [capture_process/6]).
+:- use_module('bench_cli.pl',
+              [ checker_mode/3,
+                exact_runner_args/2,
+                require_persistence_args/1,
+                require_unique_ids/2
+              ]).
+:- use_module('bench_exact.pl',
+              [ exact_version/4,
+                 require_same_version/2,
+                 require_complete_migration/4,
+                 require_protocol_value/4,
+                 exact_metric/4,
+                exact_presence/5
+              ]).
+:- use_module('bench_paths.pl', [benchmark_path/2]).
+:- use_module('bench_store.pl',
+              [ read_json_dict/2,
+                build_recorded_baseline/5,
+                replace_json_dict/4,
+                append_history/4,
+                read_history/2,
+                render_history/3,
+                current_host/1
+              ]).
 
 :- initialization(main, main).
 
 main :-
     current_prolog_flag(argv, Argv0),
-    ( select('--history', Argv0, _)      -> Mode = history, Extra = []
-    ; select('--log', Argv0, Extra)      -> Mode = log
-    ; select('--record', Argv0, Extra)   -> Mode = record
-    ; select('--promote', Argv0, Extra)  -> Mode = promote
-    ;                                       Mode = check, Extra = Argv0 ),
-    bench_dir(BenchDir),
-    ( Mode == history -> show_history(BenchDir), halt(0) ; true ),
-    directory_file_path(BenchDir, 'fill_baseline.json', BaselinePath),
+    catch(checker_mode(Argv0, Mode, Extra),
+          E, (print_message(error, E), halt(2))),
+    ( Mode == history -> show_history, halt(0) ; true ),
+    benchmark_path('fill_baseline.json', BaselinePath),
     load_baseline(BaselinePath, Baseline),
     run_note(Extra, Note),
     ( Mode == record
     ->  format("crosswordsmith fill - RECORD baseline~s~n~n", [Note]),
-        run_product_bench(BenchDir, Extra, Doc),
+        require_persistence_args(Extra),
+        run_product_bench(Extra, Doc),
+        require_record_version(Baseline, Doc),
         do_record(BaselinePath, Baseline, Doc),
-        append_history(BenchDir, Doc, Extra),
+        append_history(Doc, Extra),
         halt(0)
     ; Mode == log
     ->  format("crosswordsmith fill - LOG run to history~s~n~n", [Note]),
-        run_product_bench(BenchDir, Extra, Doc),
+        require_persistence_args(Extra),
+        run_product_bench(Extra, Doc),
         do_check(Baseline, Doc, _Fails, _Wins),
-        append_history(BenchDir, Doc, Extra),
+        append_history(Doc, Extra),
         halt(0)
     ; Mode == promote
     ->  format("crosswordsmith fill - PROMOTE (check, then ratchet this run)~s~n~n", [Note]),
-        run_product_bench(BenchDir, Extra, Doc),
+        require_persistence_args(Extra),
+        run_product_bench(Extra, Doc),
+        require_promotion_version(Baseline, Doc),
         do_check(Baseline, Doc, Fails, Wins),
         report_result(Fails, Wins),
         ( Fails =:= 0
         ->  format("~npromote: clean run - recording it as the new baseline~n~n"),
             do_record(BaselinePath, Baseline, Doc),
-            append_history(BenchDir, Doc, Extra),
+            append_history(Doc, Extra),
             halt(0)
         ;   format("~npromote: regressions present - baseline NOT recorded~n"),
             halt(1) )
+    ; Mode == exact
+    ->  catch(exact_runner_args(Extra, ExactArgs),
+              E, (print_message(error, E), halt(2))),
+        format("crosswordsmith fill - exact inference check (+heavy tail)~n~n"),
+        run_product_bench(ExactArgs, Doc),
+        do_exact_check(Baseline, Doc, Fails),
+        report_exact_result(Fails),
+        ( Fails =:= 0 -> halt(0) ; halt(1) )
     ;   format("crosswordsmith fill - performance ratchet~s~n~n", [Note]),
-        run_product_bench(BenchDir, Extra, Doc),
+        run_product_bench(Extra, Doc),
         do_check(Baseline, Doc, Fails, Wins),
         report_result(Fails, Wins),
         ( Fails =:= 0 -> halt(0) ; halt(1) ) ).
@@ -113,26 +143,21 @@ run_note(_, "").
 
 load_baseline(Path, Baseline) :-
     ( exists_file(Path) -> true ; throw(error(fill_baseline_missing(Path), _)) ),
-    setup_call_cleanup(open(Path, read, S),
-                       json_read_dict(S, Baseline, [default_tag(json)]),
-                       close(S)).
+    read_json_dict(Path, Baseline).
 
 % Spawn run_fill.pl, capture its JSON stdout, parse it. Extra args (e.g. --heavy)
 % pass through. stderr flows to ours; we gate on the child exit code.
-run_product_bench(BenchDir, Extra, Doc) :-
-    directory_file_path(BenchDir, 'run_fill.pl', RunFill),
+run_product_bench(Extra, Doc) :-
+    benchmark_path('run_fill.pl', RunFill),
     append(['-q', RunFill, '--', '--format', json], Extra, Args),
-    process_create(path(swipl), Args,
-                   [ stdout(pipe(Out)), stderr(std), process(PID) ]),
-    read_string(Out, _, JsonText),
-    close(Out),
-    process_wait(PID, Status),
+    capture_process(path(swipl), Args, inherit, JsonText, _Stderr, Status),
     ( Status == exit(0) -> true ; throw(error(fill_bench_run_failed(Status), _)) ),
     atom_json_dict(JsonText, Doc, [default_tag(json)]).
 
 % --- CHECK -------------------------------------------------------------------
 
 do_check(Baseline, Doc, Fails, Wins) :-
+    require_record_protocol(Baseline, Doc),
     get_dict(results, Doc, Results),
     get_dict(swi_prolog, Doc, RunSwi),
     baseline_meta(Baseline, BaseHost, BaseSwi, Tol),
@@ -149,6 +174,56 @@ do_check(Baseline, Doc, Fails, Wins) :-
     report_unmeasured(WL, Results),
     info_section(WL, Results, HMatch).
 
+do_exact_check(Baseline, Doc, Fails) :-
+    require_record_protocol(Baseline, Doc),
+    get_dict(swi_prolog, Baseline, BaseSwi),
+    get_dict(swi_prolog, Doc, RunSwi),
+    exact_version(BaseSwi, RunSwi, VersionStatus, VersionFails),
+    format("exact SWI: ~w -> ~w (~w)~n", [BaseSwi, RunSwi, VersionStatus]),
+    get_dict(workloads, Baseline, WL),
+    get_dict(results, Doc, Results),
+    exact_row_presence(WL, Results, Missing, Unexpected, PresenceFails),
+    format("~w~t~18|~w~t~20+~t~w~14+~t~w~14+   ~w~n",
+           ['rung', 'metric', 'baseline', 'measured', 'exact status']),
+    foldl(exact_fill_row(WL), Results, 0, MetricFails),
+    report_exact_presence(Missing, Unexpected),
+    Fails is VersionFails + PresenceFails + MetricFails.
+
+exact_fill_row(WL, Row, F0, F2) :-
+    get_dict(rung, Row, Rung),
+    (   find_baseline(WL, Rung, Spec)
+    ->  exact_fill_metric(Rung, search_inf, Spec.search_inf,
+                          Row.search_inf_med, F0, F1),
+        exact_fill_metric(Rung, load_inf, Spec.load_inf,
+                          Row.load_inf, F1, F2)
+    ;   F2 = F0,
+        format("~w~t~18|~w~t~20+~t~w~14+~t~w~14+   no_reference~n",
+               [Rung, gated_metrics, '(none)', '(n/a)'])
+    ).
+
+exact_fill_metric(Rung, Metric, Base, Measured, F0, F1) :-
+    exact_metric(Base, Measured, Status, MetricFails),
+    F1 is F0 + MetricFails,
+    format("~w~t~18|~w~t~20+~t~D~14+~t~D~14+   ~w~n",
+           [Rung, Metric, Base, Measured, Status]).
+
+exact_row_presence(WL, Results, Missing, Unexpected, Fails) :-
+    dict_pairs(WL, _, Pairs),
+    pairs_keys(Pairs, ReferenceIds),
+    findall(Rung, (member(Row, Results), get_dict(rung, Row, Rung)), MeasuredIds),
+    exact_presence(ReferenceIds, MeasuredIds, Missing, Unexpected, Fails).
+
+report_exact_presence([], []) :- !.
+report_exact_presence(Missing, Unexpected) :-
+    ( Missing == [] -> true ; format("missing exact rows: ~w~n", [Missing]) ),
+    ( Unexpected == [] -> true ; format("rows without reference: ~w~n", [Unexpected]) ).
+
+report_exact_result(0) :-
+    format("~nEXACT RESULT: PASS (all gated inferences identical)~n").
+report_exact_result(Fails) :-
+    Fails > 0,
+    format("~nEXACT RESULT: FAIL (~d exact comparison failure(s))~n", [Fails]).
+
 check_row(WL, Tol, VMatch, Row, F0-W0, F1-W1) :-
     get_dict(rung, Row, Rung),
     get_dict(search_inf_med, Row, Meas),
@@ -164,22 +239,65 @@ check_row(WL, Tol, VMatch, Row, F0-W0, F1-W1) :-
         format("~w~t~18|~t~w~14+~t~D~14+~t~w~11+   ~w~n",
                [Rung, '(none)', Meas, '-', 'NEW (not in baseline)']) ).
 
-% win: dropped past tolerance. ok: within +/-tolerance. regression: rose past it
-% (a hard fail when the SWI version matches; a WARN when it differs).
-classify(Delta, Tol, _, win)  :- Delta =< -Tol, !.
-classify(Delta, Tol, _, ok)   :- Delta =<  Tol, !.
-classify(_, _, true,  regression) :- !.
-classify(_, _, false, regression_warn).
+% Cross-version deltas are informational. On the reference version, a drop past
+% tolerance is a win and a rise is a regression.
+classify(_, _, false, version_warn) :- !.
+classify(Delta, Tol, true, win)  :- Delta =< -Tol, !.
+classify(Delta, Tol, true, ok)   :- Delta =<  Tol, !.
+classify(_, _, true, regression).
 
 kind_counts(win,             0, 1).
 kind_counts(ok,              0, 0).
 kind_counts(regression,      1, 0).
-kind_counts(regression_warn, 0, 0).
+kind_counts(version_warn,    0, 0).
 
 kind_label(win,             'WIN (improvement)').
 kind_label(ok,              'ok').
 kind_label(regression,      'REGRESSION').
-kind_label(regression_warn, 'regress? (swi-ver)').
+kind_label(version_warn,    'WARN (different SWI; informational)').
+
+require_promotion_version(Baseline, Doc) :-
+    get_dict(swi_prolog, Baseline, Reference),
+    get_dict(swi_prolog, Doc, Measured),
+    require_same_version(Reference, Measured).
+
+require_record_version(Baseline, Doc) :-
+    get_dict(swi_prolog, Baseline, ReferenceVersion),
+    get_dict(swi_prolog, Doc, MeasuredVersion),
+    get_dict(workloads, Baseline, Workloads),
+    dict_pairs(Workloads, _, ReferencePairs),
+    pairs_keys(ReferencePairs, ReferenceIds),
+    get_dict(results, Doc, Results),
+    findall(Id, (member(Row, Results), get_dict(rung, Row, Id)), MeasuredIds),
+    require_complete_migration(ReferenceVersion, MeasuredVersion,
+                               ReferenceIds, MeasuredIds),
+    require_record_protocol(Baseline, Doc).
+
+require_record_protocol(Baseline, Doc) :-
+    get_dict(workloads, Baseline, Workloads),
+    get_dict(results, Doc, Results),
+    findall(Rung, (member(Row, Results), get_dict(rung, Row, Rung)), Rungs),
+    require_unique_ids(fill, Rungs),
+    forall(member(Row, Results),
+           require_fill_protocol(Workloads, Row)).
+
+require_fill_protocol(Workloads, Row) :-
+    get_dict(rung, Row, Rung),
+    ( find_baseline(Workloads, Rung, Spec)
+    -> require_protocol_value(Rung, grid_file,
+                              Spec.grid_file, Row.grid_file),
+       require_protocol_value(Rung, dict_file,
+                              Spec.dict_file, Row.dict_file),
+       require_protocol_value(Rung, seeds, Spec.seeds, Row.seeds),
+       require_protocol_value(Rung, grid, Spec.grid, Row.size),
+       require_protocol_value(Rung, words, Spec.words, Row.words),
+       require_protocol_value(Rung, tier, Spec.tier, Row.tier),
+       require_protocol_value(Rung, iterations,
+                              Spec.iterations, Row.iterations),
+       require_protocol_value(Rung, warmup, Spec.warmup, Row.warmup),
+       require_protocol_value(Rung, budget, Spec.budget, Row.budget)
+    ; true
+    ).
 
 % load_inf: GATED since the F-L1 acceptance (Phase 3's scheduled promotion
 % decision) - same classify/tolerance machinery as search_inf, accumulating
@@ -237,45 +355,76 @@ metric_delta(Spec, Row, Key, Str) :-
 % --- RECORD (ratchet the baseline to the measured numbers) -------------------
 
 do_record(BaselinePath, Baseline, Doc) :-
+    build_recorded_baseline(Baseline, Doc, Recorded),
+    replace_json_dict(BaselinePath, Recorded, 90, verify_recorded_doc(Doc)),
     get_dict(results, Doc, Results),
-    get_dict(swi_prolog, Doc, RunSwi),
-    current_host(RunHost),
     get_dict(workloads, Baseline, WL0),
-    dict_pairs(WL0, Tag, Pairs0),
-    maplist(record_pair(Results), Pairs0, Pairs1),
-    new_rung_pairs(WL0, Results, NewPairs),
-    append(Pairs1, NewPairs, Pairs2),
-    dict_pairs(WL1, Tag, Pairs2),
-    B1 = Baseline.put(_{host: RunHost, swi_prolog: RunSwi, workloads: WL1}),
-    setup_call_cleanup(open(BaselinePath, write, S),
-                       json_write_dict(S, B1, [width(90)]),
-                       close(S)),
-    format("baseline updated: ~w~n~n", [BaselinePath]),
+    format("baseline updated and read-back verified: ~w~n~n", [BaselinePath]),
     forall(member(Row, Results), report_recorded(WL0, Row)),
     unmeasured_note(WL0, Results).
 
-record_pair(Results, K-V0, K-V1) :-
-    ( result_for(Results, K, Row)
-    ->  V1 = V0.put(_{ search_inf:      Row.search_inf_med,
-                       load_inf:        Row.load_inf,
-                       grid_inf:        Row.grid_inf,
-                       cmd_wall_med_ms: Row.cmd_wall_med_ms,
-                       cmd_rss_med_kib: Row.cmd_rss_med_kib })
-    ;   V1 = V0 ).
+build_recorded_baseline(Baseline, Doc, Recorded) :-
+    build_recorded_baseline(Baseline, Doc, record_key, record_spec, Recorded).
+
+record_key(Row, Row.rung).
+
+record_spec(Row, existing(Old), Spec) :-
+    Spec = Old.put(_{ search_inf:      Row.search_inf_med,
+                      load_inf:        Row.load_inf,
+                      grid_inf:        Row.grid_inf,
+                      cmd_wall_med_ms: Row.cmd_wall_med_ms,
+                      cmd_rss_med_kib: Row.cmd_rss_med_kib,
+                      grid_file:       Row.grid_file,
+                      dict_file:       Row.dict_file,
+                      seeds:           Row.seeds,
+                      grid:            Row.size,
+                      words:           Row.words,
+                      tier:            Row.tier,
+                      iterations:      Row.iterations,
+                      warmup:          Row.warmup,
+                      budget:          Row.budget }).
+record_spec(Row, new, Spec) :-
+    new_rung_spec(Row, Spec).
+
+verify_recorded_doc(Doc, Written) :-
+    get_dict(results, Doc, Results),
+    verify_recorded_results(Written, Results).
+
+verify_recorded_results(Written, Results) :-
+    get_dict(workloads, Written, Workloads),
+    forall(member(Row, Results), verify_recorded_row(Workloads, Row)).
+
+verify_recorded_row(Workloads, Row) :-
+    get_dict(rung, Row, Rung),
+    (   find_baseline(Workloads, Rung, Spec)
+    ->  verify_recorded_value(Rung, search_inf, Spec, Row.search_inf_med),
+        verify_recorded_value(Rung, load_inf, Spec, Row.load_inf),
+        verify_recorded_value(Rung, grid_inf, Spec, Row.grid_inf),
+        verify_recorded_value(Rung, cmd_wall_med_ms, Spec, Row.cmd_wall_med_ms),
+        verify_recorded_value(Rung, cmd_rss_med_kib, Spec, Row.cmd_rss_med_kib),
+        verify_recorded_value(Rung, grid_file, Spec, Row.grid_file),
+        verify_recorded_value(Rung, dict_file, Spec, Row.dict_file),
+        verify_recorded_value(Rung, seeds, Spec, Row.seeds),
+        verify_recorded_value(Rung, grid, Spec, Row.size),
+        verify_recorded_value(Rung, words, Spec, Row.words),
+        verify_recorded_value(Rung, tier, Spec, Row.tier),
+        verify_recorded_value(Rung, iterations, Spec, Row.iterations),
+        verify_recorded_value(Rung, warmup, Spec, Row.warmup),
+        verify_recorded_value(Rung, budget, Spec, Row.budget)
+    ;   throw(error(fill_record_readback_missing(Rung), _))
+    ).
+
+verify_recorded_value(Rung, Key, Spec, Expected) :-
+    (   get_dict(Key, Spec, Actual),
+        catch(require_protocol_value(Rung, Key, Expected, Actual), _, fail)
+    ->  true
+    ;   throw(error(fill_record_readback_mismatch(Rung, Key, Expected), _))
+    ).
 
 % A measured rung with no baseline entry joins the baseline as a COMPLETE spec
 % (the first --record after a rung is added to fill_workloads.pl). The spec
 % metadata comes from the run_fill result row - this is the carried fix for the
 % arrange campaign's --record silent-drop bug.
-new_rung_pairs(WL0, Results, Pairs) :-
-    findall(K-Spec,
-            ( member(Row, Results),
-              get_dict(rung, Row, F),
-              \+ find_baseline(WL0, F, _),
-              text_to_string(F, FS), atom_string(K, FS),
-              new_rung_spec(Row, Spec) ),
-            Pairs).
-
 new_rung_spec(Row, _{ search_inf:      Row.search_inf_med,
                       load_inf:        Row.load_inf,
                       grid_inf:        Row.grid_inf,
@@ -319,17 +468,17 @@ report_result(Fails, Wins) :-
     ;   Wins > 0
     ->  format("~nRESULT: PASS  (~d improvement(s), 0 regressions)~n", [Wins]),
         format("Lock the win(s) in with `make bench-fill-record`.~n")
-    ;   format("~nRESULT: PASS  (no change; 0 regressions)~n") ).
+    ;   format("~nRESULT: PASS  (0 regressions, 0 wins)~n") ).
 
 % --- env banner --------------------------------------------------------------
 
 print_env(BaseHost, RunHost, HMatch, BaseSwi, RunSwi, VMatch, Tol) :-
     ( HMatch == true
     ->  HostNote = 'same host -> wall/rss deltas meaningful'
-    ;   HostNote = 'DIFFERENT host -> wall/rss NOT comparable (search_inf still portable)' ),
+    ;   HostNote = 'DIFFERENT host -> wall/rss NOT comparable (same-SWI inference metrics still gate)' ),
     ( VMatch == true
     ->  VerNote = 'same swi  -> regressions gate'
-    ;   VerNote = 'DIFFERENT swi -> regressions downgraded to WARN (regenerate baseline)' ),
+    ;   VerNote = 'DIFFERENT swi -> inference deltas informational; promote refused' ),
     format("baseline:  host ~w,  swi ~w~n", [BaseHost, BaseSwi]),
     format("this run:  host ~w,  swi ~w~n", [RunHost, RunSwi]),
     format("  ~w~n", [HostNote]),
@@ -350,138 +499,44 @@ signed(X, S) :- ( X >= 0 -> format(atom(S), "+~2f", [X]) ; format(atom(S), "~2f"
 
 same_text(A, B) :- text_to_string(A, S), text_to_string(B, S).
 
-% Host only tags wall/rss comparability (never the gate), so a missing/odd uname
-% degrades to 'unknown' rather than aborting the whole check.
-current_host(Host) :-
-    catch(uname_nm(Raw), _, fail),
-    normalize_space(atom(Host), Raw), Host \== '', !.
-current_host(unknown).
-
-uname_nm(Raw) :-
-    process_create(path(uname), ['-nm'],
-                   [ stdout(pipe(Out)), stderr(null), process(PID) ]),
-    read_string(Out, _, Raw), close(Out),
-    process_wait(PID, _).
-
 % --- HISTORY (append-only trend ledger) --------------------------------------
 % One JSON object per line in benchmarks/fill_history.jsonl. search_inf and
-% load_inf are the portable, comparable-over-time numbers; wall/rss ride along
-% for same-host trend but stay informational. Each entry is stamped with the git
-% commit + local timestamp.
+% load_inf are comparable within an SWI version; wall/rss ride along for same-host
+% trend but stay informational. Each entry is stamped with the git commit + local
+% timestamp.
 
-history_path(BenchDir, Path) :-
-    directory_file_path(BenchDir, 'fill_history.jsonl', Path).
+history_path(Path) :-
+    benchmark_path('fill_history.jsonl', Path).
 
-append_history(BenchDir, Doc, Extra) :-
-    history_path(BenchDir, Path),
+append_history(Doc, Extra) :-
+    history_path(Path),
     get_dict(results, Doc, Results),
-    get_dict(swi_prolog, Doc, Swi),
-    current_host(Host),
-    git_commit(Commit),
-    git_dirty(Dirty),
-    get_time(EpochF), EpochI is round(EpochF),
-    format_time(atom(Date), '%Y-%m-%dT%H:%M:%S', EpochF),
-    ( memberchk('--heavy', Extra) -> Tiers = 'core+heavy' ; Tiers = core ),
     findall(F-Cell,
             ( member(Row, Results),
               get_dict(rung, Row, F0), atom_string(F, F0),
               Cell = _{ inf:      Row.search_inf_med,
                         load_inf: Row.load_inf,
                         wall_ms:  Row.cmd_wall_med_ms,
-                        rss_kib:  Row.cmd_rss_med_kib } ),
+                         rss_kib:  Row.cmd_rss_med_kib } ),
             RungPairs),
-    dict_pairs(Rungs, rungs, RungPairs),
-    Entry = _{ epoch:EpochI, date:Date, commit:Commit, dirty:Dirty,
-               host:Host, swi:Swi, tiers:Tiers, rungs:Rungs },
-    with_output_to(string(Raw), json_write_dict(current_output, Entry, [width(0)])),
-    normalize_space(string(Line), Raw),
-    setup_call_cleanup(open(Path, append, S),
-                       ( write(S, Line), nl(S) ),
-                       close(S)),
-    ( Dirty == true -> DMark = ' +dirty' ; DMark = '' ),
-    format("~nlogged to ~w  (commit ~w~w, ~w)~n", [Path, Commit, DMark, Tiers]).
+    append_history(Path, Doc, Extra, RungPairs).
 
-show_history(BenchDir) :-
-    history_path(BenchDir, Path),
-    ( exists_file(Path)
-    ->  read_history(Path, Entries)
-    ;   Entries = [] ),
+show_history :-
+    history_path(Path),
+    read_history(Path, Entries),
     ( Entries == []
     ->  format("no fill benchmark history yet.~n"),
         format("record one with:  make bench-fill-record   (or  make bench-fill-log)~n")
-    ;   render_history(Entries) ).
-
-read_history(Path, Entries) :-
-    read_file_to_string(Path, Str, []),
-    split_string(Str, "\n", "", Lines0),
-    exclude([L]>>(normalize_space(string(""), L)), Lines0, Lines),
-    findall(E, ( member(L, Lines), parse_history_line(L, E) ), Entries).
-
-parse_history_line(Line, Entry) :-
-    catch(atom_json_dict(Line, Entry, [default_tag(json)]), _, fail).
-
-render_history(Entries) :-
-    length(Entries, N),
-    format("fill benchmark history  (~d run(s), most recent last)~n~n", [N]),
-    forall(nth1(I, Entries, E), print_entry_meta(I, E)),
-    all_rung_keys(Entries, Keys),
-    format("~nsearch_inf per rung  (vs prev = last step, vs first = cumulative):~n~n"),
-    format("~w~t~18|~t~w~16+~t~w~12+~t~w~12+~t~w~7+~n",
-           ['rung', 'latest', 'vs prev', 'vs first', 'runs']),
-    forall(member(K, Keys), print_rung_trend(K, Entries)).
-
-print_entry_meta(I, E) :-
-    get_dict(date, E, Date), get_dict(commit, E, Commit),
-    get_dict(tiers, E, Tiers), get_dict(host, E, Host),
-    ( get_dict(dirty, E, true) -> DMark = '+dirty' ; DMark = '' ),
-    format("  [~d] ~w  ~w~w  ~w  ~w~n", [I, Date, Commit, DMark, Tiers, Host]).
-
-all_rung_keys(Entries, Keys) :-
-    findall(K,
-            ( member(E, Entries), get_dict(rungs, E, R),
-              dict_pairs(R, _, Ps), member(K-_, Ps) ),
-            Ks),
-    sort(Ks, Keys).
-
-print_rung_trend(K, Entries) :-
-    rung_series(K, Entries, Series),
-    ( Series == [] -> true
-    ;   last(Series, Latest),
-        Series = [First|_],
-        ( append(_, [Prev, Latest], Series) -> true ; Prev = Latest ),
-        length(Series, Cnt),
-        pct_str(Latest, Prev, DPrev),
-        pct_str(Latest, First, DFirst),
-        format("~w~t~18|~t~D~16+~t~w~12+~t~w~12+~t~d~7+~n",
-               [K, Latest, DPrev, DFirst, Cnt]) ).
-
-rung_series(K, Entries, Series) :-
-    findall(V,
-            ( member(E, Entries), get_dict(rungs, E, R),
-              get_dict(K, R, Cell), get_dict(inf, Cell, V) ),
-            Series).
-
-pct_str(_New, Old, 'n/a')  :- Old =:= 0, !.
-pct_str(New, Old, Str) :- P is (New - Old) / Old * 100.0, signed(P, S), atom_concat(S, '%', Str).
-
-% git provenance for a history entry. Both degrade gracefully outside a checkout.
-git_commit(Commit) :-
-    ( catch(run_capture(path(git), ['rev-parse', '--short', 'HEAD'], Raw), _, fail),
-      normalize_space(atom(C), Raw), C \== ''
-    -> Commit = C ; Commit = unknown ).
-
-git_dirty(Dirty) :-
-    ( catch(run_capture(path(git),
-              ['status', '--porcelain', '--untracked-files=no'], Raw), _, fail),
-      normalize_space(string(T), Raw), T \== ""
-    -> Dirty = true ; Dirty = false ).
-
-run_capture(Spec, Args, Out) :-
-    process_create(Spec, Args, [stdout(pipe(S)), stderr(null), process(PID)]),
-    read_string(S, _, Out), close(S), process_wait(PID, _).
+    ;   render_history('fill benchmark',
+                       [metric(search_inf, inf), metric(load_inf, load_inf)],
+                       Entries) ).
 
 :- multifile prolog:error_message//1.
 prolog:error_message(fill_baseline_missing(Path)) -->
     [ 'check_fill_baseline: ~w not found (regenerate with: make bench-fill-record)'-[Path] ].
 prolog:error_message(fill_bench_run_failed(Status)) -->
     [ 'check_fill_baseline: the fill product bench (run_fill.pl) failed: ~q'-[Status] ].
+prolog:error_message(fill_record_readback_missing(Rung)) -->
+    [ 'check_fill_baseline: recorded rung ~w is absent after baseline read-back'-[Rung] ].
+prolog:error_message(fill_record_readback_mismatch(Rung, Key, Expected)) -->
+    [ 'check_fill_baseline: recorded rung ~w field ~w does not equal measured value ~w after read-back'-[Rung, Key, Expected] ].

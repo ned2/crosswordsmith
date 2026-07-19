@@ -1,47 +1,54 @@
 % Focused subprocess test for the greedy ratchet's atomic promote/read-back path.
 
 :- use_module(library(plunit)).
-:- use_module(library(process)).
+:- use_module('../benchmarks/bench_process.pl', [capture_process/6]).
 :- use_module('../benchmarks/greedy_subjects.pl').
-:- use_module('../benchmarks/probe_arrange/g2_transpose.pl').
 
 :- begin_tests(greedy_benchmark).
 
 test(record_readback_and_retention) :-
-    process_create(path(swipl),
-                   ['-q','benchmarks/check_greedy_baseline.pl','--self-test'],
-                   [stdout(null),stderr(std),process(PID)]),
-    process_wait(PID,exit(0)).
+    capture_process(path(swipl),
+                    ['-q', 'benchmarks/check_greedy_baseline.pl', '--self-test'],
+                    inherit, _Stdout, _Stderr, Status),
+    assertion(Status == exit(0)).
 
-test(replay_equivalence_easy) :-
+test(exported_samplers_are_deterministic) :-
     load_clues('fixtures/benchmark_08_words.pl', Words),
-    greedy_subjects:replay_equivalent(
-        Words, 13, topleft_across, 'AOBSCFDMJJJJV').
+    Command = candidates(strict, 5),
+    greedy_subjects:construction_sampler(
+        Words, 13, 'AOBSCFDMJJJJV', topleft_across, completed(8, 0),
+        _Construction),
+    deterministic(ConstructionDet),
+    assertion(ConstructionDet == true),
+    greedy_subjects:sweep_sampler(Words, 13, Command, _Sweep),
+    deterministic(SweepDet),
+    assertion(SweepDet == true),
+    greedy_subjects:build_raw_pool(Words, 13, Command, Raw),
+    deterministic(PoolDet),
+    assertion(PoolDet == true),
+    greedy_subjects:postprocess_sampler(Raw, 13, 8, Command, 5, _Postprocess),
+    deterministic(PostprocessDet),
+    assertion(PostprocessDet == true),
+    greedy_subjects:command_sampler(
+        '/bin/true', ignored, 13, size, Command, 0, _Command),
+    deterministic(CommandDet),
+    assertion(CommandDet == true).
 
-% The far-corner EDDE construction places 78/80 words, exercising the dense
-% scorer/legality loop rather than only the easy top-left 9/80 construction.
-test(replay_equivalence_heavy) :-
-    load_clues('fixtures/ladder_21x21_80w.pl', Words),
-    greedy_subjects:replay_equivalent(Words, 21, topright, 'EDDE').
+test(exported_samplers_reject_invalid_inputs,
+     [forall(greedy_invalid_sampler(Goal, ExpectedError))]) :-
+    catch((call(Goal), Result = succeeded), Error, Result = threw(Error)),
+    assertion(Result = threw(Caught)),
+    assertion(Caught = ExpectedError).
 
-test(semantic_counter_partitions) :-
-    load_clues('fixtures/benchmark_08_words.pl', Words),
-    greedy_subjects:semantic_counters(
-        Words, 13, candidates(strict, 5), Counters),
-    assertion(Counters.generated_crossing_descriptors =:=
-              Counters.legality_probes),
-    assertion(Counters.legality_successes + Counters.legality_rejects =:=
-              Counters.legality_probes),
-    assertion(Counters.legality_successes =:= Counters.scored_candidates),
-    assertion(Counters.start_lt_one =< Counters.legality_rejects),
-    assertion(Counters.generated_crossing_descriptors =:= 1308),
-    assertion(Counters.legality_rejects =:= 1134),
-    assertion(Counters.scored_candidates =:= 174),
-    assertion(Counters.score_cell_visits =:= 4524),
-    assertion(Counters.rejected_score_cell_visits_avoided =:= 3640),
-    assertion(Counters.start_lt_one =:= 994),
-    assertion(Counters.direct_attempted_constructions =:= 10),
-    assertion(Counters.completed_constructions =:= 10).
+test(identity_row_is_deterministic_without_selected_layouts) :-
+    greedy_subjects:identity_row(
+        no_layout, 'fixtures/bundled_17_clues.pl',
+        'fixtures/bundled_17_clues.pl', 11, size, candidates(strict, 3),
+        'OMEGA POINT', topleft_across, completed(1, 5), './crosswordsmith', Row),
+    deterministic(Det),
+    assertion(Det == true),
+    assertion(Row.selected == []),
+    assertion(Row.candidate_count =:= 0).
 
 test(candidate_phases_match_product) :-
     load_clues('fixtures/benchmark_08_words.pl', Words),
@@ -108,83 +115,41 @@ test(direct_attempt_slots_and_strict_omission) :-
         Words, 11, candidates(strict, 3), RawPool),
     assertion(RawPool == []).
 
-test(g2_transpose_is_involution_with_fresh_clue_vars) :-
-    Placed = [pw('CAT',[c,a,t],[1,2,3],across,3,1,3,SourceNum)],
-    g2_transpose_probe:transpose_placed(Placed, 7, Once),
-    g2_transpose_probe:transpose_placed(Once, 7, Twice),
-    Once = [pw('CAT',[c,a,t],[1,8,15],down,3,1,15,OnceNum)],
-    Twice = [pw('CAT',[c,a,t],[1,2,3],across,3,1,3,TwiceNum)],
-    assertion(var(SourceNum)), assertion(var(OnceNum)), assertion(var(TwiceNum)),
-    assertion(SourceNum \== OnceNum), assertion(SourceNum \== TwiceNum),
-    assertion(OnceNum \== TwiceNum).
-
-test(g2_product_transpose_geometry_and_fresh_clue_vars) :-
-    Placed = [pw('CAT',[c,a,t],[1,2,3],across,3,1,3,SourceNum1),
-              pw('CAR',[c,a,r],[1,8,15],down,3,1,15,SourceNum2)],
-    crosswordsmith_arrange:transpose_placed(Placed, 7, Once),
-    crosswordsmith_arrange:transpose_placed(Once, 7, Twice),
-    Once = [pw('CAT',[c,a,t],[1,8,15],down,3,1,15,OnceNum1),
-            pw('CAR',[c,a,r],[1,2,3],across,3,1,3,OnceNum2)],
-    Twice = [pw('CAT',[c,a,t],[1,2,3],across,3,1,3,TwiceNum1),
-             pw('CAR',[c,a,r],[1,8,15],down,3,1,15,TwiceNum2)],
-    term_variables([SourceNum1,SourceNum2,OnceNum1,OnceNum2,
-                    TwiceNum1,TwiceNum2], ClueVars),
-    assertion(length(ClueVars, 6)).
-
-test(g2_product_preserves_four_corner_block_order) :-
-    Words = [['CAT', _{sample:only}]],
-    crosswordsmith_arrange:greedy_constructions(Words, 7, Constructions),
-    maplist(construction_seed_start_dir, Constructions, StartsDirs),
-    assertion(StartsDirs == [1-across,1-down,7-down,43-across]).
-
-test(g2_product_omits_symmetric_setup_failures) :-
-    g2_transpose_probe:additional_sample(
-        setup_failure, Words, 3, _Command, setup_failure),
-    crosswordsmith_arrange:greedy_constructions(Words, 3, Constructions),
-    assertion(length(Constructions, 8)),
-    maplist(construction_seed_start_dir, Constructions, StartsDirs),
-    assertion(StartsDirs == [1-across,1-across,1-down,1-down,
-                             3-down,3-down,7-across,7-across]).
-
-test(g2_product_preserves_dropped_terms_order_and_fresh_copies) :-
-    Words = [['CAT',meta(CatTag)],['CAR',meta(CarTag)],['DOG',meta(DogTag)]],
-    crosswordsmith_arrange:greedy_constructions(Words, 7, Constructions),
-    Constructions = [gc(_,DroppedSource),gc(_,_)|_],
-    nth0(3, Constructions, gc(_,DroppedPartner)),
-    assertion(DroppedSource =@= [['DOG',meta(_)] ]),
-    assertion(DroppedPartner =@= [['DOG',meta(_)] ]),
-    DroppedSource = [['DOG',meta(SourceTag)]],
-    DroppedPartner = [['DOG',meta(PartnerTag)]],
-    assertion(SourceTag \== PartnerTag),
-    assertion(SourceTag \== DogTag),
-    assertion(PartnerTag \== DogTag),
-    assertion(var(CatTag)), assertion(var(CarTag)).
-
-test(g2_additional_samples_cover_required_behaviors) :-
-    findall(Row,
-            ( g2_transpose_probe:additional_sample(Id, Words, Size, Command, Behavior),
-              crosswordsmith_arrange:seed_candidates(Words, Seeds),
-              length(Seeds, SeedCount), ExpectedSlots is 4 * SeedCount,
-              g2_transpose_probe:probe_case(
-                  Id, Words, Size, Command, ExpectedSlots, Row0),
-              put_dict(behavior, Row0, Behavior, Row) ),
-            Rows),
-    assertion(length(Rows, 3)),
-    assertion(forall(member(R, Rows), get_dict(gate, R, pass))),
-    once((member(Setup, Rows), Setup.behavior == setup_failure)),
-    assertion(Setup.setup_failures > 0),
-    once((member(Dropped, Rows), Dropped.behavior == dropped_word)),
-    assertion(Dropped.completed_with_drops > 0),
-    once((member(AllFit, Rows), AllFit.behavior == all_fit)),
-    assertion(AllFit.all_fit =:= AllFit.completed).
-
 attempt_slot(Attempt, Corner-SeedAnswer) :-
     get_dict(corner, Attempt, Corner),
     get_dict(seed_answer, Attempt, SeedAnswer).
 
-construction_seed_start_dir(gc(Placed, _Dropped), Start-Dir) :-
-    last(Placed, PW),
-    pw_start(PW, Start),
-    pw_dir(PW, Dir).
+greedy_invalid_sampler(Goal, ExpectedError) :-
+    load_clues('fixtures/benchmark_08_words.pl', Words),
+    greedy_invalid_sampler_case(Words, Goal, ExpectedError).
+
+greedy_invalid_sampler_case(
+    Words,
+    greedy_subjects:construction_sampler(
+        Words, 13, 'MISSING', topleft_across, completed(8, 0), _),
+    error(greedy_seed_answer_missing('MISSING'), _)).
+greedy_invalid_sampler_case(
+    Words,
+    greedy_subjects:sweep_sampler(Words, 13, unsupported, _),
+    error(greedy_benchmark_command(unsupported), _)).
+greedy_invalid_sampler_case(
+    Words,
+    greedy_subjects:build_raw_pool(Words, 13, unsupported, _),
+    error(greedy_benchmark_command(unsupported), _)).
+greedy_invalid_sampler_case(
+    _Words,
+    greedy_subjects:postprocess_sampler([], 13, 8, best_effort, 1, _),
+    error(greedy_empty_raw_pool, _)).
+greedy_invalid_sampler_case(
+    _Words,
+    greedy_subjects:command_sampler(
+        '/bin/true', ignored, 13, unsupported, best_effort, 0, _),
+    error(greedy_benchmark_framing(unsupported), _)).
+greedy_invalid_sampler_case(
+    _Words,
+    greedy_subjects:identity_row(
+        id, fixture, ignored, 13, size, unsupported, seed, corner,
+        setup_failed, '/bin/true', _),
+    error(greedy_benchmark_command(unsupported), _)).
 
 :- end_tests(greedy_benchmark).

@@ -1,65 +1,95 @@
 #!/usr/bin/env swipl
 % benchmarks/check_greedy_baseline.pl - independent greedy inference ratchet.
 % Construction, sweep, and postprocess inferences gate at 0.5%; sweep is the
-% primary metric. Command wall/RSS and semantic counters are informational.
+% primary metric. Command wall/RSS are informational.
+% --exact requires same-SWI equality over every core and heavy gated metric.
+
+:- module(check_greedy_baseline, []).
 
 :- set_prolog_flag(verbose, silent).
 :- use_module(library(apply), [foldl/4]).
-:- use_module(library(filesex), [directory_file_path/3]).
-:- use_module(library(json)).
-:- use_module(library(lists)).
-:- use_module(library(process)).
-:- use_module(library(readutil)).
+:- use_module(library(json), [atom_json_dict/3]).
+:- use_module(library(lists), [append/3, member/2]).
+:- use_module(library(pairs), [pairs_keys/2]).
+:- use_module('bench_process.pl', [capture_process/6]).
+:- use_module('bench_cli.pl',
+              [ checker_mode/3,
+                exact_runner_args/2,
+                require_persistence_args/1,
+                require_unique_ids/2
+              ]).
+:- use_module('bench_exact.pl',
+              [ exact_version/4,
+                 require_same_version/2,
+                 require_complete_migration/4,
+                 require_protocol_value/4,
+                 exact_metric/4,
+                exact_presence/5
+              ]).
+:- use_module('bench_paths.pl', [benchmark_path/2]).
+:- use_module('bench_store.pl',
+              [ read_json_dict/2,
+                build_recorded_baseline/5,
+                replace_json_dict/4,
+                append_history/4,
+                read_history/2,
+                render_history/3
+              ]).
 
-:- prolog_load_context(directory, D), assertz(bench_dir(D)).
-:- dynamic bench_dir/1.
 :- initialization(main, main).
 
 main :-
     current_prolog_flag(argv, Argv0),
-    ( select('--self-test', Argv0, _) -> self_test, halt(0)
-    ; select('--history', Argv0, _)   -> Mode=history, Extra=[]
-    ; select('--promote', Argv0, Extra) -> Mode=promote
-    ; select('--record', Argv0, Extra)  -> Mode=record
-    ; select('--log', Argv0, Extra)     -> Mode=log
-    ; Mode=check, Extra=Argv0
+    ( Argv0 == ['--self-test'] -> self_test, halt(0) ; true ),
+    catch(checker_mode(Argv0, Mode, Extra),
+          E, (print_message(error, E), halt(2))),
+    ( Mode == history -> show_history, halt(0) ; true ),
+    ( member(Mode, [record, promote, log])
+    -> catch(require_persistence_args(Extra),
+             E, (print_message(error, E), halt(2)))
+    ; true
     ),
-    bench_dir(BenchDir),
-    ( Mode == history -> show_history(BenchDir), halt(0) ; true ),
-    directory_file_path(BenchDir, 'greedy_baseline.json', Path),
+    benchmark_path('greedy_baseline.json', Path),
     load_json(Path, Baseline),
-    run_bench(BenchDir, Extra, Doc),
-    do_check(Baseline, Doc, Fails, Wins),
-    ( Mode == check
-    -> report(Fails,Wins), halt_if(Fails)
-    ; Mode == log
-    -> append_history(BenchDir,Doc,Extra), halt(0)
-    ; Mode == record
-    -> record_checked(Path,Baseline,Doc), append_history(BenchDir,Doc,Extra), halt(0)
-    ; Mode == promote
-    -> report(Fails,Wins),
-       ( Fails =:= 0
-       -> record_checked(Path,Baseline,Doc), append_history(BenchDir,Doc,Extra), halt(0)
-       ;  format("promote: regressions present; baseline unchanged~n"), halt(1) )
+    ( Mode == exact
+    -> catch(exact_runner_args(Extra, ExactArgs),
+             E, (print_message(error, E), halt(2))),
+       run_bench(ExactArgs, Doc),
+       do_exact_check(Baseline, Doc, Fails),
+       report_exact_result(Fails), halt_if(Fails)
+    ;  run_bench(Extra, Doc),
+       do_check(Baseline, Doc, Fails, Wins),
+       ( Mode == check
+       -> report(Fails,Wins), halt_if(Fails)
+       ; Mode == log
+       -> append_history(Doc,Extra), halt(0)
+       ; Mode == record
+       -> require_record_version(Baseline, Doc),
+           record_checked(Path,Baseline,Doc), append_history(Doc,Extra), halt(0)
+       ; Mode == promote
+       -> require_promotion_version(Baseline, Doc),
+          report(Fails,Wins),
+          ( Fails =:= 0
+          -> record_checked(Path,Baseline,Doc), append_history(Doc,Extra), halt(0)
+          ;  format("promote: regressions present; baseline unchanged~n"), halt(1) )
+       )
     ).
 
 halt_if(0) :- halt(0).
 halt_if(_) :- halt(1).
 
 load_json(Path, Dict) :-
-    setup_call_cleanup(open(Path,read,S),
-                       json_read_dict(S,Dict,[default_tag(json)]), close(S)).
+    read_json_dict(Path, Dict).
 
-run_bench(BenchDir, Extra, Doc) :-
-    directory_file_path(BenchDir, 'run_arrange_greedy.pl', Runner),
+run_bench(Extra, Doc) :-
+    benchmark_path('run_arrange_greedy.pl', Runner),
     append(['-q',Runner,'--','--format',json], Extra, Args),
-    process_create(path(swipl),Args,
-                   [stdout(pipe(Out)),stderr(std),process(PID)]),
-    read_string(Out,_,Text), close(Out), process_wait(PID,Status),
+    capture_process(path(swipl),Args,inherit,Text,_Stderr,Status),
     ( Status == exit(0) -> atom_json_dict(Text,Doc,[default_tag(json)])
     ; throw(error(greedy_bench_failed(Status),_)) ).
 
 do_check(Baseline, Doc, Fails, Wins) :-
+    require_record_protocol(Baseline, Doc),
     get_dict(workloads,Baseline,WL), get_dict(results,Doc,Rows),
     get_dict(regression_tolerance_pct,Baseline,Tol),
     get_dict(swi_prolog,Baseline,BaseSwi), get_dict(swi_prolog,Doc,RunSwi),
@@ -67,6 +97,56 @@ do_check(Baseline, Doc, Fails, Wins) :-
     format("greedy inference ratchet (sweep primary; tolerance +~w%)~n",[Tol]),
     foldl(check_result(WL,Tol,VMatch),Rows,0-0,Fails-Wins),
     report_unmeasured(WL,Rows).
+
+do_exact_check(Baseline, Doc, Fails) :-
+    require_record_protocol(Baseline, Doc),
+    get_dict(swi_prolog, Baseline, BaseSwi),
+    get_dict(swi_prolog, Doc, RunSwi),
+    exact_version(BaseSwi, RunSwi, VersionStatus, VersionFails),
+    format("greedy exact inference check (+heavy tail)~n"),
+    format("exact SWI: ~w -> ~w (~w)~n", [BaseSwi, RunSwi, VersionStatus]),
+    get_dict(workloads, Baseline, WL),
+    get_dict(results, Doc, Rows),
+    exact_row_presence(WL, Rows, Missing, Unexpected, PresenceFails),
+    foldl(exact_greedy_row(WL), Rows, 0, MetricFails),
+    report_exact_presence(Missing, Unexpected),
+    Fails is VersionFails + PresenceFails + MetricFails.
+
+exact_greedy_row(WL, Row, F0, F3) :-
+    get_dict(rung, Row, Rung),
+    format("~n~w~n", [Rung]),
+    (   baseline_spec(WL, Rung, Spec)
+    ->  exact_greedy_metric(construction_inf, Spec.construction_inf,
+                            Row.metrics.construction_inf_med, F0, F1),
+        exact_greedy_metric(sweep_inf, Spec.sweep_inf,
+                            Row.metrics.sweep_inf_med, F1, F2),
+        exact_greedy_metric(postprocess_inf, Spec.postprocess_inf,
+                            Row.metrics.postprocess_inf_med, F2, F3)
+    ;   F3 = F0,
+        format("  gated metrics: no_reference~n")
+    ).
+
+exact_greedy_metric(Metric, Base, Measured, F0, F1) :-
+    exact_metric(Base, Measured, Status, MetricFails),
+    F1 is F0 + MetricFails,
+    format("  ~w: ~D -> ~D ~w~n", [Metric, Base, Measured, Status]).
+
+exact_row_presence(WL, Rows, Missing, Unexpected, Fails) :-
+    dict_pairs(WL, _, Pairs),
+    pairs_keys(Pairs, ReferenceIds),
+    findall(Rung, (member(Row, Rows), get_dict(rung, Row, Rung)), MeasuredIds),
+    exact_presence(ReferenceIds, MeasuredIds, Missing, Unexpected, Fails).
+
+report_exact_presence([], []) :- !.
+report_exact_presence(Missing, Unexpected) :-
+    ( Missing == [] -> true ; format("missing exact rows: ~w~n", [Missing]) ),
+    ( Unexpected == [] -> true ; format("rows without reference: ~w~n", [Unexpected]) ).
+
+report_exact_result(0) :-
+    format("~nEXACT RESULT: PASS (all gated inferences identical)~n").
+report_exact_result(Fails) :-
+    Fails > 0,
+    format("~nEXACT RESULT: FAIL (~d exact comparison failure(s))~n", [Fails]).
 
 check_result(WL,Tol,VMatch,Row,F0-W0,F-W) :-
     get_dict(rung,Row,Rung),
@@ -92,16 +172,58 @@ check_metric(WL,Rung,Key,Measured,Tol,VMatch,F0-W0,F-W) :-
 delta(0,_M,0.0) :- !.
 delta(Base,M,Pct) :- Pct is (M-Base)/Base*100.0.
 
-classify(P,T,_V,win) :- P =< -T, !.
-classify(P,T,_V,ok) :- P =< T, !.
-classify(_P,_T,true,regression) :- !.
-classify(_P,_T,false,regression_warn).
-counts(win,0,1). counts(ok,0,0). counts(regression,1,0). counts(regression_warn,0,0).
+classify(_P,_T,false,version_warn) :- !.
+classify(P,T,true,win) :- P =< -T, !.
+classify(P,T,true,ok) :- P =< T, !.
+classify(_P,_T,true,regression).
+counts(win,0,1). counts(ok,0,0). counts(regression,1,0). counts(version_warn,0,0).
+
+require_promotion_version(Baseline, Doc) :-
+    get_dict(swi_prolog, Baseline, Reference),
+    get_dict(swi_prolog, Doc, Measured),
+    require_same_version(Reference, Measured).
+
+require_record_version(Baseline, Doc) :-
+    get_dict(swi_prolog, Baseline, ReferenceVersion),
+    get_dict(swi_prolog, Doc, MeasuredVersion),
+    get_dict(workloads, Baseline, Workloads),
+    dict_pairs(Workloads, _, ReferencePairs),
+    pairs_keys(ReferencePairs, ReferenceIds),
+    get_dict(results, Doc, Results),
+    findall(Id, (member(Row, Results), get_dict(rung, Row, Id)), MeasuredIds),
+    require_complete_migration(ReferenceVersion, MeasuredVersion,
+                               ReferenceIds, MeasuredIds),
+    require_record_protocol(Baseline, Doc).
+
+require_record_protocol(Baseline, Doc) :-
+    get_dict(workloads, Baseline, Workloads),
+    get_dict(results, Doc, Results),
+    findall(Rung, (member(Row, Results), get_dict(rung, Row, Rung)), Rungs),
+    require_unique_ids(greedy, Rungs),
+    forall(member(Row, Results),
+           require_greedy_protocol(Workloads, Row)).
+
+require_greedy_protocol(Workloads, Row) :-
+    get_dict(rung, Row, Rung),
+    ( baseline_spec(Workloads, Rung, Spec)
+    -> require_protocol_value(Rung, fixture, Spec.fixture, Row.fixture),
+       require_protocol_value(Rung, grid, Spec.grid, Row.size),
+       require_protocol_value(Rung, framing, Spec.framing, Row.framing),
+       require_protocol_value(Rung, mode, Spec.mode, Row.mode),
+       require_protocol_value(Rung, construction,
+                              Spec.construction, Row.construction),
+       require_protocol_value(Rung, words, Spec.words, Row.words),
+       require_protocol_value(Rung, tier, Spec.tier, Row.tier),
+       require_protocol_value(Rung, iterations,
+                              Spec.iterations, Row.iterations),
+       require_protocol_value(Rung, warmup, Spec.warmup, Row.warmup)
+    ; true
+    ).
 
 report(F,W) :-
     ( F > 0 -> format("~nRESULT: FAIL (~d regressions, ~d wins)~n",[F,W])
     ; W > 0 -> format("~nRESULT: PASS (~d wins, 0 regressions)~n",[W])
-    ; format("~nRESULT: PASS (all deterministic metrics +0.00%)~n") ).
+    ; format("~nRESULT: PASS (0 regressions, 0 wins)~n") ).
 
 report_unmeasured(WL,Rows) :-
     dict_pairs(WL,_,Pairs),
@@ -122,97 +244,96 @@ same_text(A,B,Same) :-
 % baseline intact. Unmeasured heavy rows are retained.
 record_checked(Path, Baseline, Doc) :-
     build_recorded(Baseline,Doc,Recorded),
-    atom_concat(Path,'.tmp',Tmp),
-    setup_call_cleanup(
-        true,
-        ( write_json(Tmp,Recorded),
-          load_json(Tmp,ReadBack),
-          verify_readback(ReadBack,Doc),
-          rename_file(Tmp,Path) ),
-        ( exists_file(Tmp) -> delete_file(Tmp) ; true )),
+    replace_json_dict(Path, Recorded, 100, verify_readback(Doc)),
     format("baseline recorded and read-back verified: ~w~n",[Path]).
 
 build_recorded(Baseline,Doc,Recorded) :-
-    get_dict(workloads,Baseline,WL0), get_dict(results,Doc,Rows),
-    foldl(record_row,Rows,WL0,WL),
-    current_host(Host),
-    Recorded=Baseline.put(_{host:Host,swi_prolog:Doc.swi_prolog,workloads:WL,
-        generated_note:'construction/sweep/postprocess inferences gate independently at 0.5%; sweep is primary. Wall/RSS and semantic counters are informational. Regenerate with make bench-greedy-record BENCH_ARGS=--heavy.'}).
+    build_recorded_baseline(Baseline, Doc, record_key, record_spec, BaseRecorded),
+    Recorded = BaseRecorded.put(generated_note,
+        'construction/sweep/postprocess inferences gate independently at 0.5%; sweep is primary. Wall/RSS are informational. Regenerate with make bench-greedy-record BENCH_ARGS=--heavy.').
 
-record_row(Row,WL0,WL) :-
-    text_to_atom(Row.rung,Key), M=Row.metrics,
-    Spec=_{construction_inf:M.construction_inf_med,
-           sweep_inf:M.sweep_inf_med,postprocess_inf:M.postprocess_inf_med,
-           command_wall_med_ms:M.command_wall_med_ms,
-           command_rss_med_kib:M.command_rss_med_kib,
-           tier:Row.tier,fixture:Row.fixture,grid:Row.size,framing:Row.framing,
-           mode:Row.mode,construction:Row.construction,words:Row.words,
-           iterations:Row.iterations,warmup:Row.warmup,
-           info_only:["command_wall_med_ms","command_rss_med_kib","semantic_counters"]},
-    put_dict(Key,WL0,Spec,WL).
+record_key(Row, Row.rung).
+
+record_spec(Row, _Prior, Spec) :-
+    Metrics = Row.metrics,
+    Spec = _{construction_inf:Metrics.construction_inf_med,
+             sweep_inf:Metrics.sweep_inf_med,
+             postprocess_inf:Metrics.postprocess_inf_med,
+             command_wall_med_ms:Metrics.command_wall_med_ms,
+             command_rss_med_kib:Metrics.command_rss_med_kib,
+             tier:Row.tier, fixture:Row.fixture, grid:Row.size,
+             framing:Row.framing, mode:Row.mode,
+             construction:Row.construction, words:Row.words,
+             iterations:Row.iterations, warmup:Row.warmup,
+             info_only:["command_wall_med_ms", "command_rss_med_kib"]}.
 
 text_to_atom(Text,Atom) :- text_to_string(Text,S), atom_string(Atom,S).
 
-write_json(Path,Dict) :-
-    setup_call_cleanup(open(Path,write,S),json_write_dict(S,Dict,[width(100)]),close(S)).
-
-verify_readback(ReadBack,Doc) :-
+verify_readback(Doc, ReadBack) :-
     get_dict(workloads,ReadBack,WL), get_dict(results,Doc,Rows),
-    forall(member(Row,Rows),
-           ( baseline_spec(WL,Row.rung,Spec),
-             Spec.construction_inf =:= Row.metrics.construction_inf_med,
-             Spec.sweep_inf =:= Row.metrics.sweep_inf_med,
-             Spec.postprocess_inf =:= Row.metrics.postprocess_inf_med )),
+    forall(member(Row,Rows), verify_readback_row(WL, Row)),
     length(Rows,Expected),
     findall(R,(member(R,Rows),baseline_spec(WL,R.rung,_)),Found),
     length(Found,Expected).
 
-current_host(Host) :-
-    process_create(path(uname),['-nm'],[stdout(pipe(S)),process(P)]),
-    read_string(S,_,Raw),close(S),process_wait(P,_),normalize_space(atom(Host),Raw).
+verify_readback_row(Workloads, Row) :-
+    Rung = Row.rung,
+    ( baseline_spec(Workloads, Rung, Spec)
+    -> Metrics = Row.metrics,
+       verify_readback_value(Rung, construction_inf, Spec,
+                             Metrics.construction_inf_med),
+       verify_readback_value(Rung, sweep_inf, Spec, Metrics.sweep_inf_med),
+       verify_readback_value(Rung, postprocess_inf, Spec,
+                             Metrics.postprocess_inf_med),
+       verify_readback_value(Rung, command_wall_med_ms, Spec,
+                             Metrics.command_wall_med_ms),
+       verify_readback_value(Rung, command_rss_med_kib, Spec,
+                             Metrics.command_rss_med_kib),
+       verify_readback_value(Rung, tier, Spec, Row.tier),
+       verify_readback_value(Rung, fixture, Spec, Row.fixture),
+       verify_readback_value(Rung, grid, Spec, Row.size),
+       verify_readback_value(Rung, framing, Spec, Row.framing),
+       verify_readback_value(Rung, mode, Spec, Row.mode),
+       verify_readback_value(Rung, construction, Spec, Row.construction),
+       verify_readback_value(Rung, words, Spec, Row.words),
+       verify_readback_value(Rung, iterations, Spec, Row.iterations),
+       verify_readback_value(Rung, warmup, Spec, Row.warmup)
+    ; throw(error(greedy_record_readback_missing(Rung), _))
+    ).
 
-history_path(BenchDir,Path) :- directory_file_path(BenchDir,'greedy_history.jsonl',Path).
+verify_readback_value(Rung, Key, Spec, Expected) :-
+    ( get_dict(Key, Spec, Actual),
+      catch(require_protocol_value(Rung, Key, Expected, Actual), _, fail)
+    -> true
+    ; throw(error(greedy_record_readback_mismatch(Rung, Key, Expected), _))
+    ).
 
-append_history(BenchDir,Doc,Extra) :-
-    history_path(BenchDir,Path), get_dict(results,Doc,Rows),
-    get_time(Now), Epoch is round(Now), format_time(atom(Date),'%Y-%m-%dT%H:%M:%S',Now),
-    git_commit(Commit), git_dirty(Dirty), current_host(Host),
-    ( memberchk('--heavy',Extra) -> Tiers='core+heavy' ; Tiers=core ),
+history_path(Path) :-
+    benchmark_path('greedy_history.jsonl', Path).
+
+append_history(Doc,Extra) :-
+    history_path(Path), get_dict(results,Doc,Rows),
     findall(K-Cell,
             ( member(R,Rows), text_to_atom(R.rung,K), M=R.metrics,
               Cell=_{construction_inf:M.construction_inf_med,
                      sweep_inf:M.sweep_inf_med,
                      postprocess_inf:M.postprocess_inf_med,
                      wall_ms:M.command_wall_med_ms,
-                     rss_kib:M.command_rss_med_kib} ),
+                      rss_kib:M.command_rss_med_kib} ),
             Pairs),
-    dict_pairs(Rungs,rungs,Pairs),
-    Entry=_{epoch:Epoch,date:Date,commit:Commit,dirty:Dirty,
-            host:Host,swi:Doc.swi_prolog,
-            tiers:Tiers,rungs:Rungs},
-    with_output_to(string(Raw),json_write_dict(current_output,Entry,[width(0)])),
-    normalize_space(string(Line),Raw),
-    setup_call_cleanup(open(Path,append,S),(write(S,Line),nl(S)),close(S)),
-    format("history appended: ~w~n",[Path]).
+    append_history(Path, Doc, Extra, Pairs).
 
-git_commit(Commit) :-
-    process_create(path(git),['rev-parse','--short','HEAD'],
-                   [stdout(pipe(S)),stderr(null),process(P)]),
-    read_string(S,_,Raw),close(S),process_wait(P,_),normalize_space(atom(Commit),Raw).
-
-git_dirty(Dirty) :-
-    process_create(path(git),['status','--porcelain','--untracked-files=no'],
-                   [stdout(pipe(S)),stderr(null),process(P)]),
-    read_string(S,_,Raw),close(S),process_wait(P,_),
-    normalize_space(string(Text),Raw),
-    ( Text == "" -> Dirty=false ; Dirty=true ).
-
-show_history(BenchDir) :-
-    history_path(BenchDir,Path),
-    ( exists_file(Path) -> read_file_to_string(Path,Text,[]) ; Text="" ),
-    split_string(Text,"\n","",Lines), exclude(==(""),Lines,NonEmpty),
-    length(NonEmpty,N), format("greedy benchmark history: ~d run(s)~n",[N]),
-    forall(member(Line,NonEmpty),writeln(Line)).
+show_history :-
+    history_path(Path),
+    read_history(Path, Entries),
+    ( Entries == []
+    -> format("no greedy benchmark history yet.~n")
+    ; render_history('greedy benchmark',
+                     [metric(construction_inf, construction_inf),
+                      metric(sweep_inf, sweep_inf),
+                      metric(postprocess_inf, postprocess_inf)],
+                     Entries)
+    ).
 
 % Fast permanent self-test for promotion safety. It proves core-only recording
 % retains a heavy row, updates an existing row, inserts a new row, and verifies
@@ -223,7 +344,7 @@ self_test :-
               regression_tolerance_pct:0.5,swi_prolog:"10.1.10",tool:"t",
               workloads:_{core:_{construction_inf:1,sweep_inf:2,postprocess_inf:3},
                            heavy:_{construction_inf:7,sweep_inf:8,postprocess_inf:9}}},
-    write_json(Path,Initial),
+    replace_json_dict(Path, Initial, 100, accept_readback),
     R1=_{rung:"core",fixture:"f",size:1,framing:"size",mode:_{kind:"best_effort"},
          construction:_{},words:1,iterations:1,warmup:0,tier:"core",
          metrics:_{construction_inf_med:10,sweep_inf_med:20,postprocess_inf_med:30,
@@ -235,6 +356,8 @@ self_test :-
     Back.workloads.new.postprocess_inf =:= 30,
     delete_file(Path),
     format("greedy baseline self-test: PASS~n").
+
+accept_readback(_).
 
 :- multifile prolog:error_message//1.
 prolog:error_message(greedy_bench_failed(Status)) -->

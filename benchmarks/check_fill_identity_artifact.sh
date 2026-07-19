@@ -26,25 +26,58 @@
 #
 # </dev/null so a load error can never park swipl at an stdin-blocking toplevel.
 
-set -u
+set -uo pipefail
 cd "$(dirname "$0")/.." || exit 2          # repo (worktree) root
 
-MANIFEST="benchmarks/fill_identity.sha256"
-WORKLOADS="benchmarks/fill_workloads.pl"
-CLI="./crosswordsmith"
+MANIFEST="${FILL_IDENTITY_MANIFEST:-benchmarks/fill_identity.sha256}"
+WORKLOADS="${FILL_IDENTITY_WORKLOADS:-benchmarks/fill_workloads.pl}"
+CLI="${FILL_IDENTITY_CLI:-./crosswordsmith}"
 
-rungs="$(swipl -q -l "$WORKLOADS" \
+if [ "$#" -ne 0 ]; then
+    echo "check_fill_identity_artifact: unknown option $1" >&2
+    exit 2
+fi
+
+if ! rungs="$(swipl -q -l "$WORKLOADS" \
   -g 'forall(fill_workload(Id,G,D,S,_,_,_,_,_), format("~w\t~w\t~w\t~w~n",[Id,G,D,S])), halt' \
-  -g 'halt(1)' </dev/null 2>/dev/null)"
+  -g 'halt(1)' </dev/null 2>/dev/null)"; then
+    echo "check_fill_identity_artifact: failed to enumerate rungs from $WORKLOADS" >&2
+    exit 2
+fi
 if [ -z "$rungs" ]; then
     echo "check_fill_identity_artifact: could not enumerate rungs from $WORKLOADS" >&2
     exit 2
 fi
 
+declare -A expected
+if [ -f "$MANIFEST" ]; then
+    while IFS=$'\t' read -r id digest extra || [ -n "$id$digest$extra" ]; do
+        [ -z "$id" ] && continue
+        if [ -n "${expected[$id]+present}" ]; then
+            echo "check_fill_identity_artifact: duplicate manifest id $id" >&2
+            exit 2
+        fi
+        if [[ ! "$digest" =~ ^[0-9a-f]{64}$ ]] || [ -n "$extra" ]; then
+            echo "check_fill_identity_artifact: malformed manifest entry $id" >&2
+            exit 2
+        fi
+        expected["$id"]="$digest"
+    done <"$MANIFEST"
+fi
+
 status=0
-artdir="$(mktemp -d)"
-seen="$(mktemp)"
+if ! artdir="$(mktemp -d)"; then
+    echo "check_fill_identity_artifact: could not allocate artifact directory" >&2
+    exit 2
+fi
+if ! seen="$(mktemp)"; then
+    echo "check_fill_identity_artifact: could not allocate seen-set temporary" >&2
+    rm -rf "$artdir"
+    exit 2
+fi
 trap 'rm -rf "$artdir" "$seen"' EXIT
+out="$artdir/out"
+declare -A known
 
 # Build one artifact per distinct dict (cache keyed by a slugged dict path).
 # FILL_SAVE_INDEX_FLAGS (word-split on purpose) selects the artifact flavour.
@@ -65,36 +98,44 @@ artifact_for() {
 
 while IFS=$'\t' read -r id grid dict seeds; do
     [ -z "$id" ] && continue
+    if [ -n "${known[$id]:-}" ]; then
+        echo "identity-artifact ($id): DUPLICATE WORKLOAD ID"; status=1
+        continue
+    fi
+    known["$id"]=1
     if ! art="$(artifact_for "$dict")"; then status=1; continue; fi
     args=(fill --grid "$grid" --index "$art")
     [ "$seeds" != none ] && args+=(--seeds "$seeds")
-    out="$(mktemp)"
     if "$CLI" "${args[@]}" >"$out" 2>/dev/null; then
-        digest="$(sha256sum "$out" | cut -d' ' -f1)"
-        expected="$(awk -F'\t' -v r="$id" '$1==r{print $2}' "$MANIFEST" 2>/dev/null)"
-        printf '%s\n' "$id" >>"$seen"
-        if [ -z "$expected" ]; then
+        hash_output=''
+        if ! hash_output="$(sha256sum "$out")" \
+           || ! read -r digest _ <<<"$hash_output" \
+           || [[ ! "$digest" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "identity-artifact ($id): SHA-256 FAILED"; status=1
+            continue
+        fi
+        if ! printf '%s\n' "$id" >>"$seen"; then
+            echo "identity-artifact ($id): SEEN-SET WRITE FAILED"; status=1
+            continue
+        fi
+        if [ -z "${expected[$id]+present}" ]; then
             echo "identity-artifact ($id): NO BASELINE (rung absent from $MANIFEST)"; status=1
-        elif [ "$expected" = "$digest" ]; then
+        elif [ "${expected[$id]}" = "$digest" ]; then
             echo "identity-artifact ($id): OK"
         else
-            echo "identity-artifact ($id): MISMATCH (want $expected got $digest)"; status=1
+            echo "identity-artifact ($id): MISMATCH (want ${expected[$id]} got $digest)"; status=1
         fi
     else
         echo "identity-artifact ($id): CLI FAILED (fill --index did not exit 0)"; status=1
     fi
-    rm -f "$out"
 done <<<"$rungs"
 
 # A manifest rung this pass never measured is a silent drop - fail it.
-if [ -f "$MANIFEST" ]; then
-    while IFS=$'\t' read -r mid _; do
-        [ -z "$mid" ] && continue
-        if ! grep -qxF "$mid" "$seen"; then
-            echo "identity-artifact ($mid): IN MANIFEST BUT NOT MEASURED (rung dropped?)"; status=1
-        fi
-    done <"$MANIFEST"
-fi
+for mid in "${!expected[@]}"; do
+    if ! grep -qxF "$mid" "$seen"; then
+        echo "identity-artifact ($mid): IN MANIFEST BUT NOT MEASURED (rung dropped?)"; status=1
+    fi
+done
 
 if [ "$status" -eq 0 ]; then
     echo "IDENTITY (artifact mode): all rung digests match $MANIFEST"

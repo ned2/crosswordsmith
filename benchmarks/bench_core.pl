@@ -9,16 +9,20 @@
 
 :- module(bench_core, [ measure/3, inproc_sampler/2, process_sampler/5 ]).
 
-:- use_module(library(lists)).
-:- use_module(library(apply)).
-:- use_module(library(process)).
-:- use_module(library(readutil)).
+:- meta_predicate measure(1, +, -).
+:- meta_predicate inproc_sampler(0, -).
+
+:- use_module(library(apply), [exclude/3, foldl/4, maplist/2]).
+:- use_module(library(lists), [append/3, member/2, nth0/3, sum_list/2]).
+:- use_module(library(readutil), [read_file_to_string/3]).
+:- use_module('bench_process.pl', [capture_process/6]).
 % call_time/2 (inproc_sampler's measurement wrapper) is autoload-only
 % (library(statistics)); explicit so the bench roots also run under
 % autoload(false) (P11/C5).
 :- use_module(library(statistics), [call_time/2]).
 
-% measure(+Sampler, +Opts, -Summary)
+%!  measure(:Sampler, +Opts:dict, -Summary:dict) is det.
+%
 %   Sampler : called as call(Sampler, Sample); Sample is a dict metric->number.
 %             Non-numeric keys (e.g. an outcome tag the caller attaches) are
 %             carried in the sample but IGNORED by the stats here.
@@ -26,8 +30,9 @@
 %   Summary : _{iterations:N, warmup:W, stats:_{Metric:_{min,median,mean}, ...}}
 %
 % Runs W warmup samples (discarded), then N measured samples; for each NUMERIC
-% metric key present it computes {min, median, mean}. Heterogeneous metric sets
-% are fine (command samples carry wall+rss; search samples wall+cpu+inferences).
+% metric key present it computes {min, median, mean}. Metric sets may differ
+% between samplers (command has wall+rss; search has wall+cpu+inferences), but
+% every measured sample from one sampler must carry the same numeric keys.
 %
 % SUCCESS-ONLY contract (plan §4, stress-test m1): measure/3 assumes the caller
 % has already established that the sampler will succeed - run_matrix gates each
@@ -51,8 +56,10 @@ measured_sample(Sampler, Sample) :-
     ( call(Sampler, Sample) -> true
     ; throw(error(bench_sampler_failed(Sampler), _)) ).
 
-% In-process Prolog goal - the search layer. call_time/2 (built-in) returns
-% time{cpu,inferences,wall}; inferences is the deterministic metric of record.
+%!  inproc_sampler(:Goal, -Sample:dict) is det.
+%
+% In-process Prolog goal - the search layer. call_time/2 returns
+% time{cpu,inferences,wall}; inferences is the SWI-version-locked metric of record.
 % The Goal MUST be deterministic (the CALLER pins the first solution with its own
 % cut - solve_once/4 cuts, arrange_best_layout/5 is single-valued). We do NOT wrap
 % in once/1: that would add one inference per call, breaking byte-for-byte
@@ -61,7 +68,9 @@ inproc_sampler(Goal, _{wall:W, cpu:C, inferences:I}) :-
     call_time(Goal, T),
     W = T.wall, C = T.cpu, I = T.inferences.
 
-% process_sampler(+Exe, +Argv, -WallSeconds, -MaxRssKiB, -ExitCode)
+%!  process_sampler(+Exe, +Argv:list, -WallSeconds:number,
+%!                  -MaxRssKiB:number, -ExitCode:integer) is det.
+%
 %   The COMMAND layer: run `Exe Argv...` as a fresh child under
 %   `/usr/bin/time -f "%e %M"`, capturing end-to-end wall (%e, seconds) and peak
 %   resident set (%M, KiB). This is the honest top-level latency a user feels -
@@ -82,9 +91,7 @@ process_sampler(Exe, Argv, Wall, Rss, Exit) :-
 
 run_under_time(Exe, Argv, TimeFile, Wall, Rss, Exit) :-
     append(['-o', TimeFile, '-f', '%e %M', Exe], Argv, TimeArgv),
-    process_create('/usr/bin/time', TimeArgv,
-                   [ stdout(null), stderr(null), process(PID) ]),
-    process_wait(PID, Status),
+    capture_process('/usr/bin/time', TimeArgv, null, _Stdout, _Stderr, Status),
     ( Status = exit(Exit) -> true ; Exit = -1 ),
     read_time_file(TimeFile, Wall, Rss).
 
@@ -101,12 +108,23 @@ read_time_file(TimeFile, Wall, Rss) :-
     ->  true
     ;   throw(error(bench_time_parse_failed(Str), _)) ).
 
-% Per-metric {min,median,mean} over the samples, for every NUMERIC-valued key in
-% the first sample. Non-numeric annotations are skipped.
+% Per-metric {min,median,mean} over the samples, for every NUMERIC-valued key.
+% Non-numeric annotations are skipped, but numeric keys must be stable across
+% samples so a missing metric cannot silently reduce its sample count.
 summarize_samples(Samples, Stats) :-
     Samples = [First|_],
-    findall(K, ( get_dict(K, First, V), number(V) ), NumKeys),
+    numeric_keys(First, NumKeys),
+    maplist(require_numeric_keys(NumKeys), Samples),
     foldl(summarize_key(Samples), NumKeys, _{}, Stats).
+
+numeric_keys(Sample, Keys) :-
+    findall(Key, ( get_dict(Key, Sample, Value), number(Value) ), Keys0),
+    sort(Keys0, Keys).
+
+require_numeric_keys(Expected, Sample) :-
+    numeric_keys(Sample, Actual),
+    ( Actual == Expected -> true
+    ; throw(error(bench_sample_schema_mismatch(Expected, Actual), _)) ).
 
 summarize_key(Samples, Key, SIn, SOut) :-
     findall(V, ( member(S, Samples), get_dict(Key, S, V) ), Vs),
@@ -140,3 +158,6 @@ prolog:error_message(bench_sampler_failed(_)) -->
     [ 'bench_core: a measured sampler failed; the caller must gate for success (solve_status) before measure/3' ].
 prolog:error_message(bench_bad_opt(Key, Val)) -->
     [ 'bench_core: measure/3 option ~w must be a valid count, got ~q'-[Key, Val] ].
+prolog:error_message(bench_sample_schema_mismatch(Expected, Actual)) -->
+    [ 'bench_core: measured sample numeric keys changed; expected ~q, got ~q'-
+      [Expected, Actual] ].

@@ -1,13 +1,11 @@
 % inference_parity.pl - gate #2: native <-> WASM arrange inference-count parity.
 %
-% The whole WASM-deployment thesis rests on one claim (benchmarks/workloads.pl
-% header, plan §7 gate #2): arrange search cost in INFERENCES is deterministic and
-% machine-independent - the SAME count native or under wasm32, only the
-% wall-per-inference constant changes. So a `-X% inferences` ratchet win predicts a
-% ~X% wasm speedup. This script is the empirical proof: it measures each ladder
-% rung's search-layer inference count and prints it. Run under BOTH native swipl
-% and the wasm/node swipl and diff - identical counts confirm the ratchet is a
-% valid wasm proxy.
+% This is the empirical native/WASM parity gate for the pinned runtimes. It
+% measures each ladder rung's search-layer inference count and prints it. Run it
+% under both native swipl and wasm/node swipl and diff the outputs; equality
+% confirms that the current same-SWI ratchet is also a valid proxy for this WASM
+% build. Re-run the gate after changing either runtime rather than assuming
+% inference counts are portable.
 %
 % It measures the IDENTICAL quantity the product bench records: call_time/2 around
 % arrange_best_layout/6 (the budget-explicit search), with NO once/1 wrap - exactly
@@ -26,6 +24,11 @@
 :- set_prolog_flag(verbose, silent).
 :- dynamic repo_root/1.
 
+:- use_module(library(filesex), [directory_file_path/3]).
+:- use_module(library(lists), [memberchk/2]).
+:- use_module(library(readutil), [read_file_to_terms/3]).
+:- use_module(library(statistics), [call_time/2]).
+
 :- prolog_load_context(directory, Dir),
    absolute_file_name('../..', Root, [relative_to(Dir), file_type(directory)]),
    asserta(repo_root(Root)),
@@ -38,7 +41,7 @@
 
 main :-
     % Heavy rungs reach tens of millions of inferences; give the (heap-backed)
-    % Prolog stacks room under both VMs. Deterministic count is unaffected.
+    % Prolog stacks room under both VMs. The measured goal is unchanged.
     set_prolog_flag(stack_limit, 2_000_000_000),
     current_prolog_flag(argv, Argv),
     ( memberchk('--heavy', Argv) -> Tiers = [core, heavy] ; Tiers = [core] ),
@@ -57,7 +60,9 @@ run_rung(F, Grid, Warmup, Expected, Budget) :-
     read_clues(File, Words),
     length(Words, NumWords),
     forall(between(1, Warmup, _),
-           ignore(crosswordsmith_arrange:arrange_best_layout(Words, Grid, Budget, _, _, _))),
+           ignore(call_time(
+               crosswordsmith_arrange:arrange_best_layout(
+                   Words, Grid, Budget, _, _, _), _))),
     call_time(crosswordsmith_arrange:arrange_best_layout(Words, Grid, Budget, _, _, Outcome), T),
     Inf = T.inferences,
     file_base_name(F, Base),

@@ -1,8 +1,9 @@
 # Candidate plan: benchmark and probe tooling review
 
-Status: CANDIDATE (2026-07-17). This is a review and cleanup plan, not an
-authorization to delete every item listed below. Each candidate must pass its
-own reachability, evidence, and replacement-coverage gate before removal.
+Status: COMPLETE (2026-07-19). All five phases passed their removal, replacement,
+and no-change gates. This was a review and cleanup plan, not an authorization to
+delete every candidate; the retained tools below remain the supported permanent
+measurement system.
 
 ## 1. Goal
 
@@ -95,9 +96,9 @@ versioned result log, not live museum code.
 Apply that policy as follows:
 
 - Keep dated Markdown reports under `benchmarks/results/`.
-- Before deleting a file named by a report, make the report identify the
-  historical commit that contains the runnable source if it does not already do
-  so.
+- Before deleting a file named by a report, make the report or the living
+  historical-reconstruction index identify the commit containing runnable source.
+  Keep corrections out of immutable dated evidence.
 - For a runner locked to a base commit that predates the runner itself, record
   the exact reconstruction recipe: checkout the measurement base, apply the
   runner source commit as a patch without advancing `HEAD`, then invoke the
@@ -141,6 +142,11 @@ No-file-left-unclassified is the review-completeness gate.
 
 Initial disposition: REMOVE.
 
+Status: COMPLETE (2026-07-18). All four gates were confirmed. P1 provenance was
+repaired in the append-only experiment ledger and the historical reconstruction
+index; the G2 test oracle remains for Phase 3, independent of its two deleted
+launchers. Deleted source: 339 lines.
+
 | Candidate | Evidence | Gate before deletion |
 |---|---|---|
 | `benchmarks/probe_backtrack.pl` | Lines 2-13 declare it historical and intentionally non-runnable; it calls removed `probe_*` hooks at lines 59-64 | Confirm `docs/experiments.md` and the preserved patch identify the result and implementation |
@@ -151,12 +157,17 @@ Initial disposition: REMOVE.
 
 Initial disposition: EXTRACT EVIDENCE REFERENCES, THEN REMOVE.
 
-`probe_f1/` reconstructs the 2026-07-05 fill loader and copied pre-MAC search.
+Status: COMPLETE (2026-07-18). The reconstruction index now records each
+measurement base, source snapshot, and required patch recipe. All 1,111 lines
+were removed: the 44-line one-off landed with V1 and the remaining 1,067 lines
+landed here. No test, Make target, or current source imported either directory.
+
+`probe_f1/` reconstructed the 2026-07-05 fill loader and copied pre-MAC search.
 The current engine is MAC plus dom/wdeg, so these probes no longer attribute the
 shipping path. Their findings are in
 `benchmarks/results/2026-07-05-p-f1-attribution.md` and `docs/experiments.md`.
 
-`probe_fh2/` reconstructs the pre-current count/index path and includes hard-coded
+`probe_fh2/` reconstructed the pre-current count/index path and included hard-coded
 `/tmp/claude-1000/f-h2/` inputs in `build_probe.pl`, `phase_a.pl`, and
 `phase_b.pl`. Its gate and attribution results are already in the two dated F-H2
 reports. `kernel_bench.pl` should remain only if the review identifies a current
@@ -172,6 +183,14 @@ Deletion gate:
 ### V3. Completed fill-quality campaign rigs
 
 Initial disposition: SPLIT PERMANENT CHECK FROM HISTORICAL CAMPAIGNS.
+
+Status: COMPLETE (2026-07-18). `make bench-fill-quality-check STW=...` now
+runs the two AC-FILL-12 authority rows on the default deterministic path,
+enforces the recorded 45.0/38.7 mean floors, and cross-checks both sidecars
+with the independent scorer. It passed against the recorded 315,905-line STW
+snapshot. The four completed campaign rigs were then removed (1,320 lines),
+their recovery commits were indexed, and the README was reduced to permanent
+operations plus evidence links.
 
 Retain the independent scorer and comparison driver. They are not, by
 themselves, the complete AC-FILL-12 standing gate: `run.sh` covers only the easy
@@ -189,7 +208,7 @@ quality-gate command that:
 - clearly reports its external STW dependency and is run whenever that dependency
   is available.
 
-Review for removal after that gap is closed:
+Removed after that gap closed:
 
 - `fill_quality/probe_mac.pl`, a 705-line file that labels itself
   "NOT SHIPPABLE ENGINEERING" and predates the accepted product engine;
@@ -198,9 +217,9 @@ Review for removal after that gap is closed:
 - `fill_quality/matrix.sh`, the completed FS-3(b)/FS-4 frontier tool unless a
   current product decision still uses it.
 
-Before deletion, split the 533-line `fill_quality/README.md` into a short living
-operational guide and dated evidence references. Update plans that link directly
-to `probe_mac.pl` to identify its historical commit instead.
+The former 533-line `fill_quality/README.md` is now a short living operational
+guide with dated evidence and reconstruction references. Plans no longer link
+directly to the retired `probe_mac.pl` source.
 
 Preserve scorer independence: do not replace `score_fill.py` with engine-side
 score reporting. Make `grids/amer11.json` the single source of truth rather than
@@ -211,10 +230,18 @@ manually synchronizing an embedded copy in `gen_grids.py`.
 Initial disposition: EXTRACT PERMANENT INVARIANTS, THEN REMOVE IN DEPENDENCY
 ORDER.
 
-The `probe_arrange/README.md` explicitly calls the directory campaign-only. The
-campaign is closed, and its mechanism evidence is preserved in dated reports.
-The directory nevertheless remains coupled to the normal test suite through
-`tests/probe_arrange.plt` and `tests/greedy_benchmark.plt`.
+Status: COMPLETE (2026-07-18). Four focused A-G2 product assertions moved to
+`tests/arrange.plt`; the permanent assoc/full-tree and A-D2 assertions remain in
+`tests/core.plt`. All 41 files under `benchmarks/probe_arrange/` and the 224-line
+campaign test suite were removed after their assertion dispositions and source
+reconstruction points were recorded. The 131-row P-R0 JSONL remains for
+independent reanalysis; its generated fixtures and seed manifest remain exactly
+recoverable from `fbea282`. The probe-only A-D1 recount and unused placed-word
+accessor were also removed after repo-wide caller checks.
+
+The removed `probe_arrange/README.md` explicitly called the directory
+campaign-only. The campaign is closed, and its mechanism evidence is preserved
+in dated reports and the historical reconstruction index.
 
 Candidate groups:
 
@@ -273,18 +300,28 @@ recorded generator hashes.
 
 Initial disposition: REFACTOR.
 
-`greedy_subjects.pl:152-329` and `run_arrange_greedy.pl:87-99` run the accepted
-A-G1 semantic-counter replay on every permanent greedy benchmark. The ratchet
-gates construction, sweep, and postprocess inferences; the campaign counters are
-informational. Retain raw-pool and selected-output identity, but remove the
-A-G1-only counter pass and hard-coded mechanism counts after confirming they are
-not needed to distinguish product output.
+Status: COMPLETE (2026-07-18). The semantic-counter replay, replay twin, and
+hard-coded mechanism assertions were removed. Permanent raw-pool/selected-output
+identity, current phase assertions, and all greedy inference ratchets remain.
+
+Before cleanup, `greedy_subjects.pl:152-329` and
+`run_arrange_greedy.pl:87-99` ran the accepted A-G1 semantic-counter replay on
+every permanent greedy benchmark. The ratchet gated construction, sweep, and
+postprocess inferences; the campaign counters were informational. The migration
+retained raw-pool and selected-output identity while removing the A-G1-only
+counter pass and hard-coded mechanism counts.
 
 ### V6. Campaign-only commands and stale instructions
 
-Remove Make targets at `Makefile:229-243` when their probe dependencies are
-gone. Replace `probe_arrange/README.md` with no active source-side archive; dated
-reports and living benchmark docs should identify permanent commands.
+Status: COMPLETE (2026-07-18). Campaign-only Make targets and test imports were
+removed. Living documentation now names the strict, greedy, fill, strategy, and
+quality commands; stale strict-ladder, fill-gate, fixture-selection, and analyzer
+examples were corrected without changing dated reports.
+
+The cleanup requirement was to remove the Make targets at `Makefile:229-243`
+with their probe dependencies and leave no active source-side archive in place
+of `probe_arrange/README.md`; dated reports and living benchmark docs instead
+identify historical recovery points and permanent commands.
 
 Correct stale living text found during the audit:
 
@@ -441,6 +478,14 @@ fixture helper.
 
 ### S4. Identity manifest lifecycle
 
+Decision: RETAIN SEPARATE (2026-07-18). Strict, fill, and greedy have different
+payload shapes, selection/completeness rules, and manifest formats. A narrower
+fill raw/artifact consolidation spike removed only nine script lines before the
+additional checks needed to preserve record safety; review found false-green
+partial-enumeration and digest-failure paths in that form. The spike was
+discarded rather than replacing the current explicit scripts with a larger or
+less safe abstraction.
+
 Share complete-record, stale/missing-ID checks, digest comparison, and atomic
 replacement only if the resulting helper is smaller and clearer than the three
 scripts. Keep separate payload producers and formats:
@@ -520,6 +565,11 @@ removed code.
 
 ### Phase 3: dissolve arrange campaign dependencies
 
+Status: COMPLETE (2026-07-18). The V4-V6 migrations and removals passed the
+native suite, strict/greedy full-ladder identity, exact same-SWI inference gates,
+and strategy matrix. No baseline, history, identity manifest, golden, or dated
+result report changed.
+
 - Migrate permanent A-D2 and A-G2 invariants to owning product tests.
 - Remove A-G1-only counters from routine greedy measurements while retaining
   semantic identity.
@@ -532,6 +582,16 @@ Exit gate: normal tests no longer import a campaign search twin; strict and
 greedy identities and all gated inference counts are unchanged.
 
 ### Phase 4: refactor permanent shared mechanics
+
+Status: COMPLETE (2026-07-18). Process lifecycle lives in `bench_process.pl`,
+ratchet storage/history in `bench_store.pl`, and runner setup is split narrowly
+across `bench_cli.pl`, `bench_paths.pl`, `bench_fixture.pl`, and
+`bench_report.pl`. All shared exports have PlDoc and verified determinism, and
+each has multiple retained callers. The native suite, strict/fill/greedy exact
+inference ladders, all identity modes, strategy matrix, start-sensitivity, and
+autoload-disabled undefined-predicate checks passed. No baseline, history,
+identity manifest, golden, or dated result report changed. S4 remained separate
+under its explicit net-simplification stop condition.
 
 - Extract process lifecycle first.
 - Extract ratchet storage/history second.
@@ -546,6 +606,20 @@ Exit gate: each shared module has an explicit narrow export list, `%!` PlDoc,
 verified determinism, and at least two retained callers.
 
 ### Phase 5: retained-code cleanup and docs
+
+Status: COMPLETE (2026-07-19). The retained-code audit removed one process-global
+greedy heartbeat flag, narrowed imports and exports, completed sampler PlDoc and
+determinism contracts, hardened identity enumeration/digest/manifest failure
+paths, made duplicate exact rows fail, and made all comparison and persistence
+paths reject workload-protocol drift. Cross-version recording additionally
+requires complete core+heavy rows, while all persistence rejects sampling
+overrides. No retained P2/P3/P10 cleanup justified hot-path churn. Living
+benchmark docs and emitted metric notes now describe inferences as
+SWI-version-locked regression signals; no hard-coded `call_time/2` correction
+remains. Accepted baseline artifacts were not rewritten merely to edit their
+historical `generated_note`; their semantic `swi_prolog` fields plus the living
+docs govern comparison, with matching `version_git` an explicit operator
+precondition for development builds.
 
 - Apply the section 8 cleanup register.
 - Reduce fill-quality README to operating instructions plus result links.
@@ -637,3 +711,63 @@ The review is complete when:
 The desired result is not the smallest possible `benchmarks/` directory. It is a
 small, trustworthy permanent measurement system plus durable historical evidence,
 with no active-looking campaign machinery left to drift.
+
+## 13. Closeout (2026-07-19)
+
+### 13.1 Size, entry points, and coverage
+
+Counts use the frozen Phase-0 method and baseline
+`1119899358a196a86d792d057df33050c4dd61d1`.
+
+| Measure | Before | After | Change |
+|---|---:|---:|---:|
+| Executable/source files under `benchmarks/` | 73 | 37 | -36 (-49.3%) |
+| Executable/source lines under `benchmarks/` | 11,225 | 5,915 | -5,310 (-47.3%) |
+| Source plus the 12 historical cliff-data files | 85 files / 11,999 lines | 37 files / 5,915 lines | -48 files / -6,084 lines |
+| Benchmark/probe Make targets | 31 | 31 | unchanged count; permanent composition replaces campaign targets |
+| Native named tests | 414 | 465 | +51 |
+| Native expanded test cases | 453 | 542 | +89 |
+
+The five removed Make entry points were `probe-arrange-fixtures`,
+`probe-arrange-seeds`, `probe-arrange-schema-test`, `probe-arrange-d0-test`, and
+`probe-arrange-check`. They were replaced by the three permanent exact gates and
+the two permanent fill-quality targets: `bench-exact`, `bench-greedy-exact`,
+`bench-fill-exact`, `bench-fill-quality-test`, and
+`bench-fill-quality-check`. The direct `start_sensitivity.pl` research entry point
+is retained and documented alongside the strategy matrix.
+
+### 13.2 Duplicate implementations
+
+| Before | Closeout disposition |
+|---|---|
+| Ad hoc subprocess capture across checkers/runners, including sequential greedy identity pipes | One exception-safe `bench_process.pl` owner with dual-pipe coverage |
+| Three copies of baseline persistence, row retention, JSONL append, and history rendering | One `bench_store.pl` mechanics owner; strict/fill/greedy policy remains domain-specific |
+| Repeated CLI parsing, root discovery, overrides, fixture loading, metadata, and report envelopes | Narrow shared owners in `bench_cli.pl`, `bench_paths.pl`, `bench_fixture.pl`, and `bench_report.pl` |
+| Repeated exact comparison policy | One `bench_exact.pl` owner; each checker retains metric-specific row conversion |
+| Campaign-local strict/fill search twins and greedy replay machinery | Removed after focused product invariants replaced their live test dependencies |
+| Strict, fill, and greedy identity shell lifecycles | Intentionally separate: the S4 spike failed its net-simplification and false-green-path stop conditions |
+
+### 13.3 Verification
+
+Closeout passed on SWI-Prolog 10.1.10:
+
+- `make test`: 542 passed, 0 failed/timed out/blocked, plus all goldens and CLI
+  contracts;
+- strict, fill, and greedy exact core+heavy ladders: every gated count identical;
+- strict heavy, greedy complete, fill raw, fill artifact, and fill artifact with
+  `--masks`: every committed identity digest unchanged;
+- `make bench-matrix` and `swipl -q benchmarks/start_sensitivity.pl`;
+- `autoload(false)` load plus `list_undefined/0` over every changed benchmark
+  root;
+- `make test-wasm`: value goldens, type lock, SDK, worker errors, and all spare
+  policies passed;
+- native inference-parity rows reproduced the strict core baseline exactly after
+  warming through the same `call_time/2` wrapper; the closeout runtime was
+  `version_git='10.1.10-17-gaa6289399'`;
+- AC-FILL-12 against the recorded 315,905-line STW snapshot: both hard rows passed
+  with independent scoring agreement;
+- optional five-mask ingrid comparison: every score-50 crosswordsmith and
+  ingrid_core row completed at mean/min 50 with zero below-clean entries; full
+  unfiltered-list capacity failures remained explicit report data.
+
+No baseline, history, identity manifest, golden, or dated result report changed.

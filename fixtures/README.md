@@ -1,8 +1,8 @@
 # Fixtures
 
 This directory contains Prolog `clues/1` fixtures used by examples,
-regressions, and local benchmarking. Each fixture can be passed to the CLI with
-`--input`, or to the benchmark harness with `make bench BENCH_FIXTURE=...`.
+regressions, and local benchmarking. Each arrange fixture can be passed to the
+CLI with `--input`; the permanent benchmark manifests select their own fixtures.
 It also holds the small `fill` test assets: grid masks (`fill_grid_*.json`),
 seed fragments (`fill_seed_*.json`), and wordlists (`wordlist_sample.txt`,
 `dict_cow*.txt`, and the scored `dict_scored_sample.txt` — an ORIGINAL,
@@ -28,27 +28,21 @@ comparisons rather than puzzle content.
 
 The "expected cost" column and the dense fixture's reputation describe the
 **`baseline`** strategy (input-order search). Under baseline, the dense fixture
-is intentionally much slower than the others: on one development machine it took
-about 23 seconds and 450 million inferences for a single iteration — an
-order-of-magnitude guide, not a portable baseline.
+is intentionally much slower than the others; use inference counts from the
+current matrix rather than old host-specific timings.
 
-`make bench` now benchmarks the **production default strategy** (`mrv_inc`; see
-`docs/experiments.md`), which solves every fixture here in well under 40 ms,
-including the dense one. To reproduce the heavy baseline search, pass
-`BENCH_STRATEGY=baseline`. The `recommended iterations` column likewise assumes
-baseline (use 1 iteration for the dense fixture only under baseline).
+`make bench` is the separate production strict-arrange ladder in
+`benchmarks/workloads.pl`. The fixtures above form the strategy-research matrix
+in `benchmarks/fixtures.pl`; its `recommended iterations` values apply to that
+matrix, including one iteration for the dense fixture.
 
 Example runs:
 
 ```sh
-make bench BENCH_FIXTURE=fixtures/benchmark_14_words.pl BENCH_GRID=17
-# dense under the fast default strategy (mrv_inc):
-make bench BENCH_FIXTURE=fixtures/benchmark_16_dense_words.pl BENCH_GRID=17
-# dense under baseline (slow; one iteration, no warmup):
-make bench BENCH_FIXTURE=fixtures/benchmark_16_dense_words.pl BENCH_GRID=17 BENCH_ITERATIONS=1 BENCH_WARMUP=0 BENCH_STRATEGY=baseline
-make bench BENCH_FIXTURE=fixtures/benchmark_26_words.pl BENCH_GRID=49
-# whole strategy x fixture matrix:
+./crosswordsmith arrange --strict --size 17 \
+  --input fixtures/benchmark_14_words.pl
 make bench-matrix
+make bench-matrix BENCH_STRATEGIES="baseline mrv_capped"
 ```
 
 ## Other Fixtures
@@ -74,7 +68,7 @@ their interlock ceilings are incidental (combs are structurally low-ceiling).
 These come with a **known-achievable checking ceiling** — the planted witness's
 own quality, reported by `gen_mesh_fixture.py` — so a quality engine can be
 measured against a real target, not just an unknown set. Analyze any layout with
-`benchmarks/analyze_layout.py` (reads emitted JSON).
+`python3 benchmarks/analyze_layout.py` (reads emitted JSON on stdin).
 
 | fixture | words | grid | witness ceiling (checked / ≥half) | use |
 | --- | ---: | ---: | --- | --- |

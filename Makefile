@@ -2,7 +2,7 @@
 
 SHELL := /bin/bash
 
-.PHONY: test test-wasm test-xword xword-parity unit golden update-golden fuzz bench bench-check bench-record bench-log bench-history bench-matrix bench-arrange-verify bench-arrange-promote bench-greedy bench-greedy-check bench-greedy-record bench-greedy-log bench-greedy-history bench-greedy-identity bench-greedy-verify bench-greedy-promote probe-arrange-fixtures probe-arrange-seeds probe-arrange-schema-test probe-arrange-d0-test probe-arrange-check
+.PHONY: test test-wasm test-xword xword-parity unit golden update-golden fuzz bench bench-check bench-exact bench-record bench-log bench-history bench-matrix bench-arrange-verify bench-arrange-promote bench-greedy bench-greedy-check bench-greedy-exact bench-greedy-record bench-greedy-log bench-greedy-history bench-greedy-identity bench-greedy-verify bench-greedy-promote
 
 BENCH_FORMAT ?= text
 BENCH_ARGS ?=
@@ -128,24 +128,29 @@ update-golden:
 # Product benchmark for `arrange`: end-to-end command latency, the in-process
 # search alone, and the CLI-wrapper overhead between them (rest = command -
 # search), over the workloads in benchmarks/workloads.pl. Core workloads only by
-# default; results are machine-specific and reporting-only. Compare on the search
-# inference counts (machine-independent); wall/rss are reporting-only.
+# default; results are machine-specific and reporting-only. Search inference
+# counts are regression signals only against a same-SWI baseline.
 #   make bench
-#   make bench BENCH_ARGS=--heavy                       # + budget-saturating probes (~26s each)
-#   make bench BENCH_FORMAT=csv BENCH_ARGS="--fixture bundled"
+#   make bench BENCH_ARGS=--heavy                       # + gated tail and one ~26s latency probe
+#   make bench BENCH_FORMAT=csv BENCH_ARGS="--fixture real"
 bench:
 	swipl -q benchmarks/run_arrange.pl -- --format $(BENCH_FORMAT) $(BENCH_ARGS)
 
-# Performance ratchet: run the 15x15 ladder and diff each rung's search-inference
-# count against benchmarks/baseline.json. A DROP is a win; a RISE past the
-# baseline's tolerance is a regression (nonzero exit). Deterministic + machine-
-# independent, so it hill-climbs the arrange algorithm (a -X% here predicts ~X%
-# under WASM). wall/rss are reported but never gated. Core rungs only by default;
+# Performance ratchet: run the 9x9/13x13/15x15/21x21 strict workload set and
+# diff each rung's search-inference count against benchmarks/baseline.json. A
+# DROP is a win; a RISE past the baseline's tolerance is a regression (nonzero
+# exit). Same-SWI inference deltas hill-climb the arrange algorithm; wall/rss are
+# reported but never gated. Core rungs only by default;
 # add the hard tail with BENCH_ARGS=--heavy. NOT on the `make test` path.
 #   make bench-check
 #   make bench-check BENCH_ARGS=--heavy
 bench-check:
 	swipl -q benchmarks/check_baseline.pl $(BENCH_ARGS)
+
+# Refactor gate: require exact same-SWI inference counts over every core and
+# heavy rung. Unlike bench-check, both increases and decreases fail.
+bench-exact:
+	swipl -q benchmarks/check_baseline.pl --exact
 
 # One-command strict arrange adjudication: full native tests, diagnostics-bearing
 # ladder identity, then the inference ratchet. Selection mirrors bench-check:
@@ -186,15 +191,18 @@ bench-log:
 bench-history:
 	swipl -q benchmarks/check_baseline.pl --history
 
-# Independent greedy best-effort/candidates substrate. Construction, full
-# four-corner seed sweep, postprocess, and command layers are separate; sweep
-# inferences are primary. This ratchet never reads or writes baseline.json or
-# history.jsonl.
+# Independent greedy best-effort/candidates substrate. Construction, the two
+# directly searched blocks plus transpose partners, postprocess, and command
+# layers are separate; sweep inferences are primary. This ratchet never reads or
+# writes baseline.json or history.jsonl.
 bench-greedy:
 	swipl -q benchmarks/run_arrange_greedy.pl -- --format $(BENCH_FORMAT) $(BENCH_ARGS)
 
 bench-greedy-check:
 	swipl -q benchmarks/check_greedy_baseline.pl $(BENCH_ARGS)
+
+bench-greedy-exact:
+	swipl -q benchmarks/check_greedy_baseline.pl --exact
 
 bench-greedy-record:
 	swipl -q benchmarks/check_greedy_baseline.pl --record $(BENCH_ARGS)
@@ -221,26 +229,10 @@ bench-greedy-promote:
 # Strategy x fixture comparison matrix (CSV on stdout). Each fixture runs on
 # its manifest grid (benchmarks/fixtures.pl). Optionally restrict strategies:
 #   make bench-matrix BENCH_STRATEGIES="baseline mrv_capped"
-# Compare on inferences (machine-independent); wall time is reporting-only.
+# Compare inference counts only within one SWI version; wall time is reporting-only.
 BENCH_STRATEGIES ?=
 bench-matrix:
 	swipl -q benchmarks/run_matrix.pl -- $(BENCH_STRATEGIES)
-
-# Campaign-only P0.3/P0.4 checks. These never record baselines, regenerate
-# goldens, or add cliff fixtures to workloads.pl.
-probe-arrange-fixtures:
-	python3 benchmarks/probe_arrange/check_fixtures.py
-
-probe-arrange-seeds:
-	python3 benchmarks/probe_arrange/check_seeds.py
-
-probe-arrange-schema-test:
-	python3 -m unittest benchmarks/probe_arrange/test_schema.py
-
-probe-arrange-d0-test:
-	swipl -q benchmarks/probe_arrange/test_d0_support.pl
-
-probe-arrange-check: probe-arrange-fixtures probe-arrange-seeds probe-arrange-schema-test probe-arrange-d0-test
 
 # --- browser payload/startup bench (payload plan Phase 0) ---------------------
 # Payload/request/startup benchmark for the browser bundle
@@ -264,27 +256,29 @@ bench-wasm-payload-record:
 bench-wasm-payload-check:
 	node wasm/test/payload_bench.mjs --check
 
-# --- fill product bench + ratchet (campaign/fill Phase 0) ---------------------
+# --- fill product bench + ratchet ---------------------------------------------
 # Product benchmark for `fill`: four attribution buckets per ladder rung -
 # command (end-to-end CLI), dict_load (load_dict/3), grid (fill_grid/4), and
 # search (fill_attempt/8, FRESH slots per sample) - over the rungs in
-# benchmarks/fill_workloads.pl. Compare on search_inf/load_inf (deterministic,
-# machine-independent); wall/rss are reporting-only. Core rungs by default.
+# benchmarks/fill_workloads.pl. Compare search_inf/load_inf only against a
+# same-SWI baseline; wall/rss are reporting-only. Core rungs by default.
 #   make bench-fill
 #   make bench-fill BENCH_ARGS=--heavy
 #   make bench-fill BENCH_FORMAT=csv BENCH_ARGS="--fixture g11"
-.PHONY: bench-fill bench-fill-check bench-fill-record bench-fill-log bench-fill-history bench-fill-verify bench-fill-promote
+.PHONY: bench-fill bench-fill-check bench-fill-exact bench-fill-record bench-fill-log bench-fill-history bench-fill-verify bench-fill-promote bench-fill-quality-test bench-fill-quality-check
 bench-fill:
 	swipl -q benchmarks/run_fill.pl -- --format $(BENCH_FORMAT) $(BENCH_ARGS)
 
-# Fill performance ratchet: diff each rung's search_inf against
-# benchmarks/fill_baseline.json. search_inf GATES (a rise past tolerance fails,
-# exit 1); load_inf is REPORTED but informational until Phase 3 decides
-# otherwise. NOT on the `make test` path.
+# Fill performance ratchet: diff each rung's search_inf and load_inf against
+# benchmarks/fill_baseline.json. Either metric rising past tolerance fails with
+# exit 1. NOT on the `make test` path.
 #   make bench-fill-check
 #   make bench-fill-check BENCH_ARGS=--heavy
 bench-fill-check:
 	swipl -q benchmarks/check_fill_baseline.pl $(BENCH_ARGS)
+
+bench-fill-exact:
+	swipl -q benchmarks/check_fill_baseline.pl --exact
 
 # Ratchet the fill baseline to the currently-measured numbers (accept a win /
 # intentional change) and append to benchmarks/fill_history.jsonl. After ANY
@@ -321,3 +315,13 @@ bench-fill-log:
 # Render the recorded fill history as a per-rung trend (reads the ledger only).
 bench-fill-history:
 	swipl -q benchmarks/check_fill_baseline.pl --history
+
+# Python-only checks for the retained independent quality scorer and gate.
+bench-fill-quality-test:
+	python3 -m unittest discover -s benchmarks/fill_quality -p 'test_*.py'
+
+# AC-FILL-12 external-dictionary gate. This is intentionally not part of
+# `make test`: Spread the Wordlist is CC BY-NC-SA and is never bundled.
+#   make bench-fill-quality-check STW=/path/to/spread-the-wordlist.txt
+bench-fill-quality-check: bench-fill-quality-test
+	python3 benchmarks/fill_quality/check_ac_fill_12.py --dict "$(STW)"

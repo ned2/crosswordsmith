@@ -1,43 +1,32 @@
 #!/usr/bin/env python3
-"""Emit the small benchmark grids in BOTH crosswordsmith (JSON) and ingrid_core
-(ASCII #/.) form, so the two fillers run on identical masks.
-
-These are deliberately EASY, short-slot grids: crosswordsmith's fixed-budget MRV
-search cannot complete a standard 13x13 with full-length slots (see README), so
-the fill-QUALITY comparison uses grids both tools finish, and the hard grid is
-reported separately as a completion-rate/search-power data point.
-"""
+"""Emit comparison grids in crosswordsmith JSON and ingrid_core ASCII forms."""
 import json
 from pathlib import Path
 
-GRIDS = {
+ROOT = Path(__file__).resolve().parents[2]
+
+EASY_GRIDS = {
     "open4": ["....", "....", "....", "...."],
     "open5": [".....", ".....", ".....", ".....", "....."],
     "mini7": ["...#...", "...#...", ".......", "###.###",
               ".......", "...#...", "...#..."],
     "mini9": ["....#....", "....#....", ".........", "###...###", ".........",
               "###...###", ".........", "....#....", "....#...."],
-    # FS-3(b): a standard American-style 11x11 midi. Unlike the easy grids
-    # above it is FULLY CHECKED (every white cell crosses an across AND a down
-    # run of >=3), 180-deg rotationally symmetric, 18 blocks (~15%), and has a
-    # spanning 11-letter down slot (col 5) — full-length slots are exactly
-    # what the completion frontier needs to probe. Verified by check_american.
-    "amer11": ["....#......",
-               "....#......",
-               "....#......",
-               "......#....",
-               "###....#...",
-               "...#...#...",
-               "...#....###",
-               "....#......",
-               "......#....",
-               "......#....",
-               "......#...."],
 }
 
 # Grids that must satisfy the strict American-mask invariants below. The easy
 # quality grids are exempt (mini9 has deliberate unchecked cells).
 AMERICAN = {"amer11"}
+
+
+def grid_documents():
+    docs = {
+        name: {"name": name, "size": len(mask),
+               "symmetry": "rot180", "mask": mask}
+        for name, mask in EASY_GRIDS.items()
+    }
+    docs["amer11"] = json.loads((ROOT / "grids/amer11.json").read_text())
+    return docs
 
 
 def check_american(name, mask):
@@ -76,13 +65,15 @@ def check_american(name, mask):
         todo += [(r + 1, c), (r - 1, c), (r, c + 1), (r, c - 1)]
     assert seen == white, f"{name}: mask not connected"
 
+
 def main(outdir="."):
     out = Path(outdir)
+    docs = grid_documents()
     for name in AMERICAN:
-        check_american(name, GRIDS[name])
-    for name, mask in GRIDS.items():
-        (out / f"{name}.json").write_text(json.dumps(
-            {"name": name, "size": len(mask), "symmetry": "rot180", "mask": mask}))
+        check_american(name, docs[name]["mask"])
+    for name, doc in docs.items():
+        mask = doc["mask"]
+        (out / f"{name}.json").write_text(json.dumps(doc))
         (out / f"{name}.txt").write_text("\n".join(mask) + "\n")
         print(f"wrote {name}.json / {name}.txt ({len(mask)}x{len(mask[0])})")
 

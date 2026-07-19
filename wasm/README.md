@@ -245,15 +245,15 @@ node wasm/test/error_probe.mjs
 #       HEAVY_STACK_CAP comment in error_probe.mjs)
 ```
 
-**Inference-count parity (gate #2)** — proves the ratchet is a valid wasm proxy:
-the arrange search yields the *same* inference count native and under wasm. Run
-the ladder under both VMs and diff — certified byte-identical on all 12 rungs
-(2026-07-05):
+**Inference-count parity (gate #2)** — tests whether the current pinned native
+and WASM runtimes give the ratchet the same inference counts. Run the ladder
+under both VMs and diff. This is an empirical gate to rerun after runtime
+changes, not a general portability assumption:
 
 ```bash
 swipl -q                                wasm/test/inference_parity.pl -- --heavy > /tmp/nat.csv  2>/dev/null
 node ~/src/swipl-devel/build.wasm/src/swipl.js -q wasm/test/inference_parity.pl -- --heavy > /tmp/wasm.csv 2>/dev/null
-diff /tmp/nat.csv /tmp/wasm.csv && echo "parity OK"     # (drop --heavy for just the 5 fast core rungs)
+diff /tmp/nat.csv /tmp/wasm.csv && echo "parity OK"     # (drop --heavy for just the 7 core rungs)
 ```
 
 **Payload/request/startup benchmark (payload plan Phase 0)** — sizes every

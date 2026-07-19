@@ -185,7 +185,7 @@ test(matches_reference, [forall(member(L, [[], [x], [x,y], [x,y,z], [x,y,z,w]]))
 :- end_tests(count_upto2).
 
 
-% Strict direct count buckets (A-D1)
+% Strict direct count buckets and residues (A-D2)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 :- begin_tests(direct_buckets).
@@ -216,13 +216,17 @@ test(stable_bucket_ties_keep_input_order) :-
     findall(ID, member(wid(ID, _), Ordered), IDs),
     IDs == [2, 3, 1, 4].
 
-test(nonsharing_word_retains_stale_visible_bucket) :-
+test(nonsharing_word_retains_stale_bucket_and_empty_residue) :-
     crosswordsmith_core:tag_words([['XYZ', _{meta:_}]], Tagged),
     Buckets = buckets(2, _Guard),
-    crosswordsmith_core:refresh_direct_counts(
-        Tagged, Buckets, [a], _Placed, _Grid, _Start, _Dir, _GS),
+    Residues = residues(none, _ResidueGuard),
+    crosswordsmith_core:refresh_delta_counts(
+        Tagged, Buckets, Residues, [a],
+        _Placed, _Grid, _Start, _Dir, _GS),
     arg(1, Buckets, Count),
-    Count =:= 2.
+    Count =:= 2,
+    arg(1, Residues, Residue),
+    Residue == none.
 
 test(setarg_bucket_update_restores_on_backtracking) :-
     Buckets = buckets(1, _Guard),
@@ -251,6 +255,15 @@ test(bucket_one_residue_survives_and_fails_exact_validation) :-
         FailedCount, FailedResidue),
     FailedCount =:= 0,
     FailedResidue == none.
+
+test(bucket_one_newest_source_saturation_discards_residue) :-
+    OldProof = proof('OLD', 1, across, 3, down),
+    Residues = residues(OldProof, _Guard),
+    once(crosswordsmith_core:direct_delta_result(
+        1, 1, ['TARGET'], Residues, _Older, 9, _GS,
+        2, proof('NEW', 7, down, 11, across), Count, Residue)),
+    Count =:= 2,
+    Residue == none.
 
 test(residue_validation_locks_source_and_orientation) :-
     residue_fixture(Entry, Older, GS,

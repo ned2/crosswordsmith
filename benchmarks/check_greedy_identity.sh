@@ -8,14 +8,28 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 manifest="benchmarks/greedy_identity.sha256"
+record=0
+tmp_manifest=""
+
+for arg in "$@"; do
+    case "$arg" in
+        --record) record=1 ;;
+        *) echo "check_greedy_identity: unknown option $arg" >&2; exit 2 ;;
+    esac
+done
+
 actual="$(mktemp)"
-trap 'rm -f "$actual"' EXIT
+if [[ "$record" -eq 1 ]]; then
+    tmp_manifest="$(mktemp "${manifest}.tmp.XXXXXX")"
+fi
+trap 'rm -f "$actual"; [[ -z "$tmp_manifest" ]] || rm -f "$tmp_manifest"' EXIT
 
 swipl -q benchmarks/run_arrange_greedy.pl -- --identity --heavy >"$actual"
 digest="$(sha256sum "$actual" | cut -d' ' -f1)"
 
-if [[ "${1:-}" == "--record" ]]; then
-    printf '%s  greedy-identity.json\n' "$digest" >"$manifest"
+if [[ "$record" -eq 1 ]]; then
+    printf '%s  greedy-identity.json\n' "$digest" >"$tmp_manifest"
+    mv "$tmp_manifest" "$manifest"
     printf 'recorded greedy identity: %s\n' "$digest"
     exit 0
 fi

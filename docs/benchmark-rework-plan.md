@@ -16,9 +16,11 @@ answers *two distinct questions without letting them tangle*:
 2. **Research:** which *search strategy* is best, and did a change to the core
    solver regress it? (existing concern — preserved, not extended)
 
-**Metric of record:** `inferences` (deterministic, machine-independent) for all
+**Metric of record:** `inferences` as an SWI-version-locked regression signal for
 *search* comparisons; `wall` + `maxRSS` for *command* latency, valid only within
-a fixed `(machine, commit)` pair.
+a fixed `(machine, commit)` pair. The persisted runtime partition is semantic
+`Major.Minor.Patch`; matching `version_git` is an operator precondition for
+development builds that share one semantic version.
 
 ---
 
@@ -117,9 +119,9 @@ than record a bogus zero-work sample. Nail this before writing the loop.
 
 ```prolog
 % In-process Prolog goal — the search layer. Uses call_time/2 (returns
-% time{cpu,inferences,wall}); inferences is the deterministic metric of record.
+% time{cpu,inferences,wall}); inferences is the version-locked metric of record.
 inproc_sampler(+Goal, -Sample) :-
-    call_time(once(Goal), T),
+    call_time(Goal, T),
     Sample = _{wall:T.wall, cpu:T.cpu, inferences:T.inferences}.
 
 % External process — the command layer. Runs the CLI under
@@ -131,6 +133,10 @@ inproc_sampler(+Goal, -Sample) :-
 process_sampler(+Argv, -Sample) :-
     Sample = _{wall:Seconds, rss:KiBMax}.
 ```
+
+The measured goal must itself be deterministic. The as-built sampler deliberately
+does not add `once/1`: that wrapper adds one inference and would move every
+accepted baseline count.
 
 **One median definition** (average the two central values for even N — the
 `run_benchmarks.pl` semantics). This unifies the two harnesses' disagreement;
@@ -250,7 +256,7 @@ _{ subject:  arrange_command,                         % | arrange_search | strat
 
 | Metric | Source | Portable? | Use |
 |---|---|---|---|
-| `inferences` | `call_time` (search) | **yes** — deterministic (INV-2) | search regression gate; cross-machine |
+| `inferences` | `call_time` (search) | within one SWI version | search regression gate |
 | `wall`, `cpu` | `call_time` / `time -f` | no — machine-dependent | latency reporting; within `(machine,commit)` |
 | `rss` | `/usr/bin/time -f` max RSS (command) | no | command footprint; NOT a search-memory metric |
 
@@ -265,10 +271,10 @@ snapshot after GC, not a true peak. Bottom line for the original question:
 *inferences* is the honest proxy for search cost; there is no clean search-memory
 number, and the plan does not pretend otherwise.
 
-**Comparison rule (stated in each bench header):** compare `inferences` freely
-across runs/machines; compare `wall`/`cpu`/`rss` only within one machine+commit,
-or as a CI trend. This is what stops "keep the old variant around to compare" —
-the comparison is the recorded number, not resurrected code.
+**Comparison rule (stated in each bench header):** compare `inferences` only
+within one SWI-Prolog version; compare `wall`/`cpu`/`rss` only within one
+machine+commit, or as a CI trend. This is what stops "keep the old variant around
+to compare" — the comparison is the recorded number, not resurrected code.
 
 ## 8. What does NOT change
 
@@ -344,9 +350,11 @@ neither `fixtures.pl` nor product workloads.)
   know what's stable.
 
 **Phase 4 — as built (2026-07): hill-climbing ratchet + cost ladder + history.**
-The exact regression *gate* became a *hill-climbing instrument* (the goal shifted
-to tracking arrange perf toward a WASM runtime, where the inference count is the
-portable signal — identical native vs WASM, only wall-per-inference changes).
+The exact regression *gate* became a *hill-climbing instrument*. Inference counts
+gate within one SWI version; the native/WASM parity harness separately tests
+whether the current pinned runtimes produce equal counts. Checkers also require
+each measured row's workload protocol to match its reference before comparing or
+persisting it; record/log/promote reject sampling overrides.
 - **Workloads → a cost ladder** (`benchmarks/workloads.pl`): planted-witness mesh
   fixtures (`gen_mesh_fixture.py`) whose current gated warm search cost climbs
   ~0.025M→38.5M across
@@ -371,11 +379,7 @@ portable signal — identical native vs WASM, only wall-per-inference changes).
 
 ```make
 bench:         ## product: command latency + search, over the arrange workloads
-	swipl -q benchmarks/run_arrange.pl -- \
-	    $(if $(BENCH_FIXTURE),--fixture $(BENCH_FIXTURE),) \
-	    $(if $(BENCH_SIZE),--size $(BENCH_SIZE),) \
-	    --mode $(BENCH_MODE) --iterations $(BENCH_ITERATIONS) \
-	    --warmup $(BENCH_WARMUP) --format $(BENCH_FORMAT)
+	swipl -q benchmarks/run_arrange.pl -- --format $(BENCH_FORMAT) $(BENCH_ARGS)
 
 bench-matrix:  ## research: strategy × fixture inference matrix (CSV)
 	swipl -q benchmarks/run_matrix.pl -- $(BENCH_STRATEGIES)

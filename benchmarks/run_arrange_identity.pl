@@ -4,20 +4,12 @@
 % the inference budget or alter the ratchet's search count.
 
 :- set_prolog_flag(verbose, silent).
-:- use_module(library(filesex), [directory_file_path/3]).
 :- use_module(library(json), [json_write_dict/2]).
 :- use_module(library(statistics), [call_time/2]).
-
-:- dynamic repo_root/1.
-
-:- prolog_load_context(directory, BenchDir),
-   absolute_file_name('..', RepoRoot,
-                      [relative_to(BenchDir), file_type(directory), access(read)]),
-   asserta(repo_root(RepoRoot)),
-   directory_file_path(RepoRoot, 'load.pl', Load),
-   consult(Load),
-   directory_file_path(BenchDir, 'workloads.pl', Workloads),
-   consult(Workloads).
+:- use_module('bench_paths.pl', [repo_path/2]).
+:- repo_path('load.pl', Load), consult(Load).
+:- use_module('bench_fixture.pl', [load_arrange_fixture/2]).
+:- consult('workloads.pl').
 
 :- initialization(main, main).
 
@@ -49,9 +41,8 @@ identity_row(Fixture0) :-
 
 identity_with_clear_state(Fixture, Size, Mode, Framing, Expected, Tier, Gate,
                           Budget, ExpectedWords) :-
-    repo_root(Root),
-    directory_file_path(Root, Fixture, File),
-    read_fixture(File, Words),
+    repo_path(Fixture, File),
+    load_arrange_fixture(File, Words),
     length(Words, ActualWords),
     (   ActualWords =:= ExpectedWords
     ->  true
@@ -94,17 +85,8 @@ expected_outcome(placed, placed).
 expected_outcome(infeasible, infeasible).
 expected_outcome(infeasible, not_proven).
 
-read_fixture(File, Words) :-
-    read_file_to_terms(File, Terms, []),
-    (   memberchk(clues(Words), Terms)
-    ->  true
-    ;   throw(error(identity_fixture_missing_clues(File), _))
-    ).
-
 :- multifile prolog:error_message//1.
 prolog:error_message(identity_workload_not_unique(Fixture, Rows)) -->
     [ 'identity workload ~q resolved to ~q (expected exactly one row)'-[Fixture, Rows] ].
 prolog:error_message(identity_word_count(Fixture, Expected, Actual)) -->
     [ 'identity fixture ~q has ~d words; manifest requires ~d'-[Fixture, Actual, Expected] ].
-prolog:error_message(identity_fixture_missing_clues(File)) -->
-    [ 'identity fixture ~q does not define clues/1'-[File] ].
