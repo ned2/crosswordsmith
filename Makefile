@@ -128,20 +128,19 @@ update-golden:
 # Product benchmark for `arrange`: end-to-end command latency, the in-process
 # search alone, and the CLI-wrapper overhead between them (rest = command -
 # search), over the workloads in benchmarks/workloads.pl. Core workloads only by
-# default; results are machine-specific and reporting-only. Compare on the search
-# inference counts (machine-independent); wall/rss are reporting-only.
+# default; results are machine-specific and reporting-only. Search inference
+# counts are regression signals only against a same-SWI baseline.
 #   make bench
-#   make bench BENCH_ARGS=--heavy                       # + budget-saturating probes (~26s each)
-#   make bench BENCH_FORMAT=csv BENCH_ARGS="--fixture bundled"
+#   make bench BENCH_ARGS=--heavy                       # + gated tail and one ~26s latency probe
+#   make bench BENCH_FORMAT=csv BENCH_ARGS="--fixture real"
 bench:
 	swipl -q benchmarks/run_arrange.pl -- --format $(BENCH_FORMAT) $(BENCH_ARGS)
 
 # Performance ratchet: run the 9x9/13x13/15x15/21x21 strict workload set and
 # diff each rung's search-inference count against benchmarks/baseline.json. A
 # DROP is a win; a RISE past the baseline's tolerance is a regression (nonzero
-# exit). Deterministic + machine-
-# independent, so it hill-climbs the arrange algorithm (a -X% here predicts ~X%
-# under WASM). wall/rss are reported but never gated. Core rungs only by default;
+# exit). Same-SWI inference deltas hill-climb the arrange algorithm; wall/rss are
+# reported but never gated. Core rungs only by default;
 # add the hard tail with BENCH_ARGS=--heavy. NOT on the `make test` path.
 #   make bench-check
 #   make bench-check BENCH_ARGS=--heavy
@@ -230,7 +229,7 @@ bench-greedy-promote:
 # Strategy x fixture comparison matrix (CSV on stdout). Each fixture runs on
 # its manifest grid (benchmarks/fixtures.pl). Optionally restrict strategies:
 #   make bench-matrix BENCH_STRATEGIES="baseline mrv_capped"
-# Compare on inferences (machine-independent); wall time is reporting-only.
+# Compare inference counts only within one SWI version; wall time is reporting-only.
 BENCH_STRATEGIES ?=
 bench-matrix:
 	swipl -q benchmarks/run_matrix.pl -- $(BENCH_STRATEGIES)
@@ -261,8 +260,8 @@ bench-wasm-payload-check:
 # Product benchmark for `fill`: four attribution buckets per ladder rung -
 # command (end-to-end CLI), dict_load (load_dict/3), grid (fill_grid/4), and
 # search (fill_attempt/8, FRESH slots per sample) - over the rungs in
-# benchmarks/fill_workloads.pl. Compare on search_inf/load_inf (deterministic,
-# machine-independent); wall/rss are reporting-only. Core rungs by default.
+# benchmarks/fill_workloads.pl. Compare search_inf/load_inf only against a
+# same-SWI baseline; wall/rss are reporting-only. Core rungs by default.
 #   make bench-fill
 #   make bench-fill BENCH_ARGS=--heavy
 #   make bench-fill BENCH_FORMAT=csv BENCH_ARGS="--fixture g11"

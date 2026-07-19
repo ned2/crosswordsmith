@@ -20,9 +20,9 @@ dead end and to be able to write up comparable findings over time.
 
 ## Metrics
 
-- **Inferences are the primary metric.** They are deterministic and
-  machine-independent, so a logged inference count stays comparable across
-  machines as long as code + fixture + config are pinned.
+- **Inferences are the primary metric.** Treat them as SWI-version-locked: a
+  logged count is comparable only when the runtime version, code, fixture, and
+  configuration are pinned.
 - **Wall time is secondary** ("is it fast enough in practice"). It is
   machine- and load-dependent; do not compare wall time across runs/machines.
 

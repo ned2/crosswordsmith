@@ -1,9 +1,9 @@
 # Candidate plan: benchmark and probe tooling review
 
-Status: IN PROGRESS (2026-07-18). Phases 0 through 3 are complete; Phase 4 is
-next. This is a review and cleanup plan, not an authorization to delete
-every item listed below. Each candidate must pass its own reachability, evidence,
-and replacement-coverage gate before removal.
+Status: COMPLETE (2026-07-19). All five phases passed their removal, replacement,
+and no-change gates. This was a review and cleanup plan, not an authorization to
+delete every candidate; the retained tools below remain the supported permanent
+measurement system.
 
 ## 1. Goal
 
@@ -607,6 +607,20 @@ verified determinism, and at least two retained callers.
 
 ### Phase 5: retained-code cleanup and docs
 
+Status: COMPLETE (2026-07-19). The retained-code audit removed one process-global
+greedy heartbeat flag, narrowed imports and exports, completed sampler PlDoc and
+determinism contracts, hardened identity enumeration/digest/manifest failure
+paths, made duplicate exact rows fail, and made all comparison and persistence
+paths reject workload-protocol drift. Cross-version recording additionally
+requires complete core+heavy rows, while all persistence rejects sampling
+overrides. No retained P2/P3/P10 cleanup justified hot-path churn. Living
+benchmark docs and emitted metric notes now describe inferences as
+SWI-version-locked regression signals; no hard-coded `call_time/2` correction
+remains. Accepted baseline artifacts were not rewritten merely to edit their
+historical `generated_note`; their semantic `swi_prolog` fields plus the living
+docs govern comparison, with matching `version_git` an explicit operator
+precondition for development builds.
+
 - Apply the section 8 cleanup register.
 - Reduce fill-quality README to operating instructions plus result links.
 - Document strict, greedy, fill, strategy, and quality commands in the root
@@ -697,3 +711,63 @@ The review is complete when:
 The desired result is not the smallest possible `benchmarks/` directory. It is a
 small, trustworthy permanent measurement system plus durable historical evidence,
 with no active-looking campaign machinery left to drift.
+
+## 13. Closeout (2026-07-19)
+
+### 13.1 Size, entry points, and coverage
+
+Counts use the frozen Phase-0 method and baseline
+`1119899358a196a86d792d057df33050c4dd61d1`.
+
+| Measure | Before | After | Change |
+|---|---:|---:|---:|
+| Executable/source files under `benchmarks/` | 73 | 37 | -36 (-49.3%) |
+| Executable/source lines under `benchmarks/` | 11,225 | 5,915 | -5,310 (-47.3%) |
+| Source plus the 12 historical cliff-data files | 85 files / 11,999 lines | 37 files / 5,915 lines | -48 files / -6,084 lines |
+| Benchmark/probe Make targets | 31 | 31 | unchanged count; permanent composition replaces campaign targets |
+| Native named tests | 414 | 465 | +51 |
+| Native expanded test cases | 453 | 542 | +89 |
+
+The five removed Make entry points were `probe-arrange-fixtures`,
+`probe-arrange-seeds`, `probe-arrange-schema-test`, `probe-arrange-d0-test`, and
+`probe-arrange-check`. They were replaced by the three permanent exact gates and
+the two permanent fill-quality targets: `bench-exact`, `bench-greedy-exact`,
+`bench-fill-exact`, `bench-fill-quality-test`, and
+`bench-fill-quality-check`. The direct `start_sensitivity.pl` research entry point
+is retained and documented alongside the strategy matrix.
+
+### 13.2 Duplicate implementations
+
+| Before | Closeout disposition |
+|---|---|
+| Ad hoc subprocess capture across checkers/runners, including sequential greedy identity pipes | One exception-safe `bench_process.pl` owner with dual-pipe coverage |
+| Three copies of baseline persistence, row retention, JSONL append, and history rendering | One `bench_store.pl` mechanics owner; strict/fill/greedy policy remains domain-specific |
+| Repeated CLI parsing, root discovery, overrides, fixture loading, metadata, and report envelopes | Narrow shared owners in `bench_cli.pl`, `bench_paths.pl`, `bench_fixture.pl`, and `bench_report.pl` |
+| Repeated exact comparison policy | One `bench_exact.pl` owner; each checker retains metric-specific row conversion |
+| Campaign-local strict/fill search twins and greedy replay machinery | Removed after focused product invariants replaced their live test dependencies |
+| Strict, fill, and greedy identity shell lifecycles | Intentionally separate: the S4 spike failed its net-simplification and false-green-path stop conditions |
+
+### 13.3 Verification
+
+Closeout passed on SWI-Prolog 10.1.10:
+
+- `make test`: 542 passed, 0 failed/timed out/blocked, plus all goldens and CLI
+  contracts;
+- strict, fill, and greedy exact core+heavy ladders: every gated count identical;
+- strict heavy, greedy complete, fill raw, fill artifact, and fill artifact with
+  `--masks`: every committed identity digest unchanged;
+- `make bench-matrix` and `swipl -q benchmarks/start_sensitivity.pl`;
+- `autoload(false)` load plus `list_undefined/0` over every changed benchmark
+  root;
+- `make test-wasm`: value goldens, type lock, SDK, worker errors, and all spare
+  policies passed;
+- native inference-parity rows reproduced the strict core baseline exactly after
+  warming through the same `call_time/2` wrapper; the closeout runtime was
+  `version_git='10.1.10-17-gaa6289399'`;
+- AC-FILL-12 against the recorded 315,905-line STW snapshot: both hard rows passed
+  with independent scoring agreement;
+- optional five-mask ingrid comparison: every score-50 crosswordsmith and
+  ingrid_core row completed at mean/min 50 with zero below-clean entries; full
+  unfiltered-list capacity failures remained explicit report data.
+
+No baseline, history, identity manifest, golden, or dated result report changed.

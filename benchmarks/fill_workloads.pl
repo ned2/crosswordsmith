@@ -5,11 +5,10 @@
 % truth (run_fill.pl reads only this file), deliberately separate from the arrange
 % manifest (benchmarks/workloads.pl) so the two ratchets never cross.
 %
-% WHY A FIXED SET: fill search and dictionary-load costs (inferences) are
-% deterministic and machine-INDEPENDENT - the SAME counts native or under WASM,
-% only the wall-per-inference constant changes. benchmarks/fill_baseline.json
-% records both metrics and `make bench-fill-check` reports each per-rung delta
-% (regressions fail, improvements are wins).
+% WHY A FIXED SET: fill search and dictionary-load inference counts are stable
+% regression signals under the SWI version recorded in fill_baseline.json.
+% `make bench-fill-check` reports each per-rung delta; same-version regressions
+% fail and improvements are wins.
 %
 % WHY THESE RUNGS: every row completes deterministically under the current MAC,
 % dom/wdeg, and restart engine with ample headroom under the benchmark's 2e9

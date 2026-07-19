@@ -559,8 +559,29 @@ xword's over one layout (best-effort parity — see `docs/xword-spec.md` §14).
 The permanent measurement tooling covers strict arrange, greedy arrange, fill,
 strategy research, and fill quality. The three product runners share
 `benchmarks/bench_core.pl` (warmup, iterate, summarize; one median definition).
-Wall time and RSS are machine-specific and reporting-only; inference counts are
-deterministic across machines under the pinned SWI-Prolog version.
+Wall time and RSS are machine-specific and reporting-only. Inference counts are
+SWI-version-locked regression signals: compare a row only with a baseline
+recorded by the same SWI-Prolog version. Native/WASM inference parity is a
+separate empirical gate, not an assumption made by the ratchets.
+
+The persisted `swi_prolog` partition is the semantic `Major.Minor.Patch` value.
+When using a development build that shares that value with other commits,
+matching `version_git` is an operator precondition; the current closeout runtime
+is `10.1.10-17-gaa6289399`. A future full-build metadata migration must update
+all three accepted baselines and history schemas together, rather than silently
+relabeling them during an unrelated cleanup.
+
+The supported product-ladder operations are:
+
+| operation | strict arrange | greedy arrange | fill |
+|---|---|---|---|
+| measure core | `make bench` | `make bench-greedy` | `make bench-fill` |
+| include heavy rows | `make bench BENCH_ARGS=--heavy` | `make bench-greedy BENCH_ARGS=--heavy` | `make bench-fill BENCH_ARGS=--heavy` |
+| tolerance ratchet | `make bench-check BENCH_ARGS=--heavy` | `make bench-greedy-check BENCH_ARGS=--heavy` | `make bench-fill-check BENCH_ARGS=--heavy` |
+| exact refactor gate | `make bench-exact` | `make bench-greedy-exact` | `make bench-fill-exact` |
+| full adjudication | `make bench-arrange-verify BENCH_ARGS=--heavy` | `make bench-greedy-verify BENCH_ARGS=--heavy` | `make bench-fill-verify BENCH_ARGS=--heavy` |
+| accept a checked improvement | `make bench-arrange-promote BENCH_ARGS=--heavy` | `make bench-greedy-promote BENCH_ARGS=--heavy` | `make bench-fill-promote BENCH_ARGS=--heavy` |
+| render history | `make bench-history` | `make bench-greedy-history` | `make bench-fill-history` |
 
 **Strict arrange benchmark** — how long `arrange --strict` takes a user, for the
 workloads in `benchmarks/workloads.pl`: a synthetic mesh **cost ladder** (the
@@ -590,11 +611,17 @@ while one whose corner triggers deep search burns the whole budget (~26-40 s)
 even after a valid layout was already found — the latency probe exists to keep
 that cliff visible.
 
-The tracked metric is **search inferences** (deterministic, machine-independent;
-the same count native or under WASM). `benchmarks/baseline.json` records each
-rung as a **ratchet**: `make bench-check` fails on a rise past tolerance, a drop
-is a win you accept with `make bench-record` (which also appends the run to the
+The tracked metric is **search inferences**. `benchmarks/baseline.json` records
+the SWI-Prolog version and each rung as a **ratchet**: on the same SWI version,
+`make bench-check` fails on a rise past tolerance and a drop is a win you accept
+with `make bench-record` (which also appends the run to the
 `benchmarks/history.jsonl` trend ledger; `make bench-history` renders it).
+Across SWI versions, all classifications are informational and promotion is
+refused. Use `make bench-record` only for an explicit runtime-baseline migration.
+That migration must measure every core and heavy row under its recorded workload
+protocol. Check, exact, record, promote, and history-log paths reject protocol
+drift; persistence also rejects `--warmup` and `--iterations` overrides, including
+for first-seen rows.
 `make bench-arrange-verify` runs the native tests, diagnostics-bearing ladder
 identity, and ratchet in one fail-fast flow. `make bench-arrange-promote` checks
 and records one measurement (rather than rerunning an accepted result), then
@@ -611,20 +638,16 @@ and command layers; the three inference layers gate independently, with sweep
 as the primary metric. Its semantic identity covers the complete raw pool and
 selected output.
 
-    $ make bench-greedy
-    $ make bench-greedy BENCH_ARGS=--heavy
-    $ make bench-greedy-verify BENCH_ARGS=--heavy
-    $ make bench-greedy-exact
+`make bench-greedy-identity` runs the semantic identity check alone; the full
+adjudication command in the table includes it.
 
 **Fill benchmark** — the permanent grid/dictionary workloads in
 `benchmarks/fill_workloads.pl`. It separates end-to-end command, dictionary
 load, grid derivation, and search. `search_inf` and `load_inf` are both ratchet
 metrics; grid inferences, wall time, and RSS are informational.
 
-    $ make bench-fill
-    $ make bench-fill BENCH_ARGS=--heavy
-    $ make bench-fill-verify BENCH_ARGS=--heavy
-    $ make bench-fill-exact
+The fill adjudication command includes both raw CLI and saved-index artifact
+identity before applying the ratchet.
 
 The independent fill-quality checks are separate from the performance ladder.
 Their no-data unit layer is `make bench-fill-quality-test`; the standing hard-row
@@ -642,6 +665,11 @@ each on its manifest grid:
 
 The matrix measures the single-corner search directly, so its per-fixture numbers
 are lighter than the product command (which runs both strict representatives).
+The companion start-position sweep runs every named start for its retained
+strategy subset:
+
+    $ swipl -q benchmarks/start_sensitivity.pl
+
 The synthetic fixtures it drives:
 
 | fixture | words | grid |

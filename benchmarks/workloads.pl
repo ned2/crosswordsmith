@@ -8,12 +8,11 @@
 % §6). No strategy column exists here - arrange always runs its production mrv_inc
 % strict search over two non-transpose corner representatives.
 %
-% WHY A LADDER (the hill-climbing charter): arrange search cost (inferences) is
-% deterministic and machine-INDEPENDENT - the SAME count native or under WASM, only
-% the wall-per-inference constant changes. So a `-X% inferences` win here predicts a
-% ~X% WASM speedup. benchmarks/baseline.json records each rung and `make bench-check`
-% reports the delta (ratchet: regressions fail, improvements are wins you accept
-% with `make bench-record`).
+% WHY A LADDER (the hill-climbing charter): arrange search inference counts are
+% stable regression signals under the SWI version recorded in baseline.json.
+% `make bench-check` reports each rung's delta; same-version regressions fail and
+% improvements are wins you accept with `make bench-record`. Native/WASM parity
+% is measured separately by wasm/test/inference_parity.pl.
 %
 % WHY THREE SIZES: grid size is a COVERAGE axis, not a difficulty axis (difficulty
 % comes from word density + small alphabet, per the gen_mesh_fixture.py K knob). But

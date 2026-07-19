@@ -14,9 +14,12 @@ contain only comments and one ground `clues/1` fact; they are classified below
 as fixture data rather than executable source, but remain in the tracked-file
 inventory so no `.pl` file is silently omitted.
 
-The source inventory is 74 executable/source files and 11,023 exclusive lines.
-The 12 fixture-data files add 976 lines, for 86 tracked `.pl`/`.py`/`.sh` files
-and 11,999 lines total. The historical-source review ceiling reconciles as:
+Closeout arithmetic correction (2026-07-19): the original subtotal omitted the
+202-line `run_arrange.pl` from source lines and added those lines to fixture data;
+it also overstated the source and total file counts by one. The corrected source
+inventory is 73 executable/source files and 11,225 exclusive lines. The 12
+fixture-data files add 774 lines, for 85 tracked `.pl`/`.py`/`.sh` files and
+11,999 lines total. The historical-source review ceiling reconciles as:
 
 | Area | Lines |
 |---|---:|
@@ -91,8 +94,8 @@ budget-exhausted fills, and enforces the recorded quality floors.
 | `benchmarks/subjects.pl` | 82 | Strict command/search samplers / strict arrange | S: strict runner | Current sanctioned benchmark seams | AB | Medium; C1 and exact `/6` seam | Strict ratchet/identity | RETAIN |
 | `benchmarks/workloads.pl` | 115 | Strict workload manifest / strict arrange | S: strict runner/check/identity; D: README | Current product | AB, AI | Medium; stale “15x15 ladder” text | AB/AI do not replace selector | RETAIN; repair comments |
 
-Permanent/top-level source subtotal: 28 files, 4,282 lines. The three historical
-top-level files account for 295 lines; the other 25 files account for 3,987.
+Permanent/top-level source subtotal: 28 files, 4,484 lines. The three historical
+top-level files account for 295 lines; the other 25 files account for 4,189.
 
 ## 3. Arrange campaign source
 
@@ -159,7 +162,7 @@ remove and rely on reports plus Git.
 | `benchmarks/probe_arrange/fixtures/cliff_21x21_88w_seed12.pl` | 94 | P-R0 corpus | HOLD DATA DECISION |
 | `benchmarks/probe_arrange/fixtures/cliff_21x21_88w_seed13.pl` | 94 | P-R0 corpus | HOLD DATA DECISION |
 
-Fixture-data subtotal: 12 files, 976 lines.
+Fixture-data subtotal: 12 files, 774 lines.
 
 ## 5. Fill campaign source
 
