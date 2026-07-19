@@ -1,8 +1,8 @@
 # Spec: JSON clue-input file
 
-Status: **implemented** — `crossword.pl` (the input-file loader), the
-`tests/clues.json` fixture, the `json_input` plunit suite, and the README now
-reflect this design.
+Status: **implemented** — `load_clues/2` and `doc_to_words/2` live in
+`prolog/crosswordsmith/core.pl`; `tests/clues.json`, the `json_input` plunit
+suite in `tests/core.plt`, and the README cover the contract.
 
 Companion to [`json-output-spec.md`](json-output-spec.md), which is implemented.
 
@@ -24,7 +24,7 @@ same mandatory CLI input-file option.
 
 - **G1.** Accept a clue set from an external **JSON file** at runtime.
 - **G2.** Accept Prolog fixture files at runtime, so the in-repo dataset does
-  not need to be compiled into `crossword.pl`.
+  not need to be compiled into the implementation.
 - **G3.** Add **no new dependency** — reuse `library(http/json)`, already
   loaded for output.
 - **G4.** Leave the solver and emitter untouched: both input sources converge
@@ -48,9 +48,9 @@ same mandatory CLI input-file option.
   script receives argv.
 - **D2. Single internal representation.** Both sources produce the existing
   `Words = [[Answer, MetaDict], …]` list (atom `Answer`, dict `MetaDict`)
-  before anything downstream runs. The change is a *loader* in `main/0`; the
-  pipeline (`check_unique_answers/1` → `find_crossword/5` → `emit_json/3`) is
-  unchanged.
+  before anything downstream runs. The loader lives in `core.pl`; the CLI
+  applies the shared uniqueness guard and passes the same representation into
+  the selected arrange path.
 - **D3. Answers normalised to atoms — for cross-source uniformity, not
   because the solver demands it.** `json_read_dict` yields SWI *strings*; the
   loader converts each answer to an atom (`atom_string/2`). To be precise about
@@ -76,11 +76,10 @@ same mandatory CLI input-file option.
    puzzle.json (json_read) ────────┘                                      pipeline
 ```
 
-`main/0` decides the source from the input-file extension, calls a loader, and
-passes the resulting `Words` into the existing flow. Everything after the
-loader is the code that ships today.
+The `arrange` CLI decides the source from the input-file extension, calls the
+shared loader, and passes the resulting `Words` into the existing flow.
 
-## 6. Proposed JSON input schema
+## 6. JSON input schema
 
 The input mirrors the output: an entry is an output `words[]` object minus the
 solver-computed fields (`number`, `direction`, `cells`).
@@ -130,26 +129,16 @@ uniformly.
 
 ## 8. CLI
 
-The input file is mandatory:
+The input file is mandatory on `arrange`:
 
-    ./crossword.pl --input puzzle.json 17 topleft_across
-    ./crossword.pl --input fixtures/bundled_17_clues.pl 17 topleft_across
-    ./crossword.pl --input puzzle.json --shuffle 17
+    ./crosswordsmith arrange --input puzzle.json --size 17
+    ./crosswordsmith arrange --input fixtures/bundled_17_clues.pl --max-size 17
+    ./crosswordsmith arrange --input puzzle.json --size 17 --seed 7
 
-The positional grammar is:
-
-- `--input FILE <grid_length> <start_loc>` for one JSON solution;
-- `--input FILE --shuffle <grid_length>` for a shuffled first solution;
-- `--input FILE --all <grid_length> [start_loc]` for solution counts.
-
-**Implemented with `library(optparse)`.** The original `main/0` matched `Argv`
-positionally and would have needed each flag stripped before the positional
-clauses ran. With `--shuffle`, `--all`, and `--out`, the flag set crossed the
-point where a real parser pays its way, so `main/0` uses `opt_parse/4`: it
-strips all flags and returns the leftover positionals as atoms, which a single
-`run/2` predicate dispatches on. Flags compose in any order, accept
-`--flag=value`, get `--help`/`-h` for free, and an unknown flag is a clean
-`existence_error(commandline_option, _)`.
+`library(optparse)` handles the verb's options. `--input FILE` composes with
+the documented arrange framing, fragment, candidate, enumeration, output, and
+variety options subject to their normal compatibility rules; see the README
+for the complete current matrix.
 
 The clue loader dispatches by extension:
 
@@ -207,14 +196,14 @@ default handler prints `Unknown message: …`. That was the model originally
 named here; `check_unique_answers/1` has since been converted to the
 `error/2` + `error_message//1` pattern, and the loader should follow it.
 
-Answer uniqueness is *not* re-checked in the loader — the existing
-`check_unique_answers/1` in `crossword/3` already covers it for both sources.
+Answer uniqueness is deliberately not duplicated in the loader — the shared
+`check_unique_answers/1` guard covers both sources before search.
 
 ## 10. Testing & docs
 
 - **Fixture.** A small `tests/<name>.json` clue set.
-- **plunit.** Assert it loads to the expected internal `Words`; that
-  `crossword/3` over it emits valid JSON with the right shape; and that
+- **plunit.** Assert it loads to the expected internal `Words`; that an
+  arrange pipeline over it emits valid JSON with the right shape; and that
   malformed inputs (no `clues`, non-string answer, invalid JSON) throw.
 - **Symmetry.** A test that takes the emitted output, reduces each `words[]`
   entry to `{answer, meta}`, and confirms it round-trips as valid input.

@@ -13,7 +13,6 @@ Progress tracker for the work specified in [`design-spec.md`](./design-spec.md).
 | `done` | Built; its ACs pass |
 | `blocked` ⊘ | Waiting on an open decision (see Open decisions) |
 | `deferred` | Spec'd as DEFERRED — not buildable until its decisions resolve |
-| `legacy` | Exists in pre-spec code; works but not yet validated/refactored against the spec |
 
 ---
 
@@ -41,13 +40,13 @@ Reachability calibration (`--check-target`, ε, τ) is a **required pre-weightin
 
 | Component | Status | Notes / ACs |
 |---|---|---|
-| Input & `meta` passthrough (§6.1) | legacy | Exists in `prolog/crosswordsmith/core.pl`; validate against AC-IN-1/2. |
-| Square grid model (§6.2) | legacy | `init_grid` etc.; reused as-is. |
-| Clue numbering & enumeration (§6.3) | legacy | Numbering exists (AC-NUM-1); enumeration string derivation to confirm (AC-ENUM-1). |
-| Metric predicates (§6.4) | legacy | Live in `prolog/crosswordsmith/metrics.pl` (the shared metric layer, formerly `quality.pl`); per spec §4 they stay a separate module, not lifted into core. The greedy constructor still departs to `arrange.pl` ([`source-structure-migration-plan.md`](./source-structure-migration-plan.md) Phase 3). |
-| Emit / canonical JSON (§6.5) | legacy | Stable sorted-key JSON exists; confirm round-trip AC-EMIT-1/2. |
+| Input & `meta` passthrough (§6.1) | **done** | `load_clues/2` + `doc_to_words/2` in `core.pl`; duplicate answers reject before search and arbitrary `meta` rejoins at emit. AC-IN-1/2 are regression-tested in `tests/core.plt`. |
+| Square grid model (§6.2) | **done** | `init_grid/2` and the free-canvas legality primitives in `core.pl` serve production `arrange`; geometry, boundary, and crossing invariants are regression-tested. |
+| Clue numbering & enumeration (§6.3) | **done** | `assign_clue_numbers/2` in `core.pl` and `answer_enumeration/2` in `export.pl`; AC-NUM-1 and AC-ENUM-1 are regression-tested. |
+| Metric predicates (§6.4) | **done** | Shared metrics live in `metrics.pl`, consumed by `arrange` and `lint`; the former `quality.pl` split/rename is complete per [`source-structure-migration-plan.md`](./source-structure-migration-plan.md). |
+| Emit / canonical JSON (§6.5) | **done** | Canonical sorted-key layout emit is shared by `arrange` and `fill`; determinism and emit→fragment round-trip cover AC-EMIT-1/2. |
 | Fragment-grid primitive (§6.6) | **done** (words-only; canonical + thin forms) | Realized in arrange Phase 5 (`arrange.pl`): emit-schema parse + reconcile + pin-via-legality-core + remainder search. AC-FRAG-1/2/3/4 + AC-EMIT-2 pass. The thin `[{answer,row,col,dir}]` form desugars at the parse boundary (`load_fragment/4`) for both consumers — `arrange --fragment` (framed by `--size`/`--max-size`, default 15) and `fill --seeds` (framed by the fill grid's own side). Letter-level pins (ninas) remain future scope. |
-| CLI contract + migration (§5) | **done** (`arrange` verb) | `crosswordsmith` script: subcommand dispatch, bare→usage, old-style→unknown-verb usage error, `arrange` flags incl. `--enumerate`/`--candidates`/`--fragment`; the substrate is a library (`prolog/crosswordsmith/core.pl`); `--shuffle`/`--strategy` removed. AC-CLI-1/2/3, AC-ARR-6/8. The migration shim (root `crossword.pl`) and the dedicated old-style migration hint were retired once there were no pre-migration consumers. `lint`/`export`/`fill` verbs recognised but report not-built/deferred. |
+| CLI contract + migration (§5) | **done** (all four verbs) | `crosswordsmith` dispatches `arrange` / `lint` / `export` / `fill`, with common help, output-on-success, failure, quiet/verbose, and option-rejection contracts covered end to end. The root `crossword.pl` migration shim and old-style hint are retired. AC-CLI-1/2/3 and the verb-specific CLI ACs pass. |
 
 ---
 
@@ -58,7 +57,7 @@ Reachability calibration (`--check-target`, ε, τ) is a **required pre-weightin
 | `lint` (validator/profiles) | §8.1 | **done** (toc / blocked-uk / american / barred-ximenean) | `lint.pl` + `crosswordsmith lint` verb: per-word/per-rule PASS/WARN/FAIL report + verdict over the canonical layout JSON; reuses the shared metric predicates. AC-LINT-1/2/3/4. 18 plunit + 1 golden. **barred-ximenean built (OD-7 resolved, DP-3)**: primary-sourced Ximenean per-length unch band; symmetry relaxed to advisory. |
 | `export` (ipuz v2 / Exolve) | §8.2 | **done** | `export.pl` + `crosswordsmith export --to ipuz\|exolve`: transformations of the canonical JSON. ipuz v2 (puzzle/solution/clues, enumerations derived from spaces/hyphens); Exolve plain text. Optional top-level `title`/`author` (json-output-spec §6.5) pass through when present — ipuz `title`/`author`, Exolve `exolve-title`/`exolve-setter`; nothing invented **except** Exolve's `exolve-title: Untitled` when a title is absent (Exet Save defence). The constant `exolve-id` is retired (Exolve auto-derives it) and the invented ipuz `"Untitled"` is dropped (P1 native-schema uplift, 2026-07-07). AC-EXP-1/3 (structure + enumeration/clue preservation); AC-EXP-2 structure. 24 plunit + 4 goldens. Real kotwords/Exet ingestion is a manual step. |
 | Stock-grid library / profiles | §8.3 | **done** | `stockgrid.pl` + `grids/` (mask schema OD-5, grid set OD-6). Ships 4 lint-validated 180°-symmetric grids (`blocked_13a`/`13b`/`15a`, plus `amer11` — the American-style 11×11 promoted from the fill-quality benchmark as the DP-9 demo pairing); legality is a CI regression (plunit). LOCKED. |
-| `fill` engine (grid-first, open-dict) | §8.4 | **done** | `fill.pl` + `crosswordsmith fill --grid <mask> [--seeds <frag>] [--dict <words>]`: each white cell is a shared logical variable, MRV backtracking over an in-memory pattern index, fragment seeds as hard pins (canonical or thin §6.6 form, framed by the grid's own side); deterministic; reports unfillable slots + fails. 7 plunit + 1 golden at delivery (thin seeds later added +2 plunit + a seeded golden, 2 checks). AC-FILL-1…4. Bundles a small sample wordlist; real fills via `--dict UKACD18`. |
+| `fill` engine (grid-first, open-dict) | §8.4 | **done** | `fill.pl` + `crosswordsmith fill`: scored dictionary ingestion and pruning (§8.4a), budget/seed/shuffle controls (§8.4b), and MAC propagation + dom/wdeg + deterministic diversified restarts (§8.4c). Canonical/thin seeds are hard pins; capacity failures are cleanly reported. The tiny sample remains the default, `dicts/cwl50.dict` is the bundled opt-in scored lexicon, and UK-style grids still want a user-supplied UK list. AC-FILL-1…15 pass. |
 | Backlog features | §8.5 | — | Unspecified; each needs its own decision pass before it gets a row here. **CWL bundling: resolved + built (DP-9, 2026-07-16)** — `dicts/cwl50.dict` (MIT Collaborative Word List clean-floor derivative, pinned snapshot, 252,200 entries) + `scripts/fetch-cwl.sh`; `--dict` default unchanged; grounding + two newly-measured engine stack envelopes in [`../benchmarks/fill_quality/`](../benchmarks/fill_quality/README.md). **Capacity robustness: resolved + built the same day (DP-10)** — both overflow modes now fail as a clean one-line §5.1 report with remedies (AC-FILL-15, [`plans/fill-capacity-cleanfail.md`](./plans/fill-capacity-cleanfail.md)); envelope unchanged. **Seeded load walk: resolved + built (A2-KS, same day)** — exact-sequence Fenwick replay cut the `cwl50` reproducer 171.14s → 9.57s with all seed/output contracts unchanged. The rest of the backlog table remains open. |
 
 ---
@@ -68,30 +67,27 @@ Reachability calibration (`--check-target`, ε, τ) is a **required pre-weightin
 | # | Gates | Status |
 |---|---|---|
 | OD-1 | `fill`: blocked-only v1 vs barred-compatible from start | **resolved (DP-1): blocked-only** |
-| OD-2 | `fill`: dictionary integration + default lexicon | **resolved (DP-2): in-memory pattern index; UKACD18 default via --dict** |
+| OD-2 | `fill`: dictionary integration + default lexicon | **resolved (DP-2/DP-9): in-memory pattern index; tiny sample default; opt-in bundled CWL; arbitrary text dictionaries via `--dict`** |
 | OD-3 | `fill`: seed/fragment semantics into open-dict fill | **resolved (DP-1): pin-and-fill (fragment primitive)** |
 | OD-4 | `fill`: v1 profiles + no-fill failure contract | **resolved (DP-2): stock-grids-as-profiles; report unfillable slots + fail** |
 | OD-5 | Stock-grid: template schema | **resolved (DP-1): black-square mask (slots derived)** |
-| OD-6 | Stock-grid: which grids seed the library | **resolved: ships blocked_13a/13b/15a (lint-validated)** |
+| OD-6 | Stock-grid: which grids seed the library | **resolved: ships blocked_13a/13b/15a + amer11 (lint-validated)** |
 | OD-7 | `lint`: barred-Ximenean unch table + barred symmetry codes | **resolved (DP-3): Ximenean band primary-sourced + built; symmetry relaxed** |
 | OD-8 | Backlog: per-feature decision pass | open |
-| OD-9 | `arrange` impl detail: ε/target/τ calibration, thin-form syntax, dup-answer disambiguation | **resolved (DP-1): 5:1 / ceil(L/2) / τ=0.30; thin-form deferred *(since landed 2026-07-06: AC-FRAG-4, arrange + fill)*; unique answers** |
+| OD-9 | `arrange` impl detail: ε/target/τ calibration, thin-form syntax, dup-answer disambiguation | **resolved (DP-1 + follow-through): 5:1 / ceil(L/2) / τ=0.30; canonical + thin fragments landed for arrange/fill; input answers must be unique** |
 
 ---
 
 ## At a glance
 
-- **Done — Flavour A `arrange` is feature-complete:** Phase 1 (oracle) + 1.5 (gate → DESCOPE) + **2 (strict)** + **3 (size framing)** + **4 (best-effort via greedy)** + **5 (fragment seeding)** + **6 (candidates)** + **7 (CLI + migration)**. Engine in `arrange.pl`; CLI in `crosswordsmith` (`crossword.pl` is now a library); **65 plunit tests (`tests/arrange.plt`) + 5 CLI golden checks (fixed + max + fragment canonical/thin + candidates)** wired into `run_tests.sh`/`make test` — full suite **306 plunit + 12 golden checks + 4 CLI exit-code checks + 2 fail-report checks, all green** (counts as of 2026-07-06, the thin-fragment-form change incl. its fill --seeds extension; the 2026-06-30 revamp audit + remediation resolved all 16 findings — see [`revamp-audit-findings.md`](./revamp-audit-findings.md)).
-- **Flavour B `lint` (§8.1): done** — `lint.pl` + `crosswordsmith lint` verb (toc / blocked-uk / american / barred-ximenean). Consumes the canonical layout JSON, reports per-word/per-rule PASS/WARN/FAIL + verdict; 18 plunit + 1 golden. The barred-ximenean band is primary-sourced (DP-3).
-- **Flavour B `export` (§8.2): done** — `export.pl` + `crosswordsmith export --to ipuz|exolve`: ipuz v2 JSON + Exolve plain text, enumerations derived from the answer; optional `title`/`author` pass-through (json-output-spec §6.5), the invented ipuz `"Untitled"` retired and the constant `exolve-id` dropped (P1 native-schema uplift, 2026-07-07); 24 plunit + 4 goldens. (Real kotwords/Exet round-trip is a manual verification step — checklist in [`exet-verification.md`](./exet-verification.md).)
-- **Flavour B stock-grid library (§8.3): done** — DP-1 fixed OD-5 (mask schema); the build resolved OD-6 (ships 3 lint-validated grids, +`amer11` at DP-9). `stockgrid.pl` + `grids/`; plunit-regressed.
-- **Flavour B `fill` (§8.4): done** — DP-2 resolved OD-2/OD-4 (completing OD-1…4); `fill.pl` + `crosswordsmith fill`. Grid-first MRV backtracking over an in-memory pattern index, fragment seeds as hard pins, deterministic; 7 plunit + 1 golden. (Ships a sample wordlist as the `--dict` default, plus — DP-9, 2026-07-16 — the opt-in bundled scored lexicon `dicts/cwl50.dict`; UK-style fills still want a user-supplied UKACD18.)
-- **Every spec'd component is now built, and OD-1…7 are all resolved.** The only thing still open is **OD-8** (backlog features in §8.5, each needs its own decision pass + spec section before implementation). The CLI does `arrange` / `lint` / `export` / `fill`.
+- **All specified engine surfaces are built:** shared substrate + canonical JSON, `arrange`, `lint`, `export`, stock grids, and the scored MAC/dom-wdeg `fill` engine. The CLI exposes all four verbs.
+- **No engine implementation is in progress, blocked, or deferred.** OD-8 is the only open decision: each §8.5 backlog feature needs a decision pass + spec + plan before implementation.
+- **Current native verification (2026-07-19):** `make test` passes 542 plunit assertions, 19 golden comparisons, 9 exit-code checks, 2 clean-failure checks, and 10 stdout/stderr contract checks.
+- **Manual release check:** real kotwords/Exet ingestion remains human-in-the-loop; use [`exet-verification.md`](./exet-verification.md).
 - **Dropped (by the gate):** `arrange` B&B search loop, admissible bound, incremental delta, LNS polish.
-- **Nothing in progress; nothing deferred or blocked.** Only OD-8 (unspec'd backlog) remains open.
 - **Audited + remediated (2026-06-30): done.** A full multi-agent code review found 16 findings; **all 16 are resolved** and all four coverage gaps are closed. See *Audit & remediation* below and [`revamp-audit-findings.md`](./revamp-audit-findings.md).
 
-### Research-derived backlog priorities (2026-07-15) — need spec + plan
+### Research-derived backlog priorities (2026-07-15 baseline)
 
 A 2026 competitive re-scan ([`research/setter-tool-landscape-2026.md`](./research/setter-tool-landscape-2026.md), three verification passes) re-baselined crosswordsmith against the current field and identified the three highest-leverage **OD-8 backlog** items. Per the OD-8 discipline, each needs its own §10 decision pass + spec section + implementation plan before work starts. **Item 1 (scored fill) is now BUILT (DP-4 → §8.4a, amended by DP-5; FS-1 complete 2026-07-15);** the other two are recorded, not yet built, and still need their decision passes. Tracked in their home specs:
 
@@ -133,7 +129,7 @@ Post-remediation suite: **179 plunit + 8 goldens + 3 CLI exit-code checks** (`ma
 
 ### SWI-Prolog purity & cut audit (2026-07-06) — remediation done
 
-A whole-core cut/impurity census plus six controlled, benchmark-gated experiments (the first audit in the series to *measure* its recommendations), grounded in the version-matched SWI 10.1.10 manual. Verdict: **zero high-severity findings** — the cleanest surface in the series. Applied 18 measured cut/purity steps (14 cuts + 9 `once/1` deleted; −6% RSS on 21×21 heavy rungs, −17…−18% greedy wall, −0.78…−2.9% fill `search_inf` where counted work shrank), with a published negative control proving where cuts must stay. Backlog: **63 findings** (C1–C47 sweep + C48–C63 browser.pl addendum), now **63/63 dispositioned** (fixed, with C42/C46 wont-fix and C44(c) reverted on measurement). One export cleanup is intentionally deferred — see the de-accretion roadmap. Full per-finding record + remediation log: [`prolog-purity-audit-findings.md`](./prolog-purity-audit-findings.md). **Status: done as of 2026-07-06.**
+A whole-core cut/impurity census plus six controlled, benchmark-gated experiments (the first audit in the series to *measure* its recommendations), grounded in the version-matched SWI 10.1.10 manual. Verdict: **zero high-severity findings** — the cleanest surface in the series. Applied 18 measured cut/purity steps (14 cuts + 9 `once/1` deleted; −6% RSS on 21×21 heavy rungs, −17…−18% greedy wall, −0.78…−2.9% fill `search_inf` where counted work shrank), with a published negative control proving where cuts must stay. Backlog: **63 findings** (C1–C47 sweep + C48–C63 browser.pl addendum), now **63/63 dispositioned** (fixed, with C42/C46 wont-fix and C44(c) reverted on measurement). The one export cleanup initially deferred has since landed; see the de-accretion roadmap. Full per-finding record + remediation log: [`prolog-purity-audit-findings.md`](./prolog-purity-audit-findings.md). **Status: done as of 2026-07-06.**
 
 ### De-accretion / retirement roadmap
 

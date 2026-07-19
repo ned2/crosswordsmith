@@ -26,7 +26,7 @@ the README.
 - `crosswordsmith` is the CLI entry point (verbs: `arrange`, `lint`, `export`,
   `fill`). The implementation lives under `prolog/crosswordsmith/`, one module
   per file (`crosswordsmith_core` etc.) with explicit export lists; root
-  `load.pl` loads all seven modules (the CLI, tests, and benchmarks all go
+  `load.pl` loads all eight modules (the CLI, tests, and benchmarks all go
   through it) and defines the `crosswordsmith` file-search alias.
 - Export lists carry only the real inter-module/CLI/benchmark API. White-box
   tests call module internals as `Module:Pred(...)` — never add an export
@@ -39,9 +39,10 @@ the README.
   `prolog/crosswordsmith/`).
 - `fixtures/bundled_17_clues.pl` is the bundled clue dataset used by examples,
   benchmarks, and the golden regression.
-- `tests/*.plt` hold the plunit coverage (one suite per module); the
-  deterministic CLI goldens live under `tests/golden/`. Run all three layers
-  (plunit + goldens + CLI exit-code checks) via `./run_tests.sh` or `make test`.
+- `tests/*.plt` hold the plunit coverage (grouped by module, plus benchmark
+  suites); deterministic CLI goldens live under `tests/golden/`. Run the full
+  native battery (plunit + goldens + CLI/failure/stream contracts) via
+  `./run_tests.sh` or `make test`.
 - `xword/` is the Python conversion companion (terminal viewer + format
   multitool: native ⇄ ipuz/exolve, rendering). Its tests are NOT run by
   `make test` — use `make test-xword`. The engine↔xword cross-check is
@@ -66,7 +67,7 @@ the README.
   build uses its own isolated `build.wasm/`.
 - Gotcha: the `USE_GMP=OFF` wasm build seeds a DIFFERENT RNG than native SWI,
   so `set_random(seed(N))` diverges CLI-vs-browser. The seeded arrange path
-  therefore owns an engine-internal xorshift PRNG — read the PRNG section of
+  therefore owns an engine-internal splitmix64 PRNG — read the PRNG section of
   [wasm/README.md](wasm/README.md) before touching seeding.
 - Build/bench logs can exceed the 256KB Read cap — tail or grep them, never
   read them whole. To wait on a long-running step, use a background task or a

@@ -157,8 +157,8 @@ crosswordsmith                                                              # �
 
 A non-zero exit with `--out` MUST NOT write a partial output file.
 
-### 5.3 Migration from the current CLI (LOCKED, one deliberate pass)
-The current interface — `./crossword.pl --input F [--strategy S] [--shuffle] [--all] [--quality ...] [--out O] <grid_length> [<start_loc>]` — is replaced by subcommands. This is a **breaking change**, done as one pass:
+### 5.3 Migration from the pre-subcommand CLI (LOCKED, one deliberate pass)
+The old interface — `./crossword.pl --input F [--strategy S] [--shuffle] [--all] [--quality ...] [--out O] <grid_length> [<start_loc>]` — was replaced by subcommands. This was a **breaking change**, done as one pass:
 - old `solve` (fixed-grid, place-all) ≡ `arrange --strict --size N` (exact N×N is the default framing)
 - old `--quality` (engine-size, drop) ≡ `arrange --best-effort --max-size N`
 - old `--all` (enumerate) ≡ `arrange --enumerate`
@@ -391,20 +391,18 @@ upgrade, and **DP-8 (§10) then adopted it as the §8.4c search core**.
   complete `blocked_13a` at `--min-score` 30 or 1. Docs must never present it
   as buying completion on hard grids.
 - **`--seed N` / `--shuffle`**: §7.6's opt-in perturbation, mirrored onto
-  `fill` for **variety** — alternative fills of the same grid. The
-  perturbation reorders **ties only**: within each slot's candidate order it
-  shuffles words of *equal score* (score-descending stays primary; on an
-  unscored/uniform dict the tie is the whole bucket) and it breaks equal-MRV
-  slot-selection ties — the quality ordering (§8.4a) and the fail-first
-  heuristic are preserved. Same input + same `N` ⇒ byte-identical output;
-  `--shuffle` draws a fresh seed per run and reports it under `--verbose` so a
-  liked fill reproduces with `--seed N`; the two are mutually exclusive; with
-  neither flag no RNG is consulted (AC-FILL-3 byte-identity holds by
-  construction). The RNG is the **engine-internal xorshift PRNG** already used
-  by seeded `arrange` — never SWI's native RNG (CLI↔WASM parity; see the PRNG
-  section of [`wasm/README.md`](../wasm/README.md)). **Not a completion
-  lever** — measured: 0/8 salted tie-reorderings complete `blocked_13a` at the
-  default budget.
+  `fill` for **variety** — alternative fills of the same grid. At dictionary
+  load, only equal-score bands are permuted, so score-descending quality remains
+  primary. During the §8.4c search, each restart makes weighted 4:2:1 picks from
+  the top three candidates; a supplied seed drives the reproducible stream and
+  `--shuffle` draws a fresh seed, reported under `--verbose` so a liked fill can
+  be replayed. The flags are mutually exclusive. The default path uses the same
+  restart policy on a pinned engine stream, so it remains a pure function of the
+  input (AC-FILL-3/13) even though later attempts consult that pinned stream.
+  The PRNG is the engine-owned portable **splitmix64**, never SWI's native RNG
+  (CLI↔WASM parity; see [`wasm/README.md`](../wasm/README.md)). These remain
+  variety/control levers, not completion promises; a seed may help or hurt a
+  marginal run under a finite budget.
 - **v1 scope**: `--seed`/`--shuffle` apply to the text `--dict` path and are
   rejected with `--index`/`--save-index` (index artifacts are order-pinned
   byte-stable caches, and — carrying no scores — they cannot honor the

@@ -1,7 +1,8 @@
 # Spec: JSON solution output with per-word link metadata
 
-Status: **implemented** — `crossword.pl`, `fixtures/bundled_17_clues.pl`, the
-tests, and the README now reflect this design.
+Status: **implemented** — canonical emit lives in
+`prolog/crosswordsmith/core.pl` and is shared by `arrange`/`fill`; the bundled
+fixture, tests, and README cover this design.
 
 Companion: [`json-input-spec.md`](json-input-spec.md) defines the JSON
 *input* format, designed as the natural mirror of this output so a solution
@@ -9,8 +10,9 @@ payload reduces back to a valid input.
 
 ## 1. Problem statement
 
-`crossword.pl` emits a solved crossword as an ad-hoc, delimiter-based text
-format (see `crossword/3`, `crossword.pl:105-111`, and the printing
+Before this spec was implemented, `crossword.pl` emitted a solved crossword as
+an ad-hoc, delimiter-based text format (see the historical `crossword/3`,
+`crossword.pl:105-111`, and the printing
 predicates `print_grid/2` / `print_clues/1`, `crossword.pl:444-486`). The
 output is meant to be consumed by a UI that renders the grid and turns each
 word into a hyperlink. The format has three sections:
